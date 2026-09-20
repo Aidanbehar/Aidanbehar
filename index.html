@@ -332,6 +332,7 @@ select{appearance:none; background-image:linear-gradient(45deg,transparent 50%,v
 :root[data-theme="dark"] select option{background:var(--surface-solid); color:var(--text)}
 .inline-2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
 .inline-3{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+.inline-4{display:grid; grid-template-columns:repeat(4,1fr); gap:10px}
 .with-unit{position:relative}
 .with-unit .unit{
   position:absolute; right:11px; top:50%; transform:translateY(-50%);
@@ -583,7 +584,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
   box-shadow:var(--shadow); font-size:.79rem; font-weight:450; line-height:1.45; text-align:left;
   pointer-events:none; display:none;
 }
-.term:hover::after,.term:focus-visible::after{display:block; animation:tipIn .2s ease both}
+.term:hover::after,.term:focus::after,.term:focus-visible::after{display:block; animation:tipIn .2s ease both}
 @keyframes tipIn{
   from{opacity:0; transform:translateX(calc(-50% + var(--tip-shift,0px))) translateY(5px)}
   to{opacity:1; transform:translateX(calc(-50% + var(--tip-shift,0px))) translateY(0)}
@@ -736,7 +737,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
   .brand .tag{display:none}
   .toolbar{width:100%; margin-left:0}
   .toolbar .btn{flex:1 1 auto; justify-content:center}
-  .inline-3{grid-template-columns:1fr 1fr}
+  .inline-3,.inline-4{grid-template-columns:1fr 1fr}
   .scale-row{grid-template-columns:112px 1fr; grid-template-areas:"n r" "s s"}
   .scale-row .swatch{grid-area:s}
   .drink-row{grid-template-columns:auto minmax(0,1fr); }
@@ -747,7 +748,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
   .tab span.tl{display:none}
   .tab{padding:9px 11px}
   .tab .kbd{display:none}
-  .inline-2,.inline-3{grid-template-columns:1fr}
+  .inline-2,.inline-3,.inline-4{grid-template-columns:1fr}
   .gauge-num{font-size:2rem}
 }
 @media (prefers-reduced-motion:reduce){
@@ -756,6 +757,21 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
   .particle{display:none}
 }
 @media print{
+  /* The custom properties kept their dark values, so chart axes, gridlines
+     and the "now" marker came out invisible on white paper and the effect
+     labels printed in pale grey. Redefining the tokens fixes every one of
+     them at once, including everything drawn inside the SVGs. */
+  :root,:root[data-theme="dark"],:root[data-theme="light"]{
+    --surface:#fff; --surface-2:#fff; --surface-3:#f4f4f6; --surface-solid:#fff;
+    --border:#bbb; --border-strong:#888;
+    --text:#000; --text-dim:#222; --text-faint:#555;
+    --grid-line:#d4d4d8; --axis-line:#333; --track:#e4e4e8; --row-hover:transparent;
+    --code-bg:#f4f4f6; --shadow:none; --shadow-sm:none;
+    --sev-1:#0b6e4f; --sev-2:#4d7c0f; --sev-3:#a16207; --sev-4:#b45309;
+    --sev-5:#b91c1c; --sev-6:#6d28d9;
+    --ok:#0b6e4f; --warn:#a16207; --danger:#b91c1c; --info:#1d4ed8;
+    --accent:#1d4ed8; --accent-2:#6d28d9;
+  }
   #bg,#particles,nav.tabs,.toolbar,.no-print{display:none !important}
   header.app{position:static; background:none; border:0}
   body{background:#fff; color:#000}
@@ -961,8 +977,10 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
         <p style="font-size:.85rem;color:var(--text-dim);margin:0">Acute cannabis overconsumption is intensely unpleasant — racing heart, panic, nausea, vomiting — but is not typically life-threatening in adults. Sit down somewhere quiet, hydrate, and wait. Seek care for chest pain, fainting, uncontrolled vomiting, or any exposure in a child or pet.</p>
       </div>
       <div>
-        <h4 style="margin-bottom:6px">Getting help</h4>
-        <p style="font-size:.85rem;color:var(--text-dim);margin:0">Phone numbers and help lines are listed with the rest of the verified sources in <a href="#" data-goto="learn" data-article="art-reading">Learn → Further reading</a>.</p>
+        <h4 style="margin-bottom:6px">Numbers</h4>
+        <p style="font-size:.85rem;color:var(--text-dim);margin:0 0 6px"><strong>Your local emergency number</strong> — 911 in the US and Canada, 999 or 112 in the UK, 112 across the EU, 000 in Australia. If you are not sure, 112 works on most mobile networks worldwide.</p>
+        <p style="font-size:.85rem;color:var(--text-dim);margin:0 0 6px"><strong>Poison Help (US), 1-800-222-1222</strong> — 24/7, free, and the right call for a child or pet that has eaten an edible. Outside the US, search for your national poison centre.</p>
+        <p style="font-size:.85rem;color:var(--text-dim);margin:0"><strong>SAMHSA National Helpline (US), 1-800-662-4357</strong> — 24/7 treatment referral. More in <a href="#" data-goto="learn" data-article="art-reading">Further reading</a>.</p>
       </div>
     </div>
   </div>
@@ -1007,6 +1025,27 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
         </div>
       </div>
 
+      <label class="check">
+        <input type="checkbox" id="alc-watson"><span class="box"></span>
+        <span>Estimate <em>r</em> from total body water (<span class="term" data-tip="Watson's equations estimate total body water from sex, age, height and weight. Recent forensic work argues the total-body-water form of Widmark's equation is more reliable than a flat population ratio — it lowers estimates for average builds and raises them for high-body-fat users." tabindex="0">Watson</span>)</span>
+      </label>
+      <div class="inline-2" id="alc-watson-fields" hidden>
+        <div class="field">
+          <label class="lab" for="alc-height">Height</label>
+          <div class="with-unit">
+            <input type="number" id="alc-height" data-unit-field="height" min="120" max="220" step="1" value="175" inputmode="decimal">
+            <button type="button" class="unit unit-btn" data-unit-toggle="height" data-unit-label="height" title="Switch between centimetres and inches">cm</button>
+          </div>
+        </div>
+        <div class="field">
+          <label class="lab" for="alc-age">Age</label>
+          <div class="with-unit">
+            <input type="number" id="alc-age" min="16" max="100" step="1" value="30" inputmode="decimal">
+            <span class="unit">years</span>
+          </div>
+        </div>
+      </div>
+
       <div class="field">
         <span class="lab">Elimination rate <span class="hint">&beta;, %/hour</span></span>
         <div class="pills" id="alc-beta" role="group" aria-label="Elimination rate"></div>
@@ -1044,7 +1083,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
       <div class="pills" id="alc-presets" role="group" aria-label="Drink presets"></div>
     </div>
 
-    <div class="inline-3">
+    <div class="inline-4">
       <div class="field">
         <label class="lab" for="alc-vol">Volume</label>
         <div class="with-unit">
@@ -1064,6 +1103,13 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
         <div class="with-unit">
           <input type="number" id="alc-when" min="0" max="1440" step="5" value="30" inputmode="decimal">
           <span class="unit">min ago</span>
+        </div>
+      </div>
+      <div class="field">
+        <label class="lab" for="alc-over">Drunk over <span class="hint">0 = in one go</span></label>
+        <div class="with-unit">
+          <input type="number" id="alc-over" min="0" max="240" step="5" value="0" inputmode="decimal">
+          <span class="unit">min</span>
         </div>
       </div>
     </div>
@@ -1111,7 +1157,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
   <!-- ---------------- reference table ---------------- -->
   <div class="card">
     <div class="card-title"><span class="ico" data-icon="table"></span><h3>BAC effects reference — 0.00 to 0.40 +</h3></div>
-    <p class="card-note">This table is permanent reference material and does not change with your inputs. Descriptions are generalised from public-health and forensic-toxicology literature; the intensity column uses the app's shared six-step scale.</p>
+    <p class="card-note">This table is permanent reference material and does not change with your inputs. Descriptions are generalised from public-health and forensic-toxicology literature. The second column uses the app's shared six-step intensity scale up to 0.20&nbsp;%, above which intensity is the wrong vocabulary entirely and it switches to risk.</p>
     <div class="table-wrap">
       <table class="wide" id="alc-ref-table"></table>
     </div>
@@ -1174,12 +1220,13 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
           <div class="with-unit"><input type="number" id="d9-cbg" min="0" max="200" step="0.5" value="0" inputmode="decimal" aria-label="CBG milligrams"><span class="unit">CBG</span></div>
         </div>
       </div>
-      <p class="card-note" style="margin-bottom:0">Milligrams. <strong>CBD</strong> modestly damps overall intensity; <strong>CBN</strong> adds specifically to sedation and sleepiness; <strong>CBG</strong> specifically trims anxiety and paranoia. <span class="tuned">hand-tuned</span></p>
+      <p class="card-note">Milligrams. None of the three changes the modelled intensity — the evidence does not support the coefficients this app used to apply, and for CBD it pointed the wrong way entirely.</p>
+      <div id="d9-cannabinoids"></div>
     </div>
 
     <div class="card">
       <div class="card-title"><span class="ico" data-icon="person"></span><h3>You</h3></div>
-      <p class="card-note">THC is <span class="term" data-tip="Lipophilic = fat-loving. THC partitions into fatty tissue rather than body water, which is the opposite of ethanol. That is why body-fat percentage — not total weight — drives the distribution term here.">lipophilic</span>, so the distribution term is driven by fat mass, not body weight.</p>
+      <p class="card-note">THC is <span class="term" data-tip="Lipophilic = fat-loving. THC ends up in fatty tissue rather than body water, the opposite of ethanol — but the uptake is slow, so it shapes the tail rather than the peak." tabindex="0">lipophilic</span>, but adipose uptake is slow: body fat stretches the <em>tail</em> here and is deliberately not allowed to move the peak. Body size is a weak predictor next to tolerance and product.</p>
 
       <div class="inline-2">
         <div class="field">
@@ -1204,7 +1251,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
       </div>
 
       <div class="field">
-        <span class="lab">Tolerance <span class="hint">shifts the effective dose</span></span>
+        <span class="lab">Tolerance <span class="hint" id="d9-tol-hint">shifts the effective dose</span></span>
         <div class="pills" id="d9-tol" role="group" aria-label="Tolerance"></div>
       </div>
 
@@ -1262,7 +1309,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
     <div class="art"><span class="ico" data-icon="gummy"></span></div>
     <div>
       <h2>Delta-8 THC — edibles</h2>
-      <p class="sub">&Delta;<sup>8</sup>-THC is a <span class="term" data-tip="Double-bond isomer: same atoms, same formula (C21H30O2), but the double bond sits on the 8th carbon of the cyclohexene ring instead of the 9th. Small change, meaningfully weaker CB1 binding.">double-bond isomer</span> of &Delta;<sup>9</sup>-THC with weaker CB1 affinity — commonly described as roughly 1.3–2&times; less potent milligram for milligram. This estimator therefore uses a <em>higher</em> EC<sub>50</sub> than the Delta-9 module, so the same milligrams land lower on the same scale.</p>
+      <p class="sub">&Delta;<sup>8</sup>-THC is a <span class="term" data-tip="Double-bond isomer: same atoms, same formula (C21H30O2), but the double bond sits on the 8th carbon of the cyclohexene ring instead of the 9th. Small change, meaningfully weaker CB1 binding.">double-bond isomer</span> of &Delta;<sup>9</sup>-THC with weaker CB1 affinity — about half as potent milligram for milligram: in a controlled human trial, 40&nbsp;mg of &Delta;<sup>8</sup> and 20&nbsp;mg of &Delta;<sup>9</sup> were pharmacodynamically indistinguishable. This estimator puts that entire difference in the EC<sub>50</sub> and models <em>no</em> difference in character, because matched for intensity the trial found none.</p>
     </div>
   </div>
 
@@ -1309,12 +1356,13 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
           <div class="with-unit"><input type="number" id="d8-cbg" min="0" max="200" step="0.5" value="0" inputmode="decimal" aria-label="CBG milligrams"><span class="unit">CBG</span></div>
         </div>
       </div>
-      <p class="card-note" style="margin-bottom:0">Delta-8 gummies very often also contain CBN. Milligrams, same three specific actions as in the Delta-9 module. <span class="tuned">hand-tuned</span></p>
+      <p class="card-note">Delta-8 gummies very often also contain CBN. As in the Delta-9 module, none of the three changes the modelled intensity.</p>
+      <div id="d8-cannabinoids"></div>
     </div>
 
     <div class="card glow-host">
       <div class="card-title"><span class="ico" data-icon="person"></span><h3>You</h3></div>
-      <p class="card-note">Same lipophilic distribution model as Delta-9 — fat mass, not body weight.</p>
+      <p class="card-note">Same as Delta-9: body fat stretches the tail and does not move the peak.</p>
 
       <div class="inline-2">
         <div class="field">
@@ -1355,7 +1403,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 
   <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="ico" data-icon="chart"></span><h3>Intensity over time</h3></div>
-    <p class="card-note">Same curve shape as Delta-9; the whole curve simply sits lower for equal milligrams, and is modelled as slightly shorter-lasting.</p>
+    <p class="card-note">Same curve and the same clamps as Delta-9 — the trial puts Delta-8 blood concentrations peaking 2–4 hours post-dose, like Delta-9. The curve simply sits lower for equal milligrams.</p>
     <div class="chart-host" id="d8-chart"></div>
     <div class="chart-legend" id="d8-chart-legend"></div>
     <div class="stat-row" id="d8-stats"></div>
@@ -1369,7 +1417,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
     </div>
     <div class="card">
       <div class="card-title"><span class="ico" data-icon="brain"></span><h3>Effect breakdown right now</h3></div>
-      <p class="card-note">Delta-8 is widely reported as producing less anxiety and less cognitive disruption at equal subjective intensity — that difference is modelled here as shifted per-effect weights. <span class="tuned">hand-tuned</span></p>
+      <p class="card-note">At equal <em>milligrams</em> Delta-8 does less of everything. At equal <em>intensity</em> the controlled trial found no difference, so these weights are identical to the Delta-9 module's — the potency gap lives entirely in the EC<sub>50</sub>.</p>
       <div class="effects" id="d8-effects"></div>
     </div>
   </div>
@@ -1450,7 +1498,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 
     <div class="card">
       <div class="card-title"><span class="ico" data-icon="person"></span><h3>You</h3></div>
-      <p class="card-note">Fat mass matters less for an inhaled dose — the acute peak is driven by what reaches arterial blood in the first minutes — but it still stretches the tail.</p>
+      <p class="card-note">Fat mass does not touch the peak of an inhaled dose at all — that is set by what reaches arterial blood in the first minutes — but it still stretches the tail.</p>
 
       <div class="inline-2">
         <div class="field">
@@ -1591,7 +1639,8 @@ gramsEthanol = volumeMl × (abvPercent / 100) × 0.789
              = <span class="hl">14.01 g ethanol</span>   <span class="cm">// ≈ one US standard drink</span></div>
 
       <h4>Step 1a — Widmark</h4>
-      <p>A is grams of ethanol, W is body mass, r is the distribution ratio, β the elimination rate. Written with W in <em>grams</em> the first term is a mass fraction, so it is multiplied by 100 to express it as g/100&nbsp;mL. This app keeps W in kilograms and folds the unit conversion into a single factor of 10, which is algebraically identical.</p>
+      <p>A is grams of ethanol, W is body mass, r is the distribution ratio, β the elimination rate. Written with W in <em>grams</em>, A/(W·r) is a mass fraction — grams of ethanol per gram of body fluid — and multiplying by 100 gives grams per 100&nbsp;grams. This app keeps W in kilograms and folds the conversion into a single factor of 10, which is algebraically identical.</p>
+      <p><strong>There is a quiet approximation in that sentence, and it is worth naming.</strong> "Grams per 100 grams" is not the same as "grams per 100&nbsp;mL": blood has a density around 1.05&nbsp;g/mL, so the two differ by roughly 5&nbsp;%. Widmark's original factors were derived against blood alcohol measured by <em>mass</em>, and treating a mass-based ratio as a volume-based concentration therefore understates the figure by about that much — in the non-conservative direction. The app does not silently correct for it, because the r values it ships are the conventional ones and adjusting one without the other would be worse. Read it as one more reason the number carries a band rather than a decimal point.</p>
       <div class="formula"><span class="cm">// textbook form, W in grams, result already in %</span>
 BAC(t) = 100 × A / (W_grams × r)  −  β × t
 
@@ -1616,6 +1665,15 @@ R  = betaPctPerHour × 10 × Vd
 <span class="cm">// concentration in g/L, then ÷10 to report as g/dL ( = % )</span>
 C(t) = (doseGrams / Vd) × (1 − e^(−kaPerHour × t))  −  (R / Vd) × t
 bacPercent(t) = max(0, C(t) / 10)</div>
+      <p>With one refinement the closed form above leaves out. Elimination is zero-order <em>because the enzyme is saturated</em>, and that stops being true as the curve approaches zero — the Michaelis constant for Class I ADH is around 2–10&nbsp;mg/100&nbsp;mL, which is exactly where a flat β would be marching the last of it off on a ruler. The implementation integrates a Michaelis–Menten term per minute instead:</p>
+      <div class="formula"><span class="cm">// KM_PCT = 0.005 %  (the middle of the 2-10 mg/100 mL range)</span>
+<span class="cm">// beta is an OBSERVED slope in the linear region, not Vmax, so Vmax is</span>
+<span class="cm">// calibrated to make the instantaneous rate exactly beta at 0.08 %:</span>
+vmax            = beta × (KM_PCT + 0.08) / 0.08
+eliminationRate = vmax × bac / (KM_PCT + bac)      <span class="cm">// %/hour</span>
+
+<span class="cm">// identical to zero-order while saturated, longer only at the very end:</span>
+<span class="cm">//   0.020 % -> 0.001 % takes ~2.1 h this way, ~1.3 h with a flat beta</span></div>
       <p>Absorption rate <code>kaPerHour</code> is taken from stomach contents — 6.0&nbsp;h⁻¹ empty, 3.5&nbsp;h⁻¹ with light food, 2.0&nbsp;h⁻¹ after a full meal. <span class="tuned">hand-tuned</span> Those three numbers are my reasoned picks inside the range reported for oral ethanol; they are not measured values for you.</p>
       <p><strong>The asymptotic check.</strong> As t grows the absorption term saturates at <code>doseGrams / Vd</code> and its derivative vanishes, so the slope of the curve must approach exactly <code>−R / Vd</code> g/L/h, which is <code>−betaPctPerHour</code> in percent. The app verifies this numerically on every load:</p>
       <div class="formula" data-live="verify-slope">computing…</div>
@@ -1648,34 +1706,39 @@ hill(dose, ec50, n) = dose^n / (ec50^n + dose^n)
 
       <h4>Step 3 — From milligrams to effective dose</h4>
       <p>Two things happen before a dose ever touches the curve: it is scaled by how the body distributes it, and it is divided by tolerance. Tolerance is modelled as <em>sliding you left along the dose axis</em> — a tolerant user needs more milligrams to reach the same point on the same curve — rather than as a multiplier applied to the output, which would wrongly leave the shape of the response untouched.</p>
-      <div class="formula"><span class="cm">// THC is lipophilic: fat mass, not body weight, drives distribution.</span>
+      <div class="formula"><span class="cm">// Adipose uptake of THC is SLOW, so fat mass shapes the TAIL, not the peak.</span>
 fatMassKg          = weightKg × bodyFatPercent / 100
 REFERENCE_FAT_KG   = 17.5              <span class="cm">// 70 kg at 25 % body fat</span>
-distributionFactor = (REFERENCE_FAT_KG / max(fatMassKg, 2)) ^ 0.35
 durationFactor     = clamp((fatMassKg / REFERENCE_FAT_KG) ^ 0.15, 0.85, 1.30)
+distributionFactor = <span class="hl">1</span>                  <span class="cm">// deliberately inert; see below</span>
 
 <span class="cm">// tolerance shifts the dose, it does not scale the response</span>
-effectiveDose = mg × distributionFactor / toleranceFactor
+effectiveDose = mg / toleranceFactor
 
-intensity01   = hill(effectiveDose, EC50_MG, HILL_N) × cbdDamping
+intensity01   = hill(effectiveDose, EC50_MG, HILL_N)
 intensityPct  = round(intensity01 × 100)</div>
-      <p><span class="tuned">hand-tuned</span> The exponents 0.35 and 0.15, the 17.5&nbsp;kg reference, the 0.85–1.30 clamp and every EC<sub>50</sub> below are my reasoned estimates. They are shaped to behave correctly — more fat mass lowers the acute peak slightly and lengthens the tail — but no published constant says 0.35.</p>
+      <p><strong>distributionFactor used to be real, and it was wrong.</strong> It scaled the effective dose by fat mass with an exponent of 0.35, which swung the same 10&nbsp;mg gummy from ×1.45 at 60&nbsp;kg and 10&nbsp;% fat to ×0.72 at 110&nbsp;kg and 40&nbsp;% — the difference between "Strong, 67&nbsp;%" and "Moderate, 42&nbsp;%". But the acute peak is governed by absorption and first-pass metabolism, and fat takes the drug up slowly, so that term was modelling the wrong phase of the curve. It is now 1, kept as a named function purely so this article can show you that it is. Fat mass survives only in <code>durationFactor</code>, where the reservoir genuinely operates.</p>
+      <p><span class="tuned">hand-tuned</span> The 0.15 exponent, the 17.5&nbsp;kg reference, the 0.85–1.30 clamp and every EC<sub>50</sub> below remain my reasoned estimates.</p>
 
       <h4>Step 4 — The three EC<sub>50</sub> values</h4>
       <p>Three separate modules, three separate constants, chosen to reproduce the potency ordering that is actually reported. The two edible values are in <em>labelled milligrams swallowed</em>; the inhaled value is in <em>estimated milligrams absorbed</em>. They are deliberately not interchangeable units, and the comparison table in the smoked section is the place they are reconciled.</p>
       <div class="formula" data-live="verify-ec50">computing…</div>
 
-      <h4>Step 5 — Minor cannabinoids, three distinct jobs</h4>
-      <div class="formula"><span class="cm">// CBD — damps overall intensity, applied to every effect</span>
-cbdRatio    = mgCbd / max(mgThc, 0.5)
-cbdDamping  = 1 − 0.25 × cbdRatio / (cbdRatio + 1.5)        <span class="cm">// → floor of 0.75</span>
+      <h4>Step 5 — Minor cannabinoids: removed from the arithmetic</h4>
+      <p>This step used to contain three saturating coefficients. It now contains none, and that is the most important correction in this article.</p>
+      <div class="formula"><span class="cm">// WHAT IT USED TO DO — wrong, and wrong toward reassurance:</span>
+<span class="cm">//   cbdDamping = 1 − 0.25 × ratio/(ratio + 1.5)   // more CBD -> gentler</span>
 
-<span class="cm">// CBN — adds ONLY to sedation and sleepiness</span>
-cbnBoost    = 0.30 × mgCbn / (mgCbn + 5)                    <span class="cm">// → ceiling of +30 %</span>
+<span class="cm">// WHAT THE EVIDENCE SAYS for a swallowed dose:</span>
+<span class="cm">//   20 mg THC + 640 mg CBD in a brownie produced ~2x the peak THC,</span>
+<span class="cm">//   ~10x the 11-hydroxy-THC, and STRONGER subjective, cognitive and</span>
+<span class="cm">//   psychomotor effects than 20 mg THC alone. CBD inhibits the CYP</span>
+<span class="cm">//   enzymes that clear oral THC. At therapeutic ratios, no substantial</span>
+<span class="cm">//   modulation in either direction.</span>
 
-<span class="cm">// CBG — subtracts ONLY from anxiety and paranoia</span>
-cbgRelief   = 0.25 × mgCbg / (mgCbg + 6)                    <span class="cm">// → floor of −25 %</span></div>
-      <p><span class="tuned">hand-tuned</span> The saturating shape is defensible — these are receptor-mediated effects and they must plateau — but the four coefficients are mine.</p>
+intensity01 = hill(effectiveDose, EC50_MG, HILL_N)   <span class="hl">// no cannabinoid terms</span></div>
+      <p>Applied to that exact 20&nbsp;mg + 640&nbsp;mg condition, the old model dropped the modelled peak from 77&nbsp;% to 59&nbsp;%. The real experiment moved it the other way. A model that tells someone their high-CBD edible is gentler than the label suggests is handing out a reason to take more, which is the worst failure mode available to this app.</p>
+      <p>The direction is evidenced; a coefficient is not. So CBD, CBN and CBG now produce an explanatory panel and change no number at all. CBN and CBG were never better supported than CBD — the difference is only that their invented coefficients pointed somewhere harmless.</p>
 
       <h4>Step 6 — The time course</h4>
       <p>Cannabis intensity is drawn as an explicitly asymmetric curve: a climb that accelerates, then a decline with a long tail. Symmetric bell curves are wrong in both directions — they come up too fast and finish too early.</p>
@@ -1689,6 +1752,8 @@ t &gt; endMin                   →  0
 
 intensityAtTime = peakIntensityPct × f</div>
       <div class="formula" data-live="verify-timing">computing…</div>
+      <p>The clamps around those numbers follow what public-health agencies publish rather than what felt tidy. Health Canada tells people an edible begins in 30&nbsp;minutes to 2&nbsp;hours, can take up to 4&nbsp;hours to peak, lasts up to 12&nbsp;hours and leaves residual effects for up to 24; for inhalation, peak within 30&nbsp;minutes and effects lasting up to 6&nbsp;hours. Earlier versions of this app capped edibles at 10&nbsp;hours and inhalation at 3, which cut the tail short in both cases.</p>
+      <p>Felt intensity is also not the same thing as impairment, so the charts carry a separate shaded band for it. The driving meta-analysis has most driving-relevant skills recovering within about 5&nbsp;hours of inhaling 20&nbsp;mg of THC and nearly all within 7, with oral doses taking longer — in every case well past the point at which the intensity curve has flattened to nothing.</p>
 
       <h4>Step 7 — Alcohol's place on the shared scale</h4>
       <p>Alcohol has no EC<sub>50</sub> here; BAC is already a physical quantity and reporting a fabricated "receptor occupancy" for it would be dishonest. To place a BAC on the same six-step vocabulary as the cannabis modules, the app uses an explicit, declared display mapping:</p>
@@ -1724,7 +1789,7 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
     <div class="acc-body article">
       <p>Three sequential bottlenecks separate swallowing from feeling anything: gastric emptying, intestinal absorption of a fat-soluble molecule into lymph and portal blood, and hepatic first-pass conversion. Each adds tens of minutes. Typical onset lands between 30 and 90 minutes, the peak between 1.5 and 3 hours, and the whole arc runs 6 to 10 hours — with a residual dullness that can outlast the day.</p>
       <p>Product format shifts the first bottleneck measurably, which is why it is an input in the estimator. A tincture held under the tongue partly bypasses the stomach through sublingual absorption and comes on soonest. Nano-emulsified drinks are engineered to absorb quickly and are next. Gummies and chocolates must dissolve first. Hard capsules with a shell to break down are slowest. Food matters at least as much: an empty stomach empties fastest and gives the quickest onset, while a fatty meal delays onset substantially <em>and</em> increases total absorption, because dietary fat improves the uptake of a lipophilic drug.</p>
-      <p>The dangerous consequence is the re-dose. At 45 minutes you feel nothing; you take a second gummy; at 90 minutes both arrive at once. You have not doubled your experience in a linear way — but you have moved from a dose where the Hill curve is steep to a dose where anxiety, cognitive disruption and coordination loss are climbing far faster than euphoria. Nearly every edible emergency-department visit is this exact story.</p>
+      <p>The dangerous consequence is the re-dose. At 45 minutes you feel nothing; you take a second gummy; at 90 minutes both arrive at once. You have not doubled your experience in a linear way — but you have moved from a dose where the Hill curve is steep to a dose where anxiety, cognitive disruption and coordination loss are climbing far faster than euphoria. It is a well-recognised route to an emergency department, though not the only one: accidental exposure in children and products whose labelled potency is simply wrong account for a large share of cannabis-related presentations too.</p>
       <p>The rule that follows is not a slogan; it falls straight out of the timing model: <strong>take a dose, then wait two full hours before deciding it was not enough.</strong> The estimator draws the dashed onset and peak markers precisely so that the waiting interval is visible rather than abstract.</p>
     </div>
   </div>
@@ -1734,7 +1799,8 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
     <div class="acc-body article">
       <p>There is a fixed number of CB1 receptors in your brain. A drug's effect depends on the fraction of them occupied, and occupancy follows the same saturating mathematics as any binding equilibrium. The Hill (or E<sub>max</sub>) equation captures it in one line: <code>response = D^n / (EC50^n + D^n)</code>.</p>
       <p>Two parameters do all the work. <strong>EC<sub>50</sub></strong> is the dose producing half the maximum modelled response — it sets where on the dose axis the interesting part of the curve sits. <strong>n</strong>, the Hill coefficient, sets how steeply the curve rises through that midpoint; values above 1 give the characteristic S-shape of a cooperative or amplified system.</p>
-      <p>The behaviour this produces is the entire reason the app uses it. Near the bottom of the curve the response is almost proportional to dose, so 10&nbsp;mg really does feel about twice 5&nbsp;mg. Near the top the curve flattens, so 110&nbsp;mg is barely distinguishable from 100&nbsp;mg no matter what the label says. A calculator that scales linearly tells a user that tripling a large dose triples the effect — that is biologically false, and it is false in the direction that encourages taking more.</p>
+      <p>The behaviour this produces is the entire reason the app uses it. Near the bottom of the curve the response is almost proportional to dose, so 10&nbsp;mg really does feel about twice 5&nbsp;mg. Near the top the curve flattens, so 110&nbsp;mg is barely distinguishable from 100&nbsp;mg no matter what the label says. A calculator that scales linearly tells a user that tripling a large dose triples the effect, which is biologically false.</p>
+      <p>Be careful with the moral, though — an earlier version of this article had it backwards. Saturation is not a safety argument in either direction. It is the <em>saturating</em> curve that says another 10&nbsp;mg on top of 100 will barely register, and someone who reads that as permission has misread it. What flattens is the modelled subjective high. Duration does not flatten, the chance of vomiting does not flatten, and the odds of a frightening few hours do not flatten. That is why the effect bars here ride separate curves and why the impairment band on the chart outlasts the intensity curve completely.</p>
       <p>Saturation is not the same as safety. The <em>subjective</em> high plateaus, but the effects that ride different curves do not stop climbing in step: anxiety, tachycardia, vomiting and profound disorientation keep increasing with dose long after euphoria has flattened. That is why each effect bar in this app has its own EC<sub>50</sub> rather than being a fixed fraction of one overall score, and why the anxiety curves are given both a higher midpoint and a steeper coefficient.</p>
     </div>
   </div>
@@ -1745,7 +1811,8 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
       <p>Cannabis tolerance is not psychological. Regular THC exposure causes measurable <strong>downregulation and desensitisation of CB1 receptors</strong> — imaging studies in daily users show substantially reduced cortical CB1 availability compared with non-users. Fewer available receptors means a given dose occupies a smaller fraction of a smaller pool, and the whole dose-response relationship shifts.</p>
       <p>The encouraging half of the same finding is that it largely reverses. CB1 availability recovers substantially over roughly two to four weeks of abstinence, with the fastest recovery in the first few days. A "tolerance break" is a real pharmacological intervention, not a folk remedy.</p>
       <p>How tolerance is modelled matters. This app divides the dose before it reaches the curve — <code>effectiveDose = mg × distributionFactor / toleranceFactor</code> — which slides a tolerant user leftward along the same curve. The alternative, multiplying the final percentage by some fraction, would be wrong in a specific and misleading way: it would preserve the shape of the response, implying that a tolerant user at a large dose still sits on the same steep part of the curve as a naive user. In reality they are further left, where the curve is shallower, which is exactly why tolerance is so difficult to out-dose and why escalation runs away.</p>
-      <p>The tolerance multipliers offered here — 1.0 for none, up to 4.0 for heavy daily use — are <span class="tuned">hand-tuned</span>. They reproduce the widely-reported clinical picture that experienced daily users need several times the dose a naive user needs for comparable effect, but no study hands you the number 2.8.</p>
+      <p>One caveat on that picture, because the model is a simplification of it. A pure rightward slide implies tolerance can always be out-dosed — take enough and you arrive at the same place. Receptor downregulation does not work like that: with fewer receptors available, a partial agonist has a lower <em>ceiling</em>, not just a longer road to it. A heavy daily user chasing a naive user's experience is climbing toward a maximum that has itself come down. This app shifts the dose without lowering the ceiling, which is the one place its tolerance model is knowingly optimistic.</p>
+      <p>The multipliers themselves — 1.0 for none, up to 4.0 for heavy daily use — are <span class="tuned">hand-tuned</span>. They reproduce the widely-reported clinical picture that experienced daily users need several times the dose a naive user needs for comparable effect, but no study hands you the number 2.8.</p>
     </div>
   </div>
 
@@ -1755,7 +1822,9 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
       <p>&Delta;<sup>8</sup>-THC and &Delta;<sup>9</sup>-THC are isomers: identical formula, C<sub>21</sub>H<sub>30</sub>O<sub>2</sub>, differing only in the position of one double bond in the cyclohexene ring. That single displacement lowers binding affinity at the CB1 receptor, and the consistent report — from the mid-twentieth-century human studies onward and from a very large body of modern user reporting — is that &Delta;<sup>8</sup> is meaningfully weaker milligram for milligram, commonly framed as somewhere between half and three-quarters as potent.</p>
       <p>This app expresses that difference where it belongs: in the EC<sub>50</sub>. The Delta-8 module carries a higher midpoint than the Delta-9 module, so identical milligrams land lower on the identical scale, and the two reference tables genuinely disagree at the same dose rather than being the same rows with a different heading. The exact values, and the ratio they imply, are printed in the comparison table at the bottom of the Delta-8 section.</p>
       <p>The qualitative reports differ too, and consistently enough to model: less anxiety, less cognitive disruption, a clearer head at comparable subjective intensity. That shows up here as shifted per-effect weights rather than as a different overall curve. <span class="tuned">hand-tuned</span> — there is far less controlled human data on &Delta;<sup>8</sup> than on &Delta;<sup>9</sup>, and reasoning from user reports is exactly the kind of inference that deserves a flag.</p>
-      <p>The part that has nothing to do with pharmacology is the part most worth knowing. Hemp contains only trace &Delta;<sup>8</sup>, so commercial product is made by acid-catalysed isomerisation of CBD. That synthesis can leave reaction by-products and residual reagents behind, and in many places these products sit outside the testing regime that applies to licensed cannabis. The FDA has published adverse-event and poison-centre data on exactly this, linked in <a href="#" data-article="art-reading">Further reading</a>. The practical implication for this estimator is blunt: the milligrams on a &Delta;<sup>8</sup> label are less trustworthy than the milligrams on a regulated &Delta;<sup>9</sup> label, and a model can only ever be as good as the number you feed it.</p>
+      <p>The part that has nothing to do with pharmacology is the part most worth knowing. Hemp contains only trace &Delta;<sup>8</sup>, so commercial product is made by acid-catalysed isomerisation of CBD. That synthesis can leave reaction by-products and residual reagents behind, and in many places these products have sat outside the testing regime that applies to licensed cannabis. The FDA has published adverse-event and poison-centre data on exactly this, linked in <a href="#" data-article="art-reading">Further reading</a>.</p>
+      <p><strong>The legal position is actively changing and this file cannot update itself.</strong> The federal hemp definition in the United States is being narrowed toward a total-THC standard, with the effective dates repeatedly moved by stopgap legislation, and state law varies enormously on top of that. Anything specific this article told you about dates would be wrong by the time you read it — check your own jurisdiction's current rules rather than trusting an offline HTML file on the subject.</p>
+      <p>The practical implication for the estimator is blunt either way: the milligrams on a &Delta;<sup>8</sup> label are less trustworthy than the milligrams on a regulated &Delta;<sup>9</sup> label, and a model can only ever be as good as the number you feed it.</p>
     </div>
   </div>
 
@@ -1785,8 +1854,9 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
     <div class="acc-body article">
       <p>The two substances in this app distribute into opposite compartments, and that single fact explains most of the difference in how they behave.</p>
       <p>Ethanol is small and water-soluble. It equilibrates into <strong>total body water</strong> and effectively ignores adipose tissue. So the relevant scaling variable is lean mass: at equal body weight, the leaner person has more water, dilutes a drink further, and peaks lower. This is why Widmark's <em>r</em> differs by sex — average body composition differs — and why using total body weight alone systematically misestimates people at either end of the composition range.</p>
-      <p>THC is strongly lipophilic. It partitions rapidly out of blood into <strong>fatty tissue</strong>, which acts as a reservoir: it lowers the acute plasma peak a little, then releases the drug slowly back into circulation for a long time afterwards. That reservoir is the reason cannabis metabolites are detectable for weeks in frequent users while the intoxication lasted hours, and it is the reason this app drives the cannabis distribution term from <em>body-fat percentage</em> rather than weight. A heavier person is not automatically less affected by a gummy; a person with more fat mass is modelled as slightly lower-peaking and slightly longer-lasting.</p>
-      <p>Because most people do not know their body-fat percentage, the field is optional and falls back to a population average — 22&nbsp;% for the male-average option, 30&nbsp;% for the female-average option, 26&nbsp;% for the neutral one. <span class="tuned">hand-tuned</span> These are round numbers near commonly cited adult averages, not measurements, and if you know your actual figure you should type it in. The model clamps fat mass at a 2&nbsp;kg floor so that an extreme entry cannot produce a nonsensical division.</p>
+      <p>THC is strongly lipophilic, and it does end up in <strong>fatty tissue</strong> — but the timing matters, and an earlier version of this article got it wrong. Adipose uptake is <em>slow</em>. The acute peak an edible produces is set by how fast the gut absorbs it and how much the liver destroys on the way past, not by how much fat is standing by to soak it up over the following hours. Saying THC "partitions rapidly into fat" described the wrong phase of the curve entirely.</p>
+      <p>That error had teeth. This app used to scale the effective dose by fat mass, which swung the same 10&nbsp;mg gummy from "Strong" at 60&nbsp;kg and 10&nbsp;% fat to "Moderate" at 110&nbsp;kg and 40&nbsp;% — a difference the evidence does not support for the acute peak. Body fat now affects only the <strong>tail</strong>, where the reservoir genuinely operates: slow redistribution back into circulation, which is why cannabis metabolites stay detectable for weeks in frequent users long after any intoxication ended.</p>
+      <p>The honest summary is that body size is a <em>weak</em> predictor of how an edible will land, far weaker than tolerance or than what the label actually contains. The body-fat field is optional and falls back to population means — about 28.7&nbsp;% for men and 40.9&nbsp;% for women by DXA, with 34.8&nbsp;% as the neutral midpoint. Those are real averages rather than the round numbers this app previously presented as such. The model clamps fat mass at a 2&nbsp;kg floor so an extreme entry cannot produce a nonsensical division.</p>
       <p>One warning about the tail this produces: a longer modelled duration is <em>not</em> a longer high. It reflects slow redistribution, which manifests as residual dullness and next-day grogginess far more than as continued intoxication.</p>
     </div>
   </div>
@@ -1796,7 +1866,7 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
     <div class="acc-body article">
       <p><strong>"Coffee sobers you up."</strong> It does not. Caffeine is a stimulant that makes an intoxicated person a more alert intoxicated person. Elimination is enzyme-limited and constant; nothing you drink changes ADH's maximum velocity. The documented danger is that caffeine masks sedation well enough that people who would otherwise have stopped decide they are fine to drive. Cold showers, fresh air, food after the fact and "walking it off" all fail for the same reason.</p>
       <p><strong>"You can sweat out an edible."</strong> No. A negligible fraction of either ethanol or THC leaves through sweat or breath; both are cleared by hepatic metabolism. Exercise raises heart rate and mobilises fat, which if anything can transiently <em>raise</em> circulating THC rather than lower it. Once an edible is absorbed there is no accelerator pedal — only time.</p>
-      <p><strong>"Eating first means it won't affect me."</strong> Food slows gastric emptying, which lowers and delays the peak for alcohol. That is genuinely useful. It does not reduce the total dose — all of it still arrives. For edibles a fatty meal does something worse than nothing: it <em>increases</em> absorption of a lipophilic drug while delaying its onset, which is precisely the combination that causes re-dosing.</p>
+      <p><strong>"Eating first means it won't affect me."</strong> Food does more than delay: it slows gastric emptying, which lowers and delays the peak, and it also raises first-pass metabolism — elimination runs measurably faster in non-fasted people, roughly 15–20&nbsp;mg/100&nbsp;mL/h against 10–15 fasted. So a meal genuinely reduces peak exposure, which is why this app now takes its default elimination rate from your stomach setting. What it does not do is make the drinks disappear, or make you fit to drive. For edibles a fatty meal does something worse than nothing: it <em>increases</em> absorption of a lipophilic drug while delaying onset, which is precisely the combination that causes re-dosing.</p>
       <p><strong>"Beer is lighter than spirits."</strong> The unit is grams of ethanol; the packaging is irrelevant. A 355&nbsp;mL beer at 5&nbsp;% and a 44&nbsp;mL shot at 40&nbsp;% are both about 14&nbsp;g. A 473&nbsp;mL craft can at 7&nbsp;% is closer to two standard drinks, which is why every preset in this app shows its computed grams rather than a "drink count".</p>
       <p><strong>"I've built tolerance, so I'm safer to drive."</strong> Tolerance blunts the <em>subjective</em> signal much more than it restores reaction time, divided attention and tracking. A tolerant person is an impaired person who feels fine — the worst of both.</p>
       <p><strong>"It's been an hour per drink, so I'm at zero."</strong> A standard drink raises a typical adult by roughly 0.02–0.03&nbsp;%, and the liver removes about 0.015&nbsp;% per hour. One drink per hour accumulates steadily. The threshold panel in the alcohol section exists to make that arithmetic concrete.</p>
@@ -1925,45 +1995,59 @@ const PROVENANCE = [
   {v:'0.789 g/mL', k:'ETHANOL_DENSITY_G_PER_ML', where:'All alcohol maths', type:'standard',
    why:'Density of ethanol at 20 °C. A measured physical constant.'},
   {v:'r = 0.68 / 0.55 / 0.615', k:'ALCOHOL.R_FACTOR', where:'Widmark + PK volume of distribution', type:'standard',
-   why:'Widmark distribution ratios in standard forensic use for male and female averages; 0.615 is their midpoint, offered as a neutral option.'},
-  {v:'β = 0.015 %/h (0.012 / 0.018)', k:'ALCOHOL.BETA', where:'Elimination, both alcohol models', type:'standard',
-   why:'Zero-order ethanol elimination rate. 0.015 is the standard adult average; the slow/fast options bracket the commonly reported 0.012–0.020 range.'},
-  {v:'ka = 6.0 / 3.5 / 2.0 h⁻¹', k:'ALCOHOL.KA', where:'PK model absorption', type:'tuned',
-   why:'Absorption rate for empty / light / full stomach. Chosen inside the reported spread for oral ethanol to give ~7, ~12 and ~21 minute absorption half-lives. My picks.'},
+   why:'Widmark distribution ratios in standard forensic use (SD about 0.085 for men, 0.055 for women); 0.615 is their midpoint, offered as a neutral option.'},
+  {v:'TBW equations; blood water 0.8064', k:'watsonTBW() / watsonR()', where:'Optional r from height and age', type:'standard',
+   why:'Watson\u2019s total-body-water regressions, converted to a Widmark factor by r = TBW / (0.8064 \u00d7 body mass). Recent forensic work argues the TBW form is more reliable than a flat ratio. It lowers estimates for average builds and raises them for high-body-fat users.'},
+  {v:'\u03b2 = 0.010 / 0.012 / 0.015 / 0.018 / 0.025 %/h', k:'ALCOHOL.BETA', where:'Elimination, both alcohol models', type:'standard',
+   why:'Jones\u2019s evidence review: fasted 0.010\u20130.015, non-fasted 0.015\u20130.020, detoxifying heavy drinkers 0.025\u20130.035, with 0.015 a fair population average. Draft OSAC guidance works with 0.010\u20130.025 g/dL/h.'},
+  {v:'0.012 / 0.015 / 0.018 by stomach', k:'ALCOHOL.BETA_FROM_FOOD', where:'Default \u03b2 on \u201cFrom stomach\u201d', type:'tuned',
+   why:'Elimination is not independent of food \u2014 the same meal that slows absorption raises first-pass metabolism. Picking one point in the fasted and non-fasted ranges for each stomach state is mine.'},
+  {v:'KM = 0.005 %', k:'ALCOHOL.KM_PCT', where:'Michaelis\u2013Menten elimination', type:'standard',
+   why:'Michaelis constant for Class I ADH is about 2\u201310 mg/100 mL; 0.005 % is the middle of it. This is why zero-order kinetics is a high-concentration approximation rather than a law.'},
+  {v:'Vmax calibrated at 0.08 %', k:'ALCOHOL.VMAX_REF_PCT', where:'Michaelis\u2013Menten elimination', type:'tuned',
+   why:'The quoted \u03b2 is an observed slope in the linear region, not Vmax. Anchoring the instantaneous rate to \u03b2 at 0.08 % keeps the familiar figure exact where it is usually measured; choosing 0.08 as the anchor is mine.'},
+  {v:'CV 21 %', k:'ALCOHOL.UNCERTAINTY_CV', where:'Band on every BAC figure; warnings', type:'standard',
+   why:'Gullberg\u2019s error propagation gives a combined uncertainty of 0.0255 g/100 mL on an estimate of 0.120 \u2014 about 21 %. Warnings key off the top of that band.'},
+  {v:'ka = 6.0 / 3.5 / 2.0 h\u207b\u00b9', k:'ALCOHOL.KA', where:'PK model absorption', type:'tuned',
+   why:'Absorption rate for empty / light / full stomach, chosen inside the reported spread for oral ethanol to give ~7, ~12 and ~21 minute absorption half-lives. My picks.'},
   {v:'anchor 0.30 %, exponent 0.75', k:'ALCOHOL.GAUGE_ANCHOR / _EXPONENT', where:'Alcohol gauge position only', type:'tuned',
-   why:'Pure display convention that maps a BAC onto the shared 0–100 scale so the familiar landmarks (0.05, 0.08, 0.15) land in sensible bands. Never applied to the reported BAC.'},
-  {v:'9 effect mid-points, 0.045–0.26 % BAC', k:'ALCOHOL.EFFECTS[].ec50', where:'Alcohol effect bars', type:'tuned',
-   why:'Each bar is a Hill curve on BAC. The mid-points are my reading of descriptive impairment literature — blackout risk around 0.17, for instance — not measured EC50 values.'},
+   why:'Pure display convention mapping a BAC onto the shared 0\u2013100 scale so the familiar landmarks land in sensible bands. Never applied to the reported BAC, and above 0.20 % the scale hands over to risk language entirely.'},
+  {v:'9 effect mid-points, 0.045\u20130.26 % BAC', k:'ALCOHOL.EFFECTS[].ec50', where:'Alcohol effect bars', type:'tuned',
+   why:'Each bar is a Hill curve on BAC. The mid-points are my reading of descriptive impairment literature \u2014 blackout risk around 0.17, for instance \u2014 not measured EC50 values.'},
   {v:'response = D^n/(EC50^n + D^n)', k:'hill()', where:'All three cannabis modules', type:'standard',
    why:'The Hill / Emax equation. Standard description of a saturating receptor-mediated response.'},
   {v:'EC50 = 9 mg, n = 1.5', k:'D9.EC50_MG / HILL_N', where:'Delta-9 edibles', type:'tuned',
-   why:'Calibrated so ~10 mg labelled lands mid-scale for a naive user, which matches the widespread "one standard edible dose" convention. The number is mine.'},
-  {v:'EC50 = 14.5 mg, n = 1.4', k:'D8.EC50_MG / HILL_N', where:'Delta-8 edibles', type:'tuned',
-   why:'≈1.6× the Delta-9 mid-point, placing Delta-8 inside the commonly reported 1.3–2× lower potency band. A slightly lower n reflects flatter, less steep reporting.'},
+   why:'Calibrated so ~10 mg labelled lands mid-scale for a naive user, matching the widespread \u201cone standard edible dose\u201d convention. The number is mine.'},
+  {v:'EC50 = 18 mg, n = 1.5', k:'D8.EC50_MG / HILL_N', where:'Delta-8 edibles', type:'standard',
+   why:'Exactly 2\u00d7 the Delta-9 midpoint, from the controlled trial in which 40 mg of Delta-8 and 20 mg of Delta-9 were pharmacodynamically indistinguishable. Same n as Delta-9, because that trial found no difference in character once intensity was matched.'},
   {v:'EC50 = 5.5 mg absorbed, n = 1.6', k:'SMOKED.EC50_MG_ABSORBED', where:'Inhaled cannabis', type:'tuned',
-   why:'Lowest of the three because inhalation bypasses first-pass loss entirely — but note the UNIT differs: milligrams absorbed, not milligrams swallowed.'},
+   why:'Lowest of the three because inhalation bypasses first-pass loss entirely \u2014 but the UNIT differs: milligrams absorbed, not milligrams swallowed.'},
   {v:'30 / 27 / 33 / 45 / 40 / 55 %', k:'SMOKED.METHODS[].efficiency', where:'Inhaled absorption', type:'tuned',
-   why:'Joint / pipe / bong / dry-herb vaporiser / vape pen / concentrate. Midpoints of the 10–35 % range quoted for smoking and the higher figures quoted for vaporisation.'},
-  {v:'0.25 / 0.20 / 0.05 g', k:'SMOKED.METHODS[].session', where:'Method defaults + the comparison table', type:'tuned',
-   why:'A typical single-session amount per route — a quarter-gram joint, a fifth of a gram in a bowl or vaporiser, a twentieth of a gram of concentrate. Used so the route comparison is between realistic sessions rather than equal masses.'},
+   why:'Joint / pipe / bong / dry-herb vaporiser / vape pen / concentrate. Midpoints of the 10\u201335 % range quoted for smoking and the higher figures quoted for vaporisation.'},
+  {v:'0.25 / 0.20 / 0.05 g', k:'SMOKED.METHODS[].session', where:'Method defaults + route comparison', type:'tuned',
+   why:'A typical single-session amount per route, so the comparison is between realistic sessions rather than equal masses.'},
   {v:'0.75 / 1.0 / 1.2', k:'SMOKED.DEPTH[].factor', where:'Inhalation depth multiplier', type:'tuned',
    why:'Shallow / normal / deep-and-hold. Direction is well supported; the magnitudes are mine.'},
   {v:'1.0 / 1.35 / 1.9 / 2.8 / 4.0', k:'TOLERANCE_FACTORS', where:'All three cannabis modules', type:'tuned',
-   why:'Divides the dose before the curve, so tolerance slides you left rather than scaling the output. Reproduces the reported several-fold gap between naive and heavy daily users.'},
-  {v:'22 % / 30 % / 26 %', k:'BODY_FAT_FALLBACK', where:'Cannabis distribution when body fat is blank', type:'tuned',
-   why:'Round numbers near commonly cited adult population averages for male / female / unspecified. Type your real figure if you know it.'},
-  {v:'17.5 kg reference, exponents 0.35 / 0.15', k:'distributionFactor() / durationFactor()', where:'Cannabis distribution + duration', type:'tuned',
-   why:'THC is lipophilic so fat mass drives distribution; the sub-linear exponents make more fat mass lower the acute peak slightly and lengthen the tail. Shape defensible, exponents invented.'},
-  {v:'0.25 / 1.5, 0.30 / 5, 0.25 / 6', k:'cbdDamping() / cbnSedationBoost() / cbgAnxietyRelief()', where:'Minor cannabinoids', type:'tuned',
-   why:'Saturating curves capping CBD damping at −25 %, CBN sedation boost at +30 %, CBG anxiety relief at −25 %. Directions are well reported; magnitudes are mine.'},
-  {v:'rise t^1.3, fall (1−t)^0.8', k:'asymmetricCurve()', where:'All three cannabis time courses', type:'tuned',
-   why:'Deliberately asymmetric — an accelerating climb and a long tail. A symmetric bell would be wrong in both directions.'},
-  {v:'onset 45 min base; −22…+18 by product; −12…+22 by food', k:'D9.PRODUCTS / FOOD', where:'Edible timing', type:'tuned',
-   why:'Keeps onset inside the published 30–90 minute window while letting tinctures and drinks lead and capsules trail. Offsets are my estimates.'},
-  {v:'peak 1.5–3.3 h, total clamped 6–10 h', k:'d9Timing() / d8Timing()', where:'Edible timing', type:'tuned',
-   why:'Clamped to the ranges reported for oral THC. Delta-8 is modelled as finishing slightly sooner.'},
-  {v:'onset 25–60 s, peak 8–20 min, total 1–3 h', k:'smokedTiming()', where:'Inhaled timing', type:'tuned',
-   why:'Clamped to the published inhaled ranges. Where inside them a given session lands is my interpolation.'},
+   why:'Divides the dose before the curve, so tolerance slides you left rather than scaling the output. Knowingly optimistic: receptor downregulation lowers the ceiling too, which this does not model.'},
+  {v:'28.7 / 40.9 / 34.8 %', k:'BODY_FAT_FALLBACK', where:'Cannabis duration when body fat is blank', type:'standard',
+   why:'US DXA population means for men and women, with their midpoint as the neutral option. Real averages, replacing the round numbers this app previously presented as such.'},
+  {v:'1 (inert)', k:'distributionFactor()', where:'Cannabis effective dose', type:'standard',
+   why:'Adipose uptake of THC is slow, so fat mass cannot govern the acute peak \u2014 it used to swing the effective dose from \u00d71.45 to \u00d70.72 across the plausible range. Now fixed at 1; fat mass survives only in durationFactor.'},
+  {v:'17.5 kg ref, exponent 0.15, clamp 0.85\u20131.30', k:'durationFactor()', where:'Cannabis tail length', type:'tuned',
+   why:'More fat mass lengthens the tail, where the reservoir genuinely operates. Shape defensible, exponent invented.'},
+  {v:'not modelled', k:'minorCannabinoidNotes()', where:'CBD / CBN / CBG inputs', type:'standard',
+   why:'CBD damping was backwards for an edible: 20 mg THC with 640 mg CBD roughly doubled peak THC and produced stronger effects, because CBD inhibits the CYP enzymes clearing oral THC. The direction is evidenced, a coefficient is not, so all three now inform rather than multiply.'},
+  {v:'rise t^1.3, fall (1\u2212t)^0.8', k:'asymmetricCurve()', where:'All three cannabis time courses', type:'tuned',
+   why:'Deliberately asymmetric \u2014 an accelerating climb and a long tail. A symmetric bell would be wrong in both directions.'},
+  {v:'onset 30\u2013120 min, peak to 4 h, total to 12 h', k:'d9Timing() / d8Timing()', where:'Edible timing', type:'standard',
+   why:'Health Canada publishes onset 30 min \u2013 2 h, peak up to 4 h, duration up to 12 h with residual effects to 24 h. The previous 6\u201310 h ceiling cut the tail short.'},
+  {v:'peak to 30 min, total to 6 h', k:'smokedTiming()', where:'Inhaled timing', type:'standard',
+   why:'Health Canada: inhaled effects peak within 30 min and can last up to 6 h. The previous 1\u20133 h clamp was this app\u2019s own invention, quoted back in Learn as though it were published.'},
+  {v:'oral to 24 h, inhaled 3\u20137 h', k:'impairmentWindowMin()', where:'Impairment band on the charts', type:'tuned',
+   why:'The driving meta-analysis has most driving-relevant skills recovering within about 5 h of inhaling 20 mg THC and nearly all within 7, with oral taking longer. Where inside that a given dose lands is my interpolation.'},
+  {v:'tolerance forced to none; anxiety \u00d70.7', k:'effectiveToleranceKey() / FIRST_TIME_ANXIETY_SHIFT', where:'First-time user checkbox', type:'tuned',
+   why:'The checkbox used to change nothing but a banner. Forcing tolerance to none is definitional; shifting the anxiety curve left reflects consistent reporting that naive users get more of it, at a magnitude I chose.'},
   {v:'bands at 10 / 30 / 50 / 70 / 85', k:'INTENSITY_BANDS', where:'Every gauge, bar and table', type:'tuned',
    why:'The six-step vocabulary boundaries. Arbitrary but applied identically everywhere, which is the only property that matters for comparison.'}
 ];
@@ -2004,11 +2088,24 @@ function asymmetricCurve(tMin, onsetMin, peakMin, endMin){
 /* Lipophilic distribution. THC partitions into fat, so fat mass — not body
    weight — is the scaling variable. Exponents are hand-tuned (see §1). */
 const REFERENCE_FAT_KG = 17.5;              // 70 kg at 25 % body fat
-const BODY_FAT_FALLBACK = {male:22, female:30, neutral:26};   // hand-tuned
+/* US DXA population means are about 28.7 % for men and 40.9 % for women; the
+   neutral option is their midpoint. These are real averages rather than the
+   round numbers this app used to call "population averages" — and since body
+   fat now only stretches the tail, the truer (higher) figures no longer drag
+   every default estimate down with them. */
+const BODY_FAT_FALLBACK = {male:28.7, female:40.9, neutral:34.8};
 function bodyFatFallback(key){ return BODY_FAT_FALLBACK[key] != null ? BODY_FAT_FALLBACK[key] : BODY_FAT_FALLBACK.neutral; }
 function fatMassKg(weightKg, bodyFatPercent){ return Math.max(weightKg * bodyFatPercent / 100, 2); }
-function distributionFactor(weightKg, bodyFatPercent){
-  return Math.pow(REFERENCE_FAT_KG / fatMassKg(weightKg, bodyFatPercent), 0.35);
+/* Adipose uptake of THC is SLOW. The acute peak an edible produces is
+   governed by absorption and first-pass metabolism, not by how much fat is
+   standing by to absorb the drug later — so scaling the peak by fat mass
+   (which this app used to do, swinging the effective dose from x1.45 at
+   60 kg/10 % to x0.72 at 110 kg/40 %, the difference between "Strong" and
+   "Moderate" for the same gummy) was modelling the wrong phase entirely.
+   Fat mass now only stretches the tail. Kept as a named function so the
+   formula article can show, in the code's own terms, that it is 1. */
+function distributionFactor(){
+  return 1;
 }
 function durationFactor(weightKg, bodyFatPercent){
   return clamp(Math.pow(fatMassKg(weightKg, bodyFatPercent) / REFERENCE_FAT_KG, 0.15), 0.85, 1.30);
@@ -2027,20 +2124,59 @@ function toleranceFactor(key){
   const t = TOLERANCE_FACTORS.find(x => x.key === key);
   return t ? t.factor : 1;
 }
+/* "First-time or near-first-time user" used to change nothing but a banner —
+   ticking it left the gauge exactly where it was, which made it look like an
+   input when it was decoration. It now forces tolerance to none and shifts
+   the anxiety curve left, because naive users report more of it. */
+function effectiveToleranceKey(tolKey, isFirstTime){ return isFirstTime ? 'none' : tolKey; }
+const FIRST_TIME_ANXIETY_SHIFT = 0.7;
 
-/* Minor cannabinoids — three distinct, saturating actions (all hand-tuned). */
-function cbdDamping(mgCbd, mgThc){
-  if (!(mgCbd > 0)) return 1;
-  const ratio = mgCbd / Math.max(mgThc, 0.5);
-  return 1 - 0.25 * ratio / (ratio + 1.5);        // floor 0.75
+/* ---------------------------------------------------------------------------
+   MINOR CANNABINOIDS — deliberately NOT in the arithmetic any more.
+
+   This app used to damp overall intensity as CBD rose. That is backwards for
+   an edible. In the Johns Hopkins trial, 20 mg THC given with 640 mg CBD in a
+   brownie produced peak THC blood levels nearly twice as high, roughly
+   ten-fold higher 11-hydroxy-THC, and STRONGER subjective, cognitive and
+   psychomotor effects than the same THC alone — CBD inhibits the CYP enzymes
+   that clear swallowed THC. At therapeutic ratios, a controlled comparison of
+   oral THC against a 1:1 oromucosal extract found no substantial modulation
+   either way. The old model was therefore wrong in direction, and wrong
+   toward reassurance: it told someone with a high-CBD edible that their dose
+   was gentler than it was, which is an invitation to take more.
+
+   The evidence supports a direction (more CBD can mean MORE oral THC
+   exposure) but nothing resembling a coefficient, so these inputs now inform
+   rather than multiply. CBN and CBG are the same story with thinner evidence
+   still: widely reported, never quantified in humans at these doses.
+   ------------------------------------------------------------------------ */
+const CBD_HIGH_MG = 100;   // dose above which the CYP interaction is flagged
+function minorCannabinoidNotes(mgCbd, mgCbn, mgCbg, mgThc){
+  const out = [];
+  if (mgCbd > 0){
+    const ratio = mgCbd / Math.max(mgThc, 0.5);
+    out.push({name:'CBD ' + round(mgCbd, 1) + ' mg', level:mgCbd >= CBD_HIGH_MG ? 'warn' : 'info',
+      text:mgCbd >= CBD_HIGH_MG
+        ? 'At this dose CBD inhibits the liver enzymes that clear swallowed THC. The best controlled data — 20 mg THC with 640 mg CBD — found roughly double the peak THC, about ten times the 11-hydroxy-THC, and <strong>stronger</strong> effects, not gentler ones. Treat this edible as stronger than the THC figure alone suggests.'
+        : 'At ' + round(ratio, 1) + ':1 CBD:THC this sits below the dose where that enzyme interaction has been demonstrated. Controlled work at therapeutic ratios found no substantial modulation of THC in either direction.'});
+  }
+  if (mgCbn > 0) out.push({name:'CBN ' + round(mgCbn, 1) + ' mg', level:'info',
+    text:'Sold as sedating, and it is largely what old cannabis degrades into — but the human evidence is thin, and the sleepiness of aged flower may owe as much to changed terpenes. Not modelled numerically here.'});
+  if (mgCbg > 0) out.push({name:'CBG ' + round(mgCbg, 1) + ' mg', level:'info',
+    text:'Usually present in small amounts, commonly described as clear-headed and anxiolytic. No controlled human dose-response exists at these amounts, so it is not modelled numerically here.'});
+  return out;
 }
-function cbnSedationBoost(mgCbn){
-  if (!(mgCbn > 0)) return 0;
-  return 0.30 * mgCbn / (mgCbn + 5);              // ceiling +0.30
-}
-function cbgAnxietyRelief(mgCbg){
-  if (!(mgCbg > 0)) return 0;
-  return 0.25 * mgCbg / (mgCbg + 6);              // floor −0.25
+function renderCannabinoidPanel(host, mgCbd, mgCbn, mgCbg, mgThc){
+  const notes = minorCannabinoidNotes(mgCbd, mgCbn, mgCbg, mgThc);
+  if (!notes.length){
+    host.innerHTML = '<p class="card-note" style="margin:0">No CBD, CBN or CBG entered. If your product contains them, add the milligrams — none of the three changes the modelled intensity, and <a href="#" data-goto="learn" data-article="art-minor">Learn explains why</a>.</p>';
+    return;
+  }
+  host.innerHTML = notes.map(n =>
+    '<div class="banner ' + n.level + '" style="margin-bottom:8px"><span class="ico" data-icon="dropper"></span>' +
+    '<div class="b-body"><strong>' + esc(n.name) + '</strong><p>' + n.text + '</p></div></div>').join('') +
+    '<p class="card-note" style="margin:4px 0 0">None of these move the gauge, on purpose — <a href="#" data-goto="learn" data-article="art-minor">why they left the arithmetic</a>.</p>';
+  paintIcons(host);
 }
 
 /* ---------------------------------------------------------------------------
@@ -2111,6 +2247,10 @@ const mlToDisplay = ml => UNIT_MODE === 'metric' ? ml : ml / ML_PER_FLOZ;
 const displayToMl = v  => UNIT_MODE === 'metric' ? v  : v * ML_PER_FLOZ;
 const weightUnitLabel = () => UNIT_MODE === 'metric' ? 'kg' : 'lb';
 const volumeUnitLabel = () => UNIT_MODE === 'metric' ? 'mL' : 'fl oz';
+const CM_PER_IN = 2.54;
+const cmToDisplay = cm => UNIT_MODE === 'metric' ? cm : cm / CM_PER_IN;
+const displayToCm = v  => UNIT_MODE === 'metric' ? v  : v * CM_PER_IN;
+const heightUnitLabel = () => UNIT_MODE === 'metric' ? 'cm' : 'in';
 
 /* Duration formatter. Never produces "0h 0m" — callers that could hit zero
    use peakStatus(), which returns the "right now" state instead. */
@@ -2243,6 +2383,11 @@ function renderGaugeWithLabel(gaugeEl, readoutEl, cfg){
       '<path d="' + arc(r) + '" stroke="var(--track)" stroke-width="18" fill="none" stroke-linecap="round"/>' +
       '<path class="gauge-arc" d="' + arc(r) + '" stroke="' + color + '" stroke-width="18" fill="none" stroke-linecap="round"' +
         ' stroke-dasharray="' + len + '" stroke-dashoffset="' + (len * (1 - frac)) + '"/>' +
+      (cfg.peakFraction != null && cfg.peakFraction > frac + 0.005
+        ? '<g transform="rotate(' + (180 * clamp(cfg.peakFraction, 0, 1)).toFixed(2) + ' ' + cx + ' ' + cy + ')">' +
+          '<line x1="' + (cx - r - 12) + '" y1="' + cy + '" x2="' + (cx - r + 12) + '" y2="' + cy +
+          '" stroke="' + (cfg.peakColor || color) + '" stroke-width="3.5" stroke-linecap="round" opacity=".95"/></g>'
+        : '') +
       '<g class="gauge-dot-g" transform="rotate(' + (180 * frac).toFixed(2) + ' ' + cx + ' ' + cy + ')">' +
         '<circle cx="' + (cx - r) + '" cy="' + cy + '" r="11" fill="var(--surface-solid)" stroke="' + color + '" stroke-width="3.5"/>' +
         '<circle cx="' + (cx - r) + '" cy="' + cy + '" r="4" fill="' + color + '"/>' +
@@ -2251,9 +2396,16 @@ function renderGaugeWithLabel(gaugeEl, readoutEl, cfg){
       '<text x="' + (cx + r) + '" y="' + (cy + 22) + '" text-anchor="middle" font-size="11" fill="var(--text-faint)">100</text>' +
     '</svg>';
 
+  /* The number and the word always ship together, and when something worse
+     is still coming the two are shown side by side — a screen that reads
+     "0.000 % · Minimal" to someone who has just drunk four shots is the least
+     alarming picture the app can draw, and it was drawing it. */
   readoutEl.innerHTML =
     '<span class="gauge-num">' + cfg.value + (cfg.valueSuffix ? '<span class="pc">' + cfg.valueSuffix + '</span>' : '') + '</span>' +
-    '<div><span class="gauge-label" style="color:' + color + '"><span class="dot"></span>' + esc(cfg.label) + '</span></div>' +
+    '<div><span class="gauge-label" style="color:' + color + '"><span class="dot"></span>' +
+      (cfg.peakLabel ? 'now: ' : '') + esc(cfg.label) + '</span>' +
+    (cfg.peakLabel ? '<span class="gauge-label" style="color:' + (cfg.peakColor || color) + ';margin-left:8px">' +
+      '<span class="dot"></span>' + esc(cfg.peakLabel) + '</span>' : '') + '</div>' +
     (cfg.sub ? '<div class="gauge-sub">' + cfg.sub + '</div>' : '');
 }
 
@@ -2303,6 +2455,17 @@ function renderChart(host, cfg){
      shorter variant is used there — it still carries the units. */
   const yLab = (narrow && cfg.yLabelShort) ? cfg.yLabelShort : cfg.yLabel;
   g += '<text transform="translate(' + (narrow ? 11 : 14) + ' ' + (P.t + ih / 2) + ') rotate(-90)" text-anchor="middle" font-size="' + (fs + .5) + '" fill="var(--text-dim)" font-weight="600">' + esc(yLab) + '</text>';
+
+  /* shaded spans (e.g. the driving-impairment window) */
+  (cfg.bands || []).forEach(bd => {
+    const x0 = X(clamp(bd.x0, 0, xMax)), x1 = X(clamp(bd.x1, 0, xMax));
+    if (x1 <= x0) return;
+    g += '<rect x="' + x0 + '" y="' + (P.t + ih - 13) + '" width="' + (x1 - x0) + '" height="9" rx="4" fill="' + bd.color + '" opacity=".32"/>';
+    /* right-anchored: the bottom-left corner is where the "now" marker sits
+       when someone has only just dosed, and the two labels collided there. */
+    g += '<text x="' + (x1 - 4) + '" y="' + (P.t + ih - 17) + '" text-anchor="end" font-size="' + (fs - 1) +
+         '" fill="' + bd.color + '" font-weight="700">' + esc(bd.label) + '</text>';
+  });
 
   /* phase reference lines (onset / peak) */
   (cfg.vlines || []).forEach(v => {
@@ -2445,15 +2608,15 @@ function badgeFor(pct){
    ------------------------------------------------------------------------ */
 const STORE_KEY = 'substance-effects-estimator.v1';
 const DEFAULT_STATE = {
-  ui:{theme:'dark', units:'metric', time:'hm', view:'home'},
-  alc:{rKey:'male', rCustom:'', weightKg:75, beta:'average', food:'light', model:'pk',
-       drinks:[], nextId:1, draft:{vol:355, abv:5, when:30, name:'Regular beer', icon:'beer'}},
+  ui:{theme:'dark', themeChosen:false, units:'metric', time:'hm', view:'home'},
+  alc:{rKey:'male', rCustom:'', weightKg:75, watson:false, heightCm:175, ageY:30, beta:'auto', food:'light', model:'pk',
+       drinks:[], nextId:1, draft:{vol:355, abv:5, when:30, over:0, name:'Regular beer', icon:'beer'}},
   d9:{mg:10, product:'gummy', food:'light', elapsed:60, cbd:0, cbn:0, cbg:0,
-      weightKg:75, bf:'', sex:'male', tol:'none', first:false},
+      weightKg:75, bf:'', sex:'male', tol:'none', first:false, takenAt:0},
   d8:{mg:25, product:'gummy', food:'light', elapsed:60, cbd:0, cbn:0, cbg:0,
-      weightKg:75, bf:'', sex:'male', tol:'none', first:false},
+      weightKg:75, bf:'', sex:'male', tol:'none', first:false, takenAt:0},
   sm:{method:'joint', amount:0.15, potency:20, depth:'normal', elapsed:15,
-      weightKg:75, bf:'', sex:'male', tol:'none', first:false},
+      weightKg:75, bf:'', sex:'male', tol:'none', first:false, takenAt:0},
   conv:{cat:'volume', unit:'ml', value:'473', drinkVol:'355', drinkUnit:'ml', drinkAbv:'5'}
 };
 let state = JSON.parse(JSON.stringify(DEFAULT_STATE));
@@ -2468,6 +2631,42 @@ function loadState(){
     });
   }catch(e){ /* corrupt or unavailable storage — fall back to defaults silently */ }
 }
+/* ---------------------------------------------------------------------------
+   THE CLOCK
+   Everything used to be stored as "minutes ago", which froze the moment the
+   page was rendered: reopen it an hour later and it showed the same BAC and
+   the same countdowns. Times are now absolute epoch milliseconds; the
+   "minutes ago" fields are how you SET that timestamp, and they move on their
+   own as time passes.
+   ------------------------------------------------------------------------ */
+const minutesSince = at => Math.max(0, Math.round((Date.now() - at) / 60000));
+const minutesAgoToStamp = mins => Date.now() - Math.max(0, mins) * 60000;
+function syncClock(){
+  state.alc.drinks.forEach(d => { if (d.at) d.when = minutesSince(d.at); });
+  ['d9', 'd8', 'sm'].forEach(k => { if (state[k].takenAt) state[k].elapsed = minutesSince(state[k].takenAt); });
+}
+/* Stamps are created only for state saved by an older build. */
+function backfillStamps(){
+  const now = Date.now();
+  state.alc.drinks.forEach(d => { if (!d.at) d.at = now - (d.when || 0) * 60000; });
+  ['d9', 'd8', 'sm'].forEach(k => { if (!state[k].takenAt) state[k].takenAt = now - (state[k].elapsed || 0) * 60000; });
+}
+function asOfLine(){
+  const d = new Date();
+  return '<span style="opacity:.75">As of <strong>' +
+    String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') +
+    '</strong> — recalculated every half minute.</span>';
+}
+/* Push the clock into the elapsed fields, never over one being typed in. */
+function syncElapsedInputs(){
+  [['d9-elapsed', 'd9'], ['d8-elapsed', 'd8'], ['sm-elapsed', 'sm']].forEach(([id, key]) => {
+    const el = document.getElementById(id), rng = document.getElementById(id + '-range');
+    if (!el || el === document.activeElement) return;
+    el.value = state[key].elapsed;
+    if (rng && rng !== document.activeElement) rng.value = clamp(state[key].elapsed, +rng.min, +rng.max);
+  });
+}
+
 let saveTimer = null;
 function saveState(){
   clearTimeout(saveTimer);
@@ -2483,7 +2682,25 @@ function saveState(){
 const ALCOHOL = {
   /* STANDARD: Widmark distribution ratios and zero-order elimination rates */
   R_FACTOR:{male:0.68, female:0.55, neutral:0.615},
-  BETA:{slow:0.012, average:0.015, fast:0.018},          // %/hour
+  /* %/hour. Jones's evidence review puts fasted elimination at 0.010-0.015,
+     non-fasted at 0.015-0.020 and detoxifying heavy drinkers at 0.025-0.035,
+     with 0.015 a fair population average; draft OSAC guidance works with
+     0.010-0.025 g/dL/h. The old 0.012 floor made "empty stomach + average"
+     the optimistic corner of the range, which is the wrong direction to err. */
+  BETA:{vslow:0.010, slow:0.012, average:0.015, fast:0.018, vfast:0.025},
+  /* Elimination is not independent of food: the same meal that slows
+     absorption also raises first-pass metabolism and elimination rate. */
+  BETA_FROM_FOOD:{empty:0.012, light:0.015, full:0.018},
+  /* Michaelis constant for Class I ADH, ~2-10 mg/100 mL. Above roughly
+     0.02 % the enzyme is saturated and the curve is a straight line; below
+     it, elimination tails off instead of hitting zero on a ruler. */
+  KM_PCT:0.005,
+  /* The quoted beta is an OBSERVED slope in the linear region, not Vmax, so
+     Vmax is calibrated to make the instantaneous rate exactly beta at 0.08 %. */
+  VMAX_REF_PCT:0.08,
+  /* Gullberg's error propagation on a Widmark estimate of 0.120 g/100 mL
+     gives a combined uncertainty of 0.0255 — a CV of about 21 %. */
+  UNCERTAINTY_CV:0.21,
   /* HAND-TUNED: absorption rate constants, 1/hour (empty ≈ 7 min half-life) */
   KA:{empty:6.0, light:3.5, full:2.0},
   /* HAND-TUNED: display mapping of BAC onto the shared 0–100 scale */
@@ -2496,9 +2713,12 @@ const ALCOHOL = {
     {key:'neutral', label:'Neutral',   sub:'r 0.615'}
   ],
   BETA_OPTIONS:[
-    {key:'slow',    label:'Slow',    sub:'0.012'},
-    {key:'average', label:'Average', sub:'0.015'},
-    {key:'fast',    label:'Fast',    sub:'0.018'}
+    {key:'auto',    label:'From stomach', sub:'0.012-0.018'},
+    {key:'vslow',   label:'Very slow',    sub:'0.010'},
+    {key:'slow',    label:'Slow',         sub:'0.012'},
+    {key:'average', label:'Average',      sub:'0.015'},
+    {key:'fast',    label:'Fast',         sub:'0.018'},
+    {key:'vfast',   label:'Induced',      sub:'0.025'}
   ],
   FOOD_OPTIONS:[
     {key:'empty', label:'Empty stomach', sub:'ka 6.0'},
@@ -2550,9 +2770,42 @@ const ALCOHOL = {
      note:'Blackouts are an encoding failure — the memory is never written, so nothing can recover it.'},
     {name:'Nausea & vomiting risk',    ec50:0.190, n:3.5},
     {name:'Sedation / loss of consciousness risk', ec50:0.260, n:5.0,
-     note:'Vomiting while unconscious is the mechanism behind most alcohol deaths.'}
+     note:'Acute alcohol poisoning kills mainly through respiratory depression; aspirating vomit with a suppressed gag reflex is one route to that. Most alcohol-attributable deaths overall are chronic disease and injury rather than acute poisoning.'}
   ]
 };
+
+/* Watson's total-body-water equations (litres). Ethanol distributes into
+   body water, so a TBW-derived r beats a flat population ratio: it lowers
+   estimates for average builds and raises them for high-body-fat users. */
+const BLOOD_WATER_FRACTION = 0.8064;
+function watsonTBW(sexKey, ageY, htCm, wtKg){
+  const male   = 2.447 - 0.09516 * ageY + 0.1074 * htCm + 0.3362 * wtKg;
+  const female = -2.097 + 0.1069 * htCm + 0.2466 * wtKg;
+  if (sexKey === 'female') return female;
+  if (sexKey === 'male') return male;
+  return (male + female) / 2;
+}
+/* r = TBW / (blood water fraction x body mass), the Widmark factor implied
+   by that water volume. */
+function watsonR(sexKey, ageY, htCm, wtKg){
+  return clamp(watsonTBW(sexKey, ageY, htCm, wtKg) / (BLOOD_WATER_FRACTION * wtKg), 0.40, 0.90);
+}
+
+/* Elimination rate actually in force: an explicit pick, or derived from the
+   stomach setting when left on "From stomach". */
+function alcoholBeta(betaKey, foodKey){
+  if (betaKey === 'auto' || betaKey == null) return ALCOHOL.BETA_FROM_FOOD[foodKey] || 0.015;
+  return ALCOHOL.BETA[betaKey] != null ? ALCOHOL.BETA[betaKey] : 0.015;
+}
+/* Instantaneous elimination, %/hour. Michaelis-Menten rather than a flat
+   subtraction: identical to zero-order while the enzyme is saturated, but it
+   stops the curve arriving at exactly zero on a straight line. From 0.020 %
+   to 0.001 % takes about 2.3 h this way against 1.3 h linear. */
+function eliminationRate(bacPercent, beta){
+  const KM = ALCOHOL.KM_PCT;
+  const vmax = beta * (KM + ALCOHOL.VMAX_REF_PCT) / ALCOHOL.VMAX_REF_PCT;
+  return vmax * Math.max(bacPercent, 0) / (KM + Math.max(bacPercent, 0));
+}
 
 /* Display-only mapping of a BAC onto the shared six-step scale. HAND-TUNED. */
 function alcoholScalePosition(bacPercent){
@@ -2591,7 +2844,7 @@ function alcoholModelRun(items, opts){
       if (buckets.has(t)) bac += buckets.get(t) / (opts.weightKg * opts.r * 10);
       shown = bac < EPS ? 0 : bac;
       pts.push([t, shown]);
-      if (bac > 0) bac = Math.max(0, bac - opts.beta / 60);
+      if (bac > 0) bac = Math.max(0, bac - eliminationRate(bac, opts.beta) / 60);
     } else {
       /* PK: first-order absorption, zero-order elimination */
       let abs = 0;
@@ -2604,11 +2857,25 @@ function alcoholModelRun(items, opts){
       if (cGL < 0) cGL = 0;
       shown = cGL / 10 < EPS ? 0 : cGL / 10;
       pts.push([t, shown]);
-      if (cGL > 0) cGL = Math.max(0, cGL - (R / Vd) / 60);
+      /* same Michaelis-Menten term, expressed in g/L (BAC % x 10) */
+      if (cGL > 0) cGL = Math.max(0, cGL - (10 * eliminationRate(cGL / 10, opts.beta)) / 60);
     }
     if (t > lastT + 5 && shown <= 0) break;
   }
   return {points:pts, Vd:Vd, R:R, lastT:lastT};
+}
+
+/* Expand each drink into per-minute sub-doses across its drinking period. */
+function alcoholDoseItems(drinks, originAgo){
+  const items = [];
+  drinks.forEach(d => {
+    const grams = gramsEthanol(d.vol, d.abv);
+    const tFinish = originAgo - d.when;
+    const over = Math.max(0, Math.round(d.over || 0));
+    if (over < 1){ items.push({t:tFinish, grams:grams}); return; }
+    for (let i = 0; i < over; i++) items.push({t:tFinish - over + i + 1, grams:grams / over});
+  });
+  return items;
 }
 
 /* Analytical time-to-peak for the PK model.
@@ -2662,7 +2929,7 @@ const BAC_REFERENCE = [
    speech:'Slurring may begin', vision:'Depth perception and glare recovery impaired',
    coord:'Balance and gross motor control affected', react:'Substantially slowed',
    memory:'Encoding impaired',
-   driving:'Crash risk is several times baseline; illegal to drive nearly everywhere',
+   driving:'Crash risk is several times baseline. Below the 0.08 per-se limit used in the US and in England and Wales, but you can still be charged on impairment there, and 0.05 is already over the limit in most of Europe, Scotland and Australia',
    risk:'High'},
   {lo:0.08, hi:0.10, mid:0.09,
    think:'Poor judgment, overconfidence, emotional volatility',
@@ -2711,6 +2978,14 @@ const BAC_REFERENCE = [
    react:'Absent', memory:'None', driving:'Incapable',
    risk:'Often fatal — respiratory arrest. Call emergency services'}
 ];
+/* Above roughly 0.20 % "Extremely Strong" is a grotesque understatement for
+   what is actually a medical emergency, so the shared intensity vocabulary
+   hands over to risk language there. Below it the scale is used as normal. */
+function alcoholRiskBadge(bacPercent){
+  if (bacPercent >= 0.30) return '<span class="badge s6"><span class="bdot"></span>Life-threatening</span>';
+  if (bacPercent >= 0.20) return '<span class="badge s5"><span class="bdot"></span>Medical emergency</span>';
+  return null;
+}
 function renderAlcoholReference(){
   const el = document.getElementById('alc-ref-table');
   const headers = [
@@ -2720,7 +2995,7 @@ function renderAlcoholReference(){
   ];
   const rows = BAC_REFERENCE.map(r => {
     const range = r.hi === null ? '0.40 +' : r.lo.toFixed(2) + '–' + r.hi.toFixed(2);
-    return [range, badgeFor(alcoholScalePosition(r.mid)), r.think, r.speech, r.vision,
+    return [range, alcoholRiskBadge(r.mid) || badgeFor(alcoholScalePosition(r.mid)), r.think, r.speech, r.vision,
             r.coord, r.react, r.memory, r.driving, r.risk];
   });
   renderTable(el, headers, rows);
@@ -2728,10 +3003,14 @@ function renderAlcoholReference(){
 
 /* --------------------------------- render -------------------------------- */
 function renderAlcohol(){
+  syncClock();
   const s = state.alc;
+  const weightForR = clamp(s.weightKg || 75, 30, 250);
   const rFactor = (s.rCustom !== '' && !isNaN(parseFloat(s.rCustom)))
-      ? clamp(parseFloat(s.rCustom), 0.4, 0.9) : ALCOHOL.R_FACTOR[s.rKey];
-  const beta = ALCOHOL.BETA[s.beta];
+      ? clamp(parseFloat(s.rCustom), 0.4, 0.9)
+      : (s.watson ? watsonR(s.rKey, s.ageY || 30, s.heightCm || 175, weightForR)
+                  : ALCOHOL.R_FACTOR[s.rKey]);
+  const beta = alcoholBeta(s.beta, s.food);
   const ka = ALCOHOL.KA[s.food];
   const weightKg = clamp(s.weightKg || 75, 30, 250);
 
@@ -2765,44 +3044,85 @@ function renderAlcohol(){
     return;
   }
 
-  /* timeline origin = the first drink; "now" = the most distant minutesAgo */
-  const maxAgo = s.drinks.reduce((m, d) => Math.max(m, d.when), 0);
-  const items = s.drinks.map(d => ({t:maxAgo - d.when, grams:gramsEthanol(d.vol, d.abv)}));
+  /* Timeline origin = the START of the earliest drink; "now" = that many
+     minutes later. A drink nursed over an hour is spread across the interval
+     rather than landing as a bolus at its finish time, which is how forensic
+     calculations treat a drinking period — and it stops a pint finished five
+     minutes ago from being modelled as if it were downed in one. */
+  const originAgo = s.drinks.reduce((m, d) => Math.max(m, d.when + (d.over || 0)), 0);
+  const items = alcoholDoseItems(s.drinks, originAgo);
   const totalGrams = items.reduce((a, i) => a + i.grams, 0);
   const run = alcoholModelRun(items, {weightKg:weightKg, r:rFactor, beta:beta, ka:ka, model:s.model});
   const pts = run.points;
-  const nowMin = maxAgo;
+  const nowMin = originAgo;
   const nowBac = valueAt(pts, nowMin);
-  const peakMin = s.model === 'pk' ? pkTmaxMinutes(items, ka, run.R) : run.lastT;
-  const peakBac = valueAt(pts, peakMin);
+  /* Two different quantities, previously conflated:
+       sessionPeak  — the highest BAC anywhere on the curve. Drives the
+                      reported peak, the chart's y-scale and the phase bands.
+                      Taken as the maximum over the plotted minutes, because
+                      the analytic solver only finds the local maximum after
+                      the LAST drink: five beers six hours ago plus one now
+                      had it reporting 0.075 % against a true 0.137 %, and the
+                      chart clipped flat because yMax came from that figure.
+       trajectoryTo — where the alcohol still in your stomach is heading,
+                      from the analytical derivative. This is what the
+                      rising / at-peak / passed status should describe. */
+  const sessionPeak = peakFrom(pts, 0);
+  const peakMin = sessionPeak.at;
+  const peakBac = sessionPeak.value;
+  const trajectoryTo = s.model === 'pk' ? pkTmaxMinutes(items, ka, run.R) : run.lastT;
+  const upcoming = peakFrom(pts, nowMin);        // the worst still to come
   const tEnd = pts[pts.length - 1][0];
   const scalePos = alcoholScalePosition(nowBac);
 
-  /* gauge + readout, always together */
+  /* Warnings and gauge colour key off whichever is worse — what you are at
+     now, or what you are still heading for. */
+  /* Every figure here carries roughly a 21 % coefficient of variation
+     (Gullberg). Warnings key off the TOP of that band, because an estimate
+     that is low by a fifth is the one that gets someone hurt. */
+  const cv = ALCOHOL.UNCERTAINTY_CV;
+  const band = v => fmtBac(v * (1 - cv)) + '\u2013' + fmtBac(v * (1 + cv));
+  const worstBac = Math.max(nowBac, upcoming.value) * (1 + cv);
+  const worstPos = alcoholScalePosition(Math.max(nowBac, upcoming.value));
+  const stillComing = upcoming.value > nowBac + 0.0005 && upcoming.at > nowMin;
   renderGaugeWithLabel(gaugeEl, readEl, {
     fraction:scalePos / 100, value:fmtBac(nowBac), valueSuffix:'% BAC',
-    label:intensityLabel(scalePos), color:severityColor(scalePos),
-    ariaLabel:'Estimated blood alcohol concentration ' + fmtBac(nowBac) + ' percent, ' + intensityLabel(scalePos),
-    sub:'Scale position <strong>' + Math.round(scalePos) + '&nbsp;%</strong> of the shared six-step scale — a declared display mapping, not a measurement.'
+    label:nowBac >= 0.20 ? (nowBac >= 0.30 ? 'Life-threatening' : 'Medical emergency') : intensityLabel(scalePos),
+    color:severityColor(scalePos),
+    peakFraction:stillComing ? worstPos / 100 : null,
+    peakColor:severityColor(worstPos),
+    peakLabel:stillComing ? 'heading for ' + fmtBac(upcoming.value) + ' % · ' + intensityLabel(worstPos) : null,
+    ariaLabel:'Estimated blood alcohol concentration ' + fmtBac(nowBac) + ' percent, ' + intensityLabel(scalePos) +
+      (stillComing ? ', still rising towards ' + fmtBac(upcoming.value) + ' percent' : ''),
+    sub:(stillComing
+      ? '<strong>Alcohol already swallowed is still arriving.</strong> The tick on the arc is where this drinking is heading — ' +
+        fmtDuration(upcoming.at - nowMin) + ' from now. '
+      : '') +
+      'Plausible range <strong>' + band(nowBac) + '&nbsp;%</strong> (&plusmn;' + Math.round(cv * 100) +
+      '&nbsp;%, after Gullberg) — scale position ' + Math.round(scalePos) + '&nbsp;%.<br>' + asOfLine()
   });
 
-  const ps = peakStatus(nowMin, peakMin, {noun:s.model === 'widmark' ? 'Modelled peak (your last drink)' : 'Peak'});
+  const ps = peakStatus(nowMin, trajectoryTo, {noun:s.model === 'widmark' ? 'Modelled peak (your last drink)' : 'Peak'});
   const stdDrinks = totalGrams / ALCOHOL.STANDARD_DRINK_G;
   statsEl.innerHTML =
-    stat('Peak BAC', fmtBac(peakBac) + ' <small>%</small>', ps.text) +
+    stat('Session peak', fmtBac(peakBac) + ' <small>% (' + band(peakBac) + ')</small>',
+         peakMin > nowMin ? 'Expected in ' + fmtDuration(peakMin - nowMin)
+                          : (nowMin - peakMin < 1 ? 'Right now' : 'Reached ' + fmtDuration(nowMin - peakMin) + ' ago')) +
     stat('Ethanol consumed', round(totalGrams, 1) + ' <small>g</small>', round(stdDrinks, 1) + ' US standard drinks') +
-    stat('Distribution', round(weightKg * rFactor, 1) + ' <small>L</small>', 'Vd = weight &times; r (' + round(rFactor, 3) + ')') +
+    stat('Distribution', round(weightKg * rFactor, 1) + ' <small>L</small>',
+         'Vd = weight &times; r (' + round(rFactor, 3) + ')' +
+         (s.watson && s.rCustom === '' ? ' &mdash; Watson TBW ' + round(watsonTBW(s.rKey, s.ageY || 30, s.heightCm || 175, weightKg), 1) + ' L' : '')) +
     stat('Burn-off rate', beta.toFixed(3) + ' <small>%/h</small>', 'Zero-order — constant, not exponential');
 
   /* --- banners ------------------------------------------------------------ */
   const banners = [];
-  if (nowBac >= 0.25) banners.push({level:'crit', icon:'alert', title:'Medical-emergency territory',
+  if (worstBac >= 0.25) banners.push({level:'crit', icon:'alert', title:'Medical-emergency territory',
     body:'A BAC in this range carries real risk of unconsciousness, vomiting with a suppressed gag reflex, and respiratory depression. If anyone is confused, vomiting while drowsy, breathing slowly or cannot be woken, call emergency services now and put them on their side. Do not leave them to sleep it off.'});
-  else if (nowBac >= 0.15) banners.push({level:'crit', icon:'alert', title:'Severe impairment',
+  else if (worstBac >= 0.15) banners.push({level:'crit', icon:'alert', title:'Severe impairment',
     body:'Blackout and vomiting are likely in this range, and it climbs toward the emergency range quickly if more is drunk. Stop drinking, switch to water, and stay with someone.'});
-  if (nowBac >= 0.08) banners.push({level:'warn', icon:'shield', title:'Above the common 0.08 % legal driving limit',
+  if (worstBac >= 0.08) banners.push({level:'warn', icon:'shield', title:(nowBac >= 0.08 ? 'Above' : 'Heading above') + ' the common 0.08 % legal driving limit',
     body:'This is a model, not a measurement — the real figure could sit either side of it. Do not drive regardless of what this or any other estimate says.'});
-  else if (nowBac > 0) banners.push({level:'info', icon:'shield', title:'Below 0.08 % does not mean unimpaired',
+  else if (worstBac > 0) banners.push({level:'info', icon:'shield', title:'Below 0.08 % does not mean unimpaired',
     body:'Divided attention, hazard scanning and reaction time are measurably degraded from around 0.02 %. Estimates like this one cannot tell you it is safe to drive — nothing can except not drinking.'});
   if (ps.state === 'rising') banners.push({level:'info', icon:'hourglass', title:'Still absorbing',
     body:'Your BAC is modelled as still rising — ' + ps.text.toLowerCase() + '. Alcohol already swallowed keeps arriving for some time after the last sip.'});
@@ -2821,7 +3141,7 @@ function renderAlcohol(){
       {y:0.08, label:'0.08 % legal limit', color:'var(--danger)'},
       {y:0.05, label:'0.05 % limit', color:'var(--warn)'}
     ],
-    vlines:[{x:peakMin, label:'peak', color:'var(--accent-2)'}],
+    vlines:[{x:peakMin, label:'session peak', color:'var(--accent-2)'}].concat(stillComing && Math.abs(upcoming.at - peakMin) > 3 ? [{x:upcoming.at, label:'heading for', color:'var(--warn)'}] : []),
     series:[{points:pts, color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:nowMin, y:nowBac, label:'now · ' + fmtBac(nowBac) + ' %'},
     accent:'var(--accent)',
@@ -2838,8 +3158,8 @@ function renderAlcohol(){
   document.getElementById('alc-peak-note').innerHTML = '<strong>' + ps.text + '.</strong> ' +
     (s.model === 'widmark'
       ? 'Widmark absorbs every drink instantly, so its maximum always sits at your last drink.'
-      : 'Computed from the analytical derivative of the absorption curve, not by scanning the plotted points.');
-  const t002 = firstTimeBelow(pts, 0.02, peakMin);
+      : 'Computed from the analytical derivative of the absorption curve, not by scanning the plotted points. Near the peak the Michaelis-Menten elimination term is within a percent of its zero-order limit, so the closed form still holds there.');
+  const t002 = timeStaysBelow(pts, 0.02, peakMin);
   renderTimeline(document.getElementById('alc-timeline'), {
     totalMin:xMaxMin, nowMin:nowMin, scale:'hr',
     phases:[
@@ -2851,18 +3171,28 @@ function renderAlcohol(){
   });
 
   /* --- thresholds --------------------------------------------------------- */
+  /* "Already below" is only true if the curve never climbs back over the
+     line — otherwise it is the most dangerous possible answer. */
+  /* A second run at the slow end of the published range, so the panel can say
+     how late this could still be rather than implying a single true answer. */
+  const slowRun = alcoholModelRun(items, {weightKg:weightKg, r:rFactor, beta:ALCOHOL.BETA.vslow, ka:ka, model:s.model});
   const thrHtml = [0.08, 0.05, 0.02, 0.0].map(thr => {
     const label = thr === 0 ? '0.000 % (fully cleared)' : thr.toFixed(2) + ' %';
-    if (nowBac <= thr + 1e-9 && thr > 0)
-      return thresholdRow(label, '<span class="badge s1"><span class="bdot"></span>Already below</span>', thr);
-    const t = firstTimeBelow(pts, thr, nowMin);
+    const t = timeStaysBelow(pts, thr, nowMin);
     if (t == null) return thresholdRow(label, '<span class="badge neutral"><span class="bdot"></span>Beyond the 36-hour modelling window</span>', thr);
     const mins = Math.max(0, t - nowMin);
-    if (mins < 1 && thr > 0) return thresholdRow(label, '<span class="badge s1"><span class="bdot"></span>Already below</span>', thr);
-    return thresholdRow(label, '<strong>' + fmtDuration(mins) + '</strong> from now', thr);
+    if (mins < 1 && thr > 0) return thresholdRow(label, '<span class="badge s1"><span class="bdot"></span>Already below, and staying below</span>', thr);
+    const rising = thr > 0 && upcoming.value > thr && nowBac <= thr;
+    const slowT = timeStaysBelow(slowRun.points, thr, nowMin);
+    const slowMins = slowT == null ? null : Math.max(0, slowT - nowMin);
+    return thresholdRow(label, '<strong>' + fmtDuration(mins) + '</strong> from now' +
+      (slowMins != null && slowMins > mins + 5
+        ? '<br><small style="color:var(--text-faint)">up to ' + fmtDuration(slowMins) + ' if you eliminate at the slow end (0.010&nbsp;%/h)</small>' : '') +
+      (rising ? '<br><small style="color:var(--warn)">you are under it now, but still climbing past it</small>' : ''), thr);
   }).join('');
   document.getElementById('alc-thresholds').innerHTML = thrHtml +
-    '<p class="card-note" style="margin:12px 0 0">Nothing accelerates the descending limb. Coffee, food, exercise and cold water change how awake you feel and not how fast alcohol leaves — see <a href="#" data-goto="learn" data-article="art-myths">Misconceptions that get people hurt</a>.</p>';
+    '<p class="card-note" style="margin:12px 0 0"><strong>Read these as floors, not deadlines.</strong> They assume the elimination rate you selected, and the last stretch below 0.02&nbsp;% is the least certain part of the curve. ' +
+    'Nothing accelerates the descending limb. Coffee, food, exercise and cold water change how awake you feel and not how fast alcohol leaves — see <a href="#" data-goto="learn" data-article="art-myths">Misconceptions that get people hurt</a>.</p>';
 
   /* --- effect bars -------------------------------------------------------- */
   renderEffectBars(document.getElementById('alc-effects'), ALCOHOL.EFFECTS.map(e => {
@@ -2882,11 +3212,26 @@ function thresholdRow(label, value, thr){
          '<span style="font-weight:600;font-size:.88rem;color:' + color + '">Below ' + label + '</span>' +
          '<span style="font-size:.88rem;text-align:right">' + value + '</span></div>';
 }
-/* First minute at or after `from` where the curve is below `thr`. */
-function firstTimeBelow(pts, thr, from){
+/* The minute after which the curve STAYS at or below `thr`.
+   The previous version returned the FIRST minute under the line, which is
+   wrong while alcohol is still being absorbed: someone who has just finished
+   four shots is momentarily under every threshold, and was told "already
+   below" on the same screen that predicted a 0.091 % peak 55 minutes later.
+   Scanning backwards from the end of the series is the only answer that
+   accounts for a curve that is still climbing. */
+function timeStaysBelow(pts, thr, from){
   const start = clamp(Math.round(from), 0, pts.length - 1);
-  for (let i = start; i < pts.length; i++){ if (pts[i][1] <= thr + 1e-9) return pts[i][0]; }
-  return null;
+  for (let i = pts.length - 1; i >= start; i--){
+    if (pts[i][1] > thr + 1e-9) return i + 1 < pts.length ? pts[i + 1][0] : null;
+  }
+  return pts[start] ? pts[start][0] : null;
+}
+/* Highest value the curve still reaches from `from` onwards, and when. */
+function peakFrom(pts, from){
+  const start = clamp(Math.round(from), 0, pts.length - 1);
+  let v = -1, t = start;
+  for (let i = start; i < pts.length; i++){ if (pts[i][1] > v){ v = pts[i][1]; t = pts[i][0]; } }
+  return {value:Math.max(v, 0), at:t};
 }
 
 /* ------------------------------- alcohol UI ------------------------------- */
@@ -2907,7 +3252,7 @@ function renderDrinkList(){
       '<div><div class="dname">' + esc(d.name) + '</div>' +
       '<div class="dmeta">' + round(mlToDisplay(d.vol), UNIT_MODE === 'metric' ? 0 : 1) + ' ' + volumeUnitLabel() +
       ' · ' + round(d.abv, 1) + ' % ABV · ' + round(g, 1) + ' g ethanol · ' + round(g / ALCOHOL.STANDARD_DRINK_G, 2) + ' std' +
-      '<br>finished ' + fmtDuration(d.when) + ' ago</div></div>' +
+      '<br>finished ' + fmtDuration(d.when) + ' ago' + (d.over ? ', over ' + fmtDuration(d.over) : '') + '</div></div>' +
       '<div class="dacts">' +
         '<button class="btn tiny" type="button" data-act="edit" title="Edit this drink"><span class="ico" data-icon="edit"></span></button>' +
         '<button class="btn tiny danger" type="button" data-act="del" title="Delete this drink"><span class="ico" data-icon="trash"></span></button>' +
@@ -2939,15 +3284,34 @@ function initAlcohol(){
 
   const weight = document.getElementById('alc-weight');
   weight.value = round(kgToDisplay(s.weightKg), 1);
-  weight.addEventListener('input', () => { s.weightKg = clamp(displayToKg(parseFloat(weight.value) || 75), 30, 250); saveState(); renderAlcohol(); });
+  weight.addEventListener('input', () => { s.weightKg = readWeightKg(weight.value); saveState(); renderAlcohol(); });
 
   const rc = document.getElementById('alc-r-custom');
   rc.value = s.rCustom || '';
   rc.addEventListener('input', () => { s.rCustom = rc.value; saveState(); renderAlcohol(); });
 
-  const vol = document.getElementById('alc-vol'), abv = document.getElementById('alc-abv'), when = document.getElementById('alc-when');
+  const vol = document.getElementById('alc-vol'), abv = document.getElementById('alc-abv'),
+        when = document.getElementById('alc-when'), over = document.getElementById('alc-over');
   vol.value = round(mlToDisplay(s.draft.vol), UNIT_MODE === 'metric' ? 0 : 1);
-  abv.value = s.draft.abv; when.value = s.draft.when;
+  abv.value = s.draft.abv; when.value = s.draft.when; over.value = s.draft.over || 0;
+  over.addEventListener('input', () => { s.draft.over = Math.max(0, parseFloat(over.value) || 0); saveState(); });
+
+  const watson = document.getElementById('alc-watson');
+  const watsonFields = document.getElementById('alc-watson-fields');
+  watson.checked = !!s.watson; watsonFields.hidden = !s.watson;
+  watson.addEventListener('change', () => {
+    s.watson = watson.checked; watsonFields.hidden = !watson.checked; saveState(); renderAlcohol();
+  });
+  const ht = document.getElementById('alc-height'), age = document.getElementById('alc-age');
+  ht.value = round(cmToDisplay(s.heightCm), 1); age.value = s.ageY;
+  ht.addEventListener('input', () => {
+    const v = parseFloat(ht.value);
+    s.heightCm = isFinite(v) ? clamp(displayToCm(v), 120, 220) : 175; saveState(); renderAlcohol();
+  });
+  age.addEventListener('input', () => {
+    const v = parseFloat(age.value);
+    s.ageY = isFinite(v) ? clamp(v, 16, 100) : 30; saveState(); renderAlcohol();
+  });
   vol.addEventListener('input', () => { s.draft.vol = displayToMl(parseFloat(vol.value) || 0); s.draft.name = 'Custom drink'; s.draft.icon = 'drink'; saveState(); });
   abv.addEventListener('input', () => { s.draft.abv = parseFloat(abv.value) || 0; s.draft.name = 'Custom drink'; s.draft.icon = 'drink'; saveState(); });
   when.addEventListener('input', () => { s.draft.when = Math.max(0, parseFloat(when.value) || 0); saveState(); });
@@ -2956,13 +3320,14 @@ function initAlcohol(){
     const v = displayToMl(parseFloat(vol.value) || 0);
     const a = parseFloat(abv.value) || 0;
     const w = Math.max(0, parseFloat(when.value) || 0);
+    const ov = Math.max(0, parseFloat(over.value) || 0);
     if (v <= 0 || a <= 0) return;
     if (alcEditingId != null){
       const d = s.drinks.find(x => x.id === alcEditingId);
-      if (d){ d.vol = v; d.abv = a; d.when = w; d.name = s.draft.name; d.icon = s.draft.icon; }
+      if (d){ d.vol = v; d.abv = a; d.when = w; d.over = ov; d.at = minutesAgoToStamp(w); d.name = s.draft.name; d.icon = s.draft.icon; }
       alcExitEdit();
     } else {
-      s.drinks.push({id:s.nextId++, name:s.draft.name || 'Custom drink', icon:s.draft.icon || 'drink', vol:v, abv:a, when:w});
+      s.drinks.push({id:s.nextId++, name:s.draft.name || 'Custom drink', icon:s.draft.icon || 'drink', vol:v, abv:a, when:w, over:ov, at:minutesAgoToStamp(w)});
     }
     saveState(); renderAlcohol();
   });
@@ -2988,6 +3353,7 @@ function initAlcohol(){
       document.getElementById('alc-vol').value = round(mlToDisplay(d.vol), UNIT_MODE === 'metric' ? 0 : 1);
       document.getElementById('alc-abv').value = d.abv;
       document.getElementById('alc-when').value = d.when;
+      document.getElementById('alc-over').value = d.over || 0;
       document.getElementById('alc-add-label').textContent = 'Save changes';
       document.getElementById('alc-cancel').hidden = false;
       document.getElementById('alc-editing').textContent = 'Editing "' + d.name + '"';
@@ -3018,8 +3384,8 @@ const D9 = {
     {key:'chocolate', label:'Chocolate', icon:'chocolate', onset:8,   note:'Fat content helps absorption but slows gastric emptying.'},
     {key:'baked',     label:'Baked good',icon:'baked',     onset:12,  note:'Slowest of the chewed formats — a whole meal to digest.'},
     {key:'capsule',   label:'Capsule',   icon:'capsule',   onset:18,  note:'The shell has to break down before anything starts.'},
-    {key:'drink',     label:'Beverage',  icon:'drink',     onset:-18, note:'Nano-emulsified drinks are engineered to absorb fast.'},
-    {key:'tincture',  label:'Tincture',  icon:'dropper',   onset:-22, note:'Held under the tongue, part of the dose skips the gut entirely.'}
+    {key:'drink',     label:'Beverage',  icon:'drink',     onset:-18, note:'Nano-emulsification is an industry claim of faster absorption; independent confirmation is limited, so treat the earlier onset as optimistic.'},
+    {key:'tincture',  label:'Tincture',  icon:'dropper',   onset:0,   note:'Often sold as fast-acting, but the best controlled comparison found no significant difference in peak concentration, time to peak or total exposure between oral THC and matched oromucosal dosing. Modelled as a swallowed dose.'}
   ],
   FOOD:[
     {key:'empty', label:'Empty stomach', onset:-12, absorb:0.92, note:'Fastest onset, but less of a fat-soluble drug is taken up.'},
@@ -3027,9 +3393,9 @@ const D9 = {
     {key:'heavy', label:'Fatty meal',    onset:22,  absorb:1.18, note:'Latest onset AND the largest total absorption — the combination behind most re-dosing accidents.'}
   ],
   SEX:[
-    {key:'male',    label:'Male avg',   sub:'22 % fat'},
-    {key:'female',  label:'Female avg', sub:'30 % fat'},
-    {key:'neutral', label:'Unspecified',sub:'26 % fat'}
+    {key:'male',    label:'Male avg',   sub:'28.7 % fat'},
+    {key:'female',  label:'Female avg', sub:'40.9 % fat'},
+    {key:'neutral', label:'Unspecified',sub:'34.8 % fat'}
   ],
   /* HAND-TUNED per-effect curves. ec50k multiplies the module EC50; effects
      with ec50k > 1 need a bigger dose before they show up. */
@@ -3040,9 +3406,9 @@ const D9 = {
     {name:'Appetite',                      ec50k:0.70, n:1.3, w:0.90},
     {name:'Cognitive fog & short-term memory', ec50k:1.00, n:1.6, w:1.00, note:'The most reliably measured acute effect of THC.'},
     {name:'Coordination impairment',       ec50k:1.15, n:1.7, w:0.95},
-    {name:'Sedation',                      ec50k:1.20, n:1.5, w:0.90, cbn:true},
-    {name:'Sleepiness',                    ec50k:1.45, n:1.5, w:0.85, cbn:true},
-    {name:'Anxiety & paranoia',            ec50k:2.20, n:2.2, w:1.00, cbg:true, note:'Higher mid-point, steeper curve: rare at low doses, then it climbs fast.'},
+    {name:'Sedation',                      ec50k:1.20, n:1.5, w:0.90},
+    {name:'Sleepiness',                    ec50k:1.45, n:1.5, w:0.85},
+    {name:'Anxiety & paranoia',            ec50k:2.20, n:2.2, w:1.00, note:'Higher mid-point, steeper curve: rare at low doses, then it climbs fast.'},
     {name:'Heart-rate increase',           ec50k:0.80, n:1.4, w:0.80},
     {name:'Dry mouth & eyes',              ec50k:0.60, n:1.2, w:0.80}
   ]
@@ -3051,18 +3417,20 @@ const D9 = {
 /* Effective dose for the Delta-9 module. */
 function d9EffectiveDose(mg, weightKg, bodyFatPct, tolKey, foodKey){
   const food = D9.FOOD.find(f => f.key === foodKey) || D9.FOOD[1];
-  return mg * food.absorb * distributionFactor(weightKg, bodyFatPct) / toleranceFactor(tolKey);
+  return mg * food.absorb / toleranceFactor(tolKey);
 }
-/* Timing for the Delta-9 module. All clamps are hand-tuned to the published
-   ranges: onset 30–90 min, peak 1.5–3.3 h, total 6–10 h. */
+/* Clamped to the ranges public-health agencies actually publish. Health
+   Canada tells people effects begin 30 min to 2 h after ingestion, take up to
+   4 h to peak and can last up to 12 h with residual effects to 24 h — the old
+   6-10 h ceiling was cutting the tail short. */
 function d9Timing(effDose, weightKg, bodyFatPct, productKey, foodKey){
   const prod = D9.PRODUCTS.find(p => p.key === productKey) || D9.PRODUCTS[0];
   const food = D9.FOOD.find(f => f.key === foodKey) || D9.FOOD[1];
-  const onset = clamp(D9.BASE_ONSET_MIN + prod.onset + food.onset, 20, 105);
+  const onset = clamp(D9.BASE_ONSET_MIN + prod.onset + food.onset, 30, 120);
   const intensity01 = hill(effDose, D9.EC50_MG, D9.HILL_N);
-  const peak = clamp(onset + 75 * (1 + 0.35 * intensity01), 90, 200);
+  const peak = clamp(onset + 75 * (1 + 0.35 * intensity01), 90, 240);
   const dur = durationFactor(weightKg, bodyFatPct);
-  const end = clamp(peak + 275 * dur * (0.85 + 0.6 * intensity01), 360, 600);
+  const end = clamp(peak + 275 * dur * (0.85 + 0.6 * intensity01), 360, 720);
   return {onset:onset, peak:peak, end:end, intensity01:intensity01};
 }
 
@@ -3085,6 +3453,14 @@ function curvePoints(peakPct, timing, stepMin){
   pts.push([end, 0]);
   return pts;
 }
+/* Felt intensity is not fitness to drive. The driving meta-analysis has most
+   driving-relevant skills recovering within about 5 h of inhaling 20 mg THC
+   and nearly all within 7 h, with oral doses taking longer — well past the
+   point at which the intensity curve has flattened to nothing. */
+function impairmentWindowMin(timing, intensity01, route){
+  if (route === 'inhaled') return clamp(180 + 240 * intensity01, 180, 420);
+  return clamp(timing.end + 120 + 180 * intensity01, timing.end + 120, 1440);
+}
 function cannabisPhases(timing){
   return [
     {name:'Nothing yet', start:0, end:timing.onset},
@@ -3101,15 +3477,16 @@ function resolveBodyFat(raw, sexKey){
 
 /* ------------------------------ renderTHC (Δ9) ---------------------------- */
 function renderTHC(){
+  syncClock();
   const s = state.d9;
   const weightKg = clamp(s.weightKg || 75, 30, 250);
   const bf = resolveBodyFat(s.bf, s.sex);
   const bfAuto = !(parseFloat(s.bf) >= 4 && parseFloat(s.bf) <= 60);
   const mg = clamp(s.mg || 0, 0, 500);
-  const effDose = d9EffectiveDose(mg, weightKg, bf, s.tol, s.food);
+  const tolKey = effectiveToleranceKey(s.tol, s.first);
+  const effDose = d9EffectiveDose(mg, weightKg, bf, tolKey, s.food);
   const timing = d9Timing(effDose, weightKg, bf, s.product, s.food);
-  const damp = cbdDamping(s.cbd, mg);
-  const peakPct = hill(effDose, D9.EC50_MG, D9.HILL_N) * damp * 100;
+  const peakPct = hill(effDose, D9.EC50_MG, D9.HILL_N) * 100;
   const now = clamp(s.elapsed || 0, 0, 900);
   const nowPct = peakPct * asymmetricCurve(now, timing.onset, timing.peak, timing.end);
 
@@ -3118,16 +3495,16 @@ function renderTHC(){
     label:intensityLabel(nowPct), color:severityColor(nowPct),
     ariaLabel:'Estimated Delta-9 intensity ' + Math.round(nowPct) + ' percent, ' + intensityLabel(nowPct),
     sub:'Relative position on the modelled dose-response curve — not a probability. Modelled peak for this dose: <strong>' +
-        Math.round(peakPct) + '&nbsp;% · ' + intensityLabel(peakPct) + '</strong>.'
+        Math.round(peakPct) + '&nbsp;% · ' + intensityLabel(peakPct) + '</strong>.<br>' + asOfLine()
   });
 
   const ps = peakStatus(now, timing.peak);
   document.getElementById('d9-stats').innerHTML =
     stat('Labelled dose', round(mg, 1) + ' <small>mg &Delta;9</small>', 'What the package says') +
-    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', 'After body composition &divide; tolerance &times;' + round(toleranceFactor(s.tol), 2)) +
+    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', 'After body composition &divide; tolerance &times;' + round(toleranceFactor(tolKey), 2)) +
     stat('Modelled peak', Math.round(peakPct) + ' <small>% · ' + intensityLabel(peakPct) + '</small>', ps.text) +
     stat('Onset → done', fmtDuration(timing.onset) + ' → ' + fmtDuration(timing.end), 'Total ' + fmtDuration(timing.end) + ' from ingestion') +
-    stat('Body fat used', round(bf, 1) + ' <small>%</small>', bfAuto ? 'Population fallback — type yours for a better estimate' : 'Your entry');
+    stat('Body fat used', round(bf, 1) + ' <small>%</small>', (bfAuto ? 'Population mean — type yours if you know it' : 'Your entry') + '; affects duration only, never the peak');
 
   /* banners */
   const banners = [];
@@ -3137,13 +3514,20 @@ function renderTHC(){
     body:'At this size the pleasant part of the curve has flattened while anxiety, disorientation, vomiting and tachycardia have not. It is not dangerous in the way an alcohol overdose is dangerous, but it can be genuinely frightening and can last most of a day.'});
   else if (mg >= 25) banners.push({level:'warn', icon:'alert', title:'Large edible dose',
     body:'25 mg and up is an experienced-user dose. If you are not sure where you sit, the model can only tell you where this dose lands on a curve — it cannot tell you how you will feel.'});
-  if (now < timing.onset) banners.push({level:'info', icon:'hourglass', title:'Nothing is expected yet — do not re-dose',
-    body:'Onset for this product and stomach is modelled at ' + fmtDuration(timing.onset) + '. You are ' + fmtDuration(now) +
-         ' in. Taking more now is the single most common way an edible goes wrong, because both doses arrive together.'});
+  /* This used to vanish the moment onset passed — at 60 minutes with a peak
+     still two hours out there was no warning at all, which is precisely the
+     window in which the second gummy gets taken. It now stays up until the
+     modelled peak is behind you. */
+  if (now < timing.peak) banners.push({level:'warn', icon:'hourglass',
+    title:now < timing.onset ? 'Nothing is expected yet — do not re-dose' : 'Still coming up — do not re-dose',
+    body:'Onset is modelled at ' + fmtDuration(timing.onset) + ' and the peak at ' + fmtDuration(timing.peak) +
+         '. You are ' + fmtDuration(now) + ' in' + (now >= timing.onset ? ' and nowhere near the top yet' : '') +
+         '. Taking more before the peak is the single most common way an edible goes wrong, because both doses then arrive together.'});
   renderBanners(document.getElementById('d9-banners'), banners);
 
   /* chart */
-  const xMax = Math.max(timing.end * 1.05, now + 30);
+  const impairEnd = impairmentWindowMin(timing, timing.intensity01, 'oral');
+  const xMax = Math.max(timing.end * 1.05, impairEnd * 1.02, now + 30);
   renderChart(document.getElementById('d9-chart'), {
     xMax:xMax, yMax:100,
     xLabel:'Hours since ingestion', yLabel:'Modelled intensity (% of curve maximum)', yLabelShort:'Intensity (% of max)',
@@ -3153,6 +3537,7 @@ function renderTHC(){
       {y:70, label:'Very Strong', color:severityColor(72)},
       {y:30, label:'Moderate', color:severityColor(32)}
     ],
+    bands:[{x0:0, x1:impairEnd, label:'driving-relevant impairment likely', color:'var(--danger)'}],
     vlines:[{x:timing.onset, label:'onset', color:'var(--text-faint)'}, {x:timing.peak, label:'peak', color:'var(--accent-2)'}],
     series:[{points:curvePoints(peakPct, timing, 2), color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:now, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
@@ -3163,7 +3548,8 @@ function renderTHC(){
     {label:'Modelled intensity', color:'var(--accent)'},
     {label:'Onset', color:'var(--text-faint)', dash:true},
     {label:'Modelled peak', color:'var(--accent-2)', dash:true},
-    {label:'Shared scale boundaries', color:severityColor(72), dash:true}
+    {label:'Shared scale boundaries', color:severityColor(72), dash:true},
+    {label:'Driving-relevant impairment outlasts the felt curve', color:'var(--danger)'}
   ]);
 
   document.getElementById('d9-peak-note').innerHTML = '<strong>' + ps.text + '.</strong> Phases are derived from the same asymmetric curve the chart draws.';
@@ -3173,17 +3559,16 @@ function renderTHC(){
   });
 
   /* effects — each one its own curve, with the three specific minor-cannabinoid actions */
-  const cbn = cbnSedationBoost(s.cbn), cbg = cbgAnxietyRelief(s.cbg);
   const shape = nowPct / Math.max(peakPct, 0.0001);   // how far along the time course we are
   renderEffectBars(document.getElementById('d9-effects'), D9.EFFECTS.map(e => {
-    let v = hill(effDose, D9.EC50_MG * e.ec50k, e.n) * e.w * 100 * damp;
+    const k = (s.first && /Anxiety/.test(e.name)) ? e.ec50k * FIRST_TIME_ANXIETY_SHIFT : e.ec50k;
+    let v = hill(effDose, D9.EC50_MG * k, e.n) * e.w * 100;
     if (e.biphasic) v *= (1 - 0.35 * hill(effDose, D9.EC50_MG * 3, 2.5));
-    if (e.cbn) v *= (1 + cbn);
-    if (e.cbg) v *= (1 - cbg);
     return {name:e.name, value:v * shape, note:e.note};
   }));
 
   /* reference table — generated from this module's own constants */
+  renderCannabinoidPanel(document.getElementById('d9-cannabinoids'), s.cbd, s.cbn, s.cbg, mg);
   renderD9Reference();
   document.getElementById('d9-tips').innerHTML = EDIBLE_TIPS;
 }
@@ -3211,13 +3596,20 @@ function renderD9Reference(){
 }
 const EDIBLE_TIPS =
   '<div class="acc open"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="hourglass"></span></span>Start low, and actually wait<span class="chev ico" data-icon="chevron"></span></button>' +
-  '<div class="acc-body">If you have no tolerance, 2.5&nbsp;mg is a real dose and 5&nbsp;mg is a full one. Take it, then wait two hours before deciding it was not enough — the model above puts onset at 30–90 minutes and the peak up to three hours out. Almost every edible emergency is a second dose taken at the 45-minute mark.</div></div>' +
+  '<div class="acc-body">If you have no tolerance, 2.5&nbsp;mg is a real dose and 5&nbsp;mg is a full one. <strong>Two hours is the minimum wait, not the all-clear.</strong> This model puts onset anywhere from 30 minutes to 2 hours and the peak as late as 4 hours out, so at the two-hour mark you may still be climbing — the gauge and the banner above will say which. A second dose taken at the 45-minute mark is one of the commonest ways it goes wrong — alongside inaccurate labelling and, for children, accidental access.</div></div>' +
   '<div class="acc"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="leaf"></span></span>Why the same gummy is different every time<span class="chev ico" data-icon="chevron"></span></button>' +
   '<div class="acc-body">Stomach contents, the fat in your last meal, CYP2C9 activity, sleep, mood and setting all move the outcome, and none of them is stable week to week. A fatty meal in particular delays onset <em>and</em> increases total absorption. See <a href="#" data-goto="learn" data-article="art-delay">Why edibles are delayed</a>.</div></div>' +
   '<div class="acc"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="shield"></span></span>If it is too much<span class="chev ico" data-icon="chevron"></span></button>' +
   '<div class="acc-body">It will pass and it is not typically dangerous in adults, but it can last hours. Sit or lie down somewhere quiet and dim, sip water, and let someone know. Slow breathing helps the panic more than anything else does. Seek medical care for chest pain, fainting or uncontrolled vomiting, and immediately for any child or pet. Nothing speeds up elimination — see <a href="#" data-goto="learn" data-article="art-myths">Misconceptions that get people hurt</a>.</div></div>';
 
 /* Small wiring helpers (no model logic lives here). */
+/* A blank field fell through to `parseFloat(v) || 75` — 75 in DISPLAY units,
+   so clearing the box in imperial mode silently stored 75 lb = 34 kg. The
+   fallback belongs after the conversion, not before it. */
+function readWeightKg(raw){
+  const v = parseFloat(raw);
+  return isFinite(v) ? clamp(displayToKg(v), 30, 250) : 75;
+}
 function bindNumber(id, apply){
   const el = document.getElementById(id);
   if (!el) return null;
@@ -3241,10 +3633,10 @@ function initD9(){
 
   const mg = bindPair('d9-mg', 'd9-mg-range', v => { s.mg = clamp(v || 0, 0, 500); saveState(); renderTHC(); });
   mg.n.value = s.mg; mg.r.value = clamp(s.mg, 0, 100);
-  const el = bindPair('d9-elapsed', 'd9-elapsed-range', v => { s.elapsed = clamp(v || 0, 0, 900); saveState(); renderTHC(); });
+  const el = bindPair('d9-elapsed', 'd9-elapsed-range', v => { s.elapsed = clamp(v || 0, 0, 900); s.takenAt = minutesAgoToStamp(s.elapsed); saveState(); renderTHC(); });
   el.n.value = s.elapsed; el.r.value = clamp(s.elapsed, 0, 600);
 
-  const w = bindNumber('d9-weight', v => { s.weightKg = clamp(displayToKg(parseFloat(v) || 75), 30, 250); saveState(); renderTHC(); });
+  const w = bindNumber('d9-weight', v => { s.weightKg = readWeightKg(v); saveState(); renderTHC(); });
   w.value = round(kgToDisplay(s.weightKg), 1);
   const bf = bindNumber('d9-bf', v => { s.bf = v; saveState(); renderTHC(); });
   bf.value = s.bf || '';
@@ -3263,17 +3655,24 @@ function initD9(){
    per-effect weights, its own timing clamps. Nothing here reads D9's values.
    ------------------------------------------------------------------------ */
 const D8 = {
-  /* HAND-TUNED: ≈1.6× the Delta-9 mid-point → inside the reported 1.3–2× gap */
-  EC50_MG:14.5,
-  HILL_N:1.4,
-  BASE_ONSET_MIN:42,
+  /* The 2025 controlled trial is the best evidence available: oral Δ8 at
+     20 mg produced lower drug effect, fewer negative effects, less cognitive
+     impairment and smaller heart-rate rises than 20 mg Δ9 — but 40 mg Δ8 and
+     20 mg Δ9 were pharmacodynamically indistinguishable. That is a potency
+     ratio near 2, and it means the difference is POTENCY, not character:
+     matched for intensity the two look alike. The per-effect discounts this
+     module used to apply have therefore been removed. HAND-TUNED only in the
+     sense that 18 mg is 2× the Δ9 mid-point. */
+  EC50_MG:18.0,
+  HILL_N:1.5,      // identical to Δ9, so the "Δ9 equivalent" stat is exact
+  BASE_ONSET_MIN:45,
   PRODUCTS:[
     {key:'gummy',     label:'Gummy',     icon:'gummy',     onset:0,   note:'By far the most common Delta-8 format.'},
     {key:'chocolate', label:'Chocolate', icon:'chocolate', onset:8,   note:'Fat helps absorption but slows gastric emptying.'},
     {key:'baked',     label:'Baked good',icon:'baked',     onset:12,  note:'Slowest of the chewed formats.'},
     {key:'capsule',   label:'Capsule',   icon:'capsule',   onset:18,  note:'The shell must break down first.'},
-    {key:'drink',     label:'Beverage',  icon:'drink',     onset:-18, note:'Emulsified drinks absorb fastest of the swallowed formats.'},
-    {key:'tincture',  label:'Tincture',  icon:'dropper',   onset:-22, note:'Sublingual absorption partly bypasses the gut.'}
+    {key:'drink',     label:'Beverage',  icon:'drink',     onset:-18, note:'Faster absorption is an industry claim for emulsified drinks; independent confirmation is limited.'},
+    {key:'tincture',  label:'Tincture',  icon:'dropper',   onset:0,   note:'Marketed as fast-acting; controlled oromucosal data show no significant speed advantage over swallowing. Modelled as a swallowed dose.'}
   ],
   FOOD:[
     {key:'empty', label:'Empty stomach', onset:-12, absorb:0.92, note:'Fastest onset, slightly less total uptake.'},
@@ -3281,53 +3680,58 @@ const D8 = {
     {key:'heavy', label:'Fatty meal',    onset:22,  absorb:1.18, note:'Latest onset and the largest total absorption.'}
   ],
   SEX:[
-    {key:'male',    label:'Male avg',   sub:'22 % fat'},
-    {key:'female',  label:'Female avg', sub:'30 % fat'},
-    {key:'neutral', label:'Unspecified',sub:'26 % fat'}
+    {key:'male',    label:'Male avg',   sub:'28.7 % fat'},
+    {key:'female',  label:'Female avg', sub:'40.9 % fat'},
+    {key:'neutral', label:'Unspecified',sub:'34.8 % fat'}
   ],
-  /* HAND-TUNED: shifted relative to Δ9 — less anxiety and less cognitive
-     disruption at equal subjective intensity, which is the consistent report. */
+  /* Identical to the Δ9 table. The 2025 trial found no pharmacodynamic
+     difference once doses were matched for intensity, so inventing per-effect
+     discounts for Δ8 would be modelling a difference the data does not show.
+     The whole difference lives in EC50. */
   EFFECTS:[
-    {name:'Euphoria',                      ec50k:0.90, n:1.4, w:0.92, biphasic:true},
-    {name:'Relaxation',                    ec50k:0.70, n:1.3, w:1.00, note:'The effect Delta-8 users most often say dominates.'},
-    {name:'Sensory & perceptual shift',    ec50k:1.25, n:1.5, w:0.78, note:'Modelled lower than Delta-9 — reported as a clearer head.'},
-    {name:'Appetite',                      ec50k:0.68, n:1.3, w:0.95, note:'Appetite stimulation is reported as comparable to Delta-9.'},
-    {name:'Cognitive fog & short-term memory', ec50k:1.20, n:1.5, w:0.80},
-    {name:'Coordination impairment',       ec50k:1.25, n:1.6, w:0.85, note:'Lower than Delta-9 — but impairment is impairment. Do not drive.'},
-    {name:'Sedation',                      ec50k:1.05, n:1.4, w:1.00, cbn:true, note:'Modelled slightly higher than Delta-9; Delta-8 is widely described as the more sedating isomer.'},
-    {name:'Sleepiness',                    ec50k:1.30, n:1.4, w:0.95, cbn:true},
-    {name:'Anxiety & paranoia',            ec50k:2.80, n:2.2, w:0.72, cbg:true, note:'Highest mid-point and lowest weight in the app — the clearest modelled difference from Delta-9.'},
-    {name:'Heart-rate increase',           ec50k:0.95, n:1.4, w:0.68},
+    {name:'Euphoria',                      ec50k:0.85, n:1.5, w:1.00, biphasic:true, note:'Displaced by anxiety at high effective doses — the curve turns on you.'},
+    {name:'Relaxation',                    ec50k:0.75, n:1.4, w:1.00},
+    {name:'Sensory & perceptual shift',    ec50k:1.10, n:1.6, w:0.95},
+    {name:'Appetite',                      ec50k:0.70, n:1.3, w:0.90},
+    {name:'Cognitive fog & short-term memory', ec50k:1.00, n:1.6, w:1.00, note:'The most reliably measured acute effect of THC.'},
+    {name:'Coordination impairment',       ec50k:1.15, n:1.7, w:0.95},
+    {name:'Sedation',                      ec50k:1.20, n:1.5, w:0.90},
+    {name:'Sleepiness',                    ec50k:1.45, n:1.5, w:0.85},
+    {name:'Anxiety & paranoia',            ec50k:2.20, n:2.2, w:1.00, note:'Higher mid-point, steeper curve: rare at low doses, then it climbs fast.'},
+    {name:'Heart-rate increase',           ec50k:0.80, n:1.4, w:0.80},
     {name:'Dry mouth & eyes',              ec50k:0.60, n:1.2, w:0.80}
   ]
 };
+
 function d8EffectiveDose(mg, weightKg, bodyFatPct, tolKey, foodKey){
   const food = D8.FOOD.find(f => f.key === foodKey) || D8.FOOD[1];
-  return mg * food.absorb * distributionFactor(weightKg, bodyFatPct) / toleranceFactor(tolKey);
+  return mg * food.absorb / toleranceFactor(tolKey);
 }
-/* Delta-8 is modelled as finishing somewhat sooner than Delta-9 — total is
-   clamped to 5–9 h rather than 6–10 h. HAND-TUNED. */
+/* Same clamps as Δ9: the trial reports Δ8 blood concentrations peaking 2–4 h
+   post-dose, like Δ9, so the shorter-duration assumption this module used to
+   carry was not supported. */
 function d8Timing(effDose, weightKg, bodyFatPct, productKey, foodKey){
   const prod = D8.PRODUCTS.find(p => p.key === productKey) || D8.PRODUCTS[0];
   const food = D8.FOOD.find(f => f.key === foodKey) || D8.FOOD[1];
-  const onset = clamp(D8.BASE_ONSET_MIN + prod.onset + food.onset, 20, 100);
+  const onset = clamp(D8.BASE_ONSET_MIN + prod.onset + food.onset, 30, 120);
   const intensity01 = hill(effDose, D8.EC50_MG, D8.HILL_N);
-  const peak = clamp(onset + 70 * (1 + 0.35 * intensity01), 85, 190);
+  const peak = clamp(onset + 75 * (1 + 0.35 * intensity01), 90, 240);
   const dur = durationFactor(weightKg, bodyFatPct);
-  const end = clamp(peak + 250 * dur * (0.85 + 0.6 * intensity01), 300, 540);
+  const end = clamp(peak + 275 * dur * (0.85 + 0.6 * intensity01), 360, 720);
   return {onset:onset, peak:peak, end:end, intensity01:intensity01};
 }
 
 function renderD8(){
+  syncClock();
   const s = state.d8;
   const weightKg = clamp(s.weightKg || 75, 30, 250);
   const bf = resolveBodyFat(s.bf, s.sex);
   const bfAuto = !(parseFloat(s.bf) >= 4 && parseFloat(s.bf) <= 60);
   const mg = clamp(s.mg || 0, 0, 500);
-  const effDose = d8EffectiveDose(mg, weightKg, bf, s.tol, s.food);
+  const tolKey = effectiveToleranceKey(s.tol, s.first);
+  const effDose = d8EffectiveDose(mg, weightKg, bf, tolKey, s.food);
   const timing = d8Timing(effDose, weightKg, bf, s.product, s.food);
-  const damp = cbdDamping(s.cbd, mg);
-  const peakPct = hill(effDose, D8.EC50_MG, D8.HILL_N) * damp * 100;
+  const peakPct = hill(effDose, D8.EC50_MG, D8.HILL_N) * 100;
   const now = clamp(s.elapsed || 0, 0, 900);
   const nowPct = peakPct * asymmetricCurve(now, timing.onset, timing.peak, timing.end);
 
@@ -3336,17 +3740,17 @@ function renderD8(){
     label:intensityLabel(nowPct), color:severityColor(nowPct),
     ariaLabel:'Estimated Delta-8 intensity ' + Math.round(nowPct) + ' percent, ' + intensityLabel(nowPct),
     sub:'Same scale as every other section. Modelled peak for this dose: <strong>' +
-        Math.round(peakPct) + '&nbsp;% · ' + intensityLabel(peakPct) + '</strong>.'
+        Math.round(peakPct) + '&nbsp;% · ' + intensityLabel(peakPct) + '</strong>.<br>' + asOfLine()
   });
 
   const ps = peakStatus(now, timing.peak);
   const d9Equivalent = mg * (D9.EC50_MG / D8.EC50_MG);
   document.getElementById('d8-stats').innerHTML =
     stat('Labelled dose', round(mg, 1) + ' <small>mg &Delta;8</small>', 'Label accuracy varies more than for &Delta;9') +
-    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', 'After body composition &divide; tolerance &times;' + round(toleranceFactor(s.tol), 2)) +
+    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', 'After body composition &divide; tolerance &times;' + round(toleranceFactor(tolKey), 2)) +
     stat('Modelled peak', Math.round(peakPct) + ' <small>% · ' + intensityLabel(peakPct) + '</small>', ps.text) +
     stat('&Delta;9 equivalent', '&asymp; ' + round(d9Equivalent, 1) + ' <small>mg &Delta;9</small>', 'From the two EC50 constants, ratio ' + round(D8.EC50_MG / D9.EC50_MG, 2) + '&times;') +
-    stat('Body fat used', round(bf, 1) + ' <small>%</small>', bfAuto ? 'Population fallback — type yours for a better estimate' : 'Your entry');
+    stat('Body fat used', round(bf, 1) + ' <small>%</small>', (bfAuto ? 'Population mean — type yours if you know it' : 'Your entry') + '; affects duration only, never the peak');
 
   const banners = [];
   if (s.first && mg > 10) banners.push({level:'crit', icon:'alert', title:'First-time user above 10 mg',
@@ -3355,19 +3759,23 @@ function renderD8(){
     body:'Above the point where the curve has flattened. More milligrams now buy very little extra euphoria and a great deal of extra sedation, disorientation and tachycardia.'});
   else if (mg >= 40) banners.push({level:'warn', icon:'alert', title:'Large Delta-8 dose',
     body:'An experienced-user dose. Note also that Delta-8 labelling accuracy is the weakest in this app — the milligrams you typed may not be the milligrams in the packet.'});
-  if (now < timing.onset) banners.push({level:'info', icon:'hourglass', title:'Nothing is expected yet — do not re-dose',
-    body:'Onset is modelled at ' + fmtDuration(timing.onset) + ' and you are ' + fmtDuration(now) + ' in. Re-dosing now stacks both doses on the same peak.'});
+  if (now < timing.peak) banners.push({level:'warn', icon:'hourglass',
+    title:now < timing.onset ? 'Nothing is expected yet — do not re-dose' : 'Still coming up — do not re-dose',
+    body:'Onset is modelled at ' + fmtDuration(timing.onset) + ' and the peak at ' + fmtDuration(timing.peak) +
+         '. You are ' + fmtDuration(now) + ' in. Re-dosing before the peak stacks both doses on the same peak.'});
   banners.push({level:'info', icon:'shield', title:'Delta-8 is a synthesised product',
     body:'Commercial Delta-8 is made by chemically converting CBD, and in many markets it sits outside the testing regime that applies to licensed cannabis — so residual reagents and by-products are a real concern. The FDA has published adverse-event data; it is linked in <a href="#" data-goto="learn" data-article="art-reading">Further reading</a>.'});
   renderBanners(document.getElementById('d8-banners'), banners);
 
-  const xMax = Math.max(timing.end * 1.05, now + 30);
+  const impairEnd = impairmentWindowMin(timing, timing.intensity01, 'oral');
+  const xMax = Math.max(timing.end * 1.05, impairEnd * 1.02, now + 30);
   renderChart(document.getElementById('d8-chart'), {
     xMax:xMax, yMax:100,
     xLabel:'Hours since ingestion', yLabel:'Modelled intensity (% of curve maximum)', yLabelShort:'Intensity (% of max)',
     xTicks:niceTicks(xMax / 60, 6).map(h => ({v:h * 60, label:h + 'h'})),
     yTicks:[0, 20, 40, 60, 80, 100].map(v => ({v:v, label:v + ' %'})),
     thresholds:[{y:70, label:'Very Strong', color:severityColor(72)}, {y:30, label:'Moderate', color:severityColor(32)}],
+    bands:[{x0:0, x1:impairEnd, label:'driving-relevant impairment likely', color:'var(--danger)'}],
     vlines:[{x:timing.onset, label:'onset', color:'var(--text-faint)'}, {x:timing.peak, label:'peak', color:'var(--accent-2)'}],
     series:[{points:curvePoints(peakPct, timing, 2), color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:now, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
@@ -3378,25 +3786,25 @@ function renderD8(){
     {label:'Modelled intensity', color:'var(--accent)'},
     {label:'Onset', color:'var(--text-faint)', dash:true},
     {label:'Modelled peak', color:'var(--accent-2)', dash:true},
-    {label:'Shared scale boundaries', color:severityColor(72), dash:true}
+    {label:'Shared scale boundaries', color:severityColor(72), dash:true},
+    {label:'Driving-relevant impairment outlasts the felt curve', color:'var(--danger)'}
   ]);
 
-  document.getElementById('d8-peak-note').innerHTML = '<strong>' + ps.text + '.</strong> Delta-8 is modelled as finishing a little sooner than Delta-9 — total duration is clamped to 5–9 hours rather than 6–10.';
+  document.getElementById('d8-peak-note').innerHTML = '<strong>' + ps.text + '.</strong> Delta-8 uses the same duration clamps as Delta-9; the shorter-duration assumption this module used to carry was not supported by the trial data.';
   renderTimeline(document.getElementById('d8-timeline'), {
     totalMin:timing.end, nowMin:now, scale:'hr', phases:cannabisPhases(timing),
     footnote:(D8.PRODUCTS.find(p => p.key === s.product) || {}).note + ' ' + (D8.FOOD.find(f => f.key === s.food) || {}).note
   });
 
-  const cbn = cbnSedationBoost(s.cbn), cbg = cbgAnxietyRelief(s.cbg);
   const shape = nowPct / Math.max(peakPct, 0.0001);
   renderEffectBars(document.getElementById('d8-effects'), D8.EFFECTS.map(e => {
-    let v = hill(effDose, D8.EC50_MG * e.ec50k, e.n) * e.w * 100 * damp;
+    const k = (s.first && /Anxiety/.test(e.name)) ? e.ec50k * FIRST_TIME_ANXIETY_SHIFT : e.ec50k;
+    let v = hill(effDose, D8.EC50_MG * k, e.n) * e.w * 100;
     if (e.biphasic) v *= (1 - 0.35 * hill(effDose, D8.EC50_MG * 3, 2.5));
-    if (e.cbn) v *= (1 + cbn);
-    if (e.cbg) v *= (1 - cbg);
     return {name:e.name, value:v * shape, note:e.note};
   }));
 
+  renderCannabinoidPanel(document.getElementById('d8-cannabinoids'), s.cbd, s.cbn, s.cbg, mg);
   renderD8Reference();
   renderD8vsD9();
 }
@@ -3433,15 +3841,16 @@ function renderD8vsD9(){
     [
       ['Structure', 'Double bond at the 9th carbon', 'Double bond at the 8th carbon — same formula, C<sub>21</sub>H<sub>30</sub>O<sub>2</sub>'],
       ['CB1 affinity', 'Higher', 'Lower — the whole reason for the potency gap'],
-      ['EC<sub>50</sub> in this app', D9.EC50_MG + ' mg labelled', D8.EC50_MG + ' mg labelled (' + round(D8.EC50_MG / D9.EC50_MG, 2) + '&times; higher)'],
-      ['Hill coefficient n', String(D9.HILL_N), String(D8.HILL_N) + ' — a slightly flatter curve'],
+      ['EC<sub>50</sub> in this app', D9.EC50_MG + ' mg labelled', D8.EC50_MG + ' mg labelled (' + round(D8.EC50_MG / D9.EC50_MG, 2) + '&times; higher, from the trial\'s 40-vs-20 mg equivalence)'],
+      ['Hill coefficient n', String(D9.HILL_N), String(D8.HILL_N) + ' — identical, so the \u201c&Delta;9 equivalent\u201d figure is exact rather than approximate'],
       ['20 mg on the shared scale', Math.round(p9) + ' % · ' + intensityLabel(p9), Math.round(p8) + ' % · ' + intensityLabel(p8)],
       ['Modelled peak (20 mg)', fmtDuration(t9.peak), fmtDuration(t8.peak)],
       ['Modelled total (20 mg)', fmtDuration(t9.end), fmtDuration(t8.end)],
-      ['Reported character', 'Stronger euphoria and perceptual change; more anxiety at dose', 'Calmer and more sedating; consistently reported as less anxiogenic'],
-      ['Anxiety weighting here', '1.00 at ' + D9.EFFECTS.find(e => e.cbg).ec50k + '&times; EC<sub>50</sub>', '0.72 at ' + D8.EFFECTS.find(e => e.cbg).ec50k + '&times; EC<sub>50</sub> — the clearest modelled difference'],
+      ['Reported character at EQUAL mg', 'Stronger on every measure', 'Lower drug effect, fewer negative effects, less cognitive impairment, smaller heart-rate rise'],
+      ['Character at EQUAL intensity', 'The reference', 'Indistinguishable — 40 mg &Delta;8 and 20 mg &Delta;9 showed no pharmacodynamic differences, so this app models no per-effect difference at all'],
+      ['Per-effect weights here', 'The reference set', 'Identical. The discounts this module used to apply were modelling a difference the trial did not find'],
       ['Source', 'Extracted from cannabis; regulated where legal', 'Chemically converted from CBD; frequently outside cannabis testing regimes'],
-      ['Evidence base', 'Large, including controlled human studies', 'Thin — much of the potency picture comes from user report'],
+      ['Evidence base', 'Large, including controlled human studies', 'Thinner, but no longer only user report — a controlled human trial now anchors the potency ratio'],
       ['Impairs driving', 'Yes', 'Yes. Weaker is not safe.']
     ]);
 }
@@ -3456,10 +3865,10 @@ function initD8(){
 
   const mg = bindPair('d8-mg', 'd8-mg-range', v => { s.mg = clamp(v || 0, 0, 500); saveState(); renderD8(); });
   mg.n.value = s.mg; mg.r.value = clamp(s.mg, 0, 150);
-  const el = bindPair('d8-elapsed', 'd8-elapsed-range', v => { s.elapsed = clamp(v || 0, 0, 900); saveState(); renderD8(); });
+  const el = bindPair('d8-elapsed', 'd8-elapsed-range', v => { s.elapsed = clamp(v || 0, 0, 900); s.takenAt = minutesAgoToStamp(s.elapsed); saveState(); renderD8(); });
   el.n.value = s.elapsed; el.r.value = clamp(s.elapsed, 0, 600);
 
-  const w = bindNumber('d8-weight', v => { s.weightKg = clamp(displayToKg(parseFloat(v) || 75), 30, 250); saveState(); renderD8(); });
+  const w = bindNumber('d8-weight', v => { s.weightKg = readWeightKg(v); saveState(); renderD8(); });
   w.value = round(kgToDisplay(s.weightKg), 1);
   const bf = bindNumber('d8-bf', v => { s.bf = v; saveState(); renderD8(); });
   bf.value = s.bf || '';
@@ -3503,9 +3912,9 @@ const SMOKED = {
     {key:'deep',    label:'Deep + hold',  sub:'×1.2',  factor:1.20}
   ],
   SEX:[
-    {key:'male',    label:'Male avg',   sub:'22 % fat'},
-    {key:'female',  label:'Female avg', sub:'30 % fat'},
-    {key:'neutral', label:'Unspecified',sub:'26 % fat'}
+    {key:'male',    label:'Male avg',   sub:'28.7 % fat'},
+    {key:'female',  label:'Female avg', sub:'40.9 % fat'},
+    {key:'neutral', label:'Unspecified',sub:'34.8 % fat'}
   ],
   /* HAND-TUNED per-effect curves for the inhaled route. Heart rate and
      perception lead; sleepiness trails, because it is over before sleep
@@ -3535,19 +3944,19 @@ function smokedAbsorbedMg(amountG, potencyPct, methodKey, depthKey){
    by what reaches arterial blood in the first minutes, so the fat reservoir
    barely touches it — but it still stretches the tail. HAND-TUNED. */
 function smokedEffectiveDose(absorbedMg, weightKg, bodyFatPct, tolKey){
-  const dist = 1 + 0.4 * (distributionFactor(weightKg, bodyFatPct) - 1);
-  return absorbedMg * dist / toleranceFactor(tolKey);
+  return absorbedMg / toleranceFactor(tolKey);
 }
 function smokedTiming(effDose, weightKg, bodyFatPct, methodKey){
   const m = SMOKED.METHODS.find(x => x.key === methodKey) || SMOKED.METHODS[0];
   const intensity01 = hill(effDose, SMOKED.EC50_MG_ABSORBED, SMOKED.HILL_N);
   const onset = clamp(m.onsetSec / 60, 0.3, 2);                 // 18 s – 2 min
-  const peak  = clamp(9 + 7 * intensity01 + m.peakAdj, 8, 20);  // 8 – 20 min
-  const end   = clamp((60 + 95 * intensity01) * durationFactor(weightKg, bodyFatPct), 60, 180); // 1 – 3 h
+  const peak  = clamp(9 + 11 * intensity01 + m.peakAdj, 8, 30);  // Health Canada: peak within 30 min
+  const end   = clamp((70 + 200 * intensity01) * durationFactor(weightKg, bodyFatPct), 60, 360); // up to 6 h
   return {onset:onset, peak:peak, end:end, intensity01:intensity01};
 }
 
 function renderSmoked(){
+  syncClock();
   const s = state.sm;
   const method = SMOKED.METHODS.find(m => m.key === s.method) || SMOKED.METHODS[0];
   const depth = SMOKED.DEPTH.find(d => d.key === s.depth) || SMOKED.DEPTH[1];
@@ -3558,7 +3967,8 @@ function renderSmoked(){
   const potency = clamp(s.potency || 0, 0, 99);
   const thcInMaterial = amount * 1000 * potency / 100;
   const absorbed = smokedAbsorbedMg(amount, potency, s.method, s.depth);
-  const effDose = smokedEffectiveDose(absorbed, weightKg, bf, s.tol);
+  const tolKey = effectiveToleranceKey(s.tol, s.first);
+  const effDose = smokedEffectiveDose(absorbed, weightKg, bf, tolKey);
   const timing = smokedTiming(effDose, weightKg, bf, s.method);
   const peakPct = hill(effDose, SMOKED.EC50_MG_ABSORBED, SMOKED.HILL_N) * 100;
   const now = clamp(s.elapsed || 0, 0, 300);
@@ -3574,16 +3984,16 @@ function renderSmoked(){
     label:intensityLabel(nowPct), color:severityColor(nowPct),
     ariaLabel:'Estimated inhaled intensity ' + Math.round(nowPct) + ' percent, ' + intensityLabel(nowPct),
     sub:'Same scale as every other section. Modelled peak for this session: <strong>' +
-        Math.round(peakPct) + '&nbsp;% · ' + intensityLabel(peakPct) + '</strong>.'
+        Math.round(peakPct) + '&nbsp;% · ' + intensityLabel(peakPct) + '</strong>.<br>' + asOfLine()
   });
 
   const ps = peakStatus(now, timing.peak, {toleranceMin:2});
   document.getElementById('sm-stats').innerHTML =
     stat('Absorbed dose', round(absorbed, 1) + ' <small>mg THC</small>', 'Of ' + round(thcInMaterial, 0) + ' mg in the material') +
-    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', 'After body composition &divide; tolerance &times;' + round(toleranceFactor(s.tol), 2)) +
+    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', 'After body composition &divide; tolerance &times;' + round(toleranceFactor(tolKey), 2)) +
     stat('Modelled peak', Math.round(peakPct) + ' <small>% · ' + intensityLabel(peakPct) + '</small>', ps.text) +
     stat('Onset → done', Math.round(timing.onset * 60) + ' <small>s</small> → ' + fmtDuration(timing.end), 'The whole arc, start to finish') +
-    stat('Body fat used', round(bf, 1) + ' <small>%</small>', bfAuto ? 'Population fallback — applied at 40 % strength for this route' : 'Your entry, applied at 40 % strength');
+    stat('Body fat used', round(bf, 1) + ' <small>%</small>', (bfAuto ? 'Population mean' : 'Your entry') + '; affects duration only, never the peak');
 
   const banners = [];
   if (s.first && absorbed > 3) banners.push({level:'crit', icon:'alert', title:'First-time user with a large inhaled dose',
@@ -3598,13 +4008,15 @@ function renderSmoked(){
     body:'Effects peak in 8–20 minutes and fade over 1–3 hours, but driving-relevant impairment outlasts the part you notice. Cannabis impairs driving; there is no BAC-style number that makes it safe.'});
   renderBanners(document.getElementById('sm-banners'), banners);
 
-  const xMax = Math.max(timing.end * 1.05, now + 10);
+  const impairEnd = impairmentWindowMin(timing, timing.intensity01, 'inhaled');
+  const xMax = Math.max(timing.end * 1.05, impairEnd * 1.02, now + 10);
   renderChart(document.getElementById('sm-chart'), {
     xMax:xMax, yMax:100,
     xLabel:'Minutes since inhaling', yLabel:'Modelled intensity (% of curve maximum)', yLabelShort:'Intensity (% of max)',
     xTicks:niceTicks(xMax, 6).map(v => ({v:v, label:Math.round(v) + 'm'})),
     yTicks:[0, 20, 40, 60, 80, 100].map(v => ({v:v, label:v + ' %'})),
     thresholds:[{y:70, label:'Very Strong', color:severityColor(72)}, {y:30, label:'Moderate', color:severityColor(32)}],
+    bands:[{x0:0, x1:impairEnd, label:'driving-relevant impairment likely', color:'var(--danger)'}],
     vlines:[{x:timing.peak, label:'peak', color:'var(--accent-2)'}],
     series:[{points:curvePoints(peakPct, timing, 0.5), color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:now, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
@@ -3614,7 +4026,8 @@ function renderSmoked(){
   renderLegend(document.getElementById('sm-chart-legend'), [
     {label:'Modelled intensity', color:'var(--accent)'},
     {label:'Modelled peak', color:'var(--accent-2)', dash:true},
-    {label:'Shared scale boundaries', color:severityColor(72), dash:true}
+    {label:'Shared scale boundaries', color:severityColor(72), dash:true},
+    {label:'Driving-relevant impairment outlasts the felt curve', color:'var(--danger)'}
   ]);
 
   document.getElementById('sm-peak-note').innerHTML = '<strong>' + ps.text + '.</strong> Onset is modelled at about ' +
@@ -3633,7 +4046,8 @@ function renderSmoked(){
 
   const shape = nowPct / Math.max(peakPct, 0.0001);
   renderEffectBars(document.getElementById('sm-effects'), SMOKED.EFFECTS.map(e => {
-    let v = hill(effDose, SMOKED.EC50_MG_ABSORBED * e.ec50k, e.n) * e.w * 100;
+    const k = (s.first && /Anxiety/.test(e.name)) ? e.ec50k * FIRST_TIME_ANXIETY_SHIFT : e.ec50k;
+    let v = hill(effDose, SMOKED.EC50_MG_ABSORBED * k, e.n) * e.w * 100;
     if (e.biphasic) v *= (1 - 0.35 * hill(effDose, SMOKED.EC50_MG_ABSORBED * 3, 2.5));
     if (e.irritation) v *= method.irritation;   // route-specific, not receptor-mediated
     return {name:e.name, value:v * shape, note:e.note};
@@ -3723,12 +4137,12 @@ function initSmoked(){
 
   const am = bindPair('sm-amount', 'sm-amount-range', v => { s.amount = clamp(v || 0, 0, 10); saveState(); renderSmoked(); });
   am.n.value = s.amount; am.r.value = clamp(s.amount, 0, 1.5);
-  const el = bindPair('sm-elapsed', 'sm-elapsed-range', v => { s.elapsed = clamp(v || 0, 0, 300); saveState(); renderSmoked(); });
+  const el = bindPair('sm-elapsed', 'sm-elapsed-range', v => { s.elapsed = clamp(v || 0, 0, 300); s.takenAt = minutesAgoToStamp(s.elapsed); saveState(); renderSmoked(); });
   el.n.value = s.elapsed; el.r.value = clamp(s.elapsed, 0, 180);
 
   const pot = bindNumber('sm-potency', v => { s.potency = clamp(parseFloat(v) || 0, 0, 99); saveState(); renderSmoked(); });
   pot.value = s.potency;
-  const w = bindNumber('sm-weight', v => { s.weightKg = clamp(displayToKg(parseFloat(v) || 75), 30, 250); saveState(); renderSmoked(); });
+  const w = bindNumber('sm-weight', v => { s.weightKg = readWeightKg(v); saveState(); renderSmoked(); });
   w.value = round(kgToDisplay(s.weightKg), 1);
   const bf = bindNumber('sm-bf', v => { s.bf = v; saveState(); renderSmoked(); });
   bf.value = s.bf || '';
@@ -3752,23 +4166,27 @@ function renderLearn(){
     '<button class="pill" type="button" data-article="' + a.id + '" aria-pressed="false">' +
     esc(a.querySelector('.acc-head').textContent.trim()) + '</button>').join('');
 
-  /* ---- live verification: zero-order slope ---- */
+  /* ---- live verification: the zero-order region, and where it ends ---- */
   const V = {weightKg:80, r:0.68, beta:0.015, ka:3.5, model:'pk'};
   const items = [{t:0, grams:60}];                 // ≈ 4.3 US standard drinks
   const run = alcoholModelRun(items, V);
-  const b4 = valueAt(run.points, 240), b5 = valueAt(run.points, 300);
-  const slope = b4 - b5;
+  const rateAt = c => eliminationRate(c, V.beta);
   setLive('verify-slope',
-    '// live check, run in your browser just now:\n' +
-    '//   80 kg, r = 0.68, beta = 0.015 %/h, ka = 3.5 /h, dose = 60 g ethanol\n' +
-    'bacPercent(4 h)          = ' + b4.toFixed(5) + ' %\n' +
-    'bacPercent(5 h)          = ' + b5.toFixed(5) + ' %\n' +
-    'slope over that hour     = ' + slope.toFixed(5) + ' %/h\n' +
-    'betaPctPerHour (target)  = ' + V.beta.toFixed(5) + ' %/h\n' +
-    'difference               = ' + Math.abs(slope - V.beta).toFixed(6) + '   <span class="hl">' +
-    (Math.abs(slope - V.beta) < 5e-5 ? 'converged' : 'NOT CONVERGED — bug') + '</span>');
+    '// elimination rate at each concentration, computed just now:\n' +
+    [0.20, 0.15, 0.08, 0.05, 0.02, 0.010, 0.005].map(c =>
+      '  bac ' + c.toFixed(3) + ' %   ->  ' + rateAt(c).toFixed(5) + ' %/h   (' +
+      (rateAt(c) / V.beta).toFixed(3) + ' x beta)' +
+      (Math.abs(c - 0.08) < 1e-9 ? '   <span class="hl">// calibration point: exactly beta</span>' : '')).join('\n') +
+    '\n\n// The straight line people describe is the high-concentration limit of\n' +
+    '// this curve, not a law of its own. Above ~0.05 % the rate is within a\n' +
+    '// few percent of beta; below ~0.02 % it visibly tails off, which is what\n' +
+    '// stops the model marching the last of it to zero on a ruler.\n' +
+    '// 0.020 % -> 0.001 % takes <span class="hl">' + (() => {
+      let c = 0.02, t = 0; while (c > 0.001 && t < 3000){ c -= rateAt(c) / 60; t++; }
+      return (t / 60).toFixed(2);
+    })() + ' h</span> here, against ' + (0.019 / V.beta).toFixed(2) + ' h with a flat beta.');
 
-  /* ---- live verification: the two models converge ---- */
+  /* ---- live verification: the two models still converge ---- */
   const runW = alcoholModelRun(items, Object.assign({}, V, {model:'widmark'}));
   const w6 = valueAt(runW.points, 360), p6 = valueAt(run.points, 360);
   const w1 = valueAt(runW.points, 30), p1 = valueAt(run.points, 30);
@@ -3776,7 +4194,11 @@ function renderLearn(){
     '// same 60 g dose, same body, both models\n' +
     '                        Widmark     PK        difference\n' +
     'at 30 min               ' + pad(w1.toFixed(5), 12) + pad(p1.toFixed(5), 10) + (w1 - p1).toFixed(5) + '   <span class="cm">// they disagree on the rise</span>\n' +
-    'at 6 h                  ' + pad(w6.toFixed(5), 12) + pad(p6.toFixed(5), 10) + (w6 - p6).toFixed(5) + '   <span class="hl">// and agree in the long run</span>');
+    'at 6 h                  ' + pad(w6.toFixed(5), 12) + pad(p6.toFixed(5), 10) + (w6 - p6).toFixed(5) + '   <span class="hl">// and agree in the long run</span>\n' +
+    '\n// The residual is under a thousandth of a percent: both models run on a\n' +
+    '// one-minute grid, Widmark starts its clock a minute earlier, and because\n' +
+    '// elimination is now concentration-dependent that offset carries a\n' +
+    '// slightly different rate with it. Discretisation, not disagreement.');
 
   /* ---- live verification: analytic vs scanned time-to-peak ---- */
   const tmax = pkTmaxMinutes(items, V.ka, run.R);
@@ -3807,8 +4229,12 @@ function renderLearn(){
     pad('SMOKED.EC50_MG_ABSORBED', 24) + '= ' + pad(SMOKED.EC50_MG_ABSORBED, 6) + pad('mg ABSORBED', 24) + 'n = ' + SMOKED.HILL_N + '   <span class="cm">// different unit — not comparable</span>\n' +
     '\n' +
     '<span class="hl">// ordering: inhaled &lt; Delta-9 &lt; Delta-8, as intended.</span>\n' +
-    '// The first two share a unit and can be compared directly.\n' +
-    '// The third cannot: see the comparison table in the smoked section.');
+    '// The Delta-8 midpoint is ' + round(D8.EC50_MG / D9.EC50_MG, 2) + 'x the Delta-9 one, from the trial in which\n' +
+    '// 40 mg of Delta-8 and 20 mg of Delta-9 were pharmacodynamically\n' +
+    '// indistinguishable. Both use n = ' + D9.HILL_N + ', so the "Delta-9 equivalent"\n' +
+    '// figure the app reports is exact rather than approximate.\n' +
+    '// The inhaled value shares no unit with either and cannot be compared:\n' +
+    '// see the route comparison table in the smoked section.');
 
   /* ---- live verification: timing ---- */
   const e9 = refEff(10), t9 = d9Timing(e9, REF_PERSON.weightKg, REF_PERSON.bodyFat, 'gummy', 'light');
@@ -3823,8 +4249,12 @@ function renderLearn(){
     'D8 gummy, 10 mg        ' + pad(Math.round(t8.onset) + ' min', 13) + pad(Math.round(t8.peak) + ' min', 13) + (t8.end / 60).toFixed(1) + ' h\n' +
     'joint, 0.25 g @ 20 %   ' + pad(Math.round(tsm.onset * 60) + ' s', 13) + pad(Math.round(tsm.peak) + ' min', 13) + (tsm.end / 60).toFixed(1) + ' h\n' +
     '\n' +
-    '<span class="hl">// published windows: edible onset 30-90 min, peak 1.5-3 h, total 6-10 h;</span>\n' +
-    '<span class="hl">// inhaled onset seconds-2 min, peak 8-20 min, total 1-3 h. All inside.</span>');
+    '\n<span class="hl">// Health Canada: ingested effects begin 30 min - 2 h, peak up to 4 h,</span>\n' +
+    '<span class="hl">// last up to 12 h, residual up to 24 h; inhaled peaks within 30 min and</span>\n' +
+    '<span class="hl">// can last up to 6 h. Every clamp above sits inside those windows.</span>\n' +
+    '// An earlier version of this block called "1-3 h" a published window for\n' +
+    '// inhalation. No agency publishes that; it was this app\'s own clamp,\n' +
+    '// quoted back at itself as though it were a source.');
 
   /* ---- the shared scale, printed from the single definition ---- */
   setLive('scale-bands', INTENSITY_BANDS.map((b, i) =>
@@ -4033,7 +4463,11 @@ function switchView(key, opts){
   currentView = key;
   state.ui.view = key;
   saveState();
-  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.view === key)));
+  document.querySelectorAll('.tab').forEach(t => {
+    const on = t.dataset.view === key;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;               // roving tabindex
+  });
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + key));
   /* charts read clientWidth, so they must be rendered while the view is
      visible — that is why rendering happens here and not on every input. */
@@ -4045,6 +4479,8 @@ function openArticle(id){
   const art = document.getElementById(id);
   if (!art) return;
   art.classList.add('open');
+  const h = art.querySelector('.acc-head');
+  if (h) h.setAttribute('aria-expanded', 'true');
   setTimeout(() => art.scrollIntoView({behavior:'smooth', block:'start'}), 60);
 }
 
@@ -4064,13 +4500,17 @@ function applyTheme(theme){
    marked a perfectly valid 300 lb entry as out of range. */
 const UNIT_BOUNDS = {
   weight:{metric:{min:30, max:250, step:0.5}, imperial:{min:66, max:551, step:1}},
-  volume:{metric:{min:1,  max:2000, step:1},  imperial:{min:0.1, max:67, step:0.5}}
+  volume:{metric:{min:1,  max:2000, step:1},  imperial:{min:0.1, max:67, step:0.5}},
+  height:{metric:{min:120, max:220, step:1},  imperial:{min:47, max:87, step:0.5}}
 };
 function applyUnits(mode){
   UNIT_MODE = mode; state.ui.units = mode;
   document.getElementById('units-label').textContent = mode === 'metric' ? 'kg \u00b7 mL' : 'lb \u00b7 fl oz';
   document.querySelectorAll('[data-unit-label="weight"]').forEach(e => e.textContent = weightUnitLabel());
   document.querySelectorAll('[data-unit-label="volume"]').forEach(e => e.textContent = volumeUnitLabel());
+  document.querySelectorAll('[data-unit-label="height"]').forEach(e => e.textContent = heightUnitLabel());
+  const ht = document.getElementById('alc-height');
+  if (ht) ht.value = round(cmToDisplay(state.alc.heightCm), 1);
   document.querySelectorAll('[data-unit-field]').forEach(el => {
     const b = UNIT_BOUNDS[el.dataset.unitField] && UNIT_BOUNDS[el.dataset.unitField][mode];
     if (b){ el.min = b.min; el.max = b.max; el.step = b.step; }
@@ -4104,26 +4544,33 @@ function buildExport(){
     const rFactor = (s.rCustom !== '' && !isNaN(parseFloat(s.rCustom))) ? clamp(parseFloat(s.rCustom), 0.4, 0.9) : ALCOHOL.R_FACTOR[s.rKey];
     L.push('SECTION: Alcohol (BAC)');
     L.push('Model: ' + (s.model === 'pk' ? 'Pharmacokinetic (1st-order absorption, zero-order elimination)' : 'Widmark'));
-    L.push('Body: ' + round(s.weightKg, 1) + ' kg, r = ' + round(rFactor, 3) + ', beta = ' + ALCOHOL.BETA[s.beta] + ' %/h, ka = ' + ALCOHOL.KA[s.food] + ' /h (' + s.food + ' stomach)');
+    L.push('Body: ' + round(s.weightKg, 1) + ' kg, r = ' + round(rFactor, 3) + ', beta = ' + alcoholBeta(s.beta, s.food) + ' %/h, ka = ' + ALCOHOL.KA[s.food] + ' /h (' + s.food + ' stomach)');
     L.push('');
     if (!s.drinks.length) L.push('No drinks entered.');
     else {
       L.push('Drinks:');
       s.drinks.slice().sort((a, b) => b.when - a.when).forEach(d =>
         L.push('  · ' + d.name + ' — ' + round(d.vol, 0) + ' mL @ ' + d.abv + ' % = ' + round(gramsEthanol(d.vol, d.abv), 1) + ' g ethanol, finished ' + d.when + ' min ago'));
-      const maxAgo = s.drinks.reduce((m, d) => Math.max(m, d.when), 0);
-      const items = s.drinks.map(d => ({t:maxAgo - d.when, grams:gramsEthanol(d.vol, d.abv)}));
-      const run = alcoholModelRun(items, {weightKg:s.weightKg, r:rFactor, beta:ALCOHOL.BETA[s.beta], ka:ALCOHOL.KA[s.food], model:s.model});
+      const maxAgo = s.drinks.reduce((m, d) => Math.max(m, d.when + (d.over || 0)), 0);
+      const items = alcoholDoseItems(s.drinks, maxAgo);
+      const run = alcoholModelRun(items, {weightKg:s.weightKg, r:rFactor, beta:alcoholBeta(s.beta, s.food), ka:ALCOHOL.KA[s.food], model:s.model});
       const nowBac = valueAt(run.points, maxAgo);
-      const peakMin = s.model === 'pk' ? pkTmaxMinutes(items, ALCOHOL.KA[s.food], run.R) : run.lastT;
+      const sessionPeak = peakFrom(run.points, 0);
+      const upcoming = peakFrom(run.points, maxAgo);
+      const trajectoryTo = s.model === 'pk' ? pkTmaxMinutes(items, ALCOHOL.KA[s.food], run.R) : run.lastT;
       const sp = alcoholScalePosition(nowBac);
       L.push('');
       L.push('Estimated BAC now: ' + fmtBac(nowBac) + ' %  (' + Math.round(sp) + ' % on the shared scale — ' + intensityLabel(sp) + ')');
-      L.push('Peak: ' + fmtBac(valueAt(run.points, peakMin)) + ' % — ' + peakStatus(maxAgo, peakMin).text);
+      L.push('Session peak: ' + fmtBac(sessionPeak.value) + ' % at ' + fmtDuration(Math.abs(sessionPeak.at - maxAgo)) +
+             (sessionPeak.at > maxAgo ? ' from now' : ' ago'));
+      if (upcoming.value > nowBac + 0.0005)
+        L.push('STILL RISING: heading for ' + fmtBac(upcoming.value) + ' % in ' + fmtDuration(upcoming.at - maxAgo) + ' — ' + peakStatus(maxAgo, trajectoryTo).text);
       [0.08, 0.05, 0.02, 0].forEach(thr => {
-        if (nowBac <= thr + 1e-9 && thr > 0){ L.push('Below ' + thr.toFixed(2) + ' %: already below'); return; }
-        const t = firstTimeBelow(run.points, thr, maxAgo);
-        L.push('Below ' + (thr === 0 ? '0.000 % (cleared)' : thr.toFixed(2) + ' %') + ': ' + (t == null ? 'beyond the modelled window' : fmtDuration(t - maxAgo) + ' from now'));
+        const t = timeStaysBelow(run.points, thr, maxAgo);
+        const lab = 'Stays below ' + (thr === 0 ? '0.000 % (cleared)' : thr.toFixed(2) + ' %') + ': ';
+        if (t == null){ L.push(lab + 'beyond the modelled window'); return; }
+        const mins = Math.max(0, t - maxAgo);
+        L.push(lab + (mins < 1 && thr > 0 ? 'already below and staying below' : fmtDuration(mins) + ' from now'));
       });
     }
   } else if (currentView === 'd9' || currentView === 'd8'){
@@ -4133,7 +4580,7 @@ function buildExport(){
     const bf = resolveBodyFat(s.bf, s.sex);
     const eff = isD9 ? d9EffectiveDose(s.mg, s.weightKg, bf, s.tol, s.food) : d8EffectiveDose(s.mg, s.weightKg, bf, s.tol, s.food);
     const t = isD9 ? d9Timing(eff, s.weightKg, bf, s.product, s.food) : d8Timing(eff, s.weightKg, bf, s.product, s.food);
-    const peakPct = hill(eff, isD9 ? M.EC50_MG : M.EC50_MG, M.HILL_N) * cbdDamping(s.cbd, s.mg) * 100;
+    const peakPct = hill(eff, M.EC50_MG, M.HILL_N) * 100;
     const nowPct = peakPct * asymmetricCurve(s.elapsed, t.onset, t.peak, t.end);
     L.push('SECTION: ' + (isD9 ? 'Delta-9' : 'Delta-8') + ' THC — edibles');
     L.push('Dose: ' + s.mg + ' mg labelled, ' + s.product + ', ' + s.food + ' stomach, tolerance "' + s.tol + '"');
@@ -4201,6 +4648,13 @@ function spawnParticles(){
 /* --------------------------------- boot ----------------------------------- */
 function boot(){
   loadState();
+  backfillStamps();
+  syncClock();
+  /* No saved preference yet: follow the system rather than forcing dark. */
+  if (!state.ui.themeChosen){
+    const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+    state.ui.theme = prefersLight ? 'light' : 'dark';
+  }
   UNIT_MODE = state.ui.units || 'metric';
   TIME_MODE = state.ui.time || 'hm';
   document.documentElement.setAttribute('data-theme', state.ui.theme || 'dark');
@@ -4220,11 +4674,40 @@ function boot(){
   renderLearn();
   spawnParticles();
 
-  /* tabs */
-  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchView(t.dataset.view)));
+  /* Accessibility sweep over static markup: every tooltip term must be
+     reachable by keyboard and by tap, and every accordion must report its
+     state. Doing it here keeps the markup above from repeating attributes. */
+  document.querySelectorAll('.term').forEach(t => {
+    if (!t.hasAttribute('tabindex')) t.tabIndex = 0;
+    if (!t.hasAttribute('role')) t.setAttribute('role', 'note');
+  });
+  document.querySelectorAll('.acc').forEach(a => {
+    const head = a.querySelector('.acc-head'), body = a.querySelector('.acc-body');
+    if (!head || !body) return;
+    if (!body.id) body.id = (a.id || 'acc') + '-body';
+    head.setAttribute('aria-expanded', String(a.classList.contains('open')));
+    head.setAttribute('aria-controls', body.id);
+  });
+
+  /* tabs: click, plus roving focus so the tablist is keyboard-navigable */
+  const tabEls = Array.from(document.querySelectorAll('.tab'));
+  tabEls.forEach(t => t.addEventListener('click', () => switchView(t.dataset.view)));
+  const focusTab = i => {
+    const t = tabEls[(i + tabEls.length) % tabEls.length];
+    t.focus(); switchView(t.dataset.view, {noScroll:true});
+  };
+  document.querySelector('.tabs-inner').addEventListener('keydown', ev => {
+    const i = tabEls.indexOf(document.activeElement);
+    if (i < 0) return;
+    if (ev.key === 'ArrowRight'){ ev.preventDefault(); focusTab(i + 1); }
+    else if (ev.key === 'ArrowLeft'){ ev.preventDefault(); focusTab(i - 1); }
+    else if (ev.key === 'Home'){ ev.preventDefault(); focusTab(0); }
+    else if (ev.key === 'End'){ ev.preventDefault(); focusTab(tabEls.length - 1); }
+  });
 
   /* toolbar */
   document.getElementById('btn-theme').addEventListener('click', () => {
+    state.ui.themeChosen = true;
     applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
     RENDERERS[currentView]();                       // colours are baked into the SVG strings
     paintIcons(document.getElementById('view-' + currentView));
@@ -4256,7 +4739,11 @@ function boot(){
   /* accordions (delegated, so dynamically inserted ones work too) */
   document.addEventListener('click', ev => {
     const head = ev.target.closest('.acc-head');
-    if (head){ head.parentElement.classList.toggle('open'); return; }
+    if (head){
+      const open = head.parentElement.classList.toggle('open');
+      head.setAttribute('aria-expanded', String(open));
+      return;
+    }
     const goto = ev.target.closest('[data-goto]');
     if (goto){
       ev.preventDefault();
@@ -4302,12 +4789,27 @@ function boot(){
     if (t) clampTip(t);
   }));
 
-  /* charts are sized from the host width, so they are redrawn on resize */
-  let rt = null;
+  /* Charts are sized from the host width, so they are redrawn on resize —
+     but ONLY when the width actually changed. Scrolling on a phone fires
+     resize as the address bar collapses, and re-rendering there restarted
+     every effect-bar width animation mid-scroll. */
+  let rt = null, lastW = window.innerWidth;
   window.addEventListener('resize', () => {
+    if (window.innerWidth === lastW) return;
+    lastW = window.innerWidth;
     clearTimeout(rt);
     rt = setTimeout(() => { RENDERERS[currentView](); paintIcons(document.getElementById('view-' + currentView)); }, 180);
   });
+
+  /* Time moves whether or not anyone touches the page. */
+  const retick = () => {
+    if (document.hidden) return;
+    syncClock(); syncElapsedInputs();
+    RENDERERS[currentView]();
+    paintIcons(document.getElementById('view-' + currentView));
+  };
+  setInterval(retick, 30000);
+  document.addEventListener('visibilitychange', retick);
 
   switchView(state.ui.view || 'home', {noScroll:true});
 }
