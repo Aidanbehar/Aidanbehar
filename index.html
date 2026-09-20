@@ -689,6 +689,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 [data-accent="d9"]     {--accent:#34d399; --accent-2:#84cc16}
 [data-accent="d8"]     {--accent:#f5a524; --accent-2:#fcd34d}
 [data-accent="smoked"] {--accent:#2dd4bf; --accent-2:#5eead4}
+[data-accent="caffeine"]{--accent:#e08a4b; --accent-2:#f2c48b}
 [data-accent="learn"]  {--accent:#a78bfa; --accent-2:#f0abfc}
 [data-accent="home"]   {--accent:#7aa2ff; --accent-2:#a78bfa}
 
@@ -723,6 +724,23 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
    10. MOTION, RESPONSIVE, PRINT
    ------------------------------------------------------------------------ */
 .fade-in{animation:fadeUp .4s cubic-bezier(.22,.68,.36,1) both}
+
+/* Scrubbing re-renders the section on every animation frame, so the usual
+   easing has to stand down — otherwise every effect bar restarts its width
+   animation sixty times a second. */
+.chart-host.scrubbable svg{cursor:ew-resize; touch-action:none}
+.chart-host.scrubbable svg:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:10px}
+body.scrubbing{user-select:none}
+body.scrubbing .effect .fill,
+body.scrubbing .gauge-arc,
+body.scrubbing .gauge-dot-g,
+body.scrubbing .tl-marker,
+body.scrubbing .tl-seg,
+body.scrubbing .phase-badge{transition:none !important; animation:none !important}
+body.scrubbing .view.active{animation:none}
+.scrub-hint{display:inline-flex; align-items:center; gap:6px; font-size:.76rem; color:var(--text-faint); margin-top:8px}
+.scrub-hint .ico{display:grid; place-items:center}
+.scrub-hint .ico svg{width:14px; height:14px}
 
 @media (max-width:980px){
   .g-input{grid-template-columns:1fr}
@@ -838,7 +856,8 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
     <button class="tab" role="tab" id="tab-d9"      aria-controls="view-d9"      aria-selected="false" data-view="d9"      style="--tab-accent:#34d399;--tab-accent-2:#84cc16"><span class="ico" data-icon="leaf"></span><span class="tl">Delta-9 edibles</span><span class="kbd">3</span></button>
     <button class="tab" role="tab" id="tab-d8"      aria-controls="view-d8"      aria-selected="false" data-view="d8"      style="--tab-accent:#f5a524;--tab-accent-2:#fcd34d"><span class="ico" data-icon="gummy"></span><span class="tl">Delta-8 edibles</span><span class="kbd">4</span></button>
     <button class="tab" role="tab" id="tab-smoked"  aria-controls="view-smoked"  aria-selected="false" data-view="smoked"  style="--tab-accent:#2dd4bf;--tab-accent-2:#5eead4"><span class="ico" data-icon="joint"></span><span class="tl">Smoked / inhaled</span><span class="kbd">5</span></button>
-    <button class="tab" role="tab" id="tab-learn"   aria-controls="view-learn"   aria-selected="false" data-view="learn"   style="--tab-accent:#a78bfa;--tab-accent-2:#f0abfc"><span class="ico" data-icon="book"></span><span class="tl">Learn</span><span class="kbd">6</span></button>
+    <button class="tab" role="tab" id="tab-caffeine" aria-controls="view-caffeine" aria-selected="false" data-view="caffeine" style="--tab-accent:#e08a4b;--tab-accent-2:#f2c48b"><span class="ico" data-icon="coffee"></span><span class="tl">Caffeine</span><span class="kbd">6</span></button>
+    <button class="tab" role="tab" id="tab-learn"   aria-controls="view-learn"   aria-selected="false" data-view="learn"   style="--tab-accent:#a78bfa;--tab-accent-2:#f0abfc"><span class="ico" data-icon="book"></span><span class="tl">Learn</span><span class="kbd">7</span></button>
   </div>
   <p class="mini-warn"><span class="ico" data-icon="alert"></span>Illustrative estimates only — never use them to judge fitness to drive.</p>
 </nav>
@@ -856,7 +875,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
     <div class="art"><span class="ico" data-icon="molecule"></span></div>
     <div>
       <h2>Estimate, then understand</h2>
-      <p class="sub">Four estimators built on published pharmacological models — Widmark and zero-order ethanol kinetics for alcohol, Hill/E<sub>max</sub> dose-response for cannabis — plus a Learn section that shows you the exact arithmetic behind every number.</p>
+      <p class="sub">Five estimators built on published pharmacological models — Widmark and Michaelis&ndash;Menten ethanol kinetics for alcohol, Hill/E<sub>max</sub> dose-response for cannabis, and a genuinely first-order one-compartment model for caffeine — plus a Learn section that shows you the exact arithmetic behind every number.</p>
     </div>
   </div>
 
@@ -947,7 +966,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
       <div>
         <h4 style="margin-bottom:6px">Keyboard</h4>
         <p style="font-size:.85rem;color:var(--text-dim);margin:0">
-          <span class="badge neutral"><span class="bdot"></span>1–6</span> switch section ·
+          <span class="badge neutral"><span class="bdot"></span>1–7</span> switch section ·
           <span class="badge neutral"><span class="bdot"></span>T</span> theme ·
           <span class="badge neutral"><span class="bdot"></span>P</span> print ·
           <span class="badge neutral"><span class="bdot"></span>E</span> export.
@@ -1127,7 +1146,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
   <!-- ---------------- chart ---------------- -->
   <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="ico" data-icon="chart"></span><h3>BAC over time</h3></div>
-    <p class="card-note">Time zero is your first drink. Dashed reference lines mark 0.08 % and 0.05 % — the two most common legal driving limits. The white dot is right now.</p>
+    <p class="card-note">Time zero is your first drink. Dashed reference lines mark 0.08 % and 0.05 % — the two most common legal driving limits.<br><span class="scrub-hint"><span class="ico" data-icon="swipe"></span>Drag the dot along the curve — or focus the chart and use the arrow keys — to move “now”. Everything on the page follows it.</span></p>
     <div class="chart-host" id="alc-chart"></div>
     <div class="chart-legend" id="alc-chart-legend"></div>
   </div>
@@ -1267,7 +1286,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 
   <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="ico" data-icon="chart"></span><h3>Intensity over time</h3></div>
-    <p class="card-note">Asymmetric curve: a slow accelerating climb (t<sup>1.3</sup>) and a long trailing decline ((1&minus;t)<sup>0.8</sup>). The dot marks where you are now.</p>
+    <p class="card-note">Asymmetric curve: a slow accelerating climb (t<sup>1.3</sup>) and a long trailing decline ((1&minus;t)<sup>0.8</sup>).<br><span class="scrub-hint"><span class="ico" data-icon="swipe"></span>Drag the dot along the curve — or focus the chart and use the arrow keys — to move “now”. Everything on the page follows it.</span></p>
     <div class="chart-host" id="d9-chart"></div>
     <div class="chart-legend" id="d9-chart-legend"></div>
     <div class="stat-row" id="d9-stats"></div>
@@ -1403,7 +1422,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 
   <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="ico" data-icon="chart"></span><h3>Intensity over time</h3></div>
-    <p class="card-note">Same curve and the same clamps as Delta-9 — the trial puts Delta-8 blood concentrations peaking 2–4 hours post-dose, like Delta-9. The curve simply sits lower for equal milligrams.</p>
+    <p class="card-note">Same curve and the same clamps as Delta-9 — the trial puts Delta-8 blood concentrations peaking 2–4 hours post-dose, like Delta-9. The curve simply sits lower for equal milligrams.<br><span class="scrub-hint"><span class="ico" data-icon="swipe"></span>Drag the dot along the curve — or focus the chart and use the arrow keys — to move “now”. Everything on the page follows it.</span></p>
     <div class="chart-host" id="d8-chart"></div>
     <div class="chart-legend" id="d8-chart-legend"></div>
     <div class="stat-row" id="d8-stats"></div>
@@ -1539,7 +1558,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 
   <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="ico" data-icon="chart"></span><h3>Intensity over time <span class="badge info" style="margin-left:6px"><span class="bdot"></span>minutes, not hours</span></h3></div>
-    <p class="card-note">Note the x-axis: the entire arc that takes an edible eight hours is finished here in one to three.</p>
+    <p class="card-note">Note the x-axis: the entire arc that takes an edible most of a day is finished here in a couple of hours.<br><span class="scrub-hint"><span class="ico" data-icon="swipe"></span>Drag the dot along the curve — or focus the chart and use the arrow keys — to move “now”. Everything on the page follows it.</span></p>
     <div class="chart-host" id="sm-chart"></div>
     <div class="chart-legend" id="sm-chart-legend"></div>
     <div class="stat-row" id="sm-stats"></div>
@@ -1574,6 +1593,134 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 </section>
 
 <!-- ======================================================================
+     VIEW: CAFFEINE
+     The one substance here with textbook first-order elimination, which
+     makes it the counterexample the alcohol section needs.
+     ==================================================================== -->
+<section class="view" id="view-caffeine" role="tabpanel" aria-labelledby="tab-caffeine" data-accent="caffeine" tabindex="-1">
+  <div class="view-head">
+    <div class="art"><span class="ico" data-icon="coffee"></span></div>
+    <div>
+      <h2>Caffeine</h2>
+      <p class="sub">Caffeine is cleared by <span class="term" data-tip="CYP1A2 performs roughly 95 % of caffeine metabolism. Its activity varies several-fold between people and is strongly induced by smoking and inhibited by oral contraceptives — which is why half-life ranges from about 2 to 10 hours in healthy adults.">CYP1A2</span> by <strong>first-order</strong> kinetics — a constant <em>fraction</em> per hour, so it has a real half-life. That makes it the exact counterexample to ethanol, and it means the classic one-compartment equation that is wrong for alcohol is right here.</p>
+    </div>
+  </div>
+
+  <div id="caf-banners"></div>
+
+  <div class="grid g-input" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="coffee"></span><h3>What you drank</h3></div>
+      <p class="card-note">Caffeine accumulates across a day, so add every source — the morning coffee is still with you at lunch.</p>
+
+      <div class="field">
+        <span class="lab">Presets <span class="hint">tap to load a typical amount</span></span>
+        <div class="pills" id="caf-presets" role="group" aria-label="Caffeine presets"></div>
+      </div>
+
+      <div class="inline-3">
+        <div class="field">
+          <label class="lab" for="caf-mg">Caffeine</label>
+          <div class="with-unit">
+            <input type="number" id="caf-mg" min="1" max="2000" step="5" value="95" inputmode="decimal">
+            <span class="unit">mg</span>
+          </div>
+        </div>
+        <div class="field">
+          <label class="lab" for="caf-when">Finished</label>
+          <div class="with-unit">
+            <input type="number" id="caf-when" min="0" max="1440" step="5" value="30" inputmode="decimal">
+            <span class="unit">min ago</span>
+          </div>
+        </div>
+        <div class="field" style="display:flex;align-items:flex-end">
+          <button class="btn primary" id="caf-add" type="button" style="width:100%;justify-content:center"><span class="ico" data-icon="plus"></span><span id="caf-add-label">Add</span></button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn" id="caf-cancel" type="button" hidden>Cancel edit</button>
+        <button class="btn" id="caf-clear" type="button"><span class="ico" data-icon="reset"></span>Clear all</button>
+        <span id="caf-editing" style="font-size:.82rem;color:var(--text-faint)"></span>
+      </div>
+      <div class="spacer"></div>
+      <div class="drink-list" id="caf-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="person"></span><h3>You</h3></div>
+      <p class="card-note">Half-life is the single biggest lever here, and it varies several-fold between people for reasons you cannot see.</p>
+
+      <div class="field">
+        <label class="lab" for="caf-weight">Body weight</label>
+        <div class="with-unit">
+          <input type="number" id="caf-weight" data-unit-field="weight" min="30" max="250" step="0.5" value="75" inputmode="decimal">
+          <button type="button" class="unit unit-btn" data-unit-toggle="weight" data-unit-label="weight" title="Switch between kilograms and pounds">kg</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lab">Clearance <span class="hint">sets the half-life</span></span>
+        <div class="pills" id="caf-clearance" role="group" aria-label="Clearance"></div>
+      </div>
+      <p class="card-note" id="caf-clearance-note"></p>
+
+      <div class="field">
+        <span class="lab">Tolerance <span class="hint">shifts the effective dose</span></span>
+        <div class="pills" id="caf-tol" role="group" aria-label="Caffeine tolerance"></div>
+      </div>
+
+      <div class="field">
+        <label class="lab" for="caf-bed">Hours until you want to be asleep</label>
+        <div class="with-unit">
+          <input type="number" id="caf-bed" min="0" max="24" step="0.5" value="8" inputmode="decimal">
+          <span class="unit">h</span>
+        </div>
+        <input type="range" id="caf-bed-range" min="0" max="18" step="0.5" value="8" aria-label="Hours until bedtime slider">
+      </div>
+
+      <div class="gauge-wrap" id="caf-gauge"></div>
+      <div class="gauge-readout" id="caf-readout"></div>
+    </div>
+  </div>
+
+  <div class="stat-row" id="caf-stats" style="margin-bottom:18px"></div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="chart"></span><h3>Caffeine in your blood</h3></div>
+    <p class="card-note">Plasma concentration in milligrams per litre, from the one-compartment model with first-order absorption <em>and</em> first-order elimination.<br><span class="scrub-hint"><span class="ico" data-icon="swipe"></span>Drag the dot along the curve — or focus the chart and use the arrow keys — to move “now”. Everything on the page follows it.</span></p>
+    <div class="chart-host" id="caf-chart-mg"></div>
+    <div class="chart-legend" id="caf-legend-mg"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="gauge"></span><h3>Effect intensity over time</h3></div>
+    <p class="card-note">The same curve mapped through a Hill equation onto the app's shared six-step scale, so it can be compared with every other section. Note how much flatter it is than the concentration curve — alertness saturates long before the concentration does.<br><span class="scrub-hint"><span class="ico" data-icon="swipe"></span>Drag the dot along the curve — or focus the chart and use the arrow keys — to move “now”. Everything on the page follows it.</span></p>
+    <div class="chart-host" id="caf-chart-fx"></div>
+    <div class="chart-legend" id="caf-legend-fx"></div>
+  </div>
+
+  <div class="grid g2" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="clock"></span><h3>Sleep</h3></div>
+      <p class="card-note" id="caf-peak-note"></p>
+      <div id="caf-sleep"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="brain"></span><h3>Effect breakdown right now</h3></div>
+      <p class="card-note">Alertness saturates early; the unpleasant effects have higher mid-points and steeper curves, which is why more caffeine stops helping long before it stops doing anything. <span class="tuned">hand-tuned</span></p>
+      <div class="effects" id="caf-effects"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="ico" data-icon="table"></span><h3>Caffeine dose reference</h3></div>
+    <p class="card-note" id="caf-ref-note"></p>
+    <div class="table-wrap"><table id="caf-ref-table"></table></div>
+    <div class="scroll-hint"><span class="ico" data-icon="swipe"></span>Scroll sideways for every column.</div>
+  </div>
+</section>
+
+<!-- ======================================================================
      VIEW: LEARN
      ==================================================================== -->
 <section class="view" id="view-learn" role="tabpanel" aria-labelledby="tab-learn" data-accent="learn" tabindex="-1">
@@ -1587,7 +1734,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 
   <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="ico" data-icon="compass"></span><h3>Start here</h3></div>
-    <p class="card-note" style="margin-bottom:12px">Seventeen articles: four on alcohol, nine on cannabis, and four on this app's own honesty — what is standard science, what is my own estimate, and what the percentages do and do not mean.</p>
+    <p class="card-note" style="margin-bottom:12px">Eighteen articles: four on alcohol, nine on cannabis, one on caffeine, and four on this app's own honesty — what is standard science, what is my own estimate, and what the percentages do and do not mean.</p>
     <div class="pills" id="learn-index" role="group" aria-label="Article index"></div>
   </div>
 
@@ -1874,6 +2021,39 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
     </div>
   </div>
 
+  <!-- ---- CAFFEINE ---- -->
+  <h3 style="margin:22px 0 10px;color:var(--text-faint);font-size:.78rem;letter-spacing:.1em;text-transform:uppercase">Caffeine</h3>
+
+  <div class="acc" id="art-caffeine">
+    <button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="coffee"></span></span>Caffeine: the first-order counterexample<span class="chev ico" data-icon="chevron"></span></button>
+    <div class="acc-body article">
+      <p>Everything the alcohol articles say about zero-order kinetics being unusual is easier to believe once you have something ordinary to compare it with. Caffeine is that something.</p>
+      <p>Caffeine is cleared almost entirely by the liver enzyme <strong>CYP1A2</strong>, which is nowhere near saturated at the concentrations ordinary drinking produces. So elimination is <strong>first-order</strong>: a constant <em>fraction</em> leaves per hour rather than a constant amount. That gives caffeine something ethanol does not have — a genuine half-life, about five hours in a typical adult. Two hundred milligrams becomes a hundred after five hours, fifty after ten, twenty-five after fifteen. The curve is an exponential decay, and it never quite reaches zero.</p>
+      <p>Which means the one-compartment equation that the alcohol article calls scientifically wrong is exactly right here:</p>
+      <div class="formula">C(t) = (F·D / Vd) × ka/(ka − ke) × (e^(−ke·t) − e^(−ka·t))
+
+<span class="cm">// ke = ln(2) / halfLifeHours       first-order OUT</span>
+<span class="cm">// ka = 5 /h                        first-order IN</span>
+<span class="cm">// Vd = 0.6 L/kg                    caffeine's volume of distribution</span>
+<span class="cm">// tmax = ln(ka/ke) / (ka − ke)     closed form, ~45 min at a 5 h half-life</span></div>
+      <p>First-order kinetics have a second consequence worth noticing: the model is <em>linear</em>, so several doses superpose exactly. The caffeine module simply adds the curves together. The alcohol module cannot do that — its zero-order term has to be clamped at zero and integrated minute by minute, because "a constant amount per hour" stops making sense once there is nothing left to remove.</p>
+
+      <h4>Five hours is an average of a very wide distribution</h4>
+      <p>The healthy-adult range runs from roughly 2 to 10 hours, and the big modifiers are common and invisible. <strong>Smoking</strong> strongly induces CYP1A2 and roughly halves the half-life — which is why coffee often feels suddenly stronger a week after quitting. <strong>Oral contraceptives</strong> inhibit the same enzyme and roughly double it. <strong>Pregnancy</strong> lengthens it dramatically, to as much as 15 hours in the third trimester, which is much of why guidance drops to 200&nbsp;mg a day. On top of all that sits ordinary genetic variation in CYP1A2 activity, which is several-fold and which nobody knows about themselves without testing.</p>
+      <p>If an afternoon coffee reliably ruins your night while the person next to you drinks espresso after dinner and sleeps fine, you are not imagining it and you are not weak-willed. You are on a different point of that distribution.</p>
+
+      <h4>Why alertness saturates and jitteriness does not</h4>
+      <p>Caffeine works mainly by blocking adenosine receptors — it does not add alertness so much as hide accumulated sleep pressure. There is a finite number of those receptors, so the alertness effect follows the same saturating Hill curve as everything else in this app, and it saturates early: most of the benefit is in the first hundred milligrams or so.</p>
+      <p>The unpleasant effects do not share that ceiling. Tremor, tachycardia, stomach upset and anxiety have higher mid-points and steeper curves, so past a certain dose you are buying side effects at full price and alertness at a discount that has already run out. That is why the effect bars in the caffeine section sit on separate curves, and why the intensity chart is visibly flatter than the concentration chart above it. The blood level keeps climbing; what you get for it does not.</p>
+      <p>One more thing the receptor story explains: tolerance. Regular use upregulates adenosine receptors, so the same dose blocks a smaller fraction of a larger pool. The uncomfortable implication is that a habitual drinker's morning coffee is doing less "making you sharp" and more "returning you to baseline from withdrawal" — which is genuinely valuable if you are in withdrawal, and not the same thing as the drug working.</p>
+
+      <h4>Sleep is the part worth taking seriously</h4>
+      <p>People judge caffeine's effect on sleep by whether they can fall asleep, which is the wrong test. In a controlled trial, 400&nbsp;mg taken <em>six hours</em> before bed reduced total sleep by more than an hour, and participants largely did not notice. Falling asleep and sleeping well are different outcomes, and caffeine separates them.</p>
+      <p>That is what the Sleep panel in the caffeine section is for. It does not ask when you drank it; it asks what concentration the model says is still circulating when you want to be asleep, which — given a five-hour half-life and a dose taken at three in the afternoon — is usually more than people expect. <span class="tuned">hand-tuned</span> The mid-point of that sleep curve is my estimate, anchored to the trial above; the half-life and the concentration model are not.</p>
+      <p>Two combinations deserve their own mention. Caffeine with alcohol masks sedation without touching impairment, producing a more alert drunk person rather than a less drunk one — the same mechanism the <a href="#" data-article="art-myths">misconceptions article</a> describes for coffee as a sobering agent. And caffeine powder sold in bulk has killed people through simple measurement error: a teaspoon can hold a several-gram dose where the ordinary one is a tenth of that.</p>
+    </div>
+  </div>
+
   <!-- ---- HONESTY ---- -->
   <h3 style="margin:22px 0 10px;color:var(--text-faint);font-size:.78rem;letter-spacing:.1em;text-transform:uppercase">About these numbers</h3>
 
@@ -2048,6 +2228,20 @@ const PROVENANCE = [
    why:'The driving meta-analysis has most driving-relevant skills recovering within about 5 h of inhaling 20 mg THC and nearly all within 7, with oral taking longer. Where inside that a given dose lands is my interpolation.'},
   {v:'tolerance forced to none; anxiety \u00d70.7', k:'effectiveToleranceKey() / FIRST_TIME_ANXIETY_SHIFT', where:'First-time user checkbox', type:'tuned',
    why:'The checkbox used to change nothing but a banner. Forcing tolerance to none is definitional; shifting the anxiety curve left reflects consistent reporting that naive users get more of it, at a magnitude I chose.'},
+  {v:'Vd 0.6 L/kg; F ~1', k:'CAFFEINE.VD_L_PER_KG', where:'Caffeine concentrations', type:'standard',
+   why:'Standard volume of distribution for caffeine, which is oral-bioavailable at about 99 %.'},
+  {v:'t\u00bd 3 / 5 / 7 / 10 / 15 h', k:'CAFFEINE.CLEARANCE', where:'Caffeine elimination', type:'standard',
+   why:'CYP1A2 does ~95 % of caffeine metabolism. ~5 h is the typical adult figure in a 2-10 h healthy range; smoking induces CYP1A2 and roughly halves it, oral contraceptives inhibit it and roughly double it, and late pregnancy can reach ~15 h.'},
+  {v:'ka = 5 /h', k:'CAFFEINE.KA_PER_HOUR', where:'Caffeine absorption', type:'tuned',
+   why:'Chosen so time-to-peak lands near 45 min with a 5 h half-life, matching the usually quoted Tmax of 30-60 min. The value itself is mine.'},
+  {v:'EC50 3.5 mg/L, n 1.4', k:'CAFFEINE.EC50_MG_PER_L', where:'Caffeine intensity on the shared scale', type:'tuned',
+   why:'Calibrated so one 95 mg coffee reads Moderate, 200 mg Strong and 400 mg Very Strong for a naive user. My numbers.'},
+  {v:'sleep EC50 1.5 mg/L, n 1.6', k:'CAFFEINE.SLEEP_EC50_MG_PER_L', where:'Caffeine sleep panel', type:'tuned',
+   why:'Set so 400 mg six hours before bed lands near the substantial disruption that trial measured (>1 h of sleep lost). The shape is mine; the finding it is anchored to is not.'},
+  {v:'400 mg/day; 200 in pregnancy', k:'CAFFEINE.DAILY_LIMIT_MG', where:'Caffeine banners', type:'standard',
+   why:'FDA cites 400 mg a day as not generally associated with negative effects in healthy adults; guidance in pregnancy is generally under 200 mg.'},
+  {v:'1.0 / 1.25 / 1.6 / 2.1', k:'CAFFEINE_TOLERANCE', where:'Caffeine effective dose', type:'tuned',
+   why:'Tolerance to the alertness effect develops within days and is real but modest compared with cannabis. The multipliers are mine.'},
   {v:'bands at 10 / 30 / 50 / 70 / 85', k:'INTENSITY_BANDS', where:'Every gauge, bar and table', type:'tuned',
    why:'The six-step vocabulary boundaries. Arbitrary but applied identically everywhere, which is the only property that matters for comparison.'}
 ];
@@ -2304,6 +2498,9 @@ const ICONS = {
   liver:'<path d="M3.6 8.6c4-3 9.1-3.6 13.6-2.6 2.5.6 3.6 2.2 3.4 4.3-.3 3.2-2.6 6.2-5.6 7.4-2.3.9-4.6.4-6.6-1-2.2-1.6-4-3.9-4.8-6.5a1.6 1.6 0 0 1 0-1.6z"/><path d="M11.6 6.5c.4 3.2.2 6.6-.8 9.9" opacity=".55"/><path d="M17.2 12.6c1.4.3 2.4.2 3.3-.4" opacity=".55"/>',
   person:'<circle cx="12" cy="7.4" r="3.6"/><path d="M4.6 21a7.4 7.4 0 0 1 14.8 0"/>',
   molecule:'<path d="M9.5 6.4 13 4.4l3.5 2v4l-3.5 2-3.5-2z"/><circle cx="6.1" cy="12.5" r="1.7"/><path d="M9.5 10.4 7.5 11.6"/><circle cx="18.6" cy="15.8" r="1.7"/><path d="M16.5 10.4v3.9"/><path d="M6.1 14.2v3.3h3.5" opacity=".7"/>',
+  coffee:'<path d="M4.5 8h11v6.5a4.5 4.5 0 0 1-4.5 4.5h-2a4.5 4.5 0 0 1-4.5-4.5z"/><path d="M15.5 9.6h1.9a2.6 2.6 0 0 1 0 5.2h-1.9"/><path d="M7.2 5.2c.8-.9-.2-1.8.6-2.7M10.4 5.2c.8-.9-.2-1.8.6-2.7M13.6 5.2c.8-.9-.2-1.8.6-2.7" opacity=".7"/><path d="M3.4 21h13.2"/>',
+  tea:'<path d="M5.5 7.5h10v6a5 5 0 0 1-10 0z"/><path d="M15.5 9h1.8a2.4 2.4 0 0 1 0 4.8h-1.8"/><path d="M10.5 7.5V4.2c0-.9.8-1.2.8-2.1" opacity=".7"/><path d="M4.5 21h12"/>',
+  energy:'<path d="M7.5 6.5h9l-.7 12.7a2 2 0 0 1-2 1.8h-3.6a2 2 0 0 1-2-1.8z"/><path d="M8.6 3.4h6.8v3.1H8.6z"/><path d="M12.6 10.2 10.4 13.9h3.2L11.4 17.6"/>',
   /* --- ui --- */
   gauge:'<path d="M3.8 17.5a8.2 8.2 0 1 1 16.4 0"/><path d="M12 17.5 16.4 12"/><circle cx="12" cy="17.5" r="1.4" fill="currentColor" stroke="none"/>',
   chart:'<path d="M4 4v16h16"/><path d="M7.4 15.2 11 10.6l3 2.5 4.6-6.6"/>',
@@ -2511,7 +2708,112 @@ function renderChart(host, cfg){
       g += '<text x="' + (lx + tw / 2) + '" y="' + (ly + 14) + '" text-anchor="middle" font-size="' + (fs - .5) + '" fill="var(--text)" font-weight="700">' + esc(txt) + '</text>';
     }
   }
-  host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(cfg.ariaLabel || cfg.yLabel + ' against ' + cfg.xLabel) + '">' + g + '</svg>';
+  const dragging = !!cfg.drag;
+  host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '"' +
+    (dragging
+      ? ' tabindex="0" role="slider" aria-orientation="horizontal"' +
+        ' aria-valuemin="0" aria-valuemax="' + Math.round(xMax) + '"' +
+        ' aria-valuenow="' + Math.round(cfg.marker ? cfg.marker.x : 0) + '"' +
+        ' aria-valuetext="' + esc(fmtDuration(cfg.marker ? cfg.marker.x : 0) + (cfg.marker && cfg.marker.label ? ', ' + cfg.marker.label : '')) + '"'
+      : ' role="img"') +
+    ' aria-label="' + esc(cfg.ariaLabel || cfg.yLabel + ' against ' + cfg.xLabel) + '">' + g + '</svg>';
+  host.classList.toggle('scrubbable', dragging);
+  if (dragging) attachChartDrag(host, cfg, {W:W, padLeft:P.l, inner:iw, xMax:xMax});
+}
+
+/* ---------------------------------------------------------------------------
+   SCRUBBING
+   The position dot is a handle: drag it (or focus the chart and use the arrow
+   keys) to move "now" along the curve. Because every section stores absolute
+   timestamps, scrubbing simply rewrites them — so the gauge, the effect bars,
+   the timeline and the threshold panel all follow, and the live clock picks up
+   from wherever it was left.
+   ------------------------------------------------------------------------ */
+let SCRUB_RAF = null, SCRUB_PENDING = null;
+function scrubTo(key, minutes){
+  const m = Math.max(0, minutes);
+  if (key === 'alc'){
+    const st = state.alc;
+    if (!st.drinks.length) return;
+    const origin = st.drinks.reduce((mx, d) => Math.max(mx, d.when + (d.over || 0)), 0);
+    const delta = m - origin;
+    st.drinks.forEach(d => { d.when = Math.max(0, d.when + delta); d.at = minutesAgoToStamp(d.when); });
+    saveState(); renderAlcohol();
+  } else if (key === 'caf'){
+    const st = state.caf;
+    if (!st.doses.length) return;
+    const origin = st.doses.reduce((mx, d) => Math.max(mx, d.when), 0);
+    const delta = m - origin;
+    st.doses.forEach(d => { d.when = Math.max(0, d.when + delta); d.at = minutesAgoToStamp(d.when); });
+    saveState(); renderCaffeine();
+  } else {
+    const map = {d9:[renderTHC, 900], d8:[renderD8, 900], sm:[renderSmoked, 300]};
+    const entry = map[key];
+    if (!entry) return;
+    const st = state[key];
+    st.elapsed = clamp(Math.round(m), 0, entry[1]);
+    st.takenAt = minutesAgoToStamp(st.elapsed);
+    const el = document.getElementById(key + '-elapsed'), rng = document.getElementById(key + '-elapsed-range');
+    if (el) el.value = st.elapsed;
+    if (rng) rng.value = clamp(st.elapsed, +rng.min, +rng.max);
+    saveState(); entry[0]();
+  }
+}
+function scheduleScrub(key, minutes){
+  SCRUB_PENDING = minutes;
+  if (SCRUB_RAF) return;
+  SCRUB_RAF = requestAnimationFrame(() => {
+    SCRUB_RAF = null;
+    const v = SCRUB_PENDING; SCRUB_PENDING = null;
+    if (v != null) scrubTo(key, v);
+  });
+}
+function attachChartDrag(host, cfg, geom){
+  const svg = host.querySelector('svg');
+  if (!svg) return;
+  /* The host stays in the DOM across re-renders; the SVG does not, so all
+     geometry is measured from the host. */
+  const toMinutes = clientX => {
+    const r = host.getBoundingClientRect();
+    if (!r.width) return 0;
+    const inView = (clientX - r.left) / r.width * geom.W;
+    return clamp((inView - geom.padLeft) / geom.inner, 0, 1) * geom.xMax;
+  };
+  const stop = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', stop);
+    window.removeEventListener('pointercancel', stop);
+    document.body.classList.remove('scrubbing');
+  };
+  function move(ev){
+    ev.preventDefault();
+    scheduleScrub(cfg.drag.key, toMinutes(ev.clientX));
+  }
+  svg.addEventListener('pointerdown', ev => {
+    if (ev.button != null && ev.button !== 0) return;
+    document.body.classList.add('scrubbing');
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    move(ev);
+    svg.focus({preventScroll:true});
+  });
+  svg.addEventListener('keydown', ev => {
+    const cur = cfg.marker ? cfg.marker.x : 0;
+    const coarse = Math.max(5, Math.round(geom.xMax / 20));
+    let next = null;
+    if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') next = cur + (ev.shiftKey ? coarse : 1);
+    else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') next = cur - (ev.shiftKey ? coarse : 1);
+    else if (ev.key === 'PageUp') next = cur + coarse;
+    else if (ev.key === 'PageDown') next = cur - coarse;
+    else if (ev.key === 'Home') next = 0;
+    else if (ev.key === 'End') next = geom.xMax;
+    if (next == null) return;
+    ev.preventDefault();
+    scrubTo(cfg.drag.key, clamp(next, 0, geom.xMax));
+    const again = host.querySelector('svg');
+    if (again) again.focus({preventScroll:true});
+  });
 }
 function renderLegend(host, items){
   host.innerHTML = items.map(i =>
@@ -2558,9 +2860,13 @@ function renderEffectBars(host, effects){
       (e.note ? '<span class="et">' + e.note + '</span>' : '') +
       '</div>';
   }).join('');
-  requestAnimationFrame(() => {
+  if (document.body.classList.contains('scrubbing')){
     host.querySelectorAll('.fill').forEach(f => { f.style.width = f.dataset.w + '%'; });
-  });
+  } else {
+    requestAnimationFrame(() => {
+      host.querySelectorAll('.fill').forEach(f => { f.style.width = f.dataset.w + '%'; });
+    });
+  }
 }
 
 /* --- 5e. Pill selector group ---------------------------------------------- */
@@ -2617,6 +2923,8 @@ const DEFAULT_STATE = {
       weightKg:75, bf:'', sex:'male', tol:'none', first:false, takenAt:0},
   sm:{method:'joint', amount:0.15, potency:20, depth:'normal', elapsed:15,
       weightKg:75, bf:'', sex:'male', tol:'none', first:false, takenAt:0},
+  caf:{doses:[], nextId:1, weightKg:75, clearance:'typical', tol:'moderate', bedHours:8,
+       draft:{mg:95, when:30, name:'Drip coffee', icon:'coffee'}},
   conv:{cat:'volume', unit:'ml', value:'473', drinkVol:'355', drinkUnit:'ml', drinkAbv:'5'}
 };
 let state = JSON.parse(JSON.stringify(DEFAULT_STATE));
@@ -2643,12 +2951,14 @@ const minutesSince = at => Math.max(0, Math.round((Date.now() - at) / 60000));
 const minutesAgoToStamp = mins => Date.now() - Math.max(0, mins) * 60000;
 function syncClock(){
   state.alc.drinks.forEach(d => { if (d.at) d.when = minutesSince(d.at); });
+  state.caf.doses.forEach(d => { if (d.at) d.when = minutesSince(d.at); });
   ['d9', 'd8', 'sm'].forEach(k => { if (state[k].takenAt) state[k].elapsed = minutesSince(state[k].takenAt); });
 }
 /* Stamps are created only for state saved by an older build. */
 function backfillStamps(){
   const now = Date.now();
   state.alc.drinks.forEach(d => { if (!d.at) d.at = now - (d.when || 0) * 60000; });
+  state.caf.doses.forEach(d => { if (!d.at) d.at = now - (d.when || 0) * 60000; });
   ['d9', 'd8', 'sm'].forEach(k => { if (!state[k].takenAt) state[k].takenAt = now - (state[k].elapsed || 0) * 60000; });
 }
 function asOfLine(){
@@ -3144,7 +3454,7 @@ function renderAlcohol(){
     vlines:[{x:peakMin, label:'session peak', color:'var(--accent-2)'}].concat(stillComing && Math.abs(upcoming.at - peakMin) > 3 ? [{x:upcoming.at, label:'heading for', color:'var(--warn)'}] : []),
     series:[{points:pts, color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:nowMin, y:nowBac, label:'now · ' + fmtBac(nowBac) + ' %'},
-    accent:'var(--accent)',
+    accent:'var(--accent)', drag:{key:'alc'},
     ariaLabel:'Blood alcohol concentration over time, currently ' + fmtBac(nowBac) + ' percent'
   });
   renderLegend(document.getElementById('alc-chart-legend'), [
@@ -3541,7 +3851,7 @@ function renderTHC(){
     vlines:[{x:timing.onset, label:'onset', color:'var(--text-faint)'}, {x:timing.peak, label:'peak', color:'var(--accent-2)'}],
     series:[{points:curvePoints(peakPct, timing, 2), color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:now, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
-    accent:'var(--accent)',
+    accent:'var(--accent)', drag:{key:'d9'},
     ariaLabel:'Delta-9 edible intensity over time, currently ' + Math.round(nowPct) + ' percent'
   });
   renderLegend(document.getElementById('d9-chart-legend'), [
@@ -3779,7 +4089,7 @@ function renderD8(){
     vlines:[{x:timing.onset, label:'onset', color:'var(--text-faint)'}, {x:timing.peak, label:'peak', color:'var(--accent-2)'}],
     series:[{points:curvePoints(peakPct, timing, 2), color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:now, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
-    accent:'var(--accent)',
+    accent:'var(--accent)', drag:{key:'d8'},
     ariaLabel:'Delta-8 edible intensity over time, currently ' + Math.round(nowPct) + ' percent'
   });
   renderLegend(document.getElementById('d8-chart-legend'), [
@@ -4020,7 +4330,7 @@ function renderSmoked(){
     vlines:[{x:timing.peak, label:'peak', color:'var(--accent-2)'}],
     series:[{points:curvePoints(peakPct, timing, 0.5), color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:now, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
-    accent:'var(--accent)',
+    accent:'var(--accent)', drag:{key:'sm'},
     ariaLabel:'Inhaled cannabis intensity over time in minutes, currently ' + Math.round(nowPct) + ' percent'
   });
   renderLegend(document.getElementById('sm-chart-legend'), [
@@ -4149,6 +4459,426 @@ function initSmoked(){
   const first = document.getElementById('sm-first');
   first.checked = !!s.first;
   first.addEventListener('change', () => { s.first = first.checked; saveState(); renderSmoked(); });
+}
+
+/* ---------------------------------------------------------------------------
+   §10b  CAFFEINE MODULE  —  renderCaffeine()
+
+   The counterexample the alcohol section needs. Caffeine is cleared by CYP1A2
+   with FIRST-ORDER kinetics: a constant fraction per hour, a real half-life,
+   and exponential decay. So the classic one-compartment equation that is
+   scientifically wrong for ethanol is exactly right here:
+
+       C(t) = (F·D/Vd) · ka/(ka−ke) · (e^(−ke·t) − e^(−ka·t))
+
+   First-order also means the model is LINEAR, so several doses superpose
+   exactly — no minute-by-minute integration needed, unlike the alcohol module
+   where the zero-order term has to be clamped at zero.
+   ------------------------------------------------------------------------ */
+const CAFFEINE = {
+  VD_L_PER_KG:0.6,        // standard volume of distribution for caffeine
+  BIOAVAILABILITY:1.0,    // oral bioavailability is ~99 %
+  /* HAND-TUNED: chosen so time-to-peak lands at ~45 min with a 5 h half-life,
+     which is the usually quoted Tmax of 30-60 min. */
+  KA_PER_HOUR:5.0,
+  /* Half-lives in hours. The typical adult figure is ~5 h with a healthy-adult
+     range of roughly 2-10; the modifiers below are the large, common ones. */
+  CLEARANCE:[
+    {key:'smoker',  label:'Smoker',       sub:'~3 h',  halfLife:3,
+     note:'Tobacco smoke strongly induces CYP1A2 — smokers clear caffeine roughly twice as fast. Quitting reverses it within about a week, which is one reason coffee suddenly feels stronger after stopping.'},
+    {key:'typical', label:'Typical adult',sub:'~5 h',  halfLife:5,
+     note:'The usual quoted figure. The healthy-adult range is about 2-10 h, mostly from CYP1A2 activity you cannot observe without testing for it.'},
+    {key:'slow',    label:'Slow',         sub:'~7 h',  halfLife:7,
+     note:'Slow CYP1A2 metabolisers are common. If an afternoon coffee reliably ruins your night while other people are unaffected, this is the likeliest reason.'},
+    {key:'oc',      label:'Oral contraceptive', sub:'~10 h', halfLife:10,
+     note:'Oral contraceptives inhibit CYP1A2 and roughly double caffeine half-life. A dose that clears by bedtime for someone else may still be half present for you.'},
+    {key:'preg',    label:'Late pregnancy', sub:'~15 h', halfLife:15,
+     note:'Caffeine half-life lengthens dramatically through pregnancy, reaching up to about 15 h in the third trimester. Guidance is generally to stay under 200 mg a day — discuss it with your own clinician rather than with this app.'}
+  ],
+  /* HAND-TUNED: the plasma concentration producing half the modelled maximum
+     stimulant response. Calibrated so one 95 mg coffee reads "Moderate",
+     200 mg "Strong" and 400 mg "Very Strong" for a naive user. */
+  EC50_MG_PER_L:3.5,
+  HILL_N:1.4,
+  /* Public-health reference points, in mg per day. */
+  DAILY_LIMIT_MG:400,
+  PREGNANCY_LIMIT_MG:200,
+  /* HAND-TUNED: concentration at which half the modelled sleep disruption
+     occurs. Set so 400 mg six hours before bed lands near the substantial
+     disruption that trial actually measured. */
+  SLEEP_EC50_MG_PER_L:1.5,
+  SLEEP_HILL_N:1.6,
+  PRESETS:[
+    {key:'espresso',  label:'Espresso',       mg:63,  icon:'coffee'},
+    {key:'doppio',    label:'Double espresso',mg:126, icon:'coffee'},
+    {key:'drip',      label:'Drip coffee',    mg:95,  icon:'coffee'},
+    {key:'bigdrip',   label:'Large coffee',   mg:190, icon:'coffee'},
+    {key:'coldbrew',  label:'Cold brew',      mg:155, icon:'coffee'},
+    {key:'instant',   label:'Instant coffee', mg:62,  icon:'coffee'},
+    {key:'latte',     label:'Latte',          mg:77,  icon:'coffee'},
+    {key:'decaf',     label:'Decaf coffee',   mg:2,   icon:'coffee'},
+    {key:'black',     label:'Black tea',      mg:47,  icon:'tea'},
+    {key:'green',     label:'Green tea',      mg:28,  icon:'tea'},
+    {key:'matcha',    label:'Matcha',         mg:70,  icon:'tea'},
+    {key:'mate',      label:'Yerba mate',     mg:85,  icon:'tea'},
+    {key:'energy',    label:'Energy drink',   mg:80,  icon:'energy'},
+    {key:'bigenergy', label:'Large energy drink', mg:160, icon:'energy'},
+    {key:'shot',      label:'Energy shot',    mg:200, icon:'energy'},
+    {key:'cola',      label:'Cola',           mg:34,  icon:'can'},
+    {key:'choc',      label:'Dark chocolate 50 g', mg:40, icon:'chocolate'},
+    {key:'pill',      label:'Caffeine tablet',mg:200, icon:'capsule'},
+    {key:'preworkout',label:'Pre-workout',    mg:200, icon:'capsule'}
+  ],
+  /* HAND-TUNED per-effect Hill curves on plasma mg/L. Alertness saturates
+     early; everything unpleasant has a higher mid-point and a steeper curve,
+     which is the whole reason more caffeine stops helping long before it
+     stops doing anything. */
+  EFFECTS:[
+    {name:'Alertness & reduced fatigue', ec50:2.2,  n:1.3, w:1.00,
+     note:'Adenosine antagonism. This is the effect people are after, and it is the first to saturate.'},
+    {name:'Focus & reaction time',       ec50:2.6,  n:1.3, w:0.95},
+    {name:'Diuresis',                    ec50:5.0,  n:1.4, w:0.75},
+    {name:'Heart-rate & blood-pressure rise', ec50:7.0, n:1.8, w:0.85},
+    {name:'Jitteriness & tremor',        ec50:9.5,  n:2.2, w:1.00,
+     note:'Steep curve with a high mid-point: rare at one coffee, near-certain at five.'},
+    {name:'Anxiety',                     ec50:10.5, n:2.4, w:1.00,
+     note:'Caffeine is genuinely anxiogenic at dose, and the effect is much stronger in people already prone to anxiety.'},
+    {name:'Stomach upset',               ec50:11.0, n:2.0, w:0.80},
+    {name:'Sleep disruption if taken now', ec50:4.0, n:1.6, w:0.90,
+     note:'Shown here as a dose effect. What actually matters is the concentration still present at bedtime — the Sleep panel computes that.'}
+  ]
+};
+const CAFFEINE_TOLERANCE = [
+  {key:'none',     label:'None',      sub:'rarely',      factor:1.0},
+  {key:'light',    label:'Light',     sub:'1 cup/day',   factor:1.25},
+  {key:'moderate', label:'Moderate',  sub:'2-3 cups',    factor:1.6},
+  {key:'heavy',    label:'Heavy',     sub:'4+ cups',     factor:2.1}
+];
+function caffeineToleranceFactor(key){
+  const t = CAFFEINE_TOLERANCE.find(x => x.key === key);
+  return t ? t.factor : 1;
+}
+function caffeineHalfLife(key){
+  const c = CAFFEINE.CLEARANCE.find(x => x.key === key);
+  return c ? c.halfLife : 5;
+}
+/* Plasma concentration in mg/L at `tHours` after a single dose. Standard
+   one-compartment, first-order in and first-order out. */
+function caffeineConcSingle(doseMg, tHours, vdL, ke, ka){
+  if (tHours <= 0) return 0;
+  return (CAFFEINE.BIOAVAILABILITY * doseMg / vdL) * (ka / (ka - ke)) *
+         (Math.exp(-ke * tHours) - Math.exp(-ka * tHours));
+}
+/* Several doses superpose exactly, because first-order kinetics are linear.
+   `items` are {t: minutes since the first dose, mg}. */
+function caffeineConcAt(items, tMin, vdL, ke, ka){
+  let c = 0;
+  for (let i = 0; i < items.length; i++){
+    if (tMin >= items[i].t) c += caffeineConcSingle(items[i].mg, (tMin - items[i].t) / 60, vdL, ke, ka);
+  }
+  return c;
+}
+function caffeineSeries(items, vdL, ke, ka, endMin, stepMin){
+  const pts = [];
+  for (let t = 0; t <= endMin; t += stepMin) pts.push([t, caffeineConcAt(items, t, vdL, ke, ka)]);
+  return pts;
+}
+/* Analytical time-to-peak. Single dose has the closed form
+   tmax = ln(ka/ke)/(ka − ke); staggered doses use the same derivative,
+   solved by bisection, exactly as the alcohol module does. */
+function caffeineTmaxMin(items, ke, ka, vdL){
+  if (!items.length) return 0;
+  const lastT = items.reduce((m, i) => Math.max(m, i.t), 0);
+  if (items.every(i => i.t === items[0].t)) return items[0].t + (Math.log(ka / ke) / (ka - ke)) * 60;
+  const deriv = tMin => items.reduce((sum, i) => {
+    if (tMin < i.t) return sum;
+    const h = (tMin - i.t) / 60;
+    return sum + (i.mg / vdL) * (ka / (ka - ke)) * (ka * Math.exp(-ka * h) - ke * Math.exp(-ke * h));
+  }, 0);
+  if (deriv(lastT) <= 0) return lastT;
+  let lo = lastT, hi = lastT + 600;
+  for (let k = 0; k < 60; k++){ const mid = (lo + hi) / 2; if (deriv(mid) > 0) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
+function caffeineIntensity(concMgL, tolKey){
+  return hill(concMgL / caffeineToleranceFactor(tolKey), CAFFEINE.EC50_MG_PER_L, CAFFEINE.HILL_N) * 100;
+}
+
+/* ------------------------------- caffeine UI ------------------------------ */
+let cafEditingId = null;
+function renderCaffeineList(){
+  const host = document.getElementById('caf-list');
+  const s = state.caf;
+  if (!s.doses.length){
+    host.innerHTML = '<div class="empty-note">Nothing added yet. Tap a preset, set how long ago, then <strong>Add</strong>.</div>';
+    return;
+  }
+  host.innerHTML = s.doses.slice().sort((a, b) => b.when - a.when).map(d =>
+    '<div class="drink-row" data-id="' + d.id + '">' +
+    '<span class="dico ico" data-icon="' + (d.icon || 'coffee') + '"></span>' +
+    '<div><div class="dname">' + esc(d.name) + '</div>' +
+    '<div class="dmeta">' + round(d.mg, 0) + ' mg &middot; ' + fmtDuration(d.when) + ' ago</div></div>' +
+    '<div class="dacts">' +
+      '<button class="btn tiny" type="button" data-act="edit" title="Edit"><span class="ico" data-icon="edit"></span></button>' +
+      '<button class="btn tiny danger" type="button" data-act="del" title="Delete"><span class="ico" data-icon="trash"></span></button>' +
+    '</div></div>').join('');
+  paintIcons(host);
+}
+
+function renderCaffeine(){
+  syncClock();
+  const s = state.caf;
+  const weightKg = clamp(s.weightKg || 75, 30, 250);
+  const vdL = weightKg * CAFFEINE.VD_L_PER_KG;
+  const halfLife = caffeineHalfLife(s.clearance);
+  const ke = Math.LN2 / halfLife;
+  const ka = CAFFEINE.KA_PER_HOUR;
+  const clearance = CAFFEINE.CLEARANCE.find(c => c.key === s.clearance) || CAFFEINE.CLEARANCE[1];
+
+  document.getElementById('caf-clearance-note').innerHTML = clearance.note;
+  renderCaffeineList();
+
+  const gaugeEl = document.getElementById('caf-gauge'), readEl = document.getElementById('caf-readout');
+  if (!s.doses.length){
+    renderBanners(document.getElementById('caf-banners'), [{level:'info', icon:'plus', title:'Nothing added yet',
+      body:'Pick a preset — a drip coffee is about 95 mg — set how long ago you had it, and everything below updates.'}]);
+    renderGaugeWithLabel(gaugeEl, readEl, {fraction:0, value:'0.0', valueSuffix:'mg/L', label:intensityLabel(0),
+      color:severityColor(0), sub:'Add a dose to begin.<br>' + asOfLine()});
+    document.getElementById('caf-stats').innerHTML = '';
+    document.getElementById('caf-sleep').innerHTML = '<div class="empty-note">Nothing to model yet.</div>';
+    document.getElementById('caf-peak-note').textContent = 'Add a dose to see how much is still with you at bedtime.';
+    renderEffectBars(document.getElementById('caf-effects'), CAFFEINE.EFFECTS.map(e => ({name:e.name, value:0, note:e.note})));
+    ['caf-chart-mg', 'caf-chart-fx'].forEach(id => { document.getElementById(id).innerHTML = ''; });
+    renderCaffeineReference();
+    return;
+  }
+
+  const originAgo = s.doses.reduce((m, d) => Math.max(m, d.when), 0);
+  const items = s.doses.map(d => ({t:originAgo - d.when, mg:d.mg}));
+  const nowMin = originAgo;
+  const totalMg = items.reduce((a, i) => a + i.mg, 0);
+
+  /* run until the concentration is negligible, capped at 48 h */
+  /* Exponential decay never actually reaches zero, so the series stops at a
+     floor rather than at zero — otherwise the axis runs for days and squeezes
+     the part of the day anyone cares about. The floor is deliberately low
+     enough that the long tail is still visible, because that tail is the
+     whole difference between first- and zero-order elimination. */
+  let endMin = Math.max(nowMin + 60, 60);
+  while (endMin < 2160 && caffeineConcAt(items, endMin, vdL, ke, ka) > 0.12) endMin += 30;
+  endMin = Math.max(endMin, nowMin + 120, clamp(s.bedHours, 0, 24) * 60 + nowMin + 30);
+
+  const step = endMin > 900 ? 5 : 2;
+  const concPts = caffeineSeries(items, vdL, ke, ka, endMin, step);
+  const nowConc = caffeineConcAt(items, nowMin, vdL, ke, ka);
+  const tmax = caffeineTmaxMin(items, ke, ka, vdL);
+  let peakConc = 0, peakAt = 0;
+  concPts.forEach(pt => { if (pt[1] > peakConc){ peakConc = pt[1]; peakAt = pt[0]; } });
+  const nowPct = caffeineIntensity(nowConc, s.tol);
+  const peakPct = caffeineIntensity(peakConc, s.tol);
+  const fxPts = concPts.map(pt => [pt[0], caffeineIntensity(pt[1], s.tol)]);
+
+  /* bedtime */
+  const bedMin = nowMin + clamp(s.bedHours || 0, 0, 24) * 60;
+  const bedConc = caffeineConcAt(items, bedMin, vdL, ke, ka);
+  const sleepHit = hill(bedConc, CAFFEINE.SLEEP_EC50_MG_PER_L, CAFFEINE.SLEEP_HILL_N) * 100;
+
+  renderGaugeWithLabel(gaugeEl, readEl, {
+    fraction:nowPct / 100, value:round(nowConc, 2), valueSuffix:'mg/L',
+    label:intensityLabel(nowPct), color:severityColor(nowPct),
+    ariaLabel:'Estimated plasma caffeine ' + round(nowConc, 2) + ' milligrams per litre, ' + intensityLabel(nowPct),
+    sub:'Stimulant intensity <strong>' + Math.round(nowPct) + '&nbsp;% · ' + intensityLabel(nowPct) +
+        '</strong> on the shared scale. Modelled peak for this day: <strong>' + round(peakConc, 2) + '&nbsp;mg/L</strong>.<br>' + asOfLine()
+  });
+
+  const ps = peakStatus(nowMin, tmax, {noun:'Peak concentration'});
+  document.getElementById('caf-stats').innerHTML =
+    stat('Taken today', Math.round(totalMg) + ' <small>mg</small>', s.doses.length + ' dose' + (s.doses.length === 1 ? '' : 's') + '; FDA cites 400 mg/day for healthy adults') +
+    stat('In your blood now', round(nowConc, 2) + ' <small>mg/L</small>', Math.round(nowPct) + ' % · ' + intensityLabel(nowPct)) +
+    stat('Half-life', halfLife + ' <small>h</small>', 'First-order: a constant fraction per hour') +
+    stat('Peak', round(peakConc, 2) + ' <small>mg/L</small>', ps.text) +
+    stat('At bedtime', round(bedConc, 2) + ' <small>mg/L</small>', 'In ' + fmtDuration(bedMin - nowMin) + ' — ' + Math.round(100 * bedConc / Math.max(peakConc, 0.0001)) + ' % of today’s peak');
+
+  /* banners */
+  const banners = [];
+  if (totalMg >= 1000) banners.push({level:'crit', icon:'alert', title:'A gram of caffeine in a day',
+    body:'At this level palpitations, tremor, vomiting and genuine anxiety are common rather than possible. Rapid consumption around 1.2 g has produced toxic effects including seizures. Stop, hydrate, and seek medical help for chest pain, fainting or a racing heart that will not settle.'});
+  else if (totalMg >= CAFFEINE.DAILY_LIMIT_MG) banners.push({level:'warn', icon:'alert', title:'Past the 400 mg-a-day reference point',
+    body:'The FDA cites 400 mg a day as the figure not generally associated with negative effects in healthy adults. It is a population reference, not a line in your own blood — people prone to anxiety or arrhythmia feel it far sooner.'});
+  if (s.clearance === 'preg' && totalMg >= CAFFEINE.PREGNANCY_LIMIT_MG) banners.push({level:'warn', icon:'shield', title:'Above the usual 200 mg guidance in pregnancy',
+    body:'Guidance in pregnancy is generally to stay under 200 mg a day, and caffeine half-life lengthens to as much as 15 hours by the third trimester, so it accumulates far more than usual. Take this up with your own clinician, not with an offline HTML file.'});
+  if (sleepHit >= 60) banners.push({level:'warn', icon:'clock', title:'This will very likely cost you sleep',
+    body:'The model puts <strong>' + round(bedConc, 2) + ' mg/L</strong> still circulating at your target bedtime. Caffeine taken even six hours before bed has been shown to cost over an hour of sleep, and people routinely fall asleep anyway while sleeping measurably worse.'});
+  if (nowConc > 0 && nowPct < 12 && totalMg > 150) banners.push({level:'info', icon:'hourglass', title:'Mostly worn off',
+    body:'Most of this has cleared. Topping up now will feel like it is doing more than it is, because you are comparing it with a caffeine-withdrawal baseline rather than a caffeine-free one.'});
+  renderBanners(document.getElementById('caf-banners'), banners);
+
+  /* concentration chart */
+  const yMax = Math.max(1, Math.ceil(peakConc * 1.25));
+  renderChart(document.getElementById('caf-chart-mg'), {
+    xMax:endMin, yMax:yMax,
+    xLabel:'Hours since the first dose', yLabel:'Plasma caffeine (mg/L)', yLabelShort:'mg/L',
+    xTicks:niceTicks(endMin / 60, 6).map(h => ({v:h * 60, label:h + 'h'})),
+    yTicks:niceTicks(yMax, 5).map(v => ({v:v, label:String(round(v, 1))})),
+    vlines:[{x:peakAt, label:'peak', color:'var(--accent-2)'}].concat(
+      bedMin <= endMin ? [{x:bedMin, label:'bedtime', color:'var(--info)'}] : []),
+    series:[{points:concPts, color:'var(--accent)', fill:true, width:2.8}],
+    marker:{x:nowMin, y:nowConc, label:'now · ' + round(nowConc, 2) + ' mg/L'},
+    accent:'var(--accent)', drag:{key:'caf', maxMin:endMin},
+    ariaLabel:'Plasma caffeine over time, currently ' + round(nowConc, 2) + ' milligrams per litre'
+  });
+  renderLegend(document.getElementById('caf-legend-mg'), [
+    {label:'Plasma caffeine (mg/L)', color:'var(--accent)'},
+    {label:'Modelled peak', color:'var(--accent-2)', dash:true},
+    {label:'Your target bedtime', color:'var(--info)', dash:true}
+  ]);
+
+  /* intensity chart, on the shared scale */
+  renderChart(document.getElementById('caf-chart-fx'), {
+    xMax:endMin, yMax:100,
+    xLabel:'Hours since the first dose', yLabel:'Modelled intensity (% of curve maximum)', yLabelShort:'Intensity (% of max)',
+    xTicks:niceTicks(endMin / 60, 6).map(h => ({v:h * 60, label:h + 'h'})),
+    yTicks:[0, 20, 40, 60, 80, 100].map(v => ({v:v, label:v + ' %'})),
+    thresholds:[{y:70, label:'Very Strong', color:severityColor(72)}, {y:30, label:'Moderate', color:severityColor(32)}],
+    vlines:[{x:peakAt, label:'peak', color:'var(--accent-2)'}].concat(
+      bedMin <= endMin ? [{x:bedMin, label:'bedtime', color:'var(--info)'}] : []),
+    series:[{points:fxPts, color:'var(--accent-2)', fill:true, width:2.8}],
+    marker:{x:nowMin, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
+    accent:'var(--accent-2)', drag:{key:'caf', maxMin:endMin},
+    ariaLabel:'Caffeine effect intensity over time, currently ' + Math.round(nowPct) + ' percent'
+  });
+  renderLegend(document.getElementById('caf-legend-fx'), [
+    {label:'Stimulant intensity (shared scale)', color:'var(--accent-2)'},
+    {label:'Modelled peak', color:'var(--accent-2)', dash:true}
+  ]);
+
+  document.getElementById('caf-peak-note').innerHTML = '<strong>' + ps.text + '.</strong> Closed form for a single dose: tmax = ln(ka/ke)/(ka&minus;ke).';
+  const lastSafe = (() => {
+    /* when would the concentration at bedtime fall below the sleep midpoint? */
+    for (let t = nowMin; t <= endMin; t += 5){
+      if (caffeineConcAt(items, bedMin > t ? bedMin : t, vdL, ke, ka) <= CAFFEINE.SLEEP_EC50_MG_PER_L) return t;
+    }
+    return null;
+  })();
+  document.getElementById('caf-sleep').innerHTML =
+    '<div class="effects"><div class="effect">' +
+    '<span class="en">Modelled sleep disruption at your target bedtime</span>' +
+    '<span class="ev" style="color:' + severityColor(sleepHit) + '">' + Math.round(sleepHit) + ' % · ' + intensityLabel(sleepHit) + '</span>' +
+    '<span class="bar"><span class="fill" data-w="' + clamp(sleepHit, 0, 100) + '" style="background:linear-gradient(90deg,' +
+      severityColor(sleepHit * 0.55) + ',' + severityColor(sleepHit) + ')"></span></span>' +
+    '<span class="et">' + round(bedConc, 2) + '&nbsp;mg/L still circulating in ' + fmtDuration(bedMin - nowMin) + '.</span>' +
+    '</div></div>' +
+    '<p class="card-note" style="margin-top:12px">' +
+    (bedConc <= CAFFEINE.SLEEP_EC50_MG_PER_L
+      ? 'That is below the mid-point of the modelled sleep effect. Nothing here says you will sleep <em>well</em> — only that caffeine is unlikely to be the reason you do not.'
+      : 'To get under that mid-point you would need about ' +
+        (lastSafe == null ? 'longer than this model runs' : fmtDuration(Math.max(0, lastSafe - nowMin)) + ' more') +
+        ' before sleeping. People habitually underestimate this, because falling asleep and sleeping well are different things.') +
+    ' With a ' + halfLife + '-hour half-life, a dose is still a quarter present after ' + fmtDuration(halfLife * 120) + '.</p>';
+  requestAnimationFrame(() => {
+    document.querySelectorAll('#caf-sleep .fill').forEach(f => { f.style.width = f.dataset.w + '%'; });
+  });
+
+  const tolF = caffeineToleranceFactor(s.tol);
+  renderEffectBars(document.getElementById('caf-effects'), CAFFEINE.EFFECTS.map(e =>
+    ({name:e.name, value:hill(nowConc / tolF, e.ec50, e.n) * e.w * 100, note:e.note})));
+
+  renderCaffeineReference();
+}
+
+function renderCaffeineReference(){
+  const REF_KG = 70, vdL = REF_KG * CAFFEINE.VD_L_PER_KG, halfLife = 5, ke = Math.LN2 / halfLife, ka = CAFFEINE.KA_PER_HOUR;
+  const doses = [20, 40, 63, 95, 150, 200, 300, 400, 600, 800, 1200];
+  const rows = doses.map(mg => {
+    const tmax = (Math.log(ka / ke) / (ka - ke)) * 60;
+    const peak = caffeineConcSingle(mg, tmax / 60, vdL, ke, ka);
+    const pct = caffeineIntensity(peak, 'none');
+    /* hours until the single dose falls under the sleep mid-point */
+    let t = tmax;
+    while (t < 2880 && caffeineConcSingle(mg, t / 60, vdL, ke, ka) > CAFFEINE.SLEEP_EC50_MG_PER_L) t += 5;
+    return [mg + ' mg', round(peak, 2) + ' mg/L', Math.round(pct) + ' %', badgeFor(pct),
+            BAND_DESCRIPTIONS[intensityLabel(pct)],
+            t >= 2880 ? 'over 48 h' : fmtDuration(t)];
+  });
+  renderTable(document.getElementById('caf-ref-table'),
+    [{label:'Dose', num:true}, {label:'Peak plasma', num:true}, {label:'Intensity', num:true},
+     {label:'Shared scale'}, {label:'What that usually means'}, {label:'Until sleep-safe', num:true}],
+    rows);
+  document.getElementById('caf-ref-note').innerHTML =
+    'Computed live from this module’s own constants for a reference adult — 70&nbsp;kg, 5-hour half-life, no tolerance — so it cannot drift from the estimator above. ' +
+    '"Until sleep-safe" is the time from dosing until the modelled concentration drops below ' + CAFFEINE.SLEEP_EC50_MG_PER_L +
+    '&nbsp;mg/L, the mid-point of the modelled sleep effect. <span class="tuned">hand-tuned</span> That mid-point is my estimate; the half-life and the one-compartment model are not.';
+}
+
+function cafSetDraftFromPreset(key){
+  const p = CAFFEINE.PRESETS.find(x => x.key === key);
+  if (!p) return;
+  state.caf.draft.mg = p.mg; state.caf.draft.name = p.label; state.caf.draft.icon = p.icon;
+  document.getElementById('caf-mg').value = p.mg;
+  saveState();
+}
+function cafExitEdit(){
+  cafEditingId = null;
+  document.getElementById('caf-add-label').textContent = 'Add';
+  document.getElementById('caf-cancel').hidden = true;
+  document.getElementById('caf-editing').textContent = '';
+}
+function initCaffeine(){
+  const s = state.caf;
+  buildPills(document.getElementById('caf-presets'), CAFFEINE.PRESETS.map(p => ({key:p.key, label:p.label, sub:p.mg + ' mg', icon:p.icon})), null, cafSetDraftFromPreset);
+  buildPills(document.getElementById('caf-clearance'), CAFFEINE.CLEARANCE.map(c => ({key:c.key, label:c.label, sub:c.sub})), s.clearance,
+    k => { s.clearance = k; saveState(); renderCaffeine(); });
+  buildPills(document.getElementById('caf-tol'), CAFFEINE_TOLERANCE.map(t => ({key:t.key, label:t.label, sub:t.sub})), s.tol,
+    k => { s.tol = k; saveState(); renderCaffeine(); });
+
+  const mg = document.getElementById('caf-mg'), when = document.getElementById('caf-when');
+  mg.value = s.draft.mg; when.value = s.draft.when;
+  mg.addEventListener('input', () => { s.draft.mg = Math.max(0, parseFloat(mg.value) || 0); s.draft.name = 'Custom'; s.draft.icon = 'coffee'; saveState(); });
+  when.addEventListener('input', () => { s.draft.when = Math.max(0, parseFloat(when.value) || 0); saveState(); });
+
+  document.getElementById('caf-add').addEventListener('click', () => {
+    const v = Math.max(0, parseFloat(mg.value) || 0);
+    const w = Math.max(0, parseFloat(when.value) || 0);
+    if (v <= 0) return;
+    if (cafEditingId != null){
+      const d = s.doses.find(x => x.id === cafEditingId);
+      if (d){ d.mg = v; d.when = w; d.at = minutesAgoToStamp(w); d.name = s.draft.name; d.icon = s.draft.icon; }
+      cafExitEdit();
+    } else {
+      s.doses.push({id:s.nextId++, name:s.draft.name || 'Custom', icon:s.draft.icon || 'coffee', mg:v, when:w, at:minutesAgoToStamp(w)});
+    }
+    saveState(); renderCaffeine();
+  });
+  document.getElementById('caf-cancel').addEventListener('click', cafExitEdit);
+  document.getElementById('caf-clear').addEventListener('click', () => {
+    if (!s.doses.length) return;
+    s.doses = []; cafExitEdit(); saveState(); renderCaffeine();
+  });
+  document.getElementById('caf-list').addEventListener('click', ev => {
+    const btn = ev.target.closest('button[data-act]');
+    if (!btn) return;
+    const id = parseInt(btn.closest('.drink-row').dataset.id, 10);
+    if (btn.dataset.act === 'del'){
+      s.doses = s.doses.filter(d => d.id !== id);
+      if (cafEditingId === id) cafExitEdit();
+      saveState(); renderCaffeine();
+    } else {
+      const d = s.doses.find(x => x.id === id);
+      if (!d) return;
+      cafEditingId = id;
+      s.draft.name = d.name; s.draft.icon = d.icon;
+      mg.value = d.mg; when.value = d.when;
+      document.getElementById('caf-add-label').textContent = 'Save';
+      document.getElementById('caf-cancel').hidden = false;
+      document.getElementById('caf-editing').textContent = 'Editing "' + d.name + '"';
+      mg.focus();
+    }
+  });
+
+  const w = bindNumber('caf-weight', v => { s.weightKg = readWeightKg(v); saveState(); renderCaffeine(); });
+  w.value = round(kgToDisplay(s.weightKg), 1);
+  const bed = bindPair('caf-bed', 'caf-bed-range', v => { s.bedHours = clamp(v || 0, 0, 24); saveState(); renderCaffeine(); });
+  bed.n.value = s.bedHours; bed.r.value = clamp(s.bedHours, 0, 18);
 }
 
 /* ---------------------------------------------------------------------------
@@ -4324,6 +5054,16 @@ const CONVERTERS = [
     {k:'gper100', label:'Grams ethanol per 100 mL',   f:1 / 0.789}
   ], note:'US proof is exactly twice ABV. Grams per 100 mL is ABV \u00d7 0.789, the density of ethanol — the conversion every drink in this app passes through.'},
 
+  {key:'caffeine', label:'Caffeine', base:'mg', units:[
+    {k:'mg',       label:'Milligrams (mg)',          f:1},
+    {k:'espresso', label:'Espresso shots (63 mg)',   f:63},
+    {k:'drip',     label:'Cups of drip coffee (95 mg)', f:95},
+    {k:'tea',      label:'Cups of black tea (47 mg)',f:47},
+    {k:'energy',   label:'Energy drinks (80 mg)',    f:80},
+    {k:'cola',     label:'Colas (34 mg)',            f:34},
+    {k:'daily',    label:'FDA daily reference (400 mg)', f:400}
+  ], note:'Serving sizes vary enormously — a "cup of coffee" runs from about 60 to 200 mg depending on bean, grind and size. These are the same typical figures the caffeine estimator uses.'},
+
   {key:'time', label:'Time', base:'minutes', units:[
     {k:'sec',  label:'Seconds',  f:1 / 60},
     {k:'min',  label:'Minutes',  f:1},
@@ -4420,8 +5160,11 @@ const HOME_CARDS = [
   {view:'smoked', accent:'smoked', icon:'joint', title:'Smoked & inhaled',
    body:'A minutes-scale timeline for six methods, each with its own absorption efficiency and irritation profile, multiplied by inhalation depth — plus an edible-versus-inhaled comparison table.',
    go:'Open the inhaled estimator'},
+  {view:'caffeine', accent:'caffeine', icon:'coffee', title:'Caffeine',
+   body:'The counterexample: caffeine really is first-order, so it has a genuine half-life and the exponential model that is wrong for alcohol is right here. Unlimited doses, half-life modifiers that matter (smoking halves it, oral contraceptives double it), a plasma curve and an effects curve, and a sleep panel.',
+   go:'Open the caffeine estimator'},
   {view:'learn', accent:'learn', icon:'book', title:'Learn',
-   body:'Seventeen articles: zero-order ethanol kinetics, first-pass metabolism and 11-hydroxy-THC, the Hill equation, receptor downregulation, the exact implemented formulas, an itemised list of every constant I invented, and verified sources.',
+   body:'Eighteen articles: zero-order ethanol kinetics, first-pass metabolism and 11-hydroxy-THC, the Hill equation, receptor downregulation, the exact implemented formulas, an itemised list of every constant I invented, and verified sources.',
    go:'Read the articles'}
 ];
 function renderDashboard(){
@@ -4454,6 +5197,7 @@ const RENDERERS = {
   d9:     renderTHC,
   d8:     renderD8,
   smoked: renderSmoked,
+  caffeine: renderCaffeine,
   learn:  renderLearn
 };
 let currentView = 'home';
@@ -4607,10 +5351,35 @@ function buildExport(){
     L.push('Now (' + fmtDuration(s.elapsed) + ' in): ' + Math.round(nowPct) + ' % — ' + intensityLabel(nowPct));
     L.push('Modelled peak: ' + Math.round(peakPct) + ' % — ' + intensityLabel(peakPct) + '; ' + peakStatus(s.elapsed, t.peak, {toleranceMin:2}).text);
     L.push('Onset ' + Math.round(t.onset * 60) + ' s · peak ' + Math.round(t.peak) + ' min · total ' + fmtDuration(t.end));
+  } else if (currentView === 'caffeine'){
+    const st = state.caf;
+    const vdL = clamp(st.weightKg, 30, 250) * CAFFEINE.VD_L_PER_KG;
+    const hl = caffeineHalfLife(st.clearance), ke = Math.LN2 / hl, ka = CAFFEINE.KA_PER_HOUR;
+    L.push('SECTION: Caffeine');
+    L.push('Body: ' + round(st.weightKg, 1) + ' kg, half-life ' + hl + ' h (' + st.clearance + '), tolerance "' + st.tol + '"');
+    L.push('');
+    if (!st.doses.length) L.push('No doses entered.');
+    else {
+      L.push('Doses:');
+      st.doses.slice().sort((a, b) => b.when - a.when).forEach(d =>
+        L.push('  \u00b7 ' + d.name + ' \u2014 ' + round(d.mg, 0) + ' mg, ' + d.when + ' min ago'));
+      const origin = st.doses.reduce((m, d) => Math.max(m, d.when), 0);
+      const items = st.doses.map(d => ({t:origin - d.when, mg:d.mg}));
+      const total = items.reduce((a, i) => a + i.mg, 0);
+      const nowConc = caffeineConcAt(items, origin, vdL, ke, ka);
+      const bedMin = origin + clamp(st.bedHours, 0, 24) * 60;
+      const bedConc = caffeineConcAt(items, bedMin, vdL, ke, ka);
+      const pct = caffeineIntensity(nowConc, st.tol);
+      L.push('');
+      L.push('Total today: ' + Math.round(total) + ' mg  (FDA cites 400 mg/day for healthy adults)');
+      L.push('In blood now: ' + round(nowConc, 2) + ' mg/L \u2014 ' + Math.round(pct) + ' % \u2014 ' + intensityLabel(pct));
+      L.push('At bedtime in ' + fmtDuration(bedMin - origin) + ': ' + round(bedConc, 2) + ' mg/L');
+      L.push('Modelled sleep disruption: ' + Math.round(hill(bedConc, CAFFEINE.SLEEP_EC50_MG_PER_L, CAFFEINE.SLEEP_HILL_N) * 100) + ' %');
+    }
   } else {
     L.push('SECTION: ' + (currentView === 'learn' ? 'Learn' : 'Dashboard'));
     L.push('');
-    L.push('No estimate to export from this section. Open one of the four');
+    L.push('No estimate to export from this section. Open one of the five');
     L.push('estimators and export from there.');
   }
   L.push('');
@@ -4669,6 +5438,7 @@ function boot(){
   initD9();
   initD8();
   initSmoked();
+  initCaffeine();
   initConverter();
   renderDashboard();
   renderLearn();
@@ -4761,12 +5531,12 @@ function boot(){
   });
 
   /* keyboard shortcuts — ignored while typing */
-  const VIEW_KEYS = ['home', 'alcohol', 'd9', 'd8', 'smoked', 'learn'];
+  const VIEW_KEYS = ['home', 'alcohol', 'd9', 'd8', 'smoked', 'caffeine', 'learn'];
   document.addEventListener('keydown', ev => {
     const t = ev.target;
     if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    if (ev.key >= '1' && ev.key <= '6'){ switchView(VIEW_KEYS[parseInt(ev.key, 10) - 1]); return; }
+    if (ev.key >= '1' && ev.key <= '7'){ switchView(VIEW_KEYS[parseInt(ev.key, 10) - 1]); return; }
     const k = ev.key.toLowerCase();
     if (k === 't') document.getElementById('btn-theme').click();
     else if (k === 'p'){ ev.preventDefault(); window.print(); }
