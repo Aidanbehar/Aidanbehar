@@ -338,6 +338,18 @@ select{appearance:none; background-image:linear-gradient(45deg,transparent 50%,v
   font-size:.78rem; color:var(--text-faint); pointer-events:none; font-weight:600;
 }
 .with-unit input{padding-right:48px}
+/* Convertible fields carry a tappable chip instead of a static label — the
+   global toolbar toggle was the only way to reach lb / fl oz and nobody
+   found it, because the control was nowhere near the field it changes. */
+.with-unit .unit-btn{
+  pointer-events:auto; cursor:pointer; font:inherit; font-size:.76rem; font-weight:650;
+  color:var(--text-dim); background:var(--surface-3); border:1px solid var(--border);
+  border-radius:8px; padding:3px 8px; line-height:1.3;
+  transition:color .18s ease, border-color .18s ease, background .18s ease, transform .16s ease;
+}
+.with-unit .unit-btn:hover{color:var(--text); border-color:var(--accent); transform:translateY(-50%) scale(1.06)}
+.with-unit .unit-btn:active{transform:translateY(-50%) scale(.98)}
+.with-unit input[data-unit-field]{padding-right:74px}
 
 input[type="range"]{
   -webkit-appearance:none; appearance:none; width:100%; background:transparent; margin:8px 0 2px;
@@ -627,6 +639,24 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 .shortcut .go svg{width:15px;height:15px; transition:transform .25s ease}
 .shortcut:hover .go svg{transform:translateX(3px)}
 
+/* dashboard unit converter */
+.conv-grid{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.25fr); gap:10px; margin-bottom:14px}
+.conv-out{display:grid; gap:6px}
+.conv-row{
+  display:flex; justify-content:space-between; align-items:center; gap:12px;
+  padding:8px 12px; border-radius:11px; background:var(--surface-2); border:1px solid var(--border);
+  font-size:.86rem; transition:background .25s ease, border-color .25s ease;
+}
+.conv-row.is-source{
+  border-color:color-mix(in srgb,var(--accent) 55%,transparent);
+  background:color-mix(in srgb,var(--accent) 13%,transparent);
+}
+.conv-row .cu{color:var(--text-dim); min-width:0}
+.conv-row.is-source .cu{color:var(--text); font-weight:600}
+.conv-row .cv{font-family:var(--mono); font-weight:650; white-space:nowrap}
+.conv-split{border-top:1px solid var(--border); margin:18px 0 14px; padding-top:16px}
+@media (max-width:720px){.conv-grid{grid-template-columns:1fr}}
+
 /* scale legend (dashboard visual summary of the shared intensity scale) */
 .scale-legend{display:grid; gap:8px; margin-top:6px}
 .scale-row{display:grid; grid-template-columns:122px 1fr auto; gap:10px; align-items:center; font-size:.83rem}
@@ -754,7 +784,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
       </div>
     </div>
     <div class="toolbar no-print">
-      <button class="btn" id="btn-units" type="button" title="Switch between metric and imperial units">
+      <button class="btn" id="btn-units" type="button" title="Switch every weight and volume field between metric and imperial. You can also tap the unit chip on any field.">
         <span class="ico" data-icon="ruler"></span><span id="units-label">Metric</span>
       </button>
       <button class="btn" id="btn-timeunits" type="button" title="Switch duration display between hours+minutes and plain minutes">
@@ -840,6 +870,61 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 
   <div class="grid g2" id="home-cards"></div>
 
+  <!-- Unit converter. This is the one interactive thing on the dashboard, and
+       it is still not a live mirror of anything: it has its own inputs and
+       reads no estimator state, so it cannot show a stale or default-state
+       figure from another section. -->
+  <div class="card" style="margin-top:18px" data-accent="home">
+    <div class="card-title"><span class="ico" data-icon="ruler"></span><h3>Unit converter</h3></div>
+    <p class="card-note">Self-contained — it reads nothing from the estimators and changes nothing in them. For the fields inside a section, tap the unit chip on the field itself, or the <strong id="conv-toolbar-hint">kg · mL</strong> button in the toolbar.</p>
+
+    <div class="field">
+      <span class="lab">What are you converting?</span>
+      <div class="pills" id="conv-cats" role="group" aria-label="Conversion category"></div>
+    </div>
+
+    <div class="conv-grid">
+      <div class="field" style="margin:0">
+        <label class="lab" for="conv-value">Value</label>
+        <input type="number" id="conv-value" step="any" value="473" inputmode="decimal">
+      </div>
+      <div class="field" style="margin:0">
+        <label class="lab" for="conv-unit">Unit</label>
+        <select id="conv-unit"></select>
+      </div>
+    </div>
+
+    <div class="conv-out" id="conv-out"></div>
+    <p class="conv-note" id="conv-note"></p>
+
+    <div class="conv-split"></div>
+    <div class="card-title"><span class="ico" data-icon="wine"></span><h3 style="font-size:1rem">What counts as a standard drink</h3></div>
+    <p class="card-note">A pure unit conversion: volume and strength into grams of ethanol, which is the unit every alcohol calculation in this app actually runs on. To model a whole evening instead, use the <a href="#" data-goto="alcohol">BAC estimator</a>.</p>
+    <div class="inline-3">
+      <div class="field" style="margin:0">
+        <label class="lab" for="conv-dv">Volume</label>
+        <input type="number" id="conv-dv" min="1" step="1" value="355" inputmode="decimal">
+      </div>
+      <div class="field" style="margin:0">
+        <label class="lab" for="conv-du">Measured in</label>
+        <select id="conv-du">
+          <option value="ml">millilitres</option>
+          <option value="floz">US fluid ounces</option>
+          <option value="flozuk">UK fluid ounces</option>
+        </select>
+      </div>
+      <div class="field" style="margin:0">
+        <label class="lab" for="conv-da">Strength</label>
+        <div class="with-unit">
+          <input type="number" id="conv-da" min="0" max="96" step="0.1" value="5" inputmode="decimal">
+          <span class="unit">% ABV</span>
+        </div>
+      </div>
+    </div>
+    <div class="conv-out" id="conv-drink-out" style="margin-top:12px"></div>
+    <p class="conv-note">Grams of ethanol = volume&nbsp;&times;&nbsp;(ABV&nbsp;/&nbsp;100)&nbsp;&times;&nbsp;0.789, the density of ethanol. "Standard drink" has no international definition — the four shown are the common national ones, and they differ by nearly a factor of two.</p>
+  </div>
+
   <div class="card" style="margin-top:18px" data-accent="home">
     <div class="card-title"><span class="ico" data-icon="keyboard"></span><h3>Shortcuts &amp; housekeeping</h3></div>
     <div class="grid g3" style="margin-top:8px">
@@ -859,7 +944,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
       </div>
       <div>
         <h4 style="margin-bottom:6px">Units</h4>
-        <p style="font-size:.85rem;color:var(--text-dim);margin:0">Toggle kg/lb and mL/fl&nbsp;oz, and switch durations between <code>2h 15m</code> and <code>135 min</code>. Cannabis is always dosed in milligrams and grams, as products are labelled.</p>
+        <p style="font-size:.85rem;color:var(--text-dim);margin:0">Tap the unit chip on any weight or volume field to switch it between kg/lb and mL/fl&nbsp;oz — or use the toolbar button to switch them all at once. The clock button swaps durations between <code>2h 15m</code> and <code>135 min</code>. Cannabis is always dosed in milligrams and grams, as products are labelled. The converter above handles everything else.</p>
       </div>
     </div>
   </div>
@@ -912,8 +997,8 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
         <div class="field">
           <label class="lab" for="alc-weight">Body weight</label>
           <div class="with-unit">
-            <input type="number" id="alc-weight" min="30" max="250" step="0.5" value="75" data-unit="weight" inputmode="decimal">
-            <span class="unit" data-unit-label="weight">kg</span>
+            <input type="number" id="alc-weight" data-unit-field="weight" min="30" max="250" step="0.5" value="75" data-unit="weight" inputmode="decimal">
+            <button type="button" class="unit unit-btn" data-unit-toggle="weight" data-unit-label="weight" title="Switch between kilograms and pounds">kg</button>
           </div>
         </div>
         <div class="field">
@@ -963,8 +1048,8 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
       <div class="field">
         <label class="lab" for="alc-vol">Volume</label>
         <div class="with-unit">
-          <input type="number" id="alc-vol" min="1" max="2000" step="1" value="355" data-unit="volume" inputmode="decimal">
-          <span class="unit" data-unit-label="volume">mL</span>
+          <input type="number" id="alc-vol" data-unit-field="volume" min="1" max="2000" step="1" value="355" data-unit="volume" inputmode="decimal">
+          <button type="button" class="unit unit-btn" data-unit-toggle="volume" data-unit-label="volume" title="Switch between millilitres and US fluid ounces">mL</button>
         </div>
       </div>
       <div class="field">
@@ -1100,8 +1185,8 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
         <div class="field">
           <label class="lab" for="d9-weight">Body weight</label>
           <div class="with-unit">
-            <input type="number" id="d9-weight" min="30" max="250" step="0.5" value="75" data-unit="weight" inputmode="decimal">
-            <span class="unit" data-unit-label="weight">kg</span>
+            <input type="number" id="d9-weight" data-unit-field="weight" min="30" max="250" step="0.5" value="75" data-unit="weight" inputmode="decimal">
+            <button type="button" class="unit unit-btn" data-unit-toggle="weight" data-unit-label="weight" title="Switch between kilograms and pounds">kg</button>
           </div>
         </div>
         <div class="field">
@@ -1235,8 +1320,8 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
         <div class="field">
           <label class="lab" for="d8-weight">Body weight</label>
           <div class="with-unit">
-            <input type="number" id="d8-weight" min="30" max="250" step="0.5" value="75" data-unit="weight" inputmode="decimal">
-            <span class="unit" data-unit-label="weight">kg</span>
+            <input type="number" id="d8-weight" data-unit-field="weight" min="30" max="250" step="0.5" value="75" data-unit="weight" inputmode="decimal">
+            <button type="button" class="unit unit-btn" data-unit-toggle="weight" data-unit-label="weight" title="Switch between kilograms and pounds">kg</button>
           </div>
         </div>
         <div class="field">
@@ -1371,8 +1456,8 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
         <div class="field">
           <label class="lab" for="sm-weight">Body weight</label>
           <div class="with-unit">
-            <input type="number" id="sm-weight" min="30" max="250" step="0.5" value="75" data-unit="weight" inputmode="decimal">
-            <span class="unit" data-unit-label="weight">kg</span>
+            <input type="number" id="sm-weight" data-unit-field="weight" min="30" max="250" step="0.5" value="75" data-unit="weight" inputmode="decimal">
+            <button type="button" class="unit unit-btn" data-unit-toggle="weight" data-unit-label="weight" title="Switch between kilograms and pounds">kg</button>
           </div>
         </div>
         <div class="field">
@@ -2368,7 +2453,8 @@ const DEFAULT_STATE = {
   d8:{mg:25, product:'gummy', food:'light', elapsed:60, cbd:0, cbn:0, cbg:0,
       weightKg:75, bf:'', sex:'male', tol:'none', first:false},
   sm:{method:'joint', amount:0.15, potency:20, depth:'normal', elapsed:15,
-      weightKg:75, bf:'', sex:'male', tol:'none', first:false}
+      weightKg:75, bf:'', sex:'male', tol:'none', first:false},
+  conv:{cat:'volume', unit:'ml', value:'473', drinkVol:'355', drinkUnit:'ml', drinkAbv:'5'}
 };
 let state = JSON.parse(JSON.stringify(DEFAULT_STATE));
 
@@ -3760,6 +3846,136 @@ function setLive(key, text){
   document.querySelectorAll('[data-live="' + key + '"]').forEach(el => { el.innerHTML = text; });
 }
 
+/* ---------------------------------------------------------------------------
+   UNIT CONVERTER (dashboard)
+   Each category declares a base unit and a factor per unit: a value is
+   converted to base by multiplying, and out of base by dividing. All factors
+   are exact definitions or standard measured constants — none is hand-tuned.
+   ------------------------------------------------------------------------ */
+const CONVERTERS = [
+  {key:'volume', label:'Liquid volume', base:'mL', units:[
+    {k:'ml',      label:'Millilitres (mL)',        f:1},
+    {k:'cl',      label:'Centilitres (cL)',        f:10},
+    {k:'l',       label:'Litres (L)',              f:1000},
+    {k:'floz',    label:'US fluid ounces',         f:29.5735295625},
+    {k:'flozuk',  label:'UK (imperial) fluid ounces', f:28.4130625},
+    {k:'shot',    label:'US shots (1.5 fl oz)',    f:44.3602943},
+    {k:'cup',     label:'US cups (8 fl oz)',       f:236.5882365},
+    {k:'pintus',  label:'US pints (16 fl oz)',     f:473.176473},
+    {k:'pintuk',  label:'Imperial pints (20 fl oz)', f:568.26125}
+  ], note:'A US pint is 473 mL and an imperial pint is 568 mL — a 20 % difference that matters when you are counting drinks.'},
+
+  {key:'weight', label:'Body weight', base:'kg', units:[
+    {k:'kg', label:'Kilograms (kg)', f:1},
+    {k:'lb', label:'Pounds (lb)',    f:0.45359237},
+    {k:'st', label:'Stone (st)',     f:6.35029318},
+    {k:'g',  label:'Grams (g)',      f:0.001}
+  ], note:'Body weight sets the volume of distribution for alcohol. In the estimators, tap the kg / lb chip on any weight field.'},
+
+  {key:'mass', label:'Cannabis mass', base:'g', units:[
+    {k:'mg',      label:'Milligrams (mg)',        f:0.001},
+    {k:'g',       label:'Grams (g)',              f:1},
+    {k:'oz',      label:'Ounces (avoirdupois)',   f:28.349523125},
+    {k:'eighth',  label:'Eighths (3.5 g)',        f:3.5},
+    {k:'quarter', label:'Quarters (7 g)',         f:7}
+  ], note:'Multiply grams by 1000 and by the THC percentage to get milligrams of THC in the material — that is the number the inhaled estimator starts from.'},
+
+  {key:'bac', label:'BAC units', base:'% (g/100 mL)', units:[
+    {k:'pct',   label:'Percent, g/100 mL (US, UK)', f:1},
+    {k:'permil',label:'Per mille \u2030 (much of Europe)', f:0.1},
+    {k:'gl',    label:'Grams per litre (g/L)',      f:0.1},
+    {k:'mgdl',  label:'Milligrams per decilitre (mg/dL)', f:0.001},
+    {k:'mgml',  label:'Milligrams per millilitre (mg/mL)', f:0.1}
+  ], note:'The same blood alcohol level is written 0.08 % in the US, 0.8 \u2030 in much of Europe, and 80 mg/dL in clinical notes. Identical number, three conventions.'},
+
+  {key:'abv', label:'Alcohol strength', base:'% ABV', units:[
+    {k:'abv',   label:'Percent ABV (by volume)',      f:1},
+    {k:'proof', label:'US proof (2 \u00d7 ABV)',      f:0.5},
+    {k:'gper100', label:'Grams ethanol per 100 mL',   f:1 / 0.789}
+  ], note:'US proof is exactly twice ABV. Grams per 100 mL is ABV \u00d7 0.789, the density of ethanol — the conversion every drink in this app passes through.'},
+
+  {key:'time', label:'Time', base:'minutes', units:[
+    {k:'sec',  label:'Seconds',  f:1 / 60},
+    {k:'min',  label:'Minutes',  f:1},
+    {k:'hr',   label:'Hours',    f:60},
+    {k:'day',  label:'Days',     f:1440}
+  ], note:'Inhaled cannabis runs on a minutes scale and edibles on an hours scale — the whole reason the two sections plot different axes.'}
+];
+/* Grams of ethanol in one "standard drink". No international definition
+   exists; these are the common national ones. */
+const STANDARD_DRINKS = [
+  {label:'US standard drinks', g:14},
+  {label:'Canadian standard drinks', g:13.45},
+  {label:'Australian / WHO standard drinks', g:10},
+  {label:'UK units', g:8}
+];
+
+/* Readable output across six orders of magnitude, without scientific notation
+   for everyday values and without a wall of trailing zeros. */
+function fmtConv(v){
+  if (!isFinite(v)) return '\u2014';
+  const a = Math.abs(v);
+  let out;
+  if (a === 0) out = '0';
+  else if (a >= 100000) out = v.toExponential(3);
+  else if (a >= 1000) out = v.toFixed(1);
+  else if (a >= 100) out = v.toFixed(2);
+  else if (a >= 1) out = v.toFixed(3);
+  else if (a >= 0.001) out = v.toFixed(5);
+  else return v.toExponential(3);
+  return out.indexOf('.') >= 0 ? out.replace(/0+$/, '').replace(/\.$/, '') : out;
+}
+
+function converterCategory(){
+  return CONVERTERS.find(c => c.key === state.conv.cat) || CONVERTERS[0];
+}
+function renderConverterOutput(){
+  const cat = converterCategory();
+  const from = cat.units.find(u => u.k === state.conv.unit) || cat.units[0];
+  const value = parseFloat(state.conv.value);
+  const inBase = (isFinite(value) ? value : 0) * from.f;
+  document.getElementById('conv-out').innerHTML = cat.units.map(u =>
+    '<div class="conv-row' + (u.k === from.k ? ' is-source' : '') + '">' +
+    '<span class="cu">' + esc(u.label) + '</span>' +
+    '<span class="cv">' + (isFinite(value) ? fmtConv(inBase / u.f) : '\u2014') + '</span></div>').join('');
+  document.getElementById('conv-note').innerHTML = cat.note;
+
+  /* standard-drink block */
+  const VOL = {ml:1, floz:29.5735295625, flozuk:28.4130625};
+  const ml = (parseFloat(state.conv.drinkVol) || 0) * (VOL[state.conv.drinkUnit] || 1);
+  const abv = parseFloat(state.conv.drinkAbv) || 0;
+  const grams = gramsEthanol(ml, abv);
+  document.getElementById('conv-drink-out').innerHTML =
+    '<div class="conv-row is-source"><span class="cu">Grams of pure ethanol</span><span class="cv">' + fmtConv(grams) + ' g</span></div>' +
+    STANDARD_DRINKS.map(d =>
+      '<div class="conv-row"><span class="cu">' + esc(d.label) + ' <span style="color:var(--text-faint)">(' + d.g + ' g)</span></span>' +
+      '<span class="cv">' + fmtConv(grams / d.g) + '</span></div>').join('');
+}
+function initConverter(){
+  const c = state.conv;
+  const unitSel = document.getElementById('conv-unit');
+  const fillUnits = () => {
+    const cat = converterCategory();
+    if (!cat.units.some(u => u.k === c.unit)) c.unit = cat.units[0].k;
+    unitSel.innerHTML = cat.units.map(u =>
+      '<option value="' + u.k + '"' + (u.k === c.unit ? ' selected' : '') + '>' + esc(u.label) + '</option>').join('');
+  };
+  buildPills(document.getElementById('conv-cats'), CONVERTERS.map(x => ({key:x.key, label:x.label})), c.cat, k => {
+    c.cat = k; c.unit = null; fillUnits(); saveState(); renderConverterOutput();
+  });
+  fillUnits();
+  const val = document.getElementById('conv-value');
+  val.value = c.value;
+  val.addEventListener('input', () => { c.value = val.value; saveState(); renderConverterOutput(); });
+  unitSel.addEventListener('change', () => { c.unit = unitSel.value; saveState(); renderConverterOutput(); });
+
+  const dv = document.getElementById('conv-dv'), du = document.getElementById('conv-du'), da = document.getElementById('conv-da');
+  dv.value = c.drinkVol; du.value = c.drinkUnit; da.value = c.drinkAbv;
+  dv.addEventListener('input', () => { c.drinkVol = dv.value; saveState(); renderConverterOutput(); });
+  du.addEventListener('change', () => { c.drinkUnit = du.value; saveState(); renderConverterOutput(); });
+  da.addEventListener('input', () => { c.drinkAbv = da.value; saveState(); renderConverterOutput(); });
+}
+
 /* ------------------------------- dashboard -------------------------------- */
 const HOME_CARDS = [
   {view:'alcohol', accent:'alcohol', icon:'beer', title:'Alcohol — BAC',
@@ -3793,6 +4009,10 @@ function renderDashboard(){
     '<span class="swatch" style="background:linear-gradient(90deg,' + severityColor(b.min + 1) + '44,' + severityColor(b.min + 1) + ')"></span>' +
     '<span class="rng">' + bandRangeText(i) + '</span></div>').join('');
   paintIcons(document.getElementById('home-cards'));
+  /* only the OUTPUT is re-rendered — rebuilding the converter's inputs here
+     would steal focus while someone is typing in them. */
+  renderConverterOutput();
+  document.getElementById('conv-toolbar-hint').textContent = UNIT_MODE === 'metric' ? 'kg \u00b7 mL' : 'lb \u00b7 fl oz';
 }
 
 /* ---------------------------------------------------------------------------
@@ -3839,11 +4059,22 @@ function applyTheme(theme){
   refreshSeverityCache();
   saveState();
 }
+/* min/max/step have to move with the unit. Left in kilogrammes while the
+   field says "lb", the spinner stopped at 250 lb (113 kg) and the browser
+   marked a perfectly valid 300 lb entry as out of range. */
+const UNIT_BOUNDS = {
+  weight:{metric:{min:30, max:250, step:0.5}, imperial:{min:66, max:551, step:1}},
+  volume:{metric:{min:1,  max:2000, step:1},  imperial:{min:0.1, max:67, step:0.5}}
+};
 function applyUnits(mode){
   UNIT_MODE = mode; state.ui.units = mode;
-  document.getElementById('units-label').textContent = mode === 'metric' ? 'Metric' : 'Imperial';
+  document.getElementById('units-label').textContent = mode === 'metric' ? 'kg \u00b7 mL' : 'lb \u00b7 fl oz';
   document.querySelectorAll('[data-unit-label="weight"]').forEach(e => e.textContent = weightUnitLabel());
   document.querySelectorAll('[data-unit-label="volume"]').forEach(e => e.textContent = volumeUnitLabel());
+  document.querySelectorAll('[data-unit-field]').forEach(el => {
+    const b = UNIT_BOUNDS[el.dataset.unitField] && UNIT_BOUNDS[el.dataset.unitField][mode];
+    if (b){ el.min = b.min; el.max = b.max; el.step = b.step; }
+  });
   [['alc-weight', 'alc'], ['d9-weight', 'd9'], ['d8-weight', 'd8'], ['sm-weight', 'sm']].forEach(([id, sec]) => {
     const el = document.getElementById(id);
     if (el) el.value = round(kgToDisplay(state[sec].weightKg), 1);
@@ -3984,6 +4215,7 @@ function boot(){
   initD9();
   initD8();
   initSmoked();
+  initConverter();
   renderDashboard();
   renderLearn();
   spawnParticles();
@@ -3997,10 +4229,16 @@ function boot(){
     RENDERERS[currentView]();                       // colours are baked into the SVG strings
     paintIcons(document.getElementById('view-' + currentView));
   });
-  document.getElementById('btn-units').addEventListener('click', () => {
+  const toggleUnits = () => {
     applyUnits(UNIT_MODE === 'metric' ? 'imperial' : 'metric');
     RENDERERS[currentView]();
     paintIcons(document.getElementById('view-' + currentView));
+  };
+  document.getElementById('btn-units').addEventListener('click', toggleUnits);
+  /* the chip inside each convertible field does the same thing, where the
+     user is actually looking when they want pounds or fluid ounces */
+  document.addEventListener('click', ev => {
+    if (ev.target.closest('[data-unit-toggle]')) toggleUnits();
   });
   document.getElementById('btn-timeunits').addEventListener('click', () => {
     applyTimeMode(TIME_MODE === 'hm' ? 'min' : 'hm');
