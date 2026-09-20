@@ -640,6 +640,33 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 .shortcut .go svg{width:15px;height:15px; transition:transform .25s ease}
 .shortcut:hover .go svg{transform:translateX(3px)}
 
+/* laws: status chips and the state grid */
+.law-chip{
+  display:inline-flex; align-items:center; gap:6px; font-size:.74rem; font-weight:700;
+  padding:3px 10px; border-radius:99px; border:1px solid currentColor; white-space:nowrap;
+}
+.law-chip .cdot{width:6px; height:6px; border-radius:50%; background:currentColor}
+.law-chip.legal{color:var(--sev-1)}
+.law-chip.medical{color:var(--info)}
+.law-chip.restricted{color:var(--sev-3)}
+.law-chip.illegal{color:var(--sev-5)}
+.law-chip.verify{color:var(--text-faint); border-style:dashed}
+.law-row{
+  display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 14px; align-items:start;
+  padding:12px 0; border-bottom:1px solid var(--border);
+}
+.law-row:last-child{border-bottom:0}
+.law-row h4{margin:0 0 3px; font-size:.95rem}
+.law-row p{margin:0; font-size:.86rem; color:var(--text-dim)}
+.law-row .facts{grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}
+.law-fact{
+  font-size:.76rem; color:var(--text-dim); background:var(--surface-2);
+  border:1px solid var(--border); border-radius:8px; padding:3px 9px;
+}
+.law-fact b{color:var(--text); font-weight:650}
+.state-select{max-width:340px}
+@media (max-width:720px){.law-row{grid-template-columns:1fr}}
+
 /* dashboard unit converter */
 .conv-grid{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.25fr); gap:10px; margin-bottom:14px}
 .conv-out{display:grid; gap:6px}
@@ -691,6 +718,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 [data-accent="smoked"] {--accent:#2dd4bf; --accent-2:#5eead4}
 [data-accent="caffeine"]{--accent:#e08a4b; --accent-2:#f2c48b}
 [data-accent="learn"]  {--accent:#a78bfa; --accent-2:#f0abfc}
+[data-accent="laws"]   {--accent:#6366f1; --accent-2:#a5b4fc}
 [data-accent="home"]   {--accent:#7aa2ff; --accent-2:#a78bfa}
 
 /* drifting smoke wisps — Smoked section input card only */
@@ -858,6 +886,7 @@ body.scrubbing .view.active{animation:none}
     <button class="tab" role="tab" id="tab-smoked"  aria-controls="view-smoked"  aria-selected="false" data-view="smoked"  style="--tab-accent:#2dd4bf;--tab-accent-2:#5eead4"><span class="ico" data-icon="joint"></span><span class="tl">Smoked / inhaled</span><span class="kbd">5</span></button>
     <button class="tab" role="tab" id="tab-caffeine" aria-controls="view-caffeine" aria-selected="false" data-view="caffeine" style="--tab-accent:#e08a4b;--tab-accent-2:#f2c48b"><span class="ico" data-icon="coffee"></span><span class="tl">Caffeine</span><span class="kbd">6</span></button>
     <button class="tab" role="tab" id="tab-learn"   aria-controls="view-learn"   aria-selected="false" data-view="learn"   style="--tab-accent:#a78bfa;--tab-accent-2:#f0abfc"><span class="ico" data-icon="book"></span><span class="tl">Learn</span><span class="kbd">7</span></button>
+    <button class="tab" role="tab" id="tab-laws" aria-controls="view-laws" aria-selected="false" data-view="laws" style="--tab-accent:#6366f1;--tab-accent-2:#a5b4fc"><span class="ico" data-icon="scale"></span><span class="tl">Laws</span><span class="kbd">8</span></button>
   </div>
   <p class="mini-warn"><span class="ico" data-icon="alert"></span>Illustrative estimates only — never use them to judge fitness to drive.</p>
 </nav>
@@ -966,7 +995,7 @@ body.scrubbing .view.active{animation:none}
       <div>
         <h4 style="margin-bottom:6px">Keyboard</h4>
         <p style="font-size:.85rem;color:var(--text-dim);margin:0">
-          <span class="badge neutral"><span class="bdot"></span>1–7</span> switch section ·
+          <span class="badge neutral"><span class="bdot"></span>1–8</span> switch section ·
           <span class="badge neutral"><span class="bdot"></span>T</span> theme ·
           <span class="badge neutral"><span class="bdot"></span>P</span> print ·
           <span class="badge neutral"><span class="bdot"></span>E</span> export.
@@ -1026,7 +1055,12 @@ body.scrubbing .view.active{animation:none}
       <p class="card-note">Body water content drives alcohol distribution — ethanol is water-soluble and stays out of fat.</p>
 
       <div class="field">
-        <span class="lab">Distribution ratio <span class="hint">Widmark <em>r</em></span></span>
+        <span class="lab">Where <em>r</em> comes from</span>
+        <div class="pills" id="alc-rmode" role="group" aria-label="Source of the distribution ratio"></div>
+      </div>
+
+      <div class="field">
+        <span class="lab">Sex for the ratio <span class="hint" id="alc-r-hint">Widmark <em>r</em></span></span>
         <div class="pills" id="alc-r" role="group" aria-label="Distribution ratio"></div>
       </div>
 
@@ -1038,16 +1072,13 @@ body.scrubbing .view.active{animation:none}
             <button type="button" class="unit unit-btn" data-unit-toggle="weight" data-unit-label="weight" title="Switch between kilograms and pounds">kg</button>
           </div>
         </div>
-        <div class="field">
-          <label class="lab" for="alc-r-custom">Custom <em>r</em> <span class="hint">optional</span></label>
+        <div class="field" id="alc-custom-field" hidden>
+          <label class="lab" for="alc-r-custom">Custom <em>r</em></label>
           <input type="number" id="alc-r-custom" min="0.4" max="0.9" step="0.005" placeholder="e.g. 0.62" inputmode="decimal">
         </div>
       </div>
 
-      <label class="check">
-        <input type="checkbox" id="alc-watson"><span class="box"></span>
-        <span>Estimate <em>r</em> from total body water (<span class="term" data-tip="Watson's equations estimate total body water from sex, age, height and weight. Recent forensic work argues the total-body-water form of Widmark's equation is more reliable than a flat population ratio — it lowers estimates for average builds and raises them for high-body-fat users." tabindex="0">Watson</span>)</span>
-      </label>
+      <p class="card-note" id="alc-r-source"></p>
       <div class="inline-2" id="alc-watson-fields" hidden>
         <div class="field">
           <label class="lab" for="alc-height">Height</label>
@@ -1618,6 +1649,19 @@ body.scrubbing .view.active{animation:none}
         <div class="pills" id="caf-presets" role="group" aria-label="Caffeine presets"></div>
       </div>
 
+      <div class="field">
+        <span class="lab">How you took it <span class="hint">changes speed, not amount</span></span>
+        <div class="pills" id="caf-route" role="group" aria-label="Route of absorption"></div>
+      </div>
+      <div class="field" id="caf-hold-field" hidden>
+        <label class="lab" for="caf-hold">Held in the mouth for <span class="hint">swallowing early undoes it</span></label>
+        <div class="with-unit">
+          <input type="number" id="caf-hold" min="0" max="60" step="1" value="10" inputmode="decimal">
+          <span class="unit">min</span>
+        </div>
+      </div>
+      <p class="card-note" id="caf-route-note"></p>
+
       <div class="inline-3">
         <div class="field">
           <label class="lab" for="caf-mg">Caffeine</label>
@@ -1717,6 +1761,11 @@ body.scrubbing .view.active{animation:none}
     <p class="card-note" id="caf-ref-note"></p>
     <div class="table-wrap"><table id="caf-ref-table"></table></div>
     <div class="scroll-hint"><span class="ico" data-icon="swipe"></span>Scroll sideways for every column.</div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <div class="card-title"><span class="ico" data-icon="dropper"></span><h3>Sublingual and buccal caffeine</h3></div>
+    <div id="caf-tips"></div>
   </div>
 </section>
 
@@ -2132,6 +2181,66 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
   </div>
 </section>
 
+<!-- ======================================================================
+     VIEW: LAWS
+     General information only. The data object near the top of the laws
+     script is the single place to update.
+     ==================================================================== -->
+<section class="view" id="view-laws" role="tabpanel" aria-labelledby="tab-laws" data-accent="laws" tabindex="-1">
+  <div class="view-head">
+    <div class="art"><span class="ico" data-icon="scale"></span></div>
+    <div>
+      <h2>Laws by state</h2>
+      <p class="sub">Where each of the substances in this app stands in each US state — legal age, possession, home cultivation, public use, and the impaired-driving standards this app estimates against.</p>
+    </div>
+  </div>
+
+  <div class="banner crit" style="margin-bottom:18px">
+    <span class="ico" data-icon="alert"></span>
+    <div class="b-body"><strong>General information, not legal advice.</strong>
+      <p>These laws change frequently and this file cannot update itself. City and county rules are often stricter than the state's. Cannabis remains federally controlled regardless of state law, which matters on federal land, in federal housing, for federal employment and when crossing state lines. Anything marked <em>verify</em> is something I was not confident enough to state. Check a current official source before relying on any of it.</p>
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="compass"></span><h3>Pick a state</h3></div>
+      <p class="card-note">50 states plus the District of Columbia.</p>
+      <select id="laws-state" class="state-select" aria-label="Select a state"></select>
+      <div id="laws-summary" style="margin-top:14px"></div>
+      <p class="card-note" id="laws-reviewed" style="margin:14px 0 0"></p>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="alert"></span><h3>Delta-8 is the unsettled one</h3></div>
+      <div id="laws-d8-federal"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="book"></span><h3 id="laws-state-title">State detail</h3></div>
+    <div id="laws-detail"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="ico" data-icon="table"></span><h3>All states at a glance</h3></div>
+    <p class="card-note">Scan and compare. The detail card above has the specifics for whichever state is selected.</p>
+    <div class="table-wrap"><table class="wide" id="laws-table"></table></div>
+    <div class="scroll-hint"><span class="ico" data-icon="swipe"></span>Scroll sideways for every column.</div>
+    <div class="article" style="font-size:.86rem;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+      <h4 style="margin-top:0">How much to trust each column</h4>
+      <p>Not evenly, so it is worth saying which is which.</p>
+      <ul style="padding-left:18px">
+        <li><strong>Alcohol is the solid one.</strong> Age 21 and a 0.08&nbsp;% per se limit are effectively uniform, with Utah's 0.05&nbsp;% the single exception. Local dry counties and licensing hours vary far more than anything in this table does.</li>
+        <li><strong>Adult-use and medical status are reliable</strong> at the level of "is there a programme" — 24 states and the District of Columbia have adult-use laws. Possession and cultivation figures are summaries; the statutes draw finer distinctions between flower, concentrate and edibles than a table cell can hold.</li>
+        <li><strong>Delta-8 is the weakest column and I have marked it so.</strong> It has been banned, un-banned, enjoined and re-legislated repeatedly, often mid-litigation, and the federal change described above is about to overtake much of it. Where a state is listed as <em>verify</em>, that is a genuine admission rather than a hedge.</li>
+        <li><strong>THC driving standards are the second weakest.</strong> The numeric limits shown are the ones I am confident in; several states have moved between per se, permissible-inference and impairment-based standards, and medical-patient defences vary. Anything marked <em>verify</em> had changed recently enough that I would not state it.</li>
+        <li><strong>Caffeine is uniform</strong> because it is essentially unregulated for adults everywhere.</li>
+      </ul>
+      <p style="margin-bottom:0">The deeper point behind the driving column: blood THC correlates poorly with actual impairment, which is why states disagree so sharply about what number, if any, should matter. That disagreement is a scientific one, not merely a political one — and it is the reason this app will not tell you that any THC estimate is safe to drive on.</p>
+    </div>
+  </div>
+</section>
+
 </main>
 
 <footer class="wrap" style="padding-bottom:40px;color:var(--text-faint);font-size:.82rem;text-align:center">
@@ -2226,14 +2335,18 @@ const PROVENANCE = [
    why:'Health Canada: inhaled effects peak within 30 min and can last up to 6 h. The previous 1\u20133 h clamp was this app\u2019s own invention, quoted back in Learn as though it were published.'},
   {v:'oral to 24 h, inhaled 3\u20137 h', k:'impairmentWindowMin()', where:'Impairment band on the charts', type:'tuned',
    why:'The driving meta-analysis has most driving-relevant skills recovering within about 5 h of inhaling 20 mg THC and nearly all within 7, with oral taking longer. Where inside that a given dose lands is my interpolation.'},
-  {v:'tolerance forced to none; anxiety \u00d70.7', k:'effectiveToleranceKey() / FIRST_TIME_ANXIETY_SHIFT', where:'First-time user checkbox', type:'tuned',
-   why:'The checkbox used to change nothing but a banner. Forcing tolerance to none is definitional; shifting the anxiety curve left reflects consistent reporting that naive users get more of it, at a magnitude I chose.'},
+  {v:'sensitivity \u00d71.25; anxiety \u00d70.7', k:'FIRST_TIME_SENSITIVITY / FIRST_TIME_ANXIETY_SHIFT', where:'First-time user checkbox', type:'tuned',
+   why:'Applied ON TOP of the tolerance setting rather than replacing it. An earlier build forced tolerance to none whenever the flag was set, which meant all five tolerance options produced identical numbers \u2014 an input silently discarded. Both magnitudes are mine; naive users consistently report more from the same dose, but nothing quantifies it.'},
   {v:'Vd 0.6 L/kg; F ~1', k:'CAFFEINE.VD_L_PER_KG', where:'Caffeine concentrations', type:'standard',
    why:'Standard volume of distribution for caffeine, which is oral-bioavailable at about 99 %.'},
   {v:'t\u00bd 3 / 5 / 7 / 10 / 15 h', k:'CAFFEINE.CLEARANCE', where:'Caffeine elimination', type:'standard',
    why:'CYP1A2 does ~95 % of caffeine metabolism. ~5 h is the typical adult figure in a 2-10 h healthy range; smoking induces CYP1A2 and roughly halves it, oral contraceptives inhibit it and roughly double it, and late pregnancy can reach ~15 h.'},
-  {v:'ka = 5 /h', k:'CAFFEINE.KA_PER_HOUR', where:'Caffeine absorption', type:'tuned',
-   why:'Chosen so time-to-peak lands near 45 min with a 5 h half-life, matching the usually quoted Tmax of 30-60 min. The value itself is mine.'},
+  {v:'ka = 5 /h swallowed', k:'CAFFEINE.KA_PER_HOUR', where:'Caffeine absorption', type:'tuned',
+   why:'Chosen so time-to-peak lands near 45 min with a 5 h half-life, matching the usually quoted Tmax of 30-60 min for a swallowed dose. The value itself is mine.'},
+  {v:'ka = 25 /h mucosal', k:'CAFFEINE.KA_MUCOSAL', where:'Sublingual and gum absorption', type:'tuned',
+   why:'Five times the swallowed rate, putting that component\u2019s own Tmax near 12 min. Caffeine gum is the best-studied mucosal form and peaks appreciably sooner than capsules, but human sublingual PK data is thin and the published spread is wide. The shape of the difference is defensible; the number is mine.'},
+  {v:'mucosal ceiling 0.85 / 0.80; half-hold 3 / 4 min', k:'CAFFEINE.ROUTES', where:'Mucosal vs swallowed split', type:'tuned',
+   why:'A mouth-held dose is never purely mucosal \u2014 saliva carries part of it down to be swallowed. The split saturates with hold time, so swallowing early converts the dose back toward ordinary oral absorption. Directionally right, numerically mine.'},
   {v:'EC50 3.5 mg/L, n 1.4', k:'CAFFEINE.EC50_MG_PER_L', where:'Caffeine intensity on the shared scale', type:'tuned',
    why:'Calibrated so one 95 mg coffee reads Moderate, 200 mg Strong and 400 mg Very Strong for a naive user. My numbers.'},
   {v:'sleep EC50 1.5 mg/L, n 1.6', k:'CAFFEINE.SLEEP_EC50_MG_PER_L', where:'Caffeine sleep panel', type:'tuned',
@@ -2318,12 +2431,22 @@ function toleranceFactor(key){
   const t = TOLERANCE_FACTORS.find(x => x.key === key);
   return t ? t.factor : 1;
 }
-/* "First-time or near-first-time user" used to change nothing but a banner —
-   ticking it left the gauge exactly where it was, which made it look like an
-   input when it was decoration. It now forces tolerance to none and shifts
-   the anxiety curve left, because naive users report more of it. */
-function effectiveToleranceKey(tolKey, isFirstTime){ return isFirstTime ? 'none' : tolKey; }
+/* "First-time or near-first-time user" is ADDITIVE to the tolerance setting.
+   It used to overwrite it — effectiveToleranceKey() returned 'none' whenever
+   the flag was set, so with it ticked all five tolerance options fed identical
+   numbers into the model and the pills moved without changing anything. That
+   silently discarded an input the user had just set, which is the worst way
+   for a control to fail: it looks like it worked.
+   Now it applies a sensitivity multiplier on top of whatever tolerance is
+   selected, and the two are shown separately in the effective-dose readout.
+   HAND-TUNED: naive users consistently report more from the same dose, but
+   nothing quantifies "more" — 1.25 is my estimate. */
+const FIRST_TIME_SENSITIVITY = 1.25;
 const FIRST_TIME_ANXIETY_SHIFT = 0.7;
+function firstTimeSensitivity(isFirstTime){ return isFirstTime ? FIRST_TIME_SENSITIVITY : 1; }
+/* First-time AND an established tolerance describe different people. Rather
+   than silently picking one, the modules surface the contradiction. */
+function toleranceConflict(tolKey, isFirstTime){ return !!isFirstTime && tolKey !== 'none'; }
 
 /* ---------------------------------------------------------------------------
    MINOR CANNABINOIDS — deliberately NOT in the arithmetic any more.
@@ -2915,7 +3038,7 @@ function badgeFor(pct){
 const STORE_KEY = 'substance-effects-estimator.v1';
 const DEFAULT_STATE = {
   ui:{theme:'dark', themeChosen:false, units:'metric', time:'hm', view:'home'},
-  alc:{rKey:'male', rCustom:'', weightKg:75, watson:false, heightCm:175, ageY:30, beta:'auto', food:'light', model:'pk',
+  alc:{rKey:'male', rMode:'flat', rCustom:'', weightKg:75, heightCm:175, ageY:30, beta:'auto', food:'light', model:'pk',
        drinks:[], nextId:1, draft:{vol:355, abv:5, when:30, over:0, name:'Regular beer', icon:'beer'}},
   d9:{mg:10, product:'gummy', food:'light', elapsed:60, cbd:0, cbn:0, cbg:0,
       weightKg:75, bf:'', sex:'male', tol:'none', first:false, takenAt:0},
@@ -2924,7 +3047,8 @@ const DEFAULT_STATE = {
   sm:{method:'joint', amount:0.15, potency:20, depth:'normal', elapsed:15,
       weightKg:75, bf:'', sex:'male', tol:'none', first:false, takenAt:0},
   caf:{doses:[], nextId:1, weightKg:75, clearance:'typical', tol:'moderate', bedHours:8,
-       draft:{mg:95, when:30, name:'Drip coffee', icon:'coffee'}},
+       draft:{mg:95, when:30, name:'Drip coffee', icon:'coffee', route:'oral', hold:0}},
+  laws:{st:'CA'},
   conv:{cat:'volume', unit:'ml', value:'473', drinkVol:'355', drinkUnit:'ml', drinkAbv:'5'}
 };
 let state = JSON.parse(JSON.stringify(DEFAULT_STATE));
@@ -2955,6 +3079,15 @@ function syncClock(){
   ['d9', 'd8', 'sm'].forEach(k => { if (state[k].takenAt) state[k].elapsed = minutesSince(state[k].takenAt); });
 }
 /* Stamps are created only for state saved by an older build. */
+/* Older saved state carried a `watson` boolean and a free-text custom r that
+   could both be set at once. Collapse them into the single explicit mode. */
+function migrateRMode(){
+  const a = state.alc;
+  if (a.rMode) return;
+  const hasCustom = a.rCustom !== '' && a.rCustom != null && isFinite(parseFloat(a.rCustom));
+  a.rMode = hasCustom ? 'custom' : (a.watson ? 'watson' : 'flat');
+  delete a.watson;
+}
 function backfillStamps(){
   const now = Date.now();
   state.alc.drinks.forEach(d => { if (!d.at) d.at = now - (d.when || 0) * 60000; });
@@ -3021,6 +3154,11 @@ const ALCOHOL = {
     {key:'male',    label:'Male avg',  sub:'r 0.68'},
     {key:'female',  label:'Female avg',sub:'r 0.55'},
     {key:'neutral', label:'Neutral',   sub:'r 0.615'}
+  ],
+  R_MODES:[
+    {key:'flat',   label:'Population ratio', sub:'Widmark'},
+    {key:'watson', label:'Watson TBW',       sub:'needs height + age'},
+    {key:'custom', label:'Custom r',         sub:'you supply it'}
   ],
   BETA_OPTIONS:[
     {key:'auto',    label:'From stomach', sub:'0.012-0.018'},
@@ -3315,16 +3453,38 @@ function renderAlcoholReference(){
 function renderAlcohol(){
   syncClock();
   const s = state.alc;
+  /* Exactly one source of r is live at a time, chosen explicitly. The previous
+     build let a custom value silently mask the Watson toggle AND the height
+     and age fields: three controls went dead with no visual cue and no
+     disabled state. Precedence you cannot see is indistinguishable from a
+     broken input. */
   const weightForR = clamp(s.weightKg || 75, 30, 250);
-  const rFactor = (s.rCustom !== '' && !isNaN(parseFloat(s.rCustom)))
-      ? clamp(parseFloat(s.rCustom), 0.4, 0.9)
-      : (s.watson ? watsonR(s.rKey, s.ageY || 30, s.heightCm || 175, weightForR)
-                  : ALCOHOL.R_FACTOR[s.rKey]);
+  const customR = parseFloat(s.rCustom);
+  const customValid = s.rMode === 'custom' && isFinite(customR) && customR >= 0.4 && customR <= 0.9;
+  const rFactor = s.rMode === 'custom'
+      ? (customValid ? customR : ALCOHOL.R_FACTOR[s.rKey])
+      : s.rMode === 'watson'
+        ? watsonR(s.rKey, s.ageY || 30, s.heightCm || 175, weightForR)
+        : ALCOHOL.R_FACTOR[s.rKey];
   const beta = alcoholBeta(s.beta, s.food);
   const ka = ALCOHOL.KA[s.food];
   const weightKg = clamp(s.weightKg || 75, 30, 250);
 
   document.getElementById('alc-model-note').innerHTML = ALCOHOL.MODEL_NOTES[s.model];
+  document.getElementById('alc-watson-fields').hidden = s.rMode !== 'watson';
+  document.getElementById('alc-custom-field').hidden = s.rMode !== 'custom';
+  document.getElementById('alc-r-hint').innerHTML =
+    s.rMode === 'custom' ? '<span style="color:var(--warn)">not in use \u2014 you are supplying r directly</span>'
+                         : (s.rMode === 'watson' ? 'feeds the Watson equation' : 'Widmark <em>r</em>');
+  document.querySelectorAll('#alc-r .pill').forEach(el => { el.style.opacity = s.rMode === 'custom' ? '.45' : '1'; });
+  document.getElementById('alc-r-source').innerHTML =
+    s.rMode === 'watson'
+      ? '<strong>Watson total body water.</strong> Height and age below feed the equation; the sex selection above picks which regression is used. This lowers estimates for average builds and raises them for high-body-fat users.'
+      : s.rMode === 'custom'
+        ? (customValid
+            ? '<strong>Your own r = ' + round(customR, 3) + '.</strong> Sex, height and age are not being used — this figure is taken as given.'
+            : '<span style="color:var(--warn)"><strong>Custom r is selected but empty or out of range (0.40\u20130.90).</strong> Falling back to the population ratio for the sex selected above until you enter one.</span>')
+        : '<strong>Flat population ratio.</strong> Widmark\'s standard forensic values. Switch to Watson if you know your height and age — it is generally the more reliable form.';
   renderDrinkList();
 
   const gaugeEl = document.getElementById('alc-gauge');
@@ -3421,7 +3581,7 @@ function renderAlcohol(){
     stat('Ethanol consumed', round(totalGrams, 1) + ' <small>g</small>', round(stdDrinks, 1) + ' US standard drinks') +
     stat('Distribution', round(weightKg * rFactor, 1) + ' <small>L</small>',
          'Vd = weight &times; r (' + round(rFactor, 3) + ')' +
-         (s.watson && s.rCustom === '' ? ' &mdash; Watson TBW ' + round(watsonTBW(s.rKey, s.ageY || 30, s.heightCm || 175, weightKg), 1) + ' L' : '')) +
+         (s.rMode === 'watson' ? ' &mdash; Watson TBW ' + round(watsonTBW(s.rKey, s.ageY || 30, s.heightCm || 175, weightKg), 1) + ' L' : '')) +
     stat('Burn-off rate', beta.toFixed(3) + ' <small>%/h</small>', 'Zero-order — constant, not exponential');
 
   /* --- banners ------------------------------------------------------------ */
@@ -3584,9 +3744,8 @@ function alcSetDraftFromPreset(key){
 function initAlcohol(){
   const s = state.alc;
 
-  buildPills(document.getElementById('alc-r'), ALCOHOL.R_OPTIONS, s.rKey, k => {
-    s.rKey = k; document.getElementById('alc-r-custom').value = ''; s.rCustom = ''; saveState(); renderAlcohol();
-  });
+  buildPills(document.getElementById('alc-rmode'), ALCOHOL.R_MODES, s.rMode, k => { s.rMode = k; saveState(); renderAlcohol(); });
+  buildPills(document.getElementById('alc-r'), ALCOHOL.R_OPTIONS, s.rKey, k => { s.rKey = k; saveState(); renderAlcohol(); });
   buildPills(document.getElementById('alc-beta'), ALCOHOL.BETA_OPTIONS, s.beta, k => { s.beta = k; saveState(); renderAlcohol(); });
   buildPills(document.getElementById('alc-food'), ALCOHOL.FOOD_OPTIONS, s.food, k => { s.food = k; saveState(); renderAlcohol(); });
   buildPills(document.getElementById('alc-model'), ALCOHOL.MODEL_OPTIONS, s.model, k => { s.model = k; saveState(); renderAlcohol(); });
@@ -3606,12 +3765,6 @@ function initAlcohol(){
   abv.value = s.draft.abv; when.value = s.draft.when; over.value = s.draft.over || 0;
   over.addEventListener('input', () => { s.draft.over = Math.max(0, parseFloat(over.value) || 0); saveState(); });
 
-  const watson = document.getElementById('alc-watson');
-  const watsonFields = document.getElementById('alc-watson-fields');
-  watson.checked = !!s.watson; watsonFields.hidden = !s.watson;
-  watson.addEventListener('change', () => {
-    s.watson = watson.checked; watsonFields.hidden = !watson.checked; saveState(); renderAlcohol();
-  });
   const ht = document.getElementById('alc-height'), age = document.getElementById('alc-age');
   ht.value = round(cmToDisplay(s.heightCm), 1); age.value = s.ageY;
   ht.addEventListener('input', () => {
@@ -3725,9 +3878,9 @@ const D9 = {
 };
 
 /* Effective dose for the Delta-9 module. */
-function d9EffectiveDose(mg, weightKg, bodyFatPct, tolKey, foodKey){
+function d9EffectiveDose(mg, weightKg, bodyFatPct, tolKey, foodKey, isFirstTime){
   const food = D9.FOOD.find(f => f.key === foodKey) || D9.FOOD[1];
-  return mg * food.absorb / toleranceFactor(tolKey);
+  return mg * food.absorb * firstTimeSensitivity(isFirstTime) / toleranceFactor(tolKey);
 }
 /* Clamped to the ranges public-health agencies actually publish. Health
    Canada tells people effects begin 30 min to 2 h after ingestion, take up to
@@ -3793,8 +3946,8 @@ function renderTHC(){
   const bf = resolveBodyFat(s.bf, s.sex);
   const bfAuto = !(parseFloat(s.bf) >= 4 && parseFloat(s.bf) <= 60);
   const mg = clamp(s.mg || 0, 0, 500);
-  const tolKey = effectiveToleranceKey(s.tol, s.first);
-  const effDose = d9EffectiveDose(mg, weightKg, bf, tolKey, s.food);
+  const tolKey = s.tol;                      // the user's choice, never overwritten
+  const effDose = d9EffectiveDose(mg, weightKg, bf, tolKey, s.food, s.first);
   const timing = d9Timing(effDose, weightKg, bf, s.product, s.food);
   const peakPct = hill(effDose, D9.EC50_MG, D9.HILL_N) * 100;
   const now = clamp(s.elapsed || 0, 0, 900);
@@ -3811,7 +3964,7 @@ function renderTHC(){
   const ps = peakStatus(now, timing.peak);
   document.getElementById('d9-stats').innerHTML =
     stat('Labelled dose', round(mg, 1) + ' <small>mg &Delta;9</small>', 'What the package says') +
-    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', 'After body composition &divide; tolerance &times;' + round(toleranceFactor(tolKey), 2)) +
+    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', '&divide; tolerance &times;' + round(toleranceFactor(tolKey), 2) + (s.first ? ' &times; first-time sensitivity ' + FIRST_TIME_SENSITIVITY : '')) +
     stat('Modelled peak', Math.round(peakPct) + ' <small>% · ' + intensityLabel(peakPct) + '</small>', ps.text) +
     stat('Onset → done', fmtDuration(timing.onset) + ' → ' + fmtDuration(timing.end), 'Total ' + fmtDuration(timing.end) + ' from ingestion') +
     stat('Body fat used', round(bf, 1) + ' <small>%</small>', (bfAuto ? 'Population mean — type yours if you know it' : 'Your entry') + '; affects duration only, never the peak');
@@ -3833,6 +3986,8 @@ function renderTHC(){
     body:'Onset is modelled at ' + fmtDuration(timing.onset) + ' and the peak at ' + fmtDuration(timing.peak) +
          '. You are ' + fmtDuration(now) + ' in' + (now >= timing.onset ? ' and nowhere near the top yet' : '') +
          '. Taking more before the peak is the single most common way an edible goes wrong, because both doses then arrive together.'});
+  if (toleranceConflict(s.tol, s.first)) banners.push({level:'info', icon:'scale', title:'Both "first-time" and an established tolerance are set',
+    body:'Those describe different people, so the model is using <strong>both</strong> rather than quietly picking one: your tolerance setting still divides the dose, and the first-time flag adds a sensitivity multiplier on top. If you meant one or the other, untick the box or set tolerance to None.'});
   renderBanners(document.getElementById('d9-banners'), banners);
 
   /* chart */
@@ -4013,9 +4168,9 @@ const D8 = {
   ]
 };
 
-function d8EffectiveDose(mg, weightKg, bodyFatPct, tolKey, foodKey){
+function d8EffectiveDose(mg, weightKg, bodyFatPct, tolKey, foodKey, isFirstTime){
   const food = D8.FOOD.find(f => f.key === foodKey) || D8.FOOD[1];
-  return mg * food.absorb / toleranceFactor(tolKey);
+  return mg * food.absorb * firstTimeSensitivity(isFirstTime) / toleranceFactor(tolKey);
 }
 /* Same clamps as Δ9: the trial reports Δ8 blood concentrations peaking 2–4 h
    post-dose, like Δ9, so the shorter-duration assumption this module used to
@@ -4038,8 +4193,8 @@ function renderD8(){
   const bf = resolveBodyFat(s.bf, s.sex);
   const bfAuto = !(parseFloat(s.bf) >= 4 && parseFloat(s.bf) <= 60);
   const mg = clamp(s.mg || 0, 0, 500);
-  const tolKey = effectiveToleranceKey(s.tol, s.first);
-  const effDose = d8EffectiveDose(mg, weightKg, bf, tolKey, s.food);
+  const tolKey = s.tol;
+  const effDose = d8EffectiveDose(mg, weightKg, bf, tolKey, s.food, s.first);
   const timing = d8Timing(effDose, weightKg, bf, s.product, s.food);
   const peakPct = hill(effDose, D8.EC50_MG, D8.HILL_N) * 100;
   const now = clamp(s.elapsed || 0, 0, 900);
@@ -4057,7 +4212,7 @@ function renderD8(){
   const d9Equivalent = mg * (D9.EC50_MG / D8.EC50_MG);
   document.getElementById('d8-stats').innerHTML =
     stat('Labelled dose', round(mg, 1) + ' <small>mg &Delta;8</small>', 'Label accuracy varies more than for &Delta;9') +
-    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', 'After body composition &divide; tolerance &times;' + round(toleranceFactor(tolKey), 2)) +
+    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', '&divide; tolerance &times;' + round(toleranceFactor(tolKey), 2) + (s.first ? ' &times; first-time sensitivity ' + FIRST_TIME_SENSITIVITY : '')) +
     stat('Modelled peak', Math.round(peakPct) + ' <small>% · ' + intensityLabel(peakPct) + '</small>', ps.text) +
     stat('&Delta;9 equivalent', '&asymp; ' + round(d9Equivalent, 1) + ' <small>mg &Delta;9</small>', 'From the two EC50 constants, ratio ' + round(D8.EC50_MG / D9.EC50_MG, 2) + '&times;') +
     stat('Body fat used', round(bf, 1) + ' <small>%</small>', (bfAuto ? 'Population mean — type yours if you know it' : 'Your entry') + '; affects duration only, never the peak');
@@ -4075,6 +4230,8 @@ function renderD8(){
          '. You are ' + fmtDuration(now) + ' in. Re-dosing before the peak stacks both doses on the same peak.'});
   banners.push({level:'info', icon:'shield', title:'Delta-8 is a synthesised product',
     body:'Commercial Delta-8 is made by chemically converting CBD, and in many markets it sits outside the testing regime that applies to licensed cannabis — so residual reagents and by-products are a real concern. The FDA has published adverse-event data; it is linked in <a href="#" data-goto="learn" data-article="art-reading">Further reading</a>.'});
+  if (toleranceConflict(s.tol, s.first)) banners.push({level:'info', icon:'scale', title:'Both "first-time" and an established tolerance are set',
+    body:'Those describe different people, so the model is using <strong>both</strong> rather than quietly picking one: your tolerance setting still divides the dose, and the first-time flag adds a sensitivity multiplier on top. If you meant one or the other, untick the box or set tolerance to None.'});
   renderBanners(document.getElementById('d8-banners'), banners);
 
   const impairEnd = impairmentWindowMin(timing, timing.intensity01, 'oral');
@@ -4253,8 +4410,8 @@ function smokedAbsorbedMg(amountG, potencyPct, methodKey, depthKey){
    Fat mass is applied at 40 % strength here: the acute inhaled peak is driven
    by what reaches arterial blood in the first minutes, so the fat reservoir
    barely touches it — but it still stretches the tail. HAND-TUNED. */
-function smokedEffectiveDose(absorbedMg, weightKg, bodyFatPct, tolKey){
-  return absorbedMg / toleranceFactor(tolKey);
+function smokedEffectiveDose(absorbedMg, weightKg, bodyFatPct, tolKey, isFirstTime){
+  return absorbedMg * firstTimeSensitivity(isFirstTime) / toleranceFactor(tolKey);
 }
 function smokedTiming(effDose, weightKg, bodyFatPct, methodKey){
   const m = SMOKED.METHODS.find(x => x.key === methodKey) || SMOKED.METHODS[0];
@@ -4277,8 +4434,8 @@ function renderSmoked(){
   const potency = clamp(s.potency || 0, 0, 99);
   const thcInMaterial = amount * 1000 * potency / 100;
   const absorbed = smokedAbsorbedMg(amount, potency, s.method, s.depth);
-  const tolKey = effectiveToleranceKey(s.tol, s.first);
-  const effDose = smokedEffectiveDose(absorbed, weightKg, bf, tolKey);
+  const tolKey = s.tol;
+  const effDose = smokedEffectiveDose(absorbed, weightKg, bf, tolKey, s.first);
   const timing = smokedTiming(effDose, weightKg, bf, s.method);
   const peakPct = hill(effDose, SMOKED.EC50_MG_ABSORBED, SMOKED.HILL_N) * 100;
   const now = clamp(s.elapsed || 0, 0, 300);
@@ -4300,7 +4457,7 @@ function renderSmoked(){
   const ps = peakStatus(now, timing.peak, {toleranceMin:2});
   document.getElementById('sm-stats').innerHTML =
     stat('Absorbed dose', round(absorbed, 1) + ' <small>mg THC</small>', 'Of ' + round(thcInMaterial, 0) + ' mg in the material') +
-    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', 'After body composition &divide; tolerance &times;' + round(toleranceFactor(tolKey), 2)) +
+    stat('Effective dose', round(effDose, 1) + ' <small>mg</small>', '&divide; tolerance &times;' + round(toleranceFactor(tolKey), 2) + (s.first ? ' &times; first-time sensitivity ' + FIRST_TIME_SENSITIVITY : '')) +
     stat('Modelled peak', Math.round(peakPct) + ' <small>% · ' + intensityLabel(peakPct) + '</small>', ps.text) +
     stat('Onset → done', Math.round(timing.onset * 60) + ' <small>s</small> → ' + fmtDuration(timing.end), 'The whole arc, start to finish') +
     stat('Body fat used', round(bf, 1) + ' <small>%</small>', (bfAuto ? 'Population mean' : 'Your entry') + '; affects duration only, never the peak');
@@ -4316,6 +4473,8 @@ function renderSmoked(){
     body:'At ' + method.potency + ' %-ish THC, a tenth of a gram carries what a whole joint of flower would. The estimator handles the arithmetic, but the practical point stands: measure much smaller amounts than you would with flower.'});
   banners.push({level:'info', icon:'shield', title:'Fast onset is not the same as short impairment',
     body:'Effects peak in 8–20 minutes and fade over 1–3 hours, but driving-relevant impairment outlasts the part you notice. Cannabis impairs driving; there is no BAC-style number that makes it safe.'});
+  if (toleranceConflict(s.tol, s.first)) banners.push({level:'info', icon:'scale', title:'Both "first-time" and an established tolerance are set',
+    body:'Those describe different people, so the model is using <strong>both</strong> rather than quietly picking one: your tolerance setting still divides the dose, and the first-time flag adds a sensitivity multiplier on top. If you meant one or the other, untick the box or set tolerance to None.'});
   renderBanners(document.getElementById('sm-banners'), banners);
 
   const impairEnd = impairmentWindowMin(timing, timing.intensity01, 'inhaled');
@@ -4479,8 +4638,31 @@ const CAFFEINE = {
   VD_L_PER_KG:0.6,        // standard volume of distribution for caffeine
   BIOAVAILABILITY:1.0,    // oral bioavailability is ~99 %
   /* HAND-TUNED: chosen so time-to-peak lands at ~45 min with a 5 h half-life,
-     which is the usually quoted Tmax of 30-60 min. */
+     which is the usually quoted Tmax of 30-60 min for a swallowed dose. */
   KA_PER_HOUR:5.0,
+  /* HAND-TUNED: absorption rate for the fraction taken up across the oral
+     mucosa. Roughly three times the swallowed rate, giving that component a
+     Tmax near 12 min for that component alone. Human sublingual caffeine
+     pharmacokinetic data is much
+     thinner than oral data — caffeine gum is the best-studied form and is
+     reported to peak appreciably sooner than capsules, but the published
+     spread is wide. Treat this number as the shape of the difference rather
+     than a measured constant. */
+  KA_MUCOSAL:25.0,
+  /* Routes. A dose is NOT purely mucosal in practice: saliva carries part of
+     it down to be swallowed and absorbed normally, so each route is modelled
+     as a split between a fast mucosal component and the ordinary oral one.
+     maxMucosal is the ceiling that split approaches with a long hold;
+     halfHoldMin is the hold time at which it reaches half that ceiling.
+     All three pairs are HAND-TUNED. */
+  ROUTES:[
+    {key:'oral', label:'Swallowed', sub:'drink or tablet', maxMucosal:0, halfHoldMin:1, defaultHold:0,
+     note:'Coffee, tea, energy drinks and ordinary swallowed tablets. All of the dose goes down the gut and absorbs at the usual rate.'},
+    {key:'sublingual', label:'Sublingual', sub:'pouch, strip, lozenge', maxMucosal:0.85, halfHoldMin:3, defaultHold:10,
+     note:'Pouches, dissolvable strips and lozenges held under the tongue or against the cheek. Part of the dose crosses the mucosa directly; the rest is swallowed with saliva.'},
+    {key:'gum', label:'Caffeinated gum', sub:'buccal', maxMucosal:0.80, halfHoldMin:4, defaultHold:10,
+     note:'The best-studied mucosal form. Chewing releases the dose gradually, so a shorter chew leaves more of it to be swallowed.'}
+  ],
   /* Half-lives in hours. The typical adult figure is ~5 h with a healthy-adult
      range of roughly 2-10; the modifiers below are the large, common ones. */
   CLEARANCE:[
@@ -4569,31 +4751,55 @@ function caffeineConcSingle(doseMg, tHours, vdL, ke, ka){
   return (CAFFEINE.BIOAVAILABILITY * doseMg / vdL) * (ka / (ka - ke)) *
          (Math.exp(-ke * tHours) - Math.exp(-ka * tHours));
 }
-/* Several doses superpose exactly, because first-order kinetics are linear.
-   `items` are {t: minutes since the first dose, mg}. */
-function caffeineConcAt(items, tMin, vdL, ke, ka){
+/* What fraction of a dose is taken up across the mucosa rather than swallowed.
+   Saturating in hold time: swallowing early converts the dose back toward
+   ordinary oral absorption. HAND-TUNED, per the ROUTES table. */
+function caffeineMucosalFraction(routeKey, holdMin){
+  const r = CAFFEINE.ROUTES.find(x => x.key === routeKey) || CAFFEINE.ROUTES[0];
+  if (!r.maxMucosal) return 0;
+  const h = Math.max(0, holdMin || 0);
+  return r.maxMucosal * h / (h + r.halfHoldMin);
+}
+/* Each dose becomes one or two absorption items, each with its own ka. Because
+   first-order kinetics are linear, the components and the doses all superpose
+   exactly — which is why this needs no numerical integration. */
+function caffeineDoseItems(doses, originAgo){
+  const items = [];
+  doses.forEach(d => {
+    const t = originAgo - d.when;
+    const frac = caffeineMucosalFraction(d.route || 'oral', d.hold);
+    if (frac > 0.001) items.push({t:t, mg:d.mg * frac, ka:CAFFEINE.KA_MUCOSAL});
+    if (frac < 0.999) items.push({t:t, mg:d.mg * (1 - frac), ka:CAFFEINE.KA_PER_HOUR});
+  });
+  return items;
+}
+/* `items` are {t: minutes since the first dose, mg, ka}. */
+function caffeineConcAt(items, tMin, vdL, ke){
   let c = 0;
   for (let i = 0; i < items.length; i++){
-    if (tMin >= items[i].t) c += caffeineConcSingle(items[i].mg, (tMin - items[i].t) / 60, vdL, ke, ka);
+    if (tMin >= items[i].t) c += caffeineConcSingle(items[i].mg, (tMin - items[i].t) / 60, vdL, ke, items[i].ka);
   }
   return c;
 }
-function caffeineSeries(items, vdL, ke, ka, endMin, stepMin){
+function caffeineSeries(items, vdL, ke, endMin, stepMin){
   const pts = [];
-  for (let t = 0; t <= endMin; t += stepMin) pts.push([t, caffeineConcAt(items, t, vdL, ke, ka)]);
+  for (let t = 0; t <= endMin; t += stepMin) pts.push([t, caffeineConcAt(items, t, vdL, ke)]);
   return pts;
 }
 /* Analytical time-to-peak. Single dose has the closed form
    tmax = ln(ka/ke)/(ka − ke); staggered doses use the same derivative,
    solved by bisection, exactly as the alcohol module does. */
-function caffeineTmaxMin(items, ke, ka, vdL){
+function caffeineTmaxMin(items, ke, vdL){
   if (!items.length) return 0;
   const lastT = items.reduce((m, i) => Math.max(m, i.t), 0);
-  if (items.every(i => i.t === items[0].t)) return items[0].t + (Math.log(ka / ke) / (ka - ke)) * 60;
+  /* Closed form only survives a single absorption component. Split a dose
+     across mucosa and gut and the sum has no algebraic root, so the same
+     analytical derivative is solved by bisection — as in the alcohol module. */
+  if (items.length === 1) return items[0].t + (Math.log(items[0].ka / ke) / (items[0].ka - ke)) * 60;
   const deriv = tMin => items.reduce((sum, i) => {
     if (tMin < i.t) return sum;
     const h = (tMin - i.t) / 60;
-    return sum + (i.mg / vdL) * (ka / (ka - ke)) * (ka * Math.exp(-ka * h) - ke * Math.exp(-ke * h));
+    return sum + (i.mg / vdL) * (i.ka / (i.ka - ke)) * (i.ka * Math.exp(-i.ka * h) - ke * Math.exp(-ke * h));
   }, 0);
   if (deriv(lastT) <= 0) return lastT;
   let lo = lastT, hi = lastT + 600;
@@ -4603,6 +4809,32 @@ function caffeineTmaxMin(items, ke, ka, vdL){
 function caffeineIntensity(concMgL, tolKey){
   return hill(concMgL / caffeineToleranceFactor(tolKey), CAFFEINE.EC50_MG_PER_L, CAFFEINE.HILL_N) * 100;
 }
+
+const CAFFEINE_TIPS =
+  '<div class="acc open"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="molecule"></span></span>What it is, and what it actually buys you<span class="chev ico" data-icon="chevron"></span></button>' +
+  '<div class="acc-body">The lining of the mouth is thin, well supplied with blood, and drains into veins that return straight to the heart rather than into the portal vein. A drug absorbed there reaches the circulation without first passing through the gut wall and the liver. <em>Sublingual</em> means under the tongue; <em>buccal</em> means against the inside of the cheek. The distinction matters less than the fact that both bypass the gut.' +
+  '<p style="margin:10px 0 0"><strong>For caffeine specifically, be careful about what that bypass is worth.</strong> The usual selling point for sublingual delivery is escaping first-pass metabolism — but swallowed caffeine is already about 99&nbsp;% bioavailable, so there is almost no first-pass loss left to escape. What changes is <em>speed</em>, not amount. This app therefore models the route as a shift in absorption rate and in nothing else: the same milligrams, arriving sooner. Total exposure, half-life and clearance are identical, which is why the concentration curves for the different routes converge within a couple of hours and sit exactly on top of each other by bedtime.</p></div></div>' +
+
+  '<div class="acc"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="capsule"></span></span>How it is actually done<span class="chev ico" data-icon="chevron"></span></button>' +
+  '<div class="acc-body"><ul style="padding-left:18px;margin:0">' +
+  '<li><strong>Caffeinated gum</strong> — the best-studied form by a wide margin, largely because militaries funded the research. Chewing releases the dose gradually across the cheek lining; the studied protocol is usually around five minutes of chewing.</li>' +
+  '<li><strong>Pouches</strong> — a sachet parked against the gum or lip, typically for twenty to thirty minutes. Long hold, high mucosal fraction.</li>' +
+  '<li><strong>Dissolvable strips and lozenges</strong> — thin films or hard lozenges that dissolve under the tongue over a few minutes.</li>' +
+  '<li><strong>A dissolvable powder or tablet held under the tongue</strong> — only if it is formulated to dissolve there, and only if you actually hold it.</li>' +
+  '<li><strong>An ordinary tablet you swallow does not count.</strong> Neither does chewing a caffeine pill and washing it down. If it goes to your stomach, it is an oral dose, and the model treats it as one.</li>' +
+  '</ul></div></div>' +
+
+  '<div class="acc"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="clock"></span></span>Holding time is the whole variable<span class="chev ico" data-icon="chevron"></span></button>' +
+  '<div class="acc-body">No mouth-held dose is purely mucosal. Saliva keeps carrying part of it down your throat the whole time, where it is absorbed in the ordinary way — so every dose is really a race between the two routes, and holding time decides the split. Swallow after two minutes and most of it behaves like a drink. Hold a pouch for half an hour and the majority crosses the mucosa.' +
+  '<p style="margin:10px 0 0">That is why the estimator asks for a hold time rather than treating "sublingual" as a switch, and why the split it reports moves as you change it. <span class="tuned">hand-tuned</span> The ceiling each route approaches, and how fast it gets there, are my estimates: human sublingual caffeine pharmacokinetic data is far thinner than the oral literature, and the published numbers that do exist scatter widely.</p></div></div>' +
+
+  '<div class="acc"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="shield"></span></span>The practical caveats<span class="chev ico" data-icon="chevron"></span></button>' +
+  '<div class="acc-body"><ul style="padding-left:18px;margin:0">' +
+  '<li><strong>Faster onset makes overshooting easier.</strong> Not because the dose is bigger — it is not — but because a sharper rise feels like a stronger product, and because the gap between taking more and regretting it gets shorter.</li>' +
+  '<li><strong>The mucosa can be irritated.</strong> Acidic formulations, flavourings and high local concentrations can leave the gum or lip sore, and parking a pouch in the same spot every day is the usual cause. Rotating the position helps; persistent soreness or white patches are worth showing to a dentist.</li>' +
+  '<li><strong>The daily limits do not change.</strong> Same molecule, same CYP1A2, same clearance. The 400&nbsp;mg-a-day reference point applies exactly as it does to coffee, and a pouch that hits sooner is not a smaller dose.</li>' +
+  '<li><strong>Nor does the sleep arithmetic.</strong> Arriving twenty minutes earlier changes nothing about what is still circulating at midnight — the Sleep panel above will show you the two routes converging.</li>' +
+  '</ul></div></div>';
 
 /* ------------------------------- caffeine UI ------------------------------ */
 let cafEditingId = null;
@@ -4617,7 +4849,11 @@ function renderCaffeineList(){
     '<div class="drink-row" data-id="' + d.id + '">' +
     '<span class="dico ico" data-icon="' + (d.icon || 'coffee') + '"></span>' +
     '<div><div class="dname">' + esc(d.name) + '</div>' +
-    '<div class="dmeta">' + round(d.mg, 0) + ' mg &middot; ' + fmtDuration(d.when) + ' ago</div></div>' +
+    '<div class="dmeta">' + round(d.mg, 0) + ' mg &middot; ' + fmtDuration(d.when) + ' ago' +
+    (d.route && d.route !== 'oral'
+      ? '<br>' + esc((CAFFEINE.ROUTES.find(r => r.key === d.route) || {}).label || d.route) + ', held ' + round(d.hold || 0, 0) + ' min &middot; ' +
+        Math.round(caffeineMucosalFraction(d.route, d.hold) * 100) + ' % mucosal'
+      : '') + '</div></div>' +
     '<div class="dacts">' +
       '<button class="btn tiny" type="button" data-act="edit" title="Edit"><span class="ico" data-icon="edit"></span></button>' +
       '<button class="btn tiny danger" type="button" data-act="del" title="Delete"><span class="ico" data-icon="trash"></span></button>' +
@@ -4650,13 +4886,16 @@ function renderCaffeine(){
     renderEffectBars(document.getElementById('caf-effects'), CAFFEINE.EFFECTS.map(e => ({name:e.name, value:0, note:e.note})));
     ['caf-chart-mg', 'caf-chart-fx'].forEach(id => { document.getElementById(id).innerHTML = ''; });
     renderCaffeineReference();
+    document.getElementById('caf-tips').innerHTML = CAFFEINE_TIPS;
+    paintIcons(document.getElementById('caf-tips'));
     return;
   }
 
   const originAgo = s.doses.reduce((m, d) => Math.max(m, d.when), 0);
-  const items = s.doses.map(d => ({t:originAgo - d.when, mg:d.mg}));
+  const items = caffeineDoseItems(s.doses, originAgo);
   const nowMin = originAgo;
-  const totalMg = items.reduce((a, i) => a + i.mg, 0);
+  const totalMg = s.doses.reduce((a, d) => a + d.mg, 0);
+  const mucosalMg = s.doses.reduce((a, d) => a + d.mg * caffeineMucosalFraction(d.route || 'oral', d.hold), 0);
 
   /* run until the concentration is negligible, capped at 48 h */
   /* Exponential decay never actually reaches zero, so the series stops at a
@@ -4665,13 +4904,13 @@ function renderCaffeine(){
      enough that the long tail is still visible, because that tail is the
      whole difference between first- and zero-order elimination. */
   let endMin = Math.max(nowMin + 60, 60);
-  while (endMin < 2160 && caffeineConcAt(items, endMin, vdL, ke, ka) > 0.12) endMin += 30;
+  while (endMin < 2160 && caffeineConcAt(items, endMin, vdL, ke) > 0.12) endMin += 30;
   endMin = Math.max(endMin, nowMin + 120, clamp(s.bedHours, 0, 24) * 60 + nowMin + 30);
 
   const step = endMin > 900 ? 5 : 2;
-  const concPts = caffeineSeries(items, vdL, ke, ka, endMin, step);
-  const nowConc = caffeineConcAt(items, nowMin, vdL, ke, ka);
-  const tmax = caffeineTmaxMin(items, ke, ka, vdL);
+  const concPts = caffeineSeries(items, vdL, ke, endMin, step);
+  const nowConc = caffeineConcAt(items, nowMin, vdL, ke);
+  const tmax = caffeineTmaxMin(items, ke, vdL);
   let peakConc = 0, peakAt = 0;
   concPts.forEach(pt => { if (pt[1] > peakConc){ peakConc = pt[1]; peakAt = pt[0]; } });
   const nowPct = caffeineIntensity(nowConc, s.tol);
@@ -4680,7 +4919,7 @@ function renderCaffeine(){
 
   /* bedtime */
   const bedMin = nowMin + clamp(s.bedHours || 0, 0, 24) * 60;
-  const bedConc = caffeineConcAt(items, bedMin, vdL, ke, ka);
+  const bedConc = caffeineConcAt(items, bedMin, vdL, ke);
   const sleepHit = hill(bedConc, CAFFEINE.SLEEP_EC50_MG_PER_L, CAFFEINE.SLEEP_HILL_N) * 100;
 
   renderGaugeWithLabel(gaugeEl, readEl, {
@@ -4697,6 +4936,8 @@ function renderCaffeine(){
     stat('In your blood now', round(nowConc, 2) + ' <small>mg/L</small>', Math.round(nowPct) + ' % · ' + intensityLabel(nowPct)) +
     stat('Half-life', halfLife + ' <small>h</small>', 'First-order: a constant fraction per hour') +
     stat('Peak', round(peakConc, 2) + ' <small>mg/L</small>', ps.text) +
+    (mucosalMg > 0.5 ? stat('Across the mucosa', Math.round(mucosalMg) + ' <small>of ' + Math.round(totalMg) + ' mg</small>',
+       Math.round(100 * mucosalMg / Math.max(totalMg, 1)) + ' % absorbed directly; the rest is swallowed') : '') +
     stat('At bedtime', round(bedConc, 2) + ' <small>mg/L</small>', 'In ' + fmtDuration(bedMin - nowMin) + ' — ' + Math.round(100 * bedConc / Math.max(peakConc, 0.0001)) + ' % of today’s peak');
 
   /* banners */
@@ -4756,7 +4997,7 @@ function renderCaffeine(){
   const lastSafe = (() => {
     /* when would the concentration at bedtime fall below the sleep midpoint? */
     for (let t = nowMin; t <= endMin; t += 5){
-      if (caffeineConcAt(items, bedMin > t ? bedMin : t, vdL, ke, ka) <= CAFFEINE.SLEEP_EC50_MG_PER_L) return t;
+      if (caffeineConcAt(items, bedMin > t ? bedMin : t, vdL, ke) <= CAFFEINE.SLEEP_EC50_MG_PER_L) return t;
     }
     return null;
   })();
@@ -4784,13 +5025,16 @@ function renderCaffeine(){
     ({name:e.name, value:hill(nowConc / tolF, e.ec50, e.n) * e.w * 100, note:e.note})));
 
   renderCaffeineReference();
+  document.getElementById('caf-tips').innerHTML = CAFFEINE_TIPS;
+  paintIcons(document.getElementById('caf-tips'));
 }
 
 function renderCaffeineReference(){
-  const REF_KG = 70, vdL = REF_KG * CAFFEINE.VD_L_PER_KG, halfLife = 5, ke = Math.LN2 / halfLife, ka = CAFFEINE.KA_PER_HOUR;
+  const REF_KG = 70, vdL = REF_KG * CAFFEINE.VD_L_PER_KG, halfLife = 5, ke = Math.LN2 / halfLife;
+  const ka = CAFFEINE.KA_PER_HOUR;   // this table is for a swallowed dose
   const doses = [20, 40, 63, 95, 150, 200, 300, 400, 600, 800, 1200];
   const rows = doses.map(mg => {
-    const tmax = (Math.log(ka / ke) / (ka - ke)) * 60;
+    const tmax = (Math.log(CAFFEINE.KA_PER_HOUR / ke) / (CAFFEINE.KA_PER_HOUR - ke)) * 60;
     const peak = caffeineConcSingle(mg, tmax / 60, vdL, ke, ka);
     const pct = caffeineIntensity(peak, 'none');
     /* hours until the single dose falls under the sleep mid-point */
@@ -4826,6 +5070,26 @@ function cafExitEdit(){
 function initCaffeine(){
   const s = state.caf;
   buildPills(document.getElementById('caf-presets'), CAFFEINE.PRESETS.map(p => ({key:p.key, label:p.label, sub:p.mg + ' mg', icon:p.icon})), null, cafSetDraftFromPreset);
+  const holdField = document.getElementById('caf-hold-field'), hold = document.getElementById('caf-hold');
+  const syncRoute = () => {
+    const r = CAFFEINE.ROUTES.find(x => x.key === s.draft.route) || CAFFEINE.ROUTES[0];
+    holdField.hidden = !r.maxMucosal;
+    const frac = caffeineMucosalFraction(s.draft.route, s.draft.hold);
+    document.getElementById('caf-route-note').innerHTML = r.note +
+      (r.maxMucosal
+        ? ' At a ' + Math.round(s.draft.hold) + '-minute hold the model puts <strong>' + Math.round(frac * 100) +
+          '&nbsp;%</strong> across the mucosa and the remaining ' + Math.round((1 - frac) * 100) + '&nbsp;% down the gut. <span class="tuned">hand-tuned</span>'
+        : '');
+  };
+  buildPills(document.getElementById('caf-route'), CAFFEINE.ROUTES, s.draft.route,
+    k => { s.draft.route = k;
+           const r = CAFFEINE.ROUTES.find(x => x.key === k);
+           if (r){ s.draft.hold = r.defaultHold; hold.value = r.defaultHold; }
+           syncRoute(); saveState(); });
+  hold.value = s.draft.hold;
+  hold.addEventListener('input', () => { s.draft.hold = clamp(parseFloat(hold.value) || 0, 0, 60); syncRoute(); saveState(); });
+  syncRoute();
+
   buildPills(document.getElementById('caf-clearance'), CAFFEINE.CLEARANCE.map(c => ({key:c.key, label:c.label, sub:c.sub})), s.clearance,
     k => { s.clearance = k; saveState(); renderCaffeine(); });
   buildPills(document.getElementById('caf-tol'), CAFFEINE_TOLERANCE.map(t => ({key:t.key, label:t.label, sub:t.sub})), s.tol,
@@ -4842,10 +5106,12 @@ function initCaffeine(){
     if (v <= 0) return;
     if (cafEditingId != null){
       const d = s.doses.find(x => x.id === cafEditingId);
-      if (d){ d.mg = v; d.when = w; d.at = minutesAgoToStamp(w); d.name = s.draft.name; d.icon = s.draft.icon; }
+      if (d){ d.mg = v; d.when = w; d.at = minutesAgoToStamp(w); d.name = s.draft.name; d.icon = s.draft.icon;
+              d.route = s.draft.route; d.hold = s.draft.hold; }
       cafExitEdit();
     } else {
-      s.doses.push({id:s.nextId++, name:s.draft.name || 'Custom', icon:s.draft.icon || 'coffee', mg:v, when:w, at:minutesAgoToStamp(w)});
+      s.doses.push({id:s.nextId++, name:s.draft.name || 'Custom', icon:s.draft.icon || 'coffee', mg:v, when:w,
+                    route:s.draft.route || 'oral', hold:s.draft.hold || 0, at:minutesAgoToStamp(w)});
     }
     saveState(); renderCaffeine();
   });
@@ -4867,6 +5133,13 @@ function initCaffeine(){
       if (!d) return;
       cafEditingId = id;
       s.draft.name = d.name; s.draft.icon = d.icon;
+      s.draft.route = d.route || 'oral'; s.draft.hold = d.hold || 0;
+      buildPills(document.getElementById('caf-route'), CAFFEINE.ROUTES, s.draft.route,
+        k => { s.draft.route = k;
+               const r = CAFFEINE.ROUTES.find(x => x.key === k);
+               if (r){ s.draft.hold = r.defaultHold; hold.value = r.defaultHold; }
+               syncRoute(); saveState(); });
+      hold.value = s.draft.hold; syncRoute();
       mg.value = d.mg; when.value = d.when;
       document.getElementById('caf-add-label').textContent = 'Save';
       document.getElementById('caf-cancel').hidden = false;
@@ -5163,6 +5436,9 @@ const HOME_CARDS = [
   {view:'caffeine', accent:'caffeine', icon:'coffee', title:'Caffeine',
    body:'The counterexample: caffeine really is first-order, so it has a genuine half-life and the exponential model that is wrong for alcohol is right here. Unlimited doses, half-life modifiers that matter (smoking halves it, oral contraceptives double it), a plasma curve and an effects curve, and a sleep panel.',
    go:'Open the caffeine estimator'},
+  {view:'laws', accent:'laws', icon:'scale', title:'Laws by state',
+   body:'Where each substance stands in all 50 states and DC — legal age, possession, home cultivation, public use, and the impaired-driving standards this app estimates against. Delta-8 is flagged throughout as the least settled area, with a federal change landing in weeks.',
+   go:'Open the state laws'},
   {view:'learn', accent:'learn', icon:'book', title:'Learn',
    body:'Eighteen articles: zero-order ethanol kinetics, first-pass metabolism and 11-hydroxy-THC, the Hill equation, receptor downregulation, the exact implemented formulas, an itemised list of every constant I invented, and verified sources.',
    go:'Read the articles'}
@@ -5189,6 +5465,298 @@ function renderDashboard(){
 }
 
 /* ---------------------------------------------------------------------------
+   §12b  LAWS BY STATE
+
+   One object literal, one place to update. Field schema:
+     n     display name
+     rec   adult-use cannabis     'legal' | 'medical' | 'restricted' | 'illegal' | 'verify'
+     med   medical cannabis       same vocabulary ('restricted' = low-THC / CBD-only)
+     d8    hemp-derived delta-8   same vocabulary
+     poss  adult-use possession limit, or null where there is no adult-use limit
+     grow  home cultivation summary, or null
+     pub   public consumption rule
+     thc   impaired-driving standard for THC:
+             'perse:N'  numeric per se limit, N ng/mL whole blood
+             'infer:N'  N ng/mL creates a permissible inference, rebuttable
+             'zero'     any measurable amount (or metabolite) is an offence
+             'impair'   no numeric threshold; prosecution is impairment-based
+             'verify'   I was not confident enough to state it
+     bac   per se BAC limit, omitted where it is the near-universal 0.08
+     note  anything that does not fit a clean category
+
+   Confidence: alcohol entries are high confidence and nearly uniform
+   nationally. Adult-use and medical cannabis status is high confidence.
+   Delta-8 and THC driving standards are the weakest — both move constantly,
+   both are litigated, and 'verify' appears wherever I would have been
+   guessing. See the Learn note in this section.
+   ------------------------------------------------------------------------ */
+const LAWS_REVIEWED = '20 September 2026';
+const LAWS_DEFAULT_BAC = 0.08;
+const LAWS = {
+  AL:{n:'Alabama', rec:'illegal', med:'medical', d8:'restricted', poss:null, grow:null,
+      pub:'No adult-use; public use is an offence', thc:'impair',
+      note:'The 2021 medical law permits non-smokable forms only, and the programme has been slowed by litigation. Hemp products were brought under a licensed, 21+ framework in 2025.'},
+  AK:{n:'Alaska', rec:'legal', med:'legal', d8:'illegal', poss:'1 oz', grow:'6 plants, 3 mature',
+      pub:'Prohibited outside licensed on-site consumption', thc:'impair'},
+  AZ:{n:'Arizona', rec:'legal', med:'legal', d8:'verify', poss:'1 oz (max 5 g concentrate)', grow:'6 plants, 12 per household',
+      pub:'Prohibited', thc:'zero',
+      note:'Zero tolerance applies to THC and its metabolites, but registered medical patients have a statutory defence. Hemp-derived delta-8 has been contested rather than clearly settled.'},
+  AR:{n:'Arkansas', rec:'illegal', med:'medical', d8:'illegal', poss:null, grow:null,
+      pub:'No adult-use', thc:'zero',
+      note:'The 2023 ban on hemp-derived THC isomers has been through repeated litigation; treat the current position as unsettled.'},
+  CA:{n:'California', rec:'legal', med:'legal', d8:'restricted', poss:'1 oz (8 g concentrate)', grow:'6 plants',
+      pub:'Prohibited; not within 1,000 ft of a school', thc:'impair',
+      note:'Emergency rules bar detectable THC in hemp food and beverage products and restrict sales to 21+, which removes most delta-8 from legal retail.'},
+  CO:{n:'Colorado', rec:'legal', med:'legal', d8:'illegal', poss:'2 oz', grow:'6 plants, 3 mature',
+      pub:'Prohibited', thc:'infer:5'},
+  CT:{n:'Connecticut', rec:'legal', med:'legal', d8:'restricted', poss:'1.5 oz on person, 5 oz locked at home', grow:'6 plants (adults 21+)',
+      pub:'Prohibited where smoking is banned', thc:'impair',
+      note:'High-THC hemp products are channelled into the licensed cannabis market rather than general retail.'},
+  DE:{n:'Delaware', rec:'legal', med:'legal', d8:'illegal', poss:'1 oz', grow:'Not permitted',
+      pub:'Prohibited', thc:'zero',
+      note:'Legalised in 2023 with licensed retail opening in 2025. Home cultivation remains prohibited.'},
+  DC:{n:'District of Columbia', rec:'legal', med:'legal', d8:'verify', poss:'2 oz', grow:'6 plants, 3 mature',
+      pub:'Prohibited', thc:'impair',
+      note:'Possession, cultivation and gifting are legal but a congressional appropriations rider blocks commercial adult-use retail, so the market runs through medical dispensaries and "gifting" arrangements.'},
+  FL:{n:'Florida', rec:'illegal', med:'medical', d8:'legal', poss:null, grow:null,
+      pub:'No adult-use', thc:'impair',
+      note:'Delta-8 is legal but restricted to 21+ and subject to packaging rules. Adult-use ballot measures have failed to reach the required supermajority.'},
+  GA:{n:'Georgia', rec:'illegal', med:'restricted', d8:'legal', poss:null, grow:null,
+      pub:'No adult-use', thc:'zero',
+      note:'The medical programme covers low-THC oil (up to 5 % THC) for registered conditions only — not whole-plant cannabis.'},
+  HI:{n:'Hawaii', rec:'illegal', med:'legal', d8:'illegal', poss:null, grow:null,
+      pub:'No adult-use; possession of up to 3 g is decriminalised', thc:'impair'},
+  ID:{n:'Idaho', rec:'illegal', med:'illegal', d8:'illegal', poss:null, grow:null,
+      pub:'No adult-use', thc:'zero',
+      note:'One of the strictest positions in the country: no medical programme, and hemp-derived THC is treated as a controlled substance.'},
+  IL:{n:'Illinois', rec:'legal', med:'legal', d8:'verify', poss:'30 g flower (residents); 15 g non-residents', grow:'Medical patients only, 5 plants',
+      pub:'Prohibited', thc:'perse:5',
+      note:'Repeated legislative attempts to bring hemp-derived THC under the cannabis regulator have not fully settled; treat delta-8 retail as in flux.'},
+  IN:{n:'Indiana', rec:'illegal', med:'restricted', d8:'legal', poss:null, grow:null,
+      pub:'No adult-use', thc:'zero',
+      note:'Only low-THC CBD is permitted medically. Delta-8 is sold openly but has been the subject of repeated bills.'},
+  IA:{n:'Iowa', rec:'illegal', med:'restricted', d8:'illegal', poss:null, grow:null,
+      pub:'No adult-use', thc:'zero',
+      note:'The medical cannabidiol programme caps THC per patient rather than offering whole-plant access.'},
+  KS:{n:'Kansas', rec:'illegal', med:'illegal', d8:'illegal', poss:null, grow:null,
+      pub:'No adult-use', thc:'impair',
+      note:'Only CBD with no measurable THC is permitted; there is no medical cannabis programme.'},
+  KY:{n:'Kentucky', rec:'illegal', med:'medical', d8:'restricted', poss:null, grow:null,
+      pub:'No adult-use', thc:'impair',
+      note:'The medical programme began operating in 2025. Hemp-derived cannabinoids are regulated with age and potency limits.'},
+  LA:{n:'Louisiana', rec:'illegal', med:'medical', d8:'restricted', poss:null, grow:null,
+      pub:'No adult-use; small-quantity possession is decriminalised', thc:'impair',
+      note:'Consumable hemp is licensed with a per-serving THC cap and 21+ sales.'},
+  ME:{n:'Maine', rec:'legal', med:'legal', d8:'legal', poss:'2.5 oz (max 5 g concentrate)', grow:'3 mature, 12 immature',
+      pub:'Prohibited', thc:'impair'},
+  MD:{n:'Maryland', rec:'legal', med:'legal', d8:'restricted', poss:'1.5 oz personal use', grow:'2 plants',
+      pub:'Prohibited', thc:'impair',
+      note:'Intoxicating hemp products were routed into the licensed cannabis market, which has been litigated.'},
+  MA:{n:'Massachusetts', rec:'legal', med:'legal', d8:'illegal', poss:'1 oz on person, 10 oz at home', grow:'6 plants, 12 per household',
+      pub:'Prohibited', thc:'impair'},
+  MI:{n:'Michigan', rec:'legal', med:'legal', d8:'restricted', poss:'2.5 oz on person, 10 oz at home', grow:'12 plants',
+      pub:'Prohibited', thc:'verify',
+      note:'Delta-8 is legal only through licensed cannabis retail, not general stores. The driving standard has shifted since legalisation and is worth checking directly.'},
+  MN:{n:'Minnesota', rec:'legal', med:'legal', d8:'restricted', poss:'2 oz in public, 2 lb at home', grow:'8 plants, 4 mature',
+      pub:'Prohibited', thc:'impair',
+      note:'Minnesota licenses low-dose hemp edibles separately, with per-serving and per-package caps.'},
+  MS:{n:'Mississippi', rec:'illegal', med:'medical', d8:'illegal', poss:null, grow:null,
+      pub:'No adult-use', thc:'impair'},
+  MO:{n:'Missouri', rec:'legal', med:'legal', d8:'verify', poss:'3 oz', grow:'6 flowering plants with a registration card',
+      pub:'Prohibited', thc:'impair',
+      note:'Executive action has targeted unregulated hemp intoxicants; the retail position has been contested.'},
+  MT:{n:'Montana', rec:'legal', med:'legal', d8:'illegal', poss:'1 oz (max 8 g concentrate)', grow:'4 mature, 4 seedlings',
+      pub:'Prohibited', thc:'perse:5'},
+  NE:{n:'Nebraska', rec:'illegal', med:'verify', d8:'verify', poss:null, grow:null,
+      pub:'No adult-use', thc:'impair',
+      note:'Voters approved medical cannabis in November 2024 by wide margins, but implementation has been contested: regulator rules and follow-on legislation conflict with the initiative, and dispensary access has been slow. Genuinely unsettled.'},
+  NV:{n:'Nevada', rec:'legal', med:'legal', d8:'illegal', poss:'1 oz (max 3.5 g concentrate)', grow:'6 plants if over 25 miles from a dispensary',
+      pub:'Prohibited outside licensed consumption lounges', thc:'verify',
+      note:'Nevada repealed its per se THC limits for most non-commercial DUI cases in 2021, leaving an impairment standard, but numeric limits persist in some contexts. Check before relying on it.'},
+  NH:{n:'New Hampshire', rec:'illegal', med:'medical', d8:'illegal', poss:null, grow:null,
+      pub:'No adult-use; small amounts decriminalised', thc:'impair'},
+  NJ:{n:'New Jersey', rec:'legal', med:'legal', d8:'verify', poss:'6 oz', grow:'Not permitted',
+      pub:'Permitted where tobacco smoking is allowed, unless a municipality bans it', thc:'impair',
+      note:'New Jersey is unusual in not banning home cultivation while also not permitting it — it remains a criminal offence.'},
+  NM:{n:'New Mexico', rec:'legal', med:'legal', d8:'verify', poss:'2 oz in public (unlimited at home if secured)', grow:'6 mature, 12 total',
+      pub:'Prohibited', thc:'impair'},
+  NY:{n:'New York', rec:'legal', med:'legal', d8:'illegal', poss:'3 oz flower, 24 g concentrate', grow:'6 plants, 12 per household',
+      pub:'Permitted wherever tobacco smoking is allowed', thc:'impair',
+      note:'New York is one of the few states to permit public cannabis smoking on the same footing as tobacco.'},
+  NC:{n:'North Carolina', rec:'illegal', med:'illegal', d8:'legal', poss:null, grow:null,
+      pub:'No adult-use', thc:'impair',
+      note:'No medical programme exists, yet hemp-derived delta-8 is sold openly — now with a 21+ age restriction. That gap is the widest in the country.'},
+  ND:{n:'North Dakota', rec:'illegal', med:'medical', d8:'illegal', poss:null, grow:null,
+      pub:'No adult-use', thc:'impair'},
+  OH:{n:'Ohio', rec:'legal', med:'legal', d8:'restricted', poss:'2.5 oz (15 g concentrate)', grow:'6 plants, 12 per household',
+      pub:'Prohibited', thc:'perse:2',
+      note:'Legalised by ballot in 2023 with retail sales from 2024. Hemp intoxicants have since been pushed toward licensed channels.'},
+  OK:{n:'Oklahoma', rec:'illegal', med:'medical', d8:'legal', poss:null, grow:null,
+      pub:'No adult-use', thc:'zero',
+      note:'One of the most accessible medical programmes in the country, with no qualifying-condition list.'},
+  OR:{n:'Oregon', rec:'legal', med:'legal', d8:'restricted', poss:'1 oz in public, 8 oz at home', grow:'4 plants per household',
+      pub:'Prohibited', thc:'impair',
+      note:'Artificially derived cannabinoids are restricted to the licensed cannabis market and 21+.'},
+  PA:{n:'Pennsylvania', rec:'illegal', med:'medical', d8:'legal', poss:null, grow:null,
+      pub:'No adult-use', thc:'perse:1',
+      note:'The 1 ng/mL per se limit is among the strictest numeric thresholds in the country and applies to medical patients as well.'},
+  RI:{n:'Rhode Island', rec:'legal', med:'legal', d8:'illegal', poss:'1 oz in public, 10 oz at home', grow:'6 plants, 3 mature',
+      pub:'Prohibited', thc:'zero'},
+  SC:{n:'South Carolina', rec:'illegal', med:'illegal', d8:'legal', poss:null, grow:null,
+      pub:'No adult-use', thc:'impair',
+      note:'No medical cannabis programme, but hemp-derived delta-8 is generally available.'},
+  SD:{n:'South Dakota', rec:'illegal', med:'medical', d8:'verify', poss:null, grow:null,
+      pub:'No adult-use', thc:'zero'},
+  TN:{n:'Tennessee', rec:'illegal', med:'restricted', d8:'restricted', poss:null, grow:null,
+      pub:'No adult-use', thc:'impair',
+      note:'Only low-THC oil is permitted medically. Hemp cannabinoids are licensed with 21+ sales and testing requirements.'},
+  TX:{n:'Texas', rec:'illegal', med:'restricted', d8:'verify', poss:null, grow:null,
+      pub:'No adult-use', thc:'impair',
+      note:'The Compassionate Use Programme permits low-THC products for listed conditions. Delta-8 has been through a ban attempt, a veto and executive restrictions limiting sales to 21+ — among the least settled positions in the country.'},
+  UT:{n:'Utah', rec:'illegal', med:'medical', d8:'illegal', poss:null, grow:null,
+      pub:'No adult-use', thc:'zero', bac:0.05,
+      note:'Utah is the only state with a 0.05 % per se BAC limit rather than 0.08 %.'},
+  VT:{n:'Vermont', rec:'legal', med:'legal', d8:'illegal', poss:'1 oz (5 g concentrate)', grow:'2 mature, 4 immature',
+      pub:'Prohibited', thc:'impair'},
+  VA:{n:'Virginia', rec:'legal', med:'legal', d8:'restricted', poss:'1 oz in public', grow:'4 plants per household',
+      pub:'Prohibited', thc:'impair',
+      note:'Possession and home cultivation are legal but adult-use retail has never been established, so there is no legal place to buy it recreationally.'},
+  WA:{n:'Washington', rec:'legal', med:'legal', d8:'illegal', poss:'1 oz flower, 7 g concentrate', grow:'Medical patients only',
+      pub:'Prohibited', thc:'perse:5',
+      note:'The 5 ng/mL limit applies to blood drawn within two hours of driving.'},
+  WV:{n:'West Virginia', rec:'illegal', med:'medical', d8:'illegal', poss:null, grow:null,
+      pub:'No adult-use', thc:'impair'},
+  WI:{n:'Wisconsin', rec:'illegal', med:'restricted', d8:'legal', poss:null, grow:null,
+      pub:'No adult-use', thc:'zero',
+      note:'Only CBD with negligible THC is permitted medically, yet delta-8 is broadly sold — another wide gap between the two regimes.'},
+  WY:{n:'Wyoming', rec:'illegal', med:'illegal', d8:'verify', poss:null, grow:null,
+      pub:'No adult-use', thc:'zero'}
+};
+const LAW_STATUS_LABEL = {legal:'Legal', medical:'Medical only', restricted:'Restricted', illegal:'Illegal', verify:'Verify'};
+/* The four-way legal vocabulary does not fit every row — "Illegal" is a
+   nonsense label for a driving standard — so rows that need their own wording
+   pass it in while keeping the same colour coding. */
+function lawChip(status, labelOverride){
+  const k = LAW_STATUS_LABEL[status] ? status : 'verify';
+  return '<span class="law-chip ' + k + '"><span class="cdot"></span>' + esc(labelOverride || LAW_STATUS_LABEL[k]) + '</span>';
+}
+function thcStandardText(code){
+  if (!code) return {chip:'verify', label:'Verify', text:'Not established here — verify with a current source.'};
+  if (code === 'zero') return {chip:'illegal', label:'Zero tolerance', text:'<strong>Zero tolerance.</strong> Any measurable THC — and in many of these states its inactive metabolite, which can persist for weeks after any impairment has gone — is itself the offence.'};
+  if (code === 'impair') return {chip:'restricted', label:'Impairment-based', text:'<strong>Impairment-based.</strong> No numeric threshold; the case turns on observed impairment, officer testimony and field evidence.'};
+  if (code === 'verify') return {chip:'verify', label:'Verify', text:'Unsettled or recently changed. Verify directly before relying on it.'};
+  const parts = code.split(':');
+  if (parts[0] === 'perse') return {chip:'illegal', label:parts[1] + ' ng/mL per se', text:'<strong>Per se limit: ' + parts[1] + '&nbsp;ng/mL</strong> THC in whole blood. At or above it, no further proof of impairment is required.'};
+  if (parts[0] === 'infer') return {chip:'restricted', label:parts[1] + ' ng/mL inference', text:'<strong>Permissible inference at ' + parts[1] + '&nbsp;ng/mL.</strong> The level permits an inference of impairment that the driver may rebut — weaker than a strict per se limit.'};
+  return {chip:'verify', label:'Verify', text:'Verify with a current source.'};
+}
+
+/* ------------------------------- laws render ------------------------------ */
+function renderLaws(){
+  const code = LAWS[state.laws.st] ? state.laws.st : 'CA';
+  const L = LAWS[code];
+  const bac = L.bac || LAWS_DEFAULT_BAC;
+  const thc = thcStandardText(L.thc);
+
+  document.getElementById('laws-reviewed').innerHTML =
+    'Last reviewed <strong>' + LAWS_REVIEWED + '</strong>. Nothing here updates itself — treat anything older than a few months as a starting point for your own check, not an answer.';
+
+  document.getElementById('laws-d8-federal').innerHTML =
+    '<p class="card-note" style="margin:0 0 10px">Delta-8 is the least settled area in this app, and state law is about to stop being the deciding factor.</p>' +
+    '<div class="article" style="font-size:.88rem">' +
+    '<p>Congress narrowed the federal definition of hemp to a <strong>total-THC</strong> standard. Cannabinoids the plant cannot produce on its own — which covers most commercial delta-8, made by chemically converting CBD — lose federal hemp status on <strong>12 November 2026</strong>. A stopgap signed on 2 September 2026 pushed most of the remaining provisions, including a per-container total-THC cap, to <strong>11 December 2026</strong>.</p>' +
+    '<p style="margin-bottom:0">What that means in practice: a product that is legal in your state today may not be federally hemp in a few weeks, and the state column below may be overtaken by it. Enforcement, litigation and any further extension are all still moving. This is the entry I would check most carefully and most often.</p></div>';
+
+  document.getElementById('laws-state-title').textContent = L.n;
+  document.getElementById('laws-summary').innerHTML =
+    '<div style="display:flex;flex-wrap:wrap;gap:7px">' +
+    '<span class="law-fact">Adult use ' + lawChip(L.rec) + '</span>' +
+    '<span class="law-fact">Medical ' + lawChip(L.med) + '</span>' +
+    '<span class="law-fact">Delta-8 ' + lawChip(L.d8) + '</span>' +
+    '<span class="law-fact">Driving ' + lawChip(thc.chip, thc.label) + '</span>' +
+    '<span class="law-fact">BAC <b>' + bac.toFixed(2) + ' %</b></span>' +
+    '</div>';
+
+  const row = (title, chip, body, facts) =>
+    '<div class="law-row"><div><h4>' + title + '</h4><p>' + body + '</p></div>' +
+    '<div>' + chip + '</div>' +
+    (facts && facts.length ? '<div class="facts">' + facts.map(f => '<span class="law-fact">' + f + '</span>').join('') + '</div>' : '') +
+    '</div>';
+
+  let html = '';
+  html += row('Alcohol', lawChip('legal', 'Legal at 21'),
+    'Legal at 21 nationwide — the federal drinking-age condition on highway funding left no state below it. Local "dry" counties, on-premises hours and Sunday sales rules vary far more than the age does.',
+    ['Legal age <b>21</b>', 'Per se BAC <b>' + bac.toFixed(2) + ' %</b>',
+     'Under 21 <b>zero tolerance</b> (0.00–0.02 % depending on state)',
+     'Commercial drivers <b>0.04 %</b>']);
+
+  html += row('Delta-9 THC — adult use', lawChip(L.rec),
+    L.rec === 'legal'
+      ? 'Adult use is legal for 21 and over.' + (L.note && L.rec === 'legal' ? ' ' + L.note : '')
+      : (L.rec === 'verify' ? 'Status unsettled — verify before relying on it.' : 'No adult-use programme. Possession outside a medical programme is an offence, though some states have decriminalised small amounts.'),
+    L.rec === 'legal'
+      ? ['Legal age <b>21</b>',
+         'Possession <b>' + (L.poss || 'verify') + '</b>',
+         'Home cultivation <b>' + (L.grow || 'verify') + '</b>',
+         'Public use: <b>' + L.pub + '</b>']
+      : ['Public use: <b>' + L.pub + '</b>']);
+
+  html += row('Delta-9 THC — medical', lawChip(L.med),
+    L.med === 'legal' ? 'A medical programme operates alongside adult-use sales; a card can still carry advantages on possession limits, tax and cultivation.'
+    : L.med === 'medical' ? 'A medical programme operates. Registration, a qualifying condition and a certifying clinician are generally required.'
+    : L.med === 'restricted' ? 'Low-THC or CBD-only access for listed conditions. This is not whole-plant medical cannabis, and the THC ceilings are low.'
+    : L.med === 'verify' ? 'Approved but contested — see the note below.'
+    : 'No medical cannabis programme.', []);
+
+  html += row('Delta-8 / hemp-derived THC', lawChip(L.d8),
+    L.d8 === 'legal' ? 'Generally available, typically with a 21+ age restriction. Testing and labelling requirements are usually lighter than for licensed cannabis — which is exactly why the milligrams on the package are less trustworthy.'
+    : L.d8 === 'restricted' ? 'Permitted only within limits — commonly confined to licensed cannabis retail, or capped by potency, serving size and age.'
+    : L.d8 === 'illegal' ? 'Prohibited, usually by treating synthesised or isomerised cannabinoids as controlled substances rather than hemp.'
+    : 'Contested, recently changed, or mid-litigation. Verify before assuming either way.',
+    ['<b>Federal change</b>: synthesised cannabinoids lose hemp status 12 Nov 2026']);
+
+  html += row('Smoked cannabis', L.rec === 'legal'
+      ? lawChip(L.pub.indexOf('Permitted') === 0 ? 'legal' : 'restricted', L.pub.indexOf('Permitted') === 0 ? 'Public use allowed' : 'Private use only')
+      : lawChip(L.rec),
+    L.rec === 'legal'
+      ? 'Where adult use is legal, smoking it is still governed separately from possessing it: <strong>' + L.pub.charAt(0).toLowerCase() + L.pub.slice(1) + '</strong>. Landlords, employers and public-housing rules commonly prohibit it regardless of state law, and smoking in a vehicle is an offence even when parked in most states.'
+      : 'No lawful adult-use consumption. ' + L.pub + '.',
+    []);
+
+  html += row('Caffeine', lawChip('legal', 'Unregulated'),
+    'Unregulated as a substance for adults in every state — no age limit, no possession limit, no driving standard. The only meaningful rules are federal food-labelling ones, plus scattered state proposals on energy-drink sales to minors that have largely not become law. Bulk caffeine powder is the one product with a genuine safety history behind it.',
+    ['No legal age', 'No possession limit', 'No impaired-driving standard']);
+
+  html += row('Impaired driving — THC', lawChip(thc.chip, thc.label), thc.text,
+    ['Alcohol per se <b>' + bac.toFixed(2) + ' %</b>',
+     'THC standard <b>' + (L.thc === 'zero' ? 'zero tolerance' : L.thc === 'impair' ? 'impairment-based' : L.thc === 'verify' ? 'verify' : L.thc.replace('perse:', '').replace('infer:', '') + ' ng/mL') + '</b>',
+     'Implied consent applies in every state']);
+
+  if (L.note) html += '<p class="card-note" style="margin-top:14px"><strong>Note on ' + esc(L.n) + ':</strong> ' + L.note + '</p>';
+  html += '<p class="card-note" style="margin-top:10px">Blood THC correlates poorly with actual driving impairment, which is why these standards differ so wildly between states and why several have moved away from numeric limits. Nothing this app estimates — for THC or for alcohol — is a defence, a measurement, or a reason to drive.</p>';
+  document.getElementById('laws-detail').innerHTML = html;
+
+  /* all-states table */
+  const rows = Object.keys(LAWS).sort((a, b) => LAWS[a].n.localeCompare(LAWS[b].n)).map(k => {
+    const x = LAWS[k];
+    const t = x.thc === 'zero' ? 'Zero tolerance' : x.thc === 'impair' ? 'Impairment-based' : x.thc === 'verify' ? 'Verify'
+            : x.thc.split(':')[0] === 'infer' ? x.thc.split(':')[1] + ' ng/mL (inference)' : x.thc.split(':')[1] + ' ng/mL (per se)';
+    return ['<strong>' + esc(x.n) + '</strong>', lawChip(x.rec), lawChip(x.med), lawChip(x.d8),
+            x.poss || '—', x.grow || '—', t, (x.bac || LAWS_DEFAULT_BAC).toFixed(2) + ' %'];
+  });
+  renderTable(document.getElementById('laws-table'),
+    [{label:'State'}, {label:'Adult use'}, {label:'Medical'}, {label:'Delta-8'},
+     {label:'Possession'}, {label:'Home grow'}, {label:'THC driving'}, {label:'BAC', num:true}],
+    rows);
+}
+function initLaws(){
+  const sel = document.getElementById('laws-state');
+  sel.innerHTML = Object.keys(LAWS).sort((a, b) => LAWS[a].n.localeCompare(LAWS[b].n))
+    .map(k => '<option value="' + k + '"' + (k === state.laws.st ? ' selected' : '') + '>' + esc(LAWS[k].n) + '</option>').join('');
+  sel.addEventListener('change', () => { state.laws.st = sel.value; saveState(); renderLaws(); });
+}
+
+/* ---------------------------------------------------------------------------
    §12  APP SHELL — navigation, theme, units, export, print, reset, boot
    ------------------------------------------------------------------------ */
 const RENDERERS = {
@@ -5198,7 +5766,8 @@ const RENDERERS = {
   d8:     renderD8,
   smoked: renderSmoked,
   caffeine: renderCaffeine,
-  learn:  renderLearn
+  learn:  renderLearn,
+  laws:   renderLaws
 };
 let currentView = 'home';
 
@@ -5285,7 +5854,10 @@ function buildExport(){
   const L = [];
   if (currentView === 'alcohol'){
     const s = state.alc;
-    const rFactor = (s.rCustom !== '' && !isNaN(parseFloat(s.rCustom))) ? clamp(parseFloat(s.rCustom), 0.4, 0.9) : ALCOHOL.R_FACTOR[s.rKey];
+    const cR = parseFloat(s.rCustom);
+    const rFactor = s.rMode === 'custom' && isFinite(cR) && cR >= 0.4 && cR <= 0.9 ? cR
+      : s.rMode === 'watson' ? watsonR(s.rKey, s.ageY || 30, s.heightCm || 175, clamp(s.weightKg, 30, 250))
+      : ALCOHOL.R_FACTOR[s.rKey];
     L.push('SECTION: Alcohol (BAC)');
     L.push('Model: ' + (s.model === 'pk' ? 'Pharmacokinetic (1st-order absorption, zero-order elimination)' : 'Widmark'));
     L.push('Body: ' + round(s.weightKg, 1) + ' kg, r = ' + round(rFactor, 3) + ', beta = ' + alcoholBeta(s.beta, s.food) + ' %/h, ka = ' + ALCOHOL.KA[s.food] + ' /h (' + s.food + ' stomach)');
@@ -5362,13 +5934,15 @@ function buildExport(){
     else {
       L.push('Doses:');
       st.doses.slice().sort((a, b) => b.when - a.when).forEach(d =>
-        L.push('  \u00b7 ' + d.name + ' \u2014 ' + round(d.mg, 0) + ' mg, ' + d.when + ' min ago'));
+        L.push('  \u00b7 ' + d.name + ' \u2014 ' + round(d.mg, 0) + ' mg, ' + d.when + ' min ago' +
+               (d.route && d.route !== 'oral' ? ' (' + d.route + ', held ' + round(d.hold || 0, 0) + ' min, ' +
+                 Math.round(caffeineMucosalFraction(d.route, d.hold) * 100) + ' % mucosal)' : '')));
       const origin = st.doses.reduce((m, d) => Math.max(m, d.when), 0);
-      const items = st.doses.map(d => ({t:origin - d.when, mg:d.mg}));
-      const total = items.reduce((a, i) => a + i.mg, 0);
-      const nowConc = caffeineConcAt(items, origin, vdL, ke, ka);
+      const items = caffeineDoseItems(st.doses, origin);
+      const total = st.doses.reduce((a, d) => a + d.mg, 0);
+      const nowConc = caffeineConcAt(items, origin, vdL, ke);
       const bedMin = origin + clamp(st.bedHours, 0, 24) * 60;
-      const bedConc = caffeineConcAt(items, bedMin, vdL, ke, ka);
+      const bedConc = caffeineConcAt(items, bedMin, vdL, ke);
       const pct = caffeineIntensity(nowConc, st.tol);
       L.push('');
       L.push('Total today: ' + Math.round(total) + ' mg  (FDA cites 400 mg/day for healthy adults)');
@@ -5418,6 +5992,7 @@ function spawnParticles(){
 function boot(){
   loadState();
   backfillStamps();
+  migrateRMode();
   syncClock();
   /* No saved preference yet: follow the system rather than forcing dark. */
   if (!state.ui.themeChosen){
@@ -5439,6 +6014,7 @@ function boot(){
   initD8();
   initSmoked();
   initCaffeine();
+  initLaws();
   initConverter();
   renderDashboard();
   renderLearn();
@@ -5531,12 +6107,12 @@ function boot(){
   });
 
   /* keyboard shortcuts — ignored while typing */
-  const VIEW_KEYS = ['home', 'alcohol', 'd9', 'd8', 'smoked', 'caffeine', 'learn'];
+  const VIEW_KEYS = ['home', 'alcohol', 'd9', 'd8', 'smoked', 'caffeine', 'learn', 'laws'];
   document.addEventListener('keydown', ev => {
     const t = ev.target;
     if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    if (ev.key >= '1' && ev.key <= '7'){ switchView(VIEW_KEYS[parseInt(ev.key, 10) - 1]); return; }
+    if (ev.key >= '1' && ev.key <= '8'){ switchView(VIEW_KEYS[parseInt(ev.key, 10) - 1]); return; }
     const k = ev.key.toLowerCase();
     if (k === 't') document.getElementById('btn-theme').click();
     else if (k === 'p'){ ev.preventDefault(); window.print(); }
