@@ -661,22 +661,44 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
   position:relative; border:1px solid var(--border); border-radius:var(--r-md);
   background:var(--surface-2); overflow:hidden;
 }
-.map-host svg{width:100%; height:auto; display:block; touch-action:none; cursor:grab}
+.map-host svg{width:100%; height:auto; display:block; touch-action:pan-y; cursor:grab}
+.map-host svg.zoomed{touch-action:none}
 .map-host svg.dragging{cursor:grabbing}
-/* the detail panel floats over the map, anchored near whatever was clicked.
-   .map-stage exists only so the panel escapes .map-host's overflow clip. */
+/* The detail panel sits BESIDE the map on a wide screen and directly under it
+   on a narrow one. It deliberately never floats over the map: an overlay put
+   a card on top of the next state you wanted to click. */
 .map-stage{position:relative}
 .map-pop{
-  position:absolute; left:0; top:0; z-index:14;
-  width:min(380px, calc(100% - 14px)); max-height:min(430px, 72vh); overflow:auto;
-  padding:13px 15px 14px; border-radius:var(--r-md);
+  position:relative; margin-top:11px; padding:13px 15px 14px; border-radius:var(--r-md);
   background:var(--surface-solid); border:1px solid var(--border-strong);
-  box-shadow:0 24px 52px -18px rgba(0,0,0,.55);
-  animation:popIn .15s cubic-bezier(.22,.68,.36,1) both;
+  box-shadow:0 18px 40px -22px rgba(0,0,0,.5);
+  animation:popIn .16s cubic-bezier(.22,.68,.36,1) both;
 }
-.map-pop[hidden]{display:none}
+.map-pop.empty{background:none; border:0; box-shadow:none; padding:9px 2px 0; animation:none}
+.map-pop{display:flex; flex-direction:column}
+.map-pop-body{overflow:auto; min-height:0; overscroll-behavior:contain}
 .map-pop:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
-@keyframes popIn{from{opacity:0; transform:translateY(7px) scale(.985)} to{opacity:1; transform:none}}
+@keyframes popIn{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
+@media (min-width:980px){
+  .map-stage{display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:14px; align-items:start}
+  .map-pop{margin-top:0; max-height:none}
+}
+.map-selring{fill:none; stroke:var(--text); stroke-width:1.9; stroke-linejoin:round; pointer-events:none; vector-effect:non-scaling-stroke}
+.map-small{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px}
+.map-small[hidden]{display:none}
+.map-small-lab{font-size:.78rem; color:var(--text-faint); margin-right:2px}
+.map-chip{
+  display:inline-flex; align-items:center; gap:5px; padding:4px 9px 4px 6px;
+  font:inherit; font-size:.78rem; font-weight:700; letter-spacing:.02em;
+  color:var(--text); background:var(--surface-3); cursor:pointer;
+  border:1px solid var(--border-strong); border-radius:999px; transition:border-color .15s, background .15s;
+}
+.map-chip:hover{border-color:var(--accent)}
+.map-chip.sel{border-color:var(--text); background:color-mix(in srgb,var(--accent) 18%,var(--surface-3))}
+.map-chip i{width:13px; height:13px; border-radius:4px; border:1px solid var(--border-strong); display:block}
+.map-chip i.hatch{background-image:repeating-linear-gradient(45deg,var(--map-pattern) 0 2px,transparent 2px 5px)}
+.map-chip i.dots{background-image:radial-gradient(var(--map-pattern) 1.1px,transparent 1.3px); background-size:5px 5px}
+.map-chip em{font-style:normal; font-size:.7rem; opacity:.8}
 .map-shape{stroke:var(--map-stroke); stroke-width:.35; stroke-linejoin:round; cursor:pointer}
 .map-shape:hover{stroke:var(--text); stroke-width:1.1}
 .map-shape.sel{stroke:var(--text); stroke-width:1.6}
@@ -714,15 +736,6 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 .map-src{font-size:.76rem; color:var(--text-faint); font-style:italic}
 @media (max-width:720px){.map-stat{grid-template-columns:1fr; gap:2px}
   .map-stat dt{margin-top:7px}}
-/* Below this width a map is too short to float a panel over: the panel drops
-   into the flow directly under the map instead, still a card, still dismissible.
-   positionMapPop() checks the computed position and leaves it alone. */
-@media (max-width:680px){
-  .map-pop{
-    position:static; width:auto; max-width:none; max-height:none;
-    margin-top:11px; animation:fadeUp .2s ease both;
-  }
-}
 
 /* laws: status chips and the state grid */
 .law-chip{
@@ -2304,7 +2317,8 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
       </div>
       <div class="map-pop" id="map-pop" role="dialog" aria-label="Map detail" aria-live="polite" tabindex="-1" hidden></div>
     </div>
-    <p class="card-note" style="margin:10px 0 0">Click or tap a shape and its detail opens over the map. Click the background or press Escape to close it. With the map focused, the arrow keys move between shapes and Enter selects. Drag to pan, scroll or pinch to zoom.</p>
+    <div class="map-small" id="map-small" role="group" aria-label="States too small to click on the map"></div>
+    <p class="card-note" style="margin:10px 0 0">Click or tap a shape and its detail opens beside the map — or under it on a narrow screen — so the panel never covers what you are trying to click. Press the background or Escape to close it. With the map focused, the arrow keys move between shapes and Enter selects. Zoom in to pan by dragging.</p>
     <div class="map-legend" id="map-legend"></div>
   </div>
 
@@ -6299,7 +6313,7 @@ function paintMap(){
   const feats = mode === 'mj-county' ? geo.counties : geo.states;
   const selKey = mode === 'mj-county' ? state.laws.map.selCounty : state.laws.map.sel;
 
-  let shapes = '', overlays = '', symbols = '';
+  let shapes = '', overlays = '', symbols = '', selD = '';
   feats.forEach(f => {
     let cat, key, label;
     if (mode === 'mj-county'){
@@ -6312,6 +6326,7 @@ function paintMap(){
     }
     const def = cats[cat] || cats.verify;
     const sel = key === selKey ? ' sel' : '';
+    if (sel) selD = f.d;
     shapes += '<path class="map-shape' + sel + '" d="' + f.d + '" fill="' + def.fill +
       '" data-k="' + key + '" data-l="' + esc(label) + '" role="button" tabindex="-1" aria-label="' +
       esc(label + ' — ' + def.label) + '"></path>';
@@ -6341,6 +6356,7 @@ function paintMap(){
       '</defs>' +
       '<g id="map-zoom" transform="translate(' + mapView.x + ',' + mapView.y + ') scale(' + mapView.k + ')">' +
         shapes + overlays + outline + symbols +
+        '<path class="map-selring" d="' + selD + '"></path>' +
       '</g>' +
     '</svg>';
   host.appendChild(tip);
@@ -6375,66 +6391,102 @@ function renderMapLegend(mode){
   host.innerHTML = rows;
 }
 
+/* Nine states and DC are a few pixels across at the default zoom — DC is
+   four by five — so they get real buttons underneath instead. */
+const MAP_SMALL = ['VT','NH','MA','RI','CT','NJ','DE','MD','DC'];
+function renderMapSmall(){
+  const host = document.getElementById('map-small');
+  if (!host) return;
+  const mode = state.laws.map.mode;
+  if (mode === 'mj-county'){ host.innerHTML = ''; host.hidden = true; return; }
+  host.hidden = false;
+  const cats = mapCats(mode), sel = state.laws.map.sel, stars = mapStarStates(mode), geo = mapGeo();
+  host.innerHTML = '<span class="map-small-lab">Too small to hit on the map:</span>' +
+    MAP_SMALL.map(k => {
+      const c = cats[mode === 'cbd-state' ? cbdStateCat(k) : mjStateCat(k)] || cats.verify;
+      const g = geo.byPostal[k];
+      return '<button type="button" class="map-chip' + (k === sel ? ' sel' : '') + '" data-k="' + k + '"' +
+        ' aria-pressed="' + (k === sel) + '"' +
+        ' aria-label="' + esc((g ? g.name : k) + ' — ' + c.label) + '">' +
+        '<i class="' + (c.pattern || '') + '" style="background:' + c.fill + '"></i>' +
+        k + (stars[k] ? '<em>\u2605</em>' : '') + '</button>';
+    }).join('');
+  host.querySelectorAll('.map-chip').forEach(bt =>
+    bt.addEventListener('click', () => mapSelect(bt.dataset.k)));
+}
+
+/* Moves the highlight and the panel without touching the geometry. */
+function mapApplySelection(){
+  const m = state.laws.map, host = document.getElementById('map-host');
+  if (host){
+    const key = m.mode === 'mj-county' ? m.selCounty : m.sel;
+    host.querySelectorAll('.sel').forEach(e => e.classList.remove('sel'));
+    const ring = host.querySelector('.map-selring');
+    let d = '';
+    if (key != null){
+      host.querySelectorAll('[data-k="' + CSS.escape(String(key)) + '"]').forEach(e => {
+        e.classList.add('sel');
+        if (e.classList.contains('map-shape') && e.tagName.toLowerCase() === 'path') d = e.getAttribute('d');
+      });
+    }
+    /* the ring is a separate path drawn last, so a neighbouring shape cannot
+       paint over half the outline the way a sibling's fill used to */
+    if (ring) ring.setAttribute('d', d);
+  }
+  renderMapPop();
+  renderMapSmall();
+}
+
 /* ------------------------------- the popover ------------------------------ */
-/* Clicking a shape opens its detail over the map rather than somewhere below
-   it, so a click visibly does something. mapSelFeat caches the selected
-   feature; on the county map, searching it again on every pan frame would be
-   3,142 comparisons per pointermove. */
-let mapSelFeat = null;
+/* Beside the map, the panel is capped at the map's own height and scrolls
+   inside, so a long entry cannot stretch the row and leave a void under the
+   map. Stacked below it, there is nothing to match and it runs full length. */
+function syncMapPopHeight(){
+  const pop = document.getElementById('map-pop'), host = document.getElementById('map-host');
+  if (!pop || !host || pop.classList.contains('empty')) return;
+  const beside = window.matchMedia('(min-width:980px)').matches;
+  pop.style.maxHeight = beside ? Math.max(240, Math.round(host.getBoundingClientRect().height)) + 'px' : '';
+}
+const MAP_POP_HINT = {
+  'mj-state':  'Pick a state for its legalisation history, market and use statistics.',
+  'cbd-state': 'Pick a state for its CBD rules, product limits and any low-THC programme.',
+  'mj-county': 'Pick a county for its dispensary status, local opt-out position and — in California — how it voted on Proposition 64.'
+};
 function renderMapPop(){
   const m = state.laws.map, mode = m.mode;
   const pop = document.getElementById('map-pop');
   if (!pop) return;
   const key = mode === 'mj-county' ? m.selCounty : m.sel;
-  if (!key){ pop.hidden = true; pop.innerHTML = ''; mapSelFeat = null; return; }
+  pop.hidden = false;
 
+  if (key == null){
+    pop.classList.add('empty');
+    pop.style.maxHeight = '';
+    pop.innerHTML = '<p class="card-note" style="margin:0">' + MAP_POP_HINT[mode] + '</p>';
+    return;
+  }
+  pop.classList.remove('empty');
   const body = mode === 'mj-county' ? mapDetailCounty(key)
              : mode === 'cbd-state' ? mapDetailCbd(key)
              : mapDetailMj(key);
   /* Dismissible three ways: this button, which is in the normal tab order;
-     Escape from the map or from the panel; and a click on open water. */
+     Escape from the map or from the panel; and a press on open water. The
+     button sits outside the scrolling body so it cannot scroll away. */
   pop.innerHTML =
     '<button class="btn tiny map-dismiss" type="button" id="map-pop-close" aria-label="Close this detail panel">' +
-    'Dismiss<span class="kbd-hint">Esc</span></button>' + body;
-  pop.hidden = false;
-  pop.scrollTop = 0;
+    'Dismiss<span class="kbd-hint">Esc</span></button><div class="map-pop-body">' + body + '</div>';
+  syncMapPopHeight();
   document.getElementById('map-pop-close').addEventListener('click', () => mapClearSelection());
   pop.addEventListener('keydown', ev => {
     if (ev.key === 'Escape'){ ev.stopPropagation(); mapClearSelection(); }
   });
 
-  mapSelFeat = mapFeatures().find(f => mapFeatureKey(f) === key) || null;
-  positionMapPop();
-
-  /* Only scroll if the panel actually landed off-screen — arrow-key roving
-     must not yank the page around on every keypress. */
+  /* Stacked under the map, the panel can open below the fold. Scroll only
+     when it actually did — arrow-key roving must not yank the page on every
+     keypress, and beside the map there is nothing to scroll to. */
   const r = pop.getBoundingClientRect();
   if (r.top > window.innerHeight - 50 || r.bottom < 50)
     pop.scrollIntoView({block:'nearest', behavior:'smooth'});
-}
-function positionMapPop(){
-  const pop = document.getElementById('map-pop'), stage = document.getElementById('map-stage'),
-        host = document.getElementById('map-host');
-  if (!pop || pop.hidden || !stage || !host) return;
-  /* narrow layout: the stylesheet drops the panel into normal flow */
-  if (getComputedStyle(pop).position === 'static'){ pop.style.left = pop.style.top = pop.style.maxHeight = ''; return; }
-  const hb = host.getBoundingClientRect(), sb = stage.getBoundingClientRect();
-  /* only ever shrink the stylesheet's cap — a short map must not grow the
-     panel to the full height of the map it is supposed to float over */
-  pop.style.maxHeight = Math.min(430, window.innerHeight * 0.72, Math.max(190, hb.height - 16)) + 'px';
-  const pw = pop.offsetWidth, ph = pop.offsetHeight;
-  const sx = hb.width / MAP_W, sy = hb.height / MAP_H;
-  let x, y;
-  if (mapSelFeat){
-    /* centroid, through the live pan/zoom transform, into stage pixels */
-    const px = (mapSelFeat.cx * mapView.k + mapView.x) * sx + (hb.left - sb.left);
-    const py = (mapSelFeat.cy * mapView.k + mapView.y) * sy + (hb.top - sb.top);
-    x = px + 20;
-    if (x + pw > sb.width - 6) x = px - pw - 20;   // flip to the other side
-    y = py - ph / 2;
-  } else { x = sb.width - pw - 8; y = 8; }
-  pop.style.left = clamp(x, 6, Math.max(6, sb.width - pw - 6)) + 'px';
-  pop.style.top  = clamp(y, 6, Math.max(6, hb.height - ph - 6)) + 'px';
 }
 
 /* ------------------------------ interaction ------------------------------- */
@@ -6444,13 +6496,11 @@ function mapFeatures(){
   return state.laws.map.mode === 'mj-county' ? geo.counties : geo.states;
 }
 function mapFeatureKey(f){ return state.laws.map.mode === 'mj-county' ? f.id : (f.postal || f.id); }
+/* Hand-tuned: 6 screen pixels. A trackpad tap routinely drifts three or four,
+   and anything under this used to be read as a pan and throw the press away. */
+const MAP_DRAG_PX = 6;
 function attachMapEvents(host, mode){
-  const svg = host.querySelector('svg'), zoomG = svg.querySelector('#map-zoom'), tip = document.getElementById('map-tip');
-  const applyView = () => {
-    zoomG.setAttribute('transform', 'translate(' + mapView.x + ',' + mapView.y + ') scale(' + mapView.k + ')');
-    mapApplyPatternScale();
-    positionMapPop();
-  };
+  const svg = host.querySelector('svg'), tip = document.getElementById('map-tip');
 
   svg.addEventListener('pointermove', ev => {
     const t = ev.target.closest('.map-shape');
@@ -6462,43 +6512,55 @@ function attachMapEvents(host, mode){
     tip.classList.add('on');
   });
   svg.addEventListener('pointerleave', () => tip.classList.remove('on'));
-  svg.addEventListener('click', ev => {
-    const t = ev.target.closest('.map-shape');
-    if (t) mapSelect(t.dataset.k);
-    else mapClearSelection({focus:'none'});    // clicked open water
-  });
 
-  /* drag to pan */
-  let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0, moved = false;
+  /* A press selects; a press that travels more than MAP_DRAG_PX pans instead.
+     Selection runs off pointerup and the shape recorded at pointerdown, NOT
+     off the click event: capturing the pointer for a pan retargets the click
+     to the <svg>, so a perfectly still click used to hit-test as open water
+     and clear the selection instead of making one. The capture is now taken
+     only once a drag has actually started, which is the other half of it. */
+  let down = null;
   svg.addEventListener('pointerdown', ev => {
     if (ev.button != null && ev.button !== 0) return;
-    dragging = true; moved = false; sx = ev.clientX; sy = ev.clientY; ox = mapView.x; oy = mapView.y;
-    svg.classList.add('dragging'); svg.setPointerCapture(ev.pointerId);
+    down = {x:ev.clientX, y:ev.clientY, ox:mapView.x, oy:mapView.y, id:ev.pointerId,
+            shape:ev.target.closest('.map-shape'), dragging:false};
   });
   svg.addEventListener('pointermove', ev => {
-    if (!dragging) return;
-    if (!svg.isConnected){ dragging = false; return; }   // re-rendered under us
+    if (!down || ev.pointerId !== down.id) return;
+    if (!svg.isConnected){ down = null; return; }          // re-rendered under us
+    const dxs = ev.clientX - down.x, dys = ev.clientY - down.y;
+    if (!down.dragging){
+      if (Math.abs(dxs) < MAP_DRAG_PX && Math.abs(dys) < MAP_DRAG_PX) return;
+      if (mapView.k <= 1){ down.dragging = true; return; }  // nothing to pan at 1x
+      down.dragging = true;
+      svg.classList.add('dragging');
+      try{ svg.setPointerCapture(down.id); }catch(e){}
+    }
+    if (mapView.k <= 1) return;
     const r = host.getBoundingClientRect(), sc = MAP_W / r.width;
-    const dx = (ev.clientX - sx) * sc, dy = (ev.clientY - sy) * sc;
-    if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
-    mapView.x = ox + dx; mapView.y = oy + dy; applyView();
+    mapView.x = down.ox + dxs * sc; mapView.y = down.oy + dys * sc;
+    mapClampView(); mapApplyView();
   });
-  const endDrag = ev => {
-    if (!dragging) return;
-    dragging = false; svg.classList.remove('dragging');
-    try{ svg.releasePointerCapture(ev.pointerId); }catch(e){}
+  const endPointer = ev => {
+    if (!down || (ev.pointerId != null && ev.pointerId !== down.id)) return;
+    const d = down; down = null;
+    svg.classList.remove('dragging');
+    try{ svg.releasePointerCapture(d.id); }catch(e){}
+    if (d.dragging || ev.type !== 'pointerup') return;
+    if (d.shape) mapSelect(d.shape.dataset.k);
+    else mapClearSelection({focus:'none'});                 // pressed open water
   };
-  svg.addEventListener('pointerup', endDrag);
-  svg.addEventListener('pointercancel', endDrag);
-  /* a drag must not also count as a click */
-  svg.addEventListener('click', ev => { if (moved){ ev.stopPropagation(); moved = false; } }, true);
+  svg.addEventListener('pointerup', endPointer);
+  svg.addEventListener('pointercancel', endPointer);
+  /* nothing downstream should act on the click; selection already happened */
+  svg.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); }, true);
 
   svg.addEventListener('wheel', ev => {
     ev.preventDefault();
     const r = host.getBoundingClientRect(), sc = MAP_W / r.width;
     const px = (ev.clientX - r.left) * sc, py = (ev.clientY - r.top) * sc;
     mapZoomAt(px, py, ev.deltaY < 0 ? 1.15 : 1 / 1.15);
-    applyView();
+    mapApplyView();
   }, {passive:false});
 
   /* keyboard: roving through the feature list, so the map is reachable
@@ -6519,7 +6581,7 @@ function attachMapEvents(host, mode){
     const f = feats[mapKeyIndex];
     mapSelect(mapFeatureKey(f), {keepFocus:true});
   });
-  applyView();
+  mapApplyView();
 }
 function mapZoomAt(px, py, factor){
   const k2 = clamp(mapView.k * factor, 1, 14);
@@ -6537,8 +6599,11 @@ function mapClampView(){
 function mapApplyView(){
   const g = document.querySelector('#map-zoom');
   if (g) g.setAttribute('transform', 'translate(' + mapView.x + ',' + mapView.y + ') scale(' + mapView.k + ')');
+  const svg = document.querySelector('#map-host svg');
+  /* At 1x there is nothing to pan, so let a finger scroll the page straight
+     past the map. Once zoomed, the map takes the gesture. */
+  if (svg) svg.classList.toggle('zoomed', mapView.k > 1.001);
   mapApplyPatternScale();
-  positionMapPop();
 }
 /* Hatching and dots are drawn in the zoomed group's coordinates, so without
    this they vanish on a phone at 1x and turn into polka dots at 10x. The
@@ -6564,7 +6629,7 @@ function mapZoomTo(cx, cy, k){
 function mapClearSelection(opts){
   const m = state.laws.map;
   if (m.mode === 'mj-county') m.selCounty = null; else m.sel = null;
-  saveState(); renderMaps();
+  saveState(); mapApplySelection();
   /* renderMaps rebuilds the svg, so focus has to be put back deliberately or
      it falls to <body> and the keyboard user loses their place. A background
      click is the exception: the pointer did not come from the keyboard, so
@@ -6591,7 +6656,12 @@ function mapSelect(key, opts){
     if (sel) sel.value = m.sel;
   }
   saveState();
-  renderLaws();
+  /* Repainting 3,142 county paths to change one outline cost ~190 ms per
+     click, which is most of why selecting felt unresponsive. Nothing about
+     the geometry changed, so only the highlight, the panel and the state
+     card below are redrawn. */
+  mapApplySelection();
+  renderLawsBody();
   if (opts && opts.keepFocus){
     const svg = document.querySelector('#map-host svg');
     if (svg) svg.focus({preventScroll:true});
@@ -6715,6 +6785,7 @@ function renderMaps(){
   document.getElementById('map-banner').innerHTML = mode === 'cbd-state' ? CBD_FEDERAL_BANNER : '';
   paintIcons(document.getElementById('map-banner'));
   paintMap();
+  renderMapSmall();
 
   /* search list follows the active view */
   const feats = mapFeatures();
@@ -6778,6 +6849,9 @@ function initMaps(){
 /* ------------------------------- laws render ------------------------------ */
 function renderLaws(){
   renderMaps();
+  renderLawsBody();
+}
+function renderLawsBody(){
   const code = LAWS[state.laws.st] ? state.laws.st : 'CA';
   const L = LAWS[code];
   const bac = L.bac || LAWS_DEFAULT_BAC;
