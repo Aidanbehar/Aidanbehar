@@ -663,6 +663,20 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 }
 .map-host svg{width:100%; height:auto; display:block; touch-action:none; cursor:grab}
 .map-host svg.dragging{cursor:grabbing}
+/* the detail panel floats over the map, anchored near whatever was clicked.
+   .map-stage exists only so the panel escapes .map-host's overflow clip. */
+.map-stage{position:relative}
+.map-pop{
+  position:absolute; left:0; top:0; z-index:14;
+  width:min(380px, calc(100% - 14px)); max-height:min(430px, 72vh); overflow:auto;
+  padding:13px 15px 14px; border-radius:var(--r-md);
+  background:var(--surface-solid); border:1px solid var(--border-strong);
+  box-shadow:0 24px 52px -18px rgba(0,0,0,.55);
+  animation:popIn .15s cubic-bezier(.22,.68,.36,1) both;
+}
+.map-pop[hidden]{display:none}
+.map-pop:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+@keyframes popIn{from{opacity:0; transform:translateY(7px) scale(.985)} to{opacity:1; transform:none}}
 .map-shape{stroke:var(--map-stroke); stroke-width:.35; stroke-linejoin:round; cursor:pointer}
 .map-shape:hover{stroke:var(--text); stroke-width:1.1}
 .map-shape.sel{stroke:var(--text); stroke-width:1.6}
@@ -687,8 +701,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
   font-size:.8rem; font-weight:600; color:var(--text); white-space:nowrap; opacity:0; transition:opacity .12s;
 }
 .map-tip.on{opacity:1}
-.map-detail{margin-top:14px; position:relative}
-.map-dismiss{position:absolute; top:0; right:0; z-index:2; display:inline-flex; align-items:center; gap:6px}
+.map-dismiss{position:absolute; top:11px; right:13px; z-index:2; display:inline-flex; align-items:center; gap:6px}
 .map-dismiss .kbd-hint{
   font-size:.66rem; letter-spacing:.04em; padding:1px 5px; border-radius:4px;
   border:1px solid var(--border-strong); color:var(--text-faint); background:var(--surface-3);
@@ -701,6 +714,15 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 .map-src{font-size:.76rem; color:var(--text-faint); font-style:italic}
 @media (max-width:720px){.map-stat{grid-template-columns:1fr; gap:2px}
   .map-stat dt{margin-top:7px}}
+/* Below this width a map is too short to float a panel over: the panel drops
+   into the flow directly under the map instead, still a card, still dismissible.
+   positionMapPop() checks the computed position and leaves it alone. */
+@media (max-width:680px){
+  .map-pop{
+    position:static; width:auto; max-width:none; max-height:none;
+    margin-top:11px; animation:fadeUp .2s ease both;
+  }
+}
 
 /* laws: status chips and the state grid */
 .law-chip{
@@ -2276,12 +2298,14 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
       <button class="btn tiny" type="button" id="map-zoom-out" aria-label="Zoom out">&minus;</button>
       <button class="btn tiny" type="button" id="map-zoom-reset">Reset view</button>
     </div>
-    <div class="map-host" id="map-host">
-      <div class="map-tip" id="map-tip"></div>
+    <div class="map-stage" id="map-stage">
+      <div class="map-host" id="map-host">
+        <div class="map-tip" id="map-tip"></div>
+      </div>
+      <div class="map-pop" id="map-pop" role="dialog" aria-label="Map detail" aria-live="polite" tabindex="-1" hidden></div>
     </div>
-    <p class="card-note" style="margin:10px 0 0">Click or tap a shape for detail. With the map focused, the arrow keys move between shapes and Enter selects; Escape closes the panel. Drag to pan, scroll or pinch to zoom.</p>
+    <p class="card-note" style="margin:10px 0 0">Click or tap a shape and its detail opens over the map. Click the background or press Escape to close it. With the map focused, the arrow keys move between shapes and Enter selects. Drag to pan, scroll or pinch to zoom.</p>
     <div class="map-legend" id="map-legend"></div>
-    <div class="map-detail" id="map-detail"></div>
   </div>
 
   <div class="grid g2" style="margin-bottom:18px">
@@ -6351,6 +6375,68 @@ function renderMapLegend(mode){
   host.innerHTML = rows;
 }
 
+/* ------------------------------- the popover ------------------------------ */
+/* Clicking a shape opens its detail over the map rather than somewhere below
+   it, so a click visibly does something. mapSelFeat caches the selected
+   feature; on the county map, searching it again on every pan frame would be
+   3,142 comparisons per pointermove. */
+let mapSelFeat = null;
+function renderMapPop(){
+  const m = state.laws.map, mode = m.mode;
+  const pop = document.getElementById('map-pop');
+  if (!pop) return;
+  const key = mode === 'mj-county' ? m.selCounty : m.sel;
+  if (!key){ pop.hidden = true; pop.innerHTML = ''; mapSelFeat = null; return; }
+
+  const body = mode === 'mj-county' ? mapDetailCounty(key)
+             : mode === 'cbd-state' ? mapDetailCbd(key)
+             : mapDetailMj(key);
+  /* Dismissible three ways: this button, which is in the normal tab order;
+     Escape from the map or from the panel; and a click on open water. */
+  pop.innerHTML =
+    '<button class="btn tiny map-dismiss" type="button" id="map-pop-close" aria-label="Close this detail panel">' +
+    'Dismiss<span class="kbd-hint">Esc</span></button>' + body;
+  pop.hidden = false;
+  pop.scrollTop = 0;
+  document.getElementById('map-pop-close').addEventListener('click', () => mapClearSelection());
+  pop.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape'){ ev.stopPropagation(); mapClearSelection(); }
+  });
+
+  mapSelFeat = mapFeatures().find(f => mapFeatureKey(f) === key) || null;
+  positionMapPop();
+
+  /* Only scroll if the panel actually landed off-screen — arrow-key roving
+     must not yank the page around on every keypress. */
+  const r = pop.getBoundingClientRect();
+  if (r.top > window.innerHeight - 50 || r.bottom < 50)
+    pop.scrollIntoView({block:'nearest', behavior:'smooth'});
+}
+function positionMapPop(){
+  const pop = document.getElementById('map-pop'), stage = document.getElementById('map-stage'),
+        host = document.getElementById('map-host');
+  if (!pop || pop.hidden || !stage || !host) return;
+  /* narrow layout: the stylesheet drops the panel into normal flow */
+  if (getComputedStyle(pop).position === 'static'){ pop.style.left = pop.style.top = pop.style.maxHeight = ''; return; }
+  const hb = host.getBoundingClientRect(), sb = stage.getBoundingClientRect();
+  /* only ever shrink the stylesheet's cap — a short map must not grow the
+     panel to the full height of the map it is supposed to float over */
+  pop.style.maxHeight = Math.min(430, window.innerHeight * 0.72, Math.max(190, hb.height - 16)) + 'px';
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  const sx = hb.width / MAP_W, sy = hb.height / MAP_H;
+  let x, y;
+  if (mapSelFeat){
+    /* centroid, through the live pan/zoom transform, into stage pixels */
+    const px = (mapSelFeat.cx * mapView.k + mapView.x) * sx + (hb.left - sb.left);
+    const py = (mapSelFeat.cy * mapView.k + mapView.y) * sy + (hb.top - sb.top);
+    x = px + 20;
+    if (x + pw > sb.width - 6) x = px - pw - 20;   // flip to the other side
+    y = py - ph / 2;
+  } else { x = sb.width - pw - 8; y = 8; }
+  pop.style.left = clamp(x, 6, Math.max(6, sb.width - pw - 6)) + 'px';
+  pop.style.top  = clamp(y, 6, Math.max(6, hb.height - ph - 6)) + 'px';
+}
+
 /* ------------------------------ interaction ------------------------------- */
 let mapKeyIndex = 0;
 function mapFeatures(){
@@ -6363,6 +6449,7 @@ function attachMapEvents(host, mode){
   const applyView = () => {
     zoomG.setAttribute('transform', 'translate(' + mapView.x + ',' + mapView.y + ') scale(' + mapView.k + ')');
     mapApplyPatternScale();
+    positionMapPop();
   };
 
   svg.addEventListener('pointermove', ev => {
@@ -6378,6 +6465,7 @@ function attachMapEvents(host, mode){
   svg.addEventListener('click', ev => {
     const t = ev.target.closest('.map-shape');
     if (t) mapSelect(t.dataset.k);
+    else mapClearSelection({focus:'none'});    // clicked open water
   });
 
   /* drag to pan */
@@ -6450,6 +6538,7 @@ function mapApplyView(){
   const g = document.querySelector('#map-zoom');
   if (g) g.setAttribute('transform', 'translate(' + mapView.x + ',' + mapView.y + ') scale(' + mapView.k + ')');
   mapApplyPatternScale();
+  positionMapPop();
 }
 /* Hatching and dots are drawn in the zoomed group's coordinates, so without
    this they vanish on a phone at 1x and turn into polka dots at 10x. The
@@ -6477,9 +6566,12 @@ function mapClearSelection(opts){
   if (m.mode === 'mj-county') m.selCounty = null; else m.sel = null;
   saveState(); renderMaps();
   /* renderMaps rebuilds the svg, so focus has to be put back deliberately or
-     it falls to <body> and the keyboard user loses their place. */
-  const back = !opts || opts.focusMap !== false;
-  const el = back ? document.querySelector('#map-host svg') : document.getElementById('map-search');
+     it falls to <body> and the keyboard user loses their place. A background
+     click is the exception: the pointer did not come from the keyboard, so
+     moving focus there would only draw a ring nobody asked for. */
+  const where = (opts && opts.focus) || 'map';
+  if (where === 'none') return;
+  const el = where === 'search' ? document.getElementById('map-search') : document.querySelector('#map-host svg');
   if (el) el.focus({preventScroll:true});
 }
 function mapSelect(key, opts){
@@ -6629,24 +6721,7 @@ function renderMaps(){
   document.getElementById('map-search-list').innerHTML = feats.map(f =>
     '<option value="' + esc(mode === 'mj-county' ? f.name + ' County, ' + f.stPostal : f.name) + '"></option>').join('');
 
-  const detail = document.getElementById('map-detail');
-  const picked = mode === 'mj-county' ? m.selCounty : m.sel;
-  let body;
-  if (mode === 'mj-county'){
-    body = m.selCounty ? mapDetailCounty(m.selCounty)
-      : '<p class="card-note">Pick a county for its dispensary status, local opt-out position and — in California — how it voted on Proposition 64.</p>';
-  } else if (mode === 'cbd-state'){
-    body = m.sel ? mapDetailCbd(m.sel) : '<p class="card-note">Pick a state for its CBD rules.</p>';
-  } else {
-    body = m.sel ? mapDetailMj(m.sel) : '<p class="card-note">Pick a state for its legalisation history, market and use statistics.</p>';
-  }
-  /* The panel is dismissible from the keyboard two ways: this button, which
-     sits in the normal tab order, and Escape while the map itself has focus. */
-  detail.innerHTML = (picked
-    ? '<button class="btn tiny map-dismiss" type="button" id="map-detail-close">Dismiss<span class="kbd-hint">Esc</span></button>'
-    : '') + body;
-  const closeBtn = document.getElementById('map-detail-close');
-  if (closeBtn) closeBtn.addEventListener('click', () => mapClearSelection({focusMap:false}));
+  renderMapPop();
   /* keep the roving keyboard cursor on whatever is selected */
   const selKey = mode === 'mj-county' ? m.selCounty : m.sel;
   if (selKey){
