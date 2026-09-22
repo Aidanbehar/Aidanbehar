@@ -11709,17 +11709,46 @@ const DEV = (()=>{
     parent.appendChild(b);
     return b;
   }
+  /* A SLIDER THE PANEL IS ALLOWED TO OVERWRITE, EXCEPT WHILE YOU ARE
+     HOLDING IT. Every one of these is re-synced from the model each
+     panel refresh, which is right — the mind moves on its own and the
+     handle should follow it. What is not right is doing that to the
+     handle under the player's thumb: the write lands mid-drag, the
+     thumb jumps back to where the model still is, and the slider reads
+     as refusing to move. It is worst on the two whose setter and getter
+     are not the same variable — intensity and agitation are PINNED by
+     writing Mind.forceI, and Mind.intensity only catches up on the next
+     update — so the value read back during the drag is always one frame
+     stale, and the fight never ends. Reported as exactly that: the two
+     that cannot be changed.
+
+     So: while the pointer is down on a slider, or it has the keyboard,
+     the panel does not touch it. */
   function slider(parent, label, min, max, step, get, set){
     const row = el('div','row');
     row.appendChild(el('label', null, label));
     const i = document.createElement('input');
     i.type = 'range'; i.min = min; i.max = max; i.step = step; i.value = get();
+    let held = false;
     i.oninput = ()=> set(parseFloat(i.value));
+    i.addEventListener('pointerdown', ()=>{ held = true; });
+    i.addEventListener('focus',       ()=>{ held = true; });
+    const release = ()=>{ held = false; };
+    i.addEventListener('pointerup',     release);
+    i.addEventListener('pointercancel', release);
+    i.addEventListener('blur',          release);
+    addEventListener('pointerup',       release);
     row.appendChild(i);
     const v = el('span', null, (+get()).toFixed(2));
     row.appendChild(v);
     parent.appendChild(row);
-    return { input:i, span:v, sync(){ i.value = get(); v.textContent = (+get()).toFixed(2); } };
+    return { input:i, span:v, get held(){ return held; },
+      sync(){
+        v.textContent = (+get()).toFixed(2);
+        if(held) return;                       // their hand is on it
+        const now = String(get());
+        if(i.value !== now) i.value = now;
+      } };
   }
 
   function build(){
@@ -11736,10 +11765,17 @@ const DEV = (()=>{
     const sStage = slider(s1, 'stage', 0, 4, 1,
       ()=>Mind.stage,
       v=>{ Mind.progress = CFG.MIND.stageAt[v] + 0.005; Mind.stage = v; });
+    /* Read back the PIN when there is one, not the model. Setting
+       Mind.forceI and reading Mind.intensity is a one-frame round trip,
+       and a control whose readback lags its own input cannot be
+       dragged. With the pin showing, the value the slider reports is
+       the value the slider set. */
     const sInt = slider(s1, 'intensity', 0, 1, 0.01,
-      ()=>Mind.intensity, v=>{ Mind.spike = 0; Mind.forceI = v; });
+      ()=> Mind.forceI != null ? Mind.forceI : Mind.intensity,
+      v=>{ Mind.spike = 0; Mind.forceI = v; Mind.intensity = v; });
     const sAgit = slider(s1, 'agitation', 0, 1, 0.01,
-      ()=>Mind.agitation, v=>{ Mind.forceA = v; });
+      ()=> Mind.forceA != null ? Mind.forceA : Mind.agitation,
+      v=>{ Mind.forceA = v; Mind.agitation = v; });
     const g1 = el('div','grid'); s1.appendChild(g1);
     button(g1, 'clear forced', ()=>{ Mind.forceI = null; Mind.forceA = null; });
     button(g1, 'freeze mind', ()=>{ CFG.DEBUG.freezeMind = !CFG.DEBUG.freezeMind; });
@@ -12247,6 +12283,25 @@ const DEV = (()=>{
       if(pointerLocked) document.exitPointerLock();
       paint();
     }
+    /* THE PANEL RUNS THE GAME. Pausing is decided by
+       `!pointerLocked && started && !DEV.open` — the panel is meant to
+       keep the world ticking without pointer lock, because half of what
+       it does is only visible in a world that is moving. But that was
+       only ever evaluated when the pointer lock CHANGED, and opening
+       the panel is not a pointer-lock change. So the ordinary way in —
+       press Escape to get the mouse back, then ` for the panel — left
+       the game paused with the panel open, and every control that pins
+       a value the simulation has to carry forward silently did nothing:
+       the intensity and agitation sliders set Mind.forceI and forceA,
+       Mind.update never ran to apply them, and the panel's own refresh
+       wrote the stale model value back into the handle. Dragged to
+       0.76, they snapped back to 0.14 and 0.00. Reported as the two
+       sliders that will not move.
+
+       Opening the panel now decides it, and closing it hands the
+       question back to whether the pointer is locked. */
+    G.paused = !D.open && !pointerLocked && G.started;
+    UI.pauseNote(!D.open && !pointerLocked && G.started && !G.over);
   };
   /* =================================================================
      WHAT HAS ACTUALLY BEEN MEASURED
@@ -12425,6 +12480,25 @@ const DEV = (()=>{
        65 buttons, 9 sliders and 1 field, every one of which changes
        observable state; none throw. The four that navigate or take
        seconds tested separately.
+       THAT AUDIT READ THE STATE BACK IMMEDIATELY, which is the one
+       check that cannot see a control undone by the NEXT frame — and
+       two were. Dragged to 0.76, intensity snapped back to 0.14 and
+       agitation to 0.00, every time, because they are the only two
+       whose setter and getter are different variables: they pin
+       Mind.forceI and forceA, Mind.intensity only catches up on the
+       next update, and the panel writes the stale model value back
+       into the handle on every refresh. Worse, the ordinary way into
+       the panel — Escape for the mouse, then ` — left the game PAUSED
+       with the panel open, because pausing was only ever decided when
+       the pointer lock changed. With the mind not updating, the lag
+       was permanent. The sliders now read back the pin, the panel
+       never writes into a control while the pointer is down on it, and
+       opening the panel decides the pause the way the pointer-lock
+       handler always intended it to.
+       The audit now sets each slider, lets a second of game and panel
+       frames run, and asks the handle again. Nine sliders, one that
+       does not hold: stamina, which recovers — that is the system
+       working, not the control failing.
 
      THE JOURNEY, from the spawn, no teleporting, under the game's own
      movement, collision and survival. FOURTEEN seeds of fourteen now
