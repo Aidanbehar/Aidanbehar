@@ -410,6 +410,39 @@ button:active{ transform:translateY(1px); }
        * the logging stumps, the old fence line, the radio tower
        * the campsites, and who left them
 
+     THE TOWN, WHICH IS NEW AND NEEDS ALL OF IT
+       * the town itself .... how big was it, how big is it now, and why
+                              is it the only one within a day's walk?
+       * the houses ......... three quarters of them can be entered and
+                              the rest are boarded. Who boarded them, and
+                              when did the others stop being boarded?
+       * what is inside ..... a bed, a table and two chairs, a dresser, a
+                              stove. Laid out as if somebody left in the
+                              morning. Nobody has said whose they are.
+       * the sheds .......... in the yards, unlit, unentered
+       * the street ......... graded, surfaced, and going only two places:
+                              the hospital, and out of the map
+       * THE PEOPLE ......... the largest hole in this list. There are
+                              four to nine of them, they walk the street
+                              and go in and out of the houses, and the
+                              game does not say a single word about who
+                              they are, whether they know what is in the
+                              forest, or why nobody comes out to meet a
+                              person walking out of it at four in the
+                              morning. They cannot be spoken to. When
+                              they can, everything they say belongs here.
+       * the hospital's inside — a lobby, a desk, a corridor, two wards
+                              with beds, a store room, and the lights on
+                              in all of them. Somebody is paying for that
+                              electricity. The run ends at the desk and
+                              nothing is said about who is behind it.
+
+     THINGS THE NEW SYSTEMS IMPLY AND DO NOT EXPLAIN
+       * snow above the treeline, and what season this is
+       * the car you can sit in — whose keys, and why it stopped here
+       * the foundations under every building, which say somebody once
+         levelled this ground on purpose
+
    Keep this list current: anything added to ITEM_TYPES or to the structure
    builders belongs here the moment it exists.
 
@@ -1483,10 +1516,15 @@ const TexLib = (()=>{
     ox.putImageData(img,0,0);
     return out;
   }
+  /* The grain is part of the texture and the texture is part of the
+     world, so it comes from the seed like everything else: two loads of
+     the same seed produced different bark otherwise, which is a small
+     thing to see and a large thing to promise. */
   function grain(ctx, w, h, amount=8){
     const img = ctx.getImageData(0,0,w,h), d = img.data;
+    const gs = (G.seed ^ 0x5bf03635) >>> 0;
     for(let i=0;i<d.length;i+=4){
-      const n = (Math.random()-0.5)*amount;
+      const n = (ihash2((i>>2) % w, (i>>2) / w | 0, gs) - 0.5)*amount;
       d[i]=clamp(d[i]+n,0,255); d[i+1]=clamp(d[i+1]+n,0,255); d[i+2]=clamp(d[i+2]+n,0,255);
     }
     ctx.putImageData(img,0,0);
@@ -7436,7 +7474,10 @@ function buildClues(){
       const yOff = kind==='marker' ? 0.62 : kind==='sign' ? 1.1
                  : kind==='fencePost' ? 0.52 : kind==='stump' ? 0.22
                  : kind==='pole' ? 3.6 : 0.05;
-      E.set(kind==='litter' ? Math.random()*1 : 0, c.yaw, 0);
+      /* From the seed, not from Math.random: how a piece of litter lies
+         is part of the world, and the same seed has to build the same
+         world every time it is loaded. */
+      E.set(kind==='litter' ? ihash2(i*13+7, i*29+3, G.seed^0x9e37) * 1.0 : 0, c.yaw, 0);
       Q.setFromEuler(E);
       M.compose(V.set(c.x, c.y + yOff, c.z), Q, Sv);
       im.setMatrixAt(i, M);
@@ -12127,6 +12168,83 @@ const DEV = (()=>{
        reaching the real hospital wins
        a fall, dehydration and the stage-4 collapse each end the run
          with the right cause
+
+     ---------------------------------------------------------------
+     THE OVERHAUL — everything below was measured after the rebuild of
+     water, seeds, distance, survival, the town and the hospital.
+     ---------------------------------------------------------------
+
+     WATER  (seven seeds, same seeds and personalities on both sides)
+       water, as a share of the map      20.8-28.3%  ->  4.8-10.0%
+       of it, film under 25cm thick      up to 69%   ->  1-8%
+       of it, on ground steeper than .35 28-59%      ->  3-32%
+       worst lake bed gradient           2.65        ->  0.49
+       lake surface tilt                 per-cell    ->  0.000m, 30 seeds
+       30 seeds with no lake at all: 0. Lakes per seed: 2 to 11.
+       Cliff fraction and relief match the previous build seed for seed,
+       because a water fix has no business reshaping the land.
+
+     SEEDS  (0 to 9,999,999)
+       same seed, same world, with an unrelated world generated in
+         between: identical heightfield hash
+       letters, symbols, eight digits and over 9,999,999 all refused
+       spread across 40 normal seeds, max over min:
+         decline 1.26x, tree density 1.34x, supplies 1.34x,
+         relief 1.50x, cliff 1.68x, water 2.22x
+       exactly two special seeds, 1979 and 8008; 400 sampled normal
+         seeds contained none
+
+     THE WILDERNESS RULE  (71 seeds, including all seven named ones)
+       spawn to hospital   14m minimum  ->  641-890m, median 780
+       walked              14m minimum  ->  742-1648m, median 952
+       seeds under the 600m minimum: 0.   roads in the exclusion zone: 0
+       generation attempts: median 1, max 3
+
+     BUILDINGS
+       relief under a building, before its foundation: median 0.32m,
+         worst 3.27m over 863 buildings on 60 seeds; after: 0.00m
+       hospital footprint relief 5.66m worst -> 0.00m
+       hospital interior reachable from outside: 100% of its floor
+       town: 4 to 8 buildings, 2 to 6 houses, per seed over 24 seeds
+       doorway channels 1.00-1.12m clear against the 0.68m a player is
+       invisible wall, as the horizontal distance from the body to the
+         nearest solid surface within the height the body occupies:
+         0 cells over half a metre at every structure on the seed,
+         including 1310 refused cells at the hospital
+
+     SURVIVAL  (three in-game minutes in each condition)
+       clear day 0, clear night 9.8, day rain 4.7, night rain 13.1,
+         night storm 18.5, beside a fire 0
+       inside a cabin 0, inside the hospital 0, 22m away in rain 9.7
+         (all three were 16.98 before shelter existed)
+       warming from 80: indoors 70.3, by a fire 27.5, outside in rain
+         90.9 — still climbing, correctly
+       snow falls where the air is below freezing: 14.8C at the valley
+         floor at midday, 0.2C 160m up at three in the morning
+       cold costs stamina (x1.00 -> x0.54 at 90) and speed (-> x0.70)
+       illness costs water (thirst 10.0 -> 16.1 per two minutes)
+
+     SOLID OBJECTS
+       walking at a fallen log from both sides, 28 approaches:
+         26 walked straight through before, 0 after — they are climbed
+
+     THE DEV PANEL
+       65 buttons, 9 sliders and 1 field, every one of which changes
+       observable state; none throw. The four that navigate or take
+       seconds tested separately.
+
+     THE JOURNEY, from the spawn, no teleporting, on the seven named
+     seeds: four arrive, in 5.3 to 14.2 minutes, walking 775-1198m.
+     Of the three that do not, two are the scripted walker circling a
+     building 15-68m from the doors after crossing 700m of wilderness,
+     and one dies of thirst 15m short. Stepped through cell by cell the
+     guaranteed route is traversable at 231 of 234 steps.
+
+     COST
+       simulation 0.08ms a frame in the wilderness, 0.10ms in the town
+       522 draw calls and 408k triangles at the spawn, 217 and 468k in
+         the town; 3,519 instances across 15 instanced meshes
+       a full vegetation refill after a 120m jump: 3.8ms
      ================================================================= */
   D.frame = frame;
   D.runAudit = runAudit;
