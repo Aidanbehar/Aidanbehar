@@ -2691,53 +2691,104 @@ function placeHospital(){
   const anchor = cur >= 0 ? cur : bestOutlet;
   const ax = anchor % N, az = (anchor/N)|0;
 
-  // search outward for a flat, dry, buildable pad
+  /* Search outward for buildable ground, and judge it on the ground the
+     BUILDING will stand on. The first version tested the maximum cell
+     slope over a 9x9 patch, which is neither the same shape as the
+     hospital nor the same question: a cell slope of 0.30 is 1.2m of rise
+     across one 4m cell, so a site could pass that test with seven metres
+     of relief under a 24m by 15m building. It did. Measured across three
+     seeds, the ground within the hospital's own span ranged over 17.9m,
+     64.1m and 10.9m, which is a building hanging off a hillside.
+
+     The hospital cannot simply be re-rolled the way a cabin can — there
+     is one of it, and where it sits is the point of the map — so the
+     relief limit is relaxed in two further passes rather than failing
+     the seed, and whatever is left is levelled by its foundation. */
+  const [hhx, hhz] = padExtent('hospital', null);
   let best = null, bestScore = -Infinity;
-  for(let rad=3; rad<=26; rad++){
-    for(let a=0; a<Math.max(10, rad*6); a++){
-      const th = a/Math.max(10, rad*6) * TAU;
-      const ix = Math.round(ax + Math.cos(th)*rad), iz = Math.round(az + Math.sin(th)*rad);
-      if(!inGrid(ix,iz)) continue;
-      const i = iz*N+ix;
-      if(ix<6||iz<6||ix>N-7||iz>N-7) continue;
-      if(Wld.WLEV[i] > Wld.H[i]) continue;                 // not in the river
-      // flatness over the footprint
-      let maxS = 0, sum = 0, cnt = 0;
-      for(let dz=-4; dz<=4; dz++) for(let dx=-4; dx<=4; dx++){
-        if(!inGrid(ix+dx, iz+dz)) { maxS = 9; continue; }
-        const j = (iz+dz)*N + (ix+dx);
-        maxS = Math.max(maxS, Wld.SLOPE[j]);
-        sum += Wld.H[j]; cnt++;
+  for(const [limit, maxRad] of [[PAD.maxReliefBig, 26], [PAD.maxReliefBig*2, 26],
+                               [PAD.maxReliefBig*4, 70]]){
+    for(let rad=3; rad<=maxRad; rad++){
+      for(let a=0; a<Math.max(10, rad*6); a++){
+        const th = a/Math.max(10, rad*6) * TAU;
+        const ix = Math.round(ax + Math.cos(th)*rad), iz = Math.round(az + Math.sin(th)*rad);
+        if(!inGrid(ix,iz)) continue;
+        const i = iz*N+ix;
+        if(ix<6||iz<6||ix>N-7||iz>N-7) continue;
+        if(Wld.WLEV[i] > Wld.H[i]) continue;                 // not in the river
+        let maxS = 0;
+        for(let dz=-4; dz<=4; dz++) for(let dx=-4; dx<=4; dx++){
+          if(!inGrid(ix+dx, iz+dz)) { maxS = 9; continue; }
+          maxS = Math.max(maxS, Wld.SLOPE[(iz+dz)*N + (ix+dx)]);
+        }
+        if(maxS > 0.30) continue;
+        /* The building faces along the river, so the footprint is tested
+           at the orientation it will be built at. */
+        const x = wxOf(ix), z = wzOf(iz);
+        const d0 = Wld.DIR[i];
+        const yaw = d0 >= 0 ? Math.atan2(wzOf((d0/N)|0) - z, wxOf(d0%N) - x) : 0;
+        const pg = padGround(x, z, hhx, hhz, yaw);
+        if(pg.wet > 0) continue;
+        if(pg.relief > limit) continue;
+        const score = -pg.relief*6 - maxS*10 - rad*0.05
+                    + (Wld.H[i] < Wld.H[anchor]+9 ? 1 : 0);
+        if(score > bestScore){ bestScore = score; best = { ix, iz, i, y: pg.mean, yaw }; }
       }
-      if(maxS > 0.30) continue;
-      const score = -maxS*10 - rad*0.05 + (Wld.H[i] < Wld.H[anchor]+9 ? 1 : 0);
-      if(score > bestScore){ bestScore = score; best = { ix, iz, i, y: sum/cnt }; }
+      if(best) break;
     }
     if(best) break;
   }
   if(!best){
-    // fall back to the flattest cell in the downstream quarter, which is
-    // rare enough that it has never been the reason a seed was rejected,
-    // and is still a legal site
-    let fb=null, fbs=Infinity;
-    for(let iz=8; iz<N-8; iz++) for(let ix=8; ix<N-8; ix++){
-      const i=iz*N+ix;
-      if(Wld.WLEV[i] > Wld.H[i]) continue;
-      const d = Math.hypot(ix-ax, iz-az);
-      const s = Wld.SLOPE[i]*10 + d*0.02;
-      if(s < fbs){ fbs=s; fb={ix,iz,i,y:Wld.H[i]}; }
-    }
+    /* Nothing within reach of the river was buildable, so sweep the map.
+       The old version of this scored cells on the slope AT the cell and
+       its distance from the outlet, which is how the hospital ended up
+       on sites with nineteen metres of relief under it: a single cell
+       can be flat on the lip of a drop. It is scored on the ground under
+       the whole building now, and on staying out of the water, with
+       distance from the river as a tiebreak rather than the rule.
+       Coarse first, then refined around the winner, because measuring a
+       footprint at every cell of the grid is not free. */
+    let fb = null, fbs = -Infinity;
+    const sweep = (x0, x1, z0, z1, step)=>{
+      for(let iz=z0; iz<=z1; iz+=step) for(let ix=x0; ix<=x1; ix+=step){
+        if(ix<8||iz<8||ix>N-9||iz>N-9) continue;
+        const i = iz*N+ix;
+        if(Wld.WLEV[i] > Wld.H[i]) continue;
+        const x = wxOf(ix), z = wzOf(iz);
+        const d0 = Wld.DIR[i];
+        const yaw = d0 >= 0 ? Math.atan2(wzOf((d0/N)|0) - z, wxOf(d0%N) - x) : 0;
+        const pg = padGround(x, z, hhx, hhz, yaw);
+        const sc = -pg.relief*3 - pg.wet*2 - Math.hypot(ix-ax, iz-az)*0.05;
+        if(sc > fbs){ fbs = sc; fb = { ix, iz, i, y: pg.mean, yaw }; }
+      }
+    };
+    sweep(8, N-9, 8, N-9, 4);
+    if(fb) sweep(Math.max(8,fb.ix-5), Math.min(N-9,fb.ix+5),
+                 Math.max(8,fb.iz-5), Math.min(N-9,fb.iz+5), 1);
     best = fb;
+    Wld.stats.hospitalSwept = true;
   }
   Wld.hospital = {
     ix: best.ix, iz: best.iz, i: best.i,
     x: wxOf(best.ix), z: wzOf(best.iz),
-    y: heightAt(wxOf(best.ix), wzOf(best.iz)),
+    y: best.y,
     yaw: 0, real: true,
   };
   // face it along the river, which is also where the road will run
   const d = Wld.DIR[best.i];
   if(d >= 0) Wld.hospital.yaw = Math.atan2(wzOf((d/N)|0) - Wld.hospital.z, wxOf(d%N) - Wld.hospital.x);
+  /* The ground is levelled here, before the start, the pass, the routes
+     and the canopy, so that every one of them is laid over the terrain
+     the hospital will actually stand on. */
+  {
+    const g = padGround(Wld.hospital.x, Wld.hospital.z, hhx, hhz, Wld.hospital.yaw);
+    carvePad(Wld.hospital.x, Wld.hospital.z, hhx, hhz, Wld.hospital.yaw, g.mean, g.relief);
+    recomputeSlope();
+    const after = padGround(Wld.hospital.x, Wld.hospital.z, hhx, hhz, Wld.hospital.yaw);
+    Wld.hospital.y = after.mean;
+    Wld.stats.hospitalRelief = +g.relief.toFixed(2);
+    Wld.stats.hospitalReliefAfter = +after.relief.toFixed(2);
+  }
   Wld.stats.outletAcc = bestAcc;
 }
 
@@ -2935,12 +2986,175 @@ function rollStyle(){
 
 const STRUCT_KINDS = ['cabin','campsite','ruin','car'];
 
+/* ---------------------------------------------------------------------
+   FOUNDATIONS
+
+   A building was placed at the height of the single grid cell under its
+   centre and then built as a rigid box. The ground it stood on was never
+   asked to agree. Measured across three seeds, cabins stood on ground
+   that varied up to 3.2m across their own footprint, and the hospital —
+   24m by 15m, sited by a slope test over a region smaller than itself —
+   spanned 17.9m of relief on one seed and 64.1m on another. A building
+   on ground like that has one corner buried to the windows and the
+   opposite corner standing in the air, and the collision boxes go with
+   it: the roof drops into the player's chest on the high side, and on
+   the low side you are refused by a wall whose geometry starts above
+   your head.
+
+   That is the cause of a whole family of "invisible wall" reports, and
+   the cause is placement, not collision. So:
+
+     1. A SITE IS SCREENED ON ITS OWN FOOTPRINT. Slope at a point says
+        nothing about relief across a building. The rule is now the
+        difference between the highest and lowest ground under the
+        building itself, and a site that fails it is rejected and another
+        is drawn — the loop already tries 120 times.
+     2. THE FLOOR IS THE GROUND'S MEAN, not one sample of it, so the
+        error is shared between the corners instead of being dumped on
+        one of them.
+     3. WHAT IS LEFT IS LEVELLED. The footprint is flattened to the floor
+        height and blended out through a skirt wide enough that the skirt
+        itself stays walkable — the flatter the site, the smaller the
+        earthwork, and a site that was already flat gets almost none.
+
+   This is levelling the ground a building stands on, which is what
+   building on a slope actually involves. It is not flattening the world:
+   it touches the footprint and a few metres around it, everything else
+   is left exactly as steep as it was, and water is never carved at all —
+   a cell with water in it is skipped, so a pad can neither dam a river
+   nor drain one.
+
+   It runs before routes, canopy, resources and hazards, so nothing is
+   ever placed on ground that later moves.
+   ------------------------------------------------------------------- */
+const PAD = {
+  margin: 1.2,          // metres of standing room beyond the walls
+  maxRelief: 1.10,      // how uneven a small building's ground may be
+  maxReliefBig: 2.20,   // and the hospital's, which cannot be re-rolled freely
+  skirtSlope: 0.40,     // the blend is spread until it is this shallow
+  skirtMin: 2.5, skirtMax: 16,
+};
+
+/* The rectangle a building actually occupies, plus standing room. The
+   ruin and the car build themselves from their own seeded RNG, so these
+   are their widest cases rather than their exact ones. */
+function padExtent(kind, style){
+  switch(kind){
+    case 'cabin':    return [style.footprint[0]*0.5 + PAD.margin,
+                             style.footprint[1]*0.5 + PAD.margin];
+    case 'ruin':     return [3.75 + PAD.margin, 3.10 + PAD.margin];
+    case 'campsite': return [2.60 + PAD.margin, 2.60 + PAD.margin];
+    case 'car':      return [1.25 + PAD.margin, 2.40 + PAD.margin];
+    case 'hospital': return [12.6 + PAD.margin, 9.2 + PAD.margin];
+    default:         return [3, 3];
+  }
+}
+
+/* What the ground under that rectangle is doing: its range, its mean,
+   and whether any of it is under water. */
+function padGround(cx, cz, hx, hz, yaw){
+  const N = Wld.N, H = Wld.H, cell = Wld.cell;
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  const reach = Math.hypot(hx, hz) + cell;
+  const ix0 = Math.max(0, Math.floor(gxOf(cx-reach))), ix1 = Math.min(N-1, Math.ceil(gxOf(cx+reach)));
+  const iz0 = Math.max(0, Math.floor(gzOf(cz-reach))), iz1 = Math.min(N-1, Math.ceil(gzOf(cz+reach)));
+  let lo = Infinity, hi = -Infinity, sum = 0, n = 0, wet = 0;
+  for(let iz=iz0; iz<=iz1; iz++) for(let ix=ix0; ix<=ix1; ix++){
+    const dx = wxOf(ix)-cx, dz = wzOf(iz)-cz;
+    const lx = dx*c - dz*s, lz = dx*s + dz*c;
+    if(Math.abs(lx) > hx || Math.abs(lz) > hz) continue;
+    const i = iz*N+ix;
+    const h = H[i];
+    if(h < lo) lo = h; if(h > hi) hi = h;
+    sum += h; n++;
+    if(Wld.WLEV[i] > h - 0.05) wet++;
+  }
+  if(!n){                                   // smaller than one cell: sample it
+    const h = heightAt(cx, cz);
+    return { lo:h, hi:h, mean:h, relief:0, wet:0, n:0 };
+  }
+  return { lo, hi, mean:sum/n, relief:hi-lo, wet, n };
+}
+
+/* Flatten the footprint to floorY and blend it out. Returns how much
+   ground was moved, for the generation log. */
+function carvePad(cx, cz, hx, hz, yaw, floorY, relief){
+  const N = Wld.N, H = Wld.H, cell = Wld.cell;
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  const skirt = clamp(relief / PAD.skirtSlope, PAD.skirtMin, PAD.skirtMax);
+  const reach = Math.hypot(hx, hz) + skirt + cell;
+  const ix0 = Math.max(0, Math.floor(gxOf(cx-reach))), ix1 = Math.min(N-1, Math.ceil(gxOf(cx+reach)));
+  const iz0 = Math.max(0, Math.floor(gzOf(cz-reach))), iz1 = Math.min(N-1, Math.ceil(gzOf(cz+reach)));
+  let moved = 0;
+  for(let iz=iz0; iz<=iz1; iz++) for(let ix=ix0; ix<=ix1; ix++){
+    const i = iz*N+ix;
+    /* Water is never carved. A pad that filled a river would dam it and
+       a pad that lowered one would leave it hanging, and neither is a
+       thing a foundation does. */
+    if(Wld.WLEV[i] > H[i] - 0.05) continue;
+    const dx = wxOf(ix)-cx, dz = wzOf(iz)-cz;
+    const lx = dx*c - dz*s, lz = dx*s + dz*c;
+    const ox = Math.max(0, Math.abs(lx)-hx), oz = Math.max(0, Math.abs(lz)-hz);
+    const d = Math.hypot(ox, oz);
+    if(d > skirt) continue;
+    const w = 1 - smoothstep(0, skirt, d);
+    const before = H[i];
+    H[i] = lerp(before, floorY, w);
+    moved += Math.abs(H[i]-before);
+  }
+  return moved;
+}
+
+/* Level the ground under everything that has been placed, and give each
+   building the floor height it will actually be built at. */
+function carveFoundations(){
+  let moved = 0, pads = 0;
+  const one = (spec, kind, style)=>{
+    const [hx, hz] = padExtent(kind, style);
+    const g = padGround(spec.x, spec.z, hx, hz, spec.yaw || 0);
+    spec.y = g.mean;
+    spec.padRelief = +g.relief.toFixed(2);
+    moved += carvePad(spec.x, spec.z, hx, hz, spec.yaw || 0, g.mean, g.relief);
+    pads++;
+  };
+  const h = Wld.hospital;
+  if(h) one(h, 'hospital', Wld.style);
+  for(const st of Wld.structures) one(st, st.kind, st.style);
+  recomputeSlope();
+  /* The floor is read back from the carved ground rather than trusted,
+     because two pads close enough to overlap leave the later one's skirt
+     across the earlier one's corner. */
+  const settle = (spec, kind, style)=>{
+    const [hx, hz] = padExtent(kind, style);
+    const g = padGround(spec.x, spec.z, hx, hz, spec.yaw || 0);
+    spec.y = g.mean;
+    spec.padResidual = +g.relief.toFixed(2);
+  };
+  if(h) settle(h, 'hospital', Wld.style);
+  for(const st of Wld.structures) settle(st, st.kind, st.style);
+  Wld.stats.pads = pads;
+  Wld.stats.padMoved = +moved.toFixed(1);
+  return pads;
+}
+
+/* Is this a place a building could be, ignoring the exact shape of the
+   building? Two questions only: is any of it a cliff face, and is any of
+   it under water.
+
+   It used to demand a cell slope no steeper than 0.30 across a disc
+   twelve metres wide for a cabin seven metres across — a stricter test
+   than the building needs, asked over ground the building does not
+   stand on. On a rolling seed it rejected 668 sites and left that world
+   with no cabin at all. The question it was trying to ask, "will the
+   building sit level", is now asked directly, of the footprint, by
+   padGround(), and answered by levelling it. So this one is left with
+   the two disqualifications a foundation cannot fix. */
 function structureFits(ix, iz, rad){
   const N = Wld.N;
   for(let dz=-rad; dz<=rad; dz++) for(let dx=-rad; dx<=rad; dx++){
     if(!inGrid(ix+dx, iz+dz)) return false;
     const j = (iz+dz)*N+(ix+dx);
-    if(Wld.SLOPE[j] > 0.30) return false;
+    if(Wld.SLOPE[j] > CFG.HAZARD.cliffSlope) return false;
     if(Wld.WLEV[j] > Wld.H[j] - 0.15) return false;
   }
   return true;
@@ -2955,9 +3169,16 @@ function genStructures(){
   const routeCells = [];
   for(let i=0;i<N*N;i++) if(Wld.ROUTE[i]) routeCells.push(i);
 
+  /* Why sites are turned down, kept because "there is no cabin on this
+     seed" is otherwise a mystery with five possible causes. */
+  const rej = { fit:0, clear:0, close:0, wet:0, relief:0, lost:{} };
   const place = (kind, count)=>{
     for(let k=0;k<count;k++){
-      let spot = null;
+      let spot = null, roughSpot = null;
+      /* Drawn once per building rather than once per attempt, so that a
+         seed's buildings do not change orientation because an unrelated
+         site was rejected. */
+      const padYaw = rng()*TAU;
       for(let tries=0; tries<120 && !spot; tries++){
         let ix, iz;
         if(routeCells.length && rng.chance(S.routeBias)){
@@ -2971,22 +3192,47 @@ function genStructures(){
         }
         if(!inGrid(ix,iz)) continue;
         const i = iz*N+ix;
-        if(!structureFits(ix, iz, kind==='cabin'?3:2)) continue;
-        if(Wld.CLEAR[i] < 0.18) continue;                 // needs a gap in the trees
+        if(!structureFits(ix, iz, kind==='cabin'?3:2)){ rej.fit++; continue; }
+        if(Wld.CLEAR[i] < 0.18){ rej.clear++; continue; }  // needs a gap in the trees
         const x = wxOf(ix), z = wzOf(iz);
         let tooClose = Math.hypot(x-Wld.hospital.x, z-Wld.hospital.z) < 60;
         for(const o of out) if(Math.hypot(o.x-x, o.z-z) < S.minApart) tooClose = true;
-        if(tooClose) continue;
-        spot = { ix, iz, i, x, z };
+        if(tooClose){ rej.close++; continue; }
+        /* AND THE GROUND UNDER THE BUILDING ITSELF. The slope test above
+           asks about a disc of terrain; this asks the only question that
+           decides whether the building will sit on its own floor. A cell
+           slope of 0.30 is 1.2m of rise across one cell, so a site can
+           pass the slope test and still put two metres of relief under a
+           seven-metre cabin. */
+        const [phx, phz] = padExtent(kind, style);
+        const pg = padGround(x, z, phx, phz, padYaw);
+        if(pg.wet > 0){ rej.wet++; continue; }
+        /* FLAT GROUND IS PREFERRED, NEVER REQUIRED. Holding out for it
+           loses buildings on a steep seed, and a building is worth more
+           to the player than a smaller earthwork: the first rough site
+           that is otherwise legal is kept aside, and used if nothing
+           flatter turns up in 120 tries. Losing a cabin to a screen
+           would be the screen doing more harm than the bug. */
+        if(pg.relief > PAD.maxRelief){
+          rej.relief++;
+          /* A rough site is worth keeping as a reserve, but only up to a
+             point: past three times the limit the foundation stops being
+             a foundation and starts being a quarry. */
+          if(!roughSpot && pg.relief < PAD.maxRelief*3)
+            roughSpot = { ix, iz, i, x, z, yaw: padYaw };
+          continue;
+        }
+        spot = { ix, iz, i, x, z, yaw: padYaw };
       }
-      if(!spot) continue;
+      if(!spot) spot = roughSpot;
+      if(!spot){ rej.lost[kind] = (rej.lost[kind]||0)+1; continue; }
       // network distance to the hospital decides how "kept" a place looks
       const dHos = Math.hypot(spot.x-Wld.hospital.x, spot.z-Wld.hospital.z);
       out.push({
         kind, id: kind+'-'+out.length,
         x: spot.x, z: spot.z, y: heightAt(spot.x, spot.z),
         ix: spot.ix, iz: spot.iz,
-        yaw: rng()*TAU,
+        yaw: spot.yaw,
         style,
         decay: clamp(style.decay + smoothstep(120, 700, dHos)*0.5 + rng.range(-0.12,0.12), 0, 1),
         phantom: false, searched: false, items: [], mesh: null,
@@ -3001,6 +3247,7 @@ function genStructures(){
   place('ruin',     rng.irange(S.ruins[0], S.ruins[1]));
   place('car',      rng.irange(S.car[0], S.car[1]));
   Wld.structures = out;
+  Wld.stats.structReject = rej;
 }
 
 /* ---------------------------------------------------------------------
@@ -3637,6 +3884,10 @@ function generateWorld(onProgress){
       genRoutes();
       genCanopy();
       genStructures();
+      /* The ground is levelled under everything that was just placed,
+         BEFORE resources and hazards go onto it, so nothing is ever left
+         sitting on terrain that has since moved. */
+      carveFoundations();
       genResources();
       genHazards();
       result = validateWorld();
@@ -8318,7 +8569,12 @@ function buildEventLibrary(){
 
   /* ---------------- STAGE 2 — unreliable ---------------- */
   add({ id:'fakeTrail', stage:2, flavour:'navigational', p:1.4, weightQuiet:1.3,
-    ok:()=> sampleGrid(Wld.ROUTE, Player.pos.x, Player.pos.z) === 0,
+    /* Declining for want of a site belongs in ok(), where the bag can see
+       it, not in fire(), where it reads as an event that broke. Every
+       other sited event does it this way. */
+    ok:()=> sampleGrid(Wld.ROUTE, Player.pos.x, Player.pos.z) === 0
+         && !!findSpot({ minD:12, maxD:34, flat:0.30, clearance:0.15, inFront:1.6,
+                         clash:14 }),
     fire:()=>{
       const spot = findSpot({ minD:12, maxD:34, flat:0.30, clearance:0.15, inFront:1.6, clash:14 });
       if(!spot) return false;
