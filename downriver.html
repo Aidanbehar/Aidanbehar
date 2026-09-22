@@ -6057,52 +6057,73 @@ const Mind = {
 
     const add = (key, rate)=>{ this.agit[key] = Math.min(A.capPerEvent, this.agit[key] + rate*dt); };
 
-    if(sprinting && straightness < 0.62) add('sprintNoHeading', A.sprintNoHeading);
-    if(this.yawRate > A.spinRate) add('spin', A.spin);
-    if(this.yawRate > A.spinRate*0.75 && Gear.torchOn) add('torchSwing', A.torchSwing);
-    // circling: several old trail points near where we are standing now
-    if(this.trail.length > 8){
-      let near = 0;
-      for(let i=0;i<this.trail.length-4;i++){
+    /* WORK OUT WHAT IS HAPPENING FIRST, THEN DECIDE WHETHER IT IS CALM.
+
+       The first version decided "calm" from a couple of inputs — not
+       sprinting, not spinning — and applied the drains on that basis.
+       Which meant a player walking in circles beside a river counted as
+       calm, collected the riverbank drain at 0.075/s, and cancelled the
+       0.030/s the circling was adding: measured, four minutes of walking
+       in a tight loop produced an agitation of exactly 0.000. The same
+       shape of bug cost a sprinting, view-whipping panic its whole score
+       on a seed that happened to start near water.
+
+       So the patterns are all evaluated first, and calm is defined as
+       the absence of every one of them. You cannot be calming down while
+       you are panicking, which is both obviously true and the only
+       version that cannot be gamed by standing in the right place. */
+    const circling = (()=>{
+      if(!moving || this.trail.length <= 8) return false;
+      let near = 0, pathLen = 0;
+      for(let i=0;i<this.trail.length;i++){
         const p = this.trail[i];
-        if(Math.hypot(p.x-Player.pos.x, p.z-Player.pos.z) < 9) near++;
+        if(i) pathLen += Math.hypot(p.x-this.trail[i-1].x, p.z-this.trail[i-1].z);
+        if(i < this.trail.length-4 &&
+           Math.hypot(p.x-Player.pos.x, p.z-Player.pos.z) < 9) near++;
       }
-      if(near >= 3) add('backtrack', A.backtrack);
-    }
-    if(this.toolHits.length >= A.toolSpamCount) add('toolSpam', A.toolSpam);
-    // standing still in the dark
+      /* Covered a real distance and ended up back where you were.
+         Requiring some old points to be FAR away was an earlier attempt
+         and it misses the case that matters most, because a tight circle
+         never gets far from anything. Path length separates "went round
+         in a loop" from "barely moved"; the `moving` gate above
+         separates both from standing still, which has its own
+         accumulator and correctly needs the dark. */
+      return near >= 3 && pathLen > 40;
+    })();
     const dark = (1 - Sky.day) > 0.75 && !Gear.torchOn;
     if(!moving && dark) this.frozen += dt; else this.frozen = 0;
-    if(this.frozen > A.frozenSeconds) add('frozenDark', A.frozenDark);
+
+    const pSprint = sprinting && straightness < 0.62;
+    const pSpin   = this.yawRate > A.spinRate;
+    const pTorch  = this.yawRate > A.spinRate*0.75 && Gear.torchOn;
+    const pTool   = this.toolHits.length >= A.toolSpamCount;
+    const pFrozen = this.frozen > A.frozenSeconds;
+
+    if(pSprint) add('sprintNoHeading', A.sprintNoHeading);
+    if(pSpin)   add('spin', A.spin);
+    if(pTorch)  add('torchSwing', A.torchSwing);
+    if(circling) add('backtrack', A.backtrack);
+    if(pTool)   add('toolSpam', A.toolSpam);
+    if(pFrozen) add('frozenDark', A.frozenDark);
+
+    const anyPanic = pSprint || pSpin || pTorch || circling || pTool || pFrozen;
 
     /* CALM DRAINS EVERYTHING. Walking steadily on a heading, and more so
        on a real trail or a riverbank, pulls every accumulator down — so
        the loop is panic, strangeness, and then a way OUT of it, rather
        than a spiral with no exit. */
-    /* CALM IS A BEHAVIOUR, NOT A PLACE. The drains were gated only on
-       where the player was standing, so someone sprinting along a
-       riverbank whipping their view around was collecting the riverbank
-       bonus the whole time — and at 0.075/s against a spin accumulation
-       of 0.045/s the bonus WINS. Measured, a sustained panic on a seed
-       that starts near water came back with an agitation of exactly
-       0.000. Following a river calms you down; tearing along one does
-       not, and the code now says so. */
-    const calmNow = !sprinting && this.yawRate < A.spinRate*0.6;
     let drain = 0;
-    if(moving && calmNow && straightness > 0.80) drain += A.calmDrain;
-    const onRoute = sampleGrid(Wld.ROUTE, Player.pos.x, Player.pos.z) > 0;
-    /* "FOLLOWING A RIVERBANK" MEANS THERE IS A RIVER THERE.
-       The first version tested flow accumulation against the stream
-       threshold, which is true of every cell that drains twenty-six
-       others — something like a third of the map, most of it nowhere near
-       water. The riverbank drain was therefore running almost everywhere,
-       and it is large enough (0.075/s) to hold agitation at zero through
-       a sustained panic: a measured test of sprinting while whipping the
-       view around came back with an agitation of exactly 0.000 on a seed
-       where the player happened to start on high ground. Ambience.waterNear
-       is the real thing — it is what decides whether you can HEAR water. */
-    const onBank = Ambience.waterNear > 0.4;
-    if(moving && calmNow && (onRoute || onBank)) drain += A.trailDrain;
+    if(!anyPanic){
+      if(moving && !sprinting && straightness > 0.80) drain += A.calmDrain;
+      const onRoute = sampleGrid(Wld.ROUTE, Player.pos.x, Player.pos.z) > 0;
+      /* "Following a riverbank" means there is a river there. Testing
+         flow accumulation against the stream threshold is true of every
+         cell that drains twenty-six others — about a third of the map,
+         most of it nowhere near water. Ambience.waterNear is the real
+         thing: it is what decides whether you can hear it. */
+      const onBank = Ambience.waterNear > 0.4;
+      if(moving && (onRoute || onBank)) drain += A.trailDrain;
+    }
     if(Player.resting) drain += A.restDrain;
     if(drain > 0) for(const kk in this.agit) this.agit[kk] = Math.max(0, this.agit[kk] - drain*dt);
 
@@ -8504,14 +8525,21 @@ const DEV = (()=>{
        resolved, the phantom was removed, 0.41 in-fiction hours were
        lost, and the player was alive afterwards.
 
-     THE MIND
-       120 seconds of steady walking:            agitation 0.000
-       60 seconds of sprinting while whipping
-         the view around:                        agitation 0.453
-       back to 0.02 after 4.9 seconds of calm walking
-       intensity over 15 minutes at stage 3: ranged 0.402 to 0.832 and
-         fell between samples 32 times against 27 rises — a wave with
-         real lulls, not a climb
+     THE MIND — agitation, by what the player is actually doing
+       120s of steady walking in a line:         0.000
+       180s standing still in daylight:          0.000
+       180s of walking in a straight line:       0.000
+       60s sprinting while whipping the view:    0.453
+       240s walking in a tight circle:           0.220
+       180s standing frozen in the dark:         0.220
+       recovery from a full panic to under 0.02: 13.2s of calm walking
+       The three zeroes are the important ones: ordinary play has to cost
+       nothing, or the system is a tax on being a person rather than a
+       reading of panic.
+
+     INTENSITY  (15 simulated minutes pinned at stage 3)
+       ranged 0.349 to 1.000, and fell between samples 31 times against
+       28 rises — a wave with real lulls, not a climb
 
      THE DRIFT  (10 independent 5-minute stretches, walking blind at
                  night in fog)
