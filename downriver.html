@@ -787,8 +787,37 @@ const CFG = {
     weakSpeedFloor: 0.62,    // slowest you can get from need alone
     weakStamFloor: 0.45,
     sickMinutes: [3, 9],     // how long a bad drink or bad berry lasts
-    coldPerHour: 8.0,        // exposure when wet, at night, in rain
-    coldWarmPerHour: 16.0,   // and how fast shelter or a fire gives it back
+    sickThirstMult: 1.6,     // and what it costs you in water while it does
+    /* ---- TEMPERATURE ------------------------------------------------
+       Cold used to be a single rate multiplied by a blend of "is it wet,
+       is it night, is it windy". That is a mood, not a temperature: it
+       has no idea how cold the air is, standing on a summit is the same
+       as standing in the valley, and a storm came out marginally milder
+       than ordinary rain because the wetness term was a yes-or-no.
+
+       There is a felt temperature now, in degrees, built the way one
+       actually is: the air, then what the sky is doing to it, then how
+       high you are, then the wind on your skin, then how wet you are,
+       then whatever you are standing under or beside. The meter fills at
+       a rate proportional to how far below comfortable you are, so
+       nothing is sudden and everything is legible. */
+    dayC: 15,                // air at the valley floor, mid-afternoon
+    nightC: 5.0,             // ... and at four in the morning
+    lapseC: 3.0,             // degrees colder per 100m of height gained
+    rainC: -3.0,             // at full rain
+    fogC: -1.5,
+    windC: -7.0,             // full wind, on bare skin
+    wetC: -5.0,              // soaked through
+    soakRate: 0.055,         // how fast rain and rivers soak you, per second
+    drySheltered: 0.020,     // ... and how slowly you dry out under cover
+    dryOutside: 0.006,
+    shelterC: 5.5,           // a roof and four walls
+    fireC: 15.0,
+    comfortC: 4.0,           // below this you start losing heat
+    coldPerDegHour: 0.90,    // meter per degree of deficit per hour
+    warmPerDegHour: 1.60,    // ... and back, per degree of surplus
+    snowBelowC: 1.0,         // precipitation falls as snow below this
+    coldWarmPerHour: 16.0,   // kept: the fire's own recovery rate
     coldDeadlyAt: 100,
     drownSeconds: 22,        // underwater stamina, effectively
   },
@@ -2930,6 +2959,16 @@ function genHydrology(){
     if(WLEV[j] >= WLEV[i]) WLEV[j] = WLEV[i] - 0.012;
   }
   for(let i=0;i<n2;i++) if(POND[i]) WLEV[i] = pondLevel[i];
+
+  /* THE VALLEY FLOOR, for the temperature model: the tenth percentile of
+     the land, which is the river's level rather than the deepest hole in
+     it. Everything above this is colder, by the lapse rate. */
+  {
+    const sample = [];
+    for(let i=0;i<n2;i+=17) sample.push(H[i]);
+    sample.sort((a,b)=>a-b);
+    Wld.seaLevel = sample[Math.floor(sample.length*0.10)];
+  }
 
   // slope, once, for everyone downstream of here
   const SLOPE = new Float32Array(n2);
@@ -5177,7 +5216,7 @@ const Sky = {
   tintTarget: new THREE.Color(0x0a0e12), tintNow: new THREE.Color(0x0a0e12),
 };
 const Weather = {
-  kind: 'clear', next: 0, wind: 0.3, windGust: 0, rain: 0, rainTarget: 0,
+  kind: 'clear', next: 0, wind: 0.3, windGust: 0, rain: 0, rainTarget: 0, snow: 0,
   fogBoost: 0, fogBoostTarget: 0, thunder: 0, nextStrike: 1e9, lastFlash: 0,
   flash: 0,
 };
@@ -5427,12 +5466,22 @@ function buildRain(){
 }
 function updateRain(dt){
   const p = World.rain; if(!p) return;
-  p.material.uniforms.uOpacity.value = Weather.rain*0.5;
+  /* SNOW IS RAIN THAT IS COLD ENOUGH, which is the only honest way to
+     decide: it falls high on the map and late at night, where the air
+     actually is below freezing, rather than being a weather name the
+     seed rolls. The same particles fall slower, wander further and are
+     drawn bigger and paler. */
+  const air = Survival.airTemp(camera.position.y);
+  const snowing = Weather.rain > 0.02 && air <= CFG.SURVIVE.snowBelowC;
+  Weather.snow = snowing ? Weather.rain : 0;
+  p.material.uniforms.uOpacity.value = Weather.rain*(snowing ? 0.85 : 0.5);
+  p.material.uniforms.uSize.value = snowing ? 4.6 : 2.0;
+  p.material.uniforms.uColor.value.setHex(snowing ? 0xe8eef4 : 0x9fb0c0);
   p.visible = Weather.rain > 0.02;
   if(!p.visible) return;
   const pos = p.geometry.attributes.position, spd = p.geometry.attributes.aSpd;
-  const fall = (13 + Weather.wind*10) * dt;
-  const drift = Weather.wind*3.2*dt;
+  const fall = (snowing ? 2.2 + Weather.wind*2.4 : 13 + Weather.wind*10) * dt;
+  const drift = Weather.wind*(snowing ? 6.5 : 3.2)*dt;
   for(let i=0;i<pos.count;i++){
     let y = pos.getY(i) - fall*spd.getX(i);
     let x = pos.getX(i) + drift;
@@ -6882,11 +6931,86 @@ function updatePlayer(dt){
    feeds back into the thing the game is actually about. Severe neglect
    still ends a run, and all of it is tunable in CFG.SURVIVE.
    ===================================================================== */
+/* ---------------------------------------------------------------------
+   AM I UNDER ANYTHING?
+
+   Shelter was a boolean that only ever became true while the player was
+   sitting down to rest. Standing inside a cabin did nothing; standing
+   inside the hospital did nothing. Measured in rain at night, three
+   minutes inside a cabin, inside the hospital, and standing 22m away in
+   the open all produced exactly the same 16.98 points of cold. The
+   building was scenery.
+
+   It is measured from the collision data now, which is the only
+   description of the building the game actually has. A roof is a
+   collider over your head; walls are colliders around you. Both matter
+   and they matter differently — a porch keeps the rain off and the wind
+   still finds you — so this returns two numbers rather than a flag:
+
+     roof  0..1  how covered you are, which is what stops precipitation
+     walls 0..1  how enclosed you are, which is what stops the wind
+
+   Trees count, a little, and only as roof: a dense canopy is a real
+   thing to stand under in rain and no help at all in wind.
+   ------------------------------------------------------------------- */
+const _shelterDirs = (()=>{ const a=[]; for(let i=0;i<8;i++) a.push([Math.cos(i/8*TAU), Math.sin(i/8*TAU)]); return a; })();
+function shelterAt(x, z, feetY){
+  let roof = 0, walls = 0;
+  const head = feetY + 1.55;
+  for(let si=0; si<STRUCT_COLLIDERS.length; si++){
+    const st = STRUCT_COLLIDERS[si];
+    if(Math.abs(x - st.x) > st.reach || Math.abs(z - st.z) > st.reach) continue;
+    for(const b of st.solids){
+      /* OVERHEAD: the box starts above your head and is not so far above
+         it that you are standing under a bridge in a gale. */
+      if(b.y0 > head && b.y0 < head + 6.5){
+        const dx = x-b.cx, dz = z-b.cz;
+        const lx = dx*b.cos - dz*b.sin, lz = dx*b.sin + dz*b.cos;
+        if(Math.abs(lx) < b.hx && Math.abs(lz) < b.hz){ roof = 1; }
+      }
+    }
+    if(!roof) continue;
+    /* ENCLOSURE, and only once something is overhead: count how many
+       directions run into a wall within a few metres. A room scores
+       eight, a porch one or two, a lean-to three. */
+    let hit = 0;
+    /* The reach is the building's own size. At a fixed four metres the
+       hospital came back as unenclosed — it is 24m by 15m, so from the
+       middle of the ward every wall is out of range, and the one
+       building the whole game is about counted as a porch. */
+    const far = clamp(st.reach, 5, 18);
+    for(const [ux, uz] of _shelterDirs){
+      let found = false;
+      for(let d=0.6; d<=far && !found; d+=0.6){
+        const px = x + ux*d, pz = z + uz*d;
+        for(const b of st.solids){
+          if(b.kind !== 'wall') continue;
+          if(b.y1 < feetY + 0.6 || b.y0 > feetY + 1.7) continue;
+          const dx = px-b.cx, dz = pz-b.cz;
+          const lx = dx*b.cos - dz*b.sin, lz = dx*b.sin + dz*b.cos;
+          if(Math.abs(lx) < b.hx && Math.abs(lz) < b.hz){ found = true; break; }
+        }
+      }
+      if(found) hit++;
+    }
+    walls = Math.max(walls, hit/8);
+  }
+  if(roof < 1){
+    // the canopy, which keeps rain off and nothing else
+    const i = idxOf(Math.round(clamp(gxOf(x),0,Wld.N-1)), Math.round(clamp(gzOf(z),0,Wld.N-1)));
+    const open = Wld.CLEAR ? Wld.CLEAR[i] : 1;
+    roof = Math.max(roof, clamp(1-open, 0, 1) * 0.45);
+  }
+  return { roof, walls };
+}
+
 const Survival = {
   thirst: 0, hunger: 0, cold: 0, sick: 0, sickKind: null,
   bottle: 0, bottleMax: CFG.GEAR.bottleML, hasBottle: false,
   food: 0, tablets: 0, matches: 0,
   sheltered: false, warm: 0,
+  /* the live temperature picture, for the HUD and the dev panel */
+  roof: 0, walls: 0, wet: 0, feltC: 12, airC: 12, indoors: false,
 
   reset(){
     this.thirst = 8; this.hunger = 6; this.cold = 0; this.sick = 0; this.sickKind = null;
@@ -6908,7 +7032,84 @@ const Survival = {
     const S = CFG.SURVIVE;
     const t = smoothstep(S.thirstWeakAt*0.8, 100, this.thirst);
     const h = smoothstep(S.hungerWeakAt*0.8, 100, this.hunger);
-    return lerp(1, S.weakStamFloor, clamp(Math.max(t,h), 0, 1)) * (this.sick > 0 ? 0.7 : 1);
+    /* COLD COSTS ENERGY, which is the point of the meter before it is
+       the point of the death. Shivering is work: without this, cold did
+       nothing whatever to the player between 0 and the fatal end of the
+       bar, and a mechanic that only matters at 100 is a mechanic the
+       player never learns. */
+    const c = smoothstep(30, 95, this.cold);
+    return lerp(1, S.weakStamFloor, clamp(Math.max(t, h, c*0.85), 0, 1))
+         * (this.sick > 0 ? 0.7 : 1);
+  },
+
+  /* ---------------------------------------------------------------
+     THE FELT TEMPERATURE, in degrees, and what it does to you.
+
+     Built in the order a person feels it: the air for the hour, what
+     the sky is doing to it, how high up you are, the wind that finds
+     you, how wet you are, and then whatever you are under or beside.
+
+     The meter moves at a rate proportional to the DIFFERENCE from
+     comfortable, which is what makes it gradual and legible at once:
+     three degrees under and you will be fine for a long time, fifteen
+     under and you are in trouble, and both feel like the same system.
+     Stepping inside does not reset anything — it changes the sign of
+     the rate, and you warm up over the following minutes, still wet,
+     which is what the brief asks for and also what happens.
+     --------------------------------------------------------------- */
+  airTemp(y){
+    const S = CFG.SURVIVE;
+    /* The daily swing, warmest mid-afternoon and coldest before dawn,
+       and the altitude above the valley floor. */
+    const t = Math.cos((G.hours - 15) / 24 * TAU);
+    const base = lerp(S.nightC, S.dayC, (t + 1) * 0.5);
+    const up = Math.max(0, y - (Wld.seaLevel || 0));
+    return base - up * (S.lapseC/100);
+  },
+  temperature(dt, h){
+    const S = CFG.SURVIVE;
+    const p = Player.pos;
+
+    /* WHAT IS OVER AND AROUND ME. Eight rays through every collider of
+       every nearby building is not a per-frame cost, and nothing about
+       standing up changes four times a second, so it is sampled at 5Hz
+       and re-sampled immediately if the player has moved a stride. */
+    this._shT = (this._shT || 0) + dt;
+    const moved = Math.hypot(p.x - (this._shX||0), p.z - (this._shZ||0));
+    if(this._shT > 0.2 || moved > 0.8 || !this._sh){
+      this._shT = 0; this._shX = p.x; this._shZ = p.z;
+      this._sh = shelterAt(p.x, p.z, p.y);
+    }
+    const sh = this._sh;
+    this.roof = sh.roof; this.walls = sh.walls;
+    this.indoors = sh.roof >= 1 && sh.walls > 0.55;
+    /* `sheltered` stays a boolean for everything that already reads it,
+       and now it means what it says rather than "is sitting down". */
+    this.sheltered = this.indoors || Player.resting;
+
+    // how wet I am, which lags behind the weather in both directions
+    const inRain = Weather.rain * (1 - this.roof);
+    const inWater = Player.inWater > 0.25 ? 1 : 0;
+    const soaking = Math.max(inRain, inWater);
+    if(soaking > this.wet) this.wet = clamp(this.wet + S.soakRate*soaking*dt, 0, 1);
+    else this.wet = clamp(this.wet - (this.roof > 0.8 ? S.drySheltered : S.dryOutside)
+                                     * (this.warm ? 3.2 : 1) * dt, 0, 1);
+
+    // the air, then everything that is done to it
+    this.airC = this.airTemp(p.y);
+    let felt = this.airC;
+    felt += S.rainC * Weather.rain * (1 - this.roof);
+    if(Weather.kind === 'fog') felt += S.fogC;
+    felt += S.windC * Weather.wind * (1 - this.walls*0.85);
+    felt += S.wetC * this.wet;
+    felt += S.shelterC * (this.roof*0.35 + this.walls*0.65);
+    if(this.warm > 0) felt += S.fireC;
+    this.feltC = felt;
+
+    const diff = felt - S.comfortC;
+    if(diff < 0) this.cold = clamp(this.cold + (-diff) * S.coldPerDegHour * h, 0, 100);
+    else         this.cold = clamp(this.cold - diff * S.warmPerDegHour * h, 0, 100);
+    if(this.warm > 0) this.warm = Math.max(0, this.warm - dt);
   },
 
   update(dt){
@@ -6920,18 +7121,16 @@ const Survival = {
     let tRate = S.thirstPerHour;
     if(Player.sprinting) tRate *= S.sprintThirstMult;
     if(Sky.phase === 'day' && Weather.kind === 'clear') tRate *= S.heatThirstMult;
+    /* Being ill costs water, which is the whole reason bad water is a
+       trap: it fixes your thirst now and charges you for it later. */
+    if(this.sick > 0) tRate *= S.sickThirstMult;
     this.thirst = clamp(this.thirst + tRate*h, 0, 100);
     this.hunger = clamp(this.hunger + S.hungerPerHour*h, 0, 100);
 
     /* COLD is exposure, and it is the one need that can be reversed
        quickly: get out of the rain, or stand by a fire, and it drops
        twice as fast as it rose. */
-    const wet = (Weather.rain > 0.15 ? 1 : 0) + (Player.inWater > 0.3 ? 1 : 0);
-    const night = 1 - Sky.day;
-    const exposure = (wet*0.6 + night*0.5 + Weather.wind*0.25) * (this.sheltered ? 0.15 : 1);
-    if(exposure > 0.18 && !this.warm) this.cold = clamp(this.cold + S.coldPerHour*exposure*h, 0, 100);
-    else this.cold = clamp(this.cold - S.coldWarmPerHour*h*(this.warm?1.6:1), 0, 100);
-    if(this.warm > 0) this.warm = Math.max(0, this.warm - dt);
+    this.temperature(dt, h);
 
     if(this.sick > 0){
       this.sick = Math.max(0, this.sick - dt);
@@ -8643,7 +8842,7 @@ const Phantoms = {
    themselves from the bag: if findSpot comes back empty there is nowhere
    for a cabin to stand, so the fake-cabin event is not a candidate this
    tick rather than a candidate that fails. */
-function findSpot({ minD=22, maxD=70, flat=0.26, clearance=0.30, inFront=null, tries=60, clash=26 }={}){
+function findSpot({ minD=22, maxD=70, flat=0.26, clearance=0.30, inFront=null, tries=60, clash=26, dry=0 }={}){
   const r = rngFor('spot', Math.floor(G.t*13));
   // the camera looks down -Z, so forward is (-sin(yaw), -cos(yaw)); a
   // bearing offset of 0 is straight ahead
@@ -8671,6 +8870,20 @@ function findSpot({ minD=22, maxD=70, flat=0.26, clearance=0.30, inFront=null, t
     let bad = false;
     for(const st of Wld.structures) if(Math.hypot(st.x-x, st.z-z) < clash){ bad = true; break; }
     if(bad) continue;
+    /* AND, WHERE IT MATTERS, CLEAR OF REAL WATER. The centre cell is
+       already dry, but the grid is four metres and the player's reach is
+       two and a half, so a phantom pool could be laid on the bank of a
+       real stream — where the player leans in and drinks, from the real
+       stream, through the hallucination. The lie is wasted and the event
+       reads as a bug. */
+    if(dry > 0){
+      let wet = false;
+      for(let a=0; a<8 && !wet; a++){
+        const ux = Math.cos(a/8*TAU)*dry, uz = Math.sin(a/8*TAU)*dry;
+        if(waterDepthAt(x+ux, z+uz) > 0.06) wet = true;
+      }
+      if(wet) continue;
+    }
     return { x, z, y: heightAt(x,z), i, ix, iz, dist: d };
   }
   return null;
@@ -9221,7 +9434,7 @@ function buildEventLibrary(){
   add({ id:'fakeWater', stage:4, flavour:'structural', p:1.2,
     ok:()=> waterDepthAt(Player.pos.x, Player.pos.z) < 0.05,
     fire:()=>{
-      const spot = findSpot({ minD:14, maxD:46, flat:0.26, clearance:0.12, inFront:2.4, clash:12 });
+      const spot = findSpot({ minD:14, maxD:46, flat:0.26, clearance:0.12, inFront:2.4, clash:12, dry:3.2 });
       if(!spot) return false;
       const g = new THREE.Group();
       const pts = [];
@@ -9482,12 +9695,23 @@ const UI = {
       : b < 0.08 ? 'the beam is browning out' : b < 0.22 ? 'the beam is yellow'
       : b < 0.5 ? 'the beam is steady' : '',
       b < 0.08 ? 'bad' : b < 0.22 ? 'warn' : '');
+    /* THE BODY LINE, in the order the body would notice. Cold is the
+       one that now has a temperature behind it, so it gets the warning
+       signs the brief asks for — something before "you cannot feel your
+       hands" — and being wet is said out loud, because being wet is
+       most of why you are cold and the player cannot see it otherwise. */
     let body = '';
     if(S.sick > 0) body = 'you feel sick';
-    else if(c > 72) body = 'you cannot feel your hands';
-    else if(c > 45) body = 'you are shivering';
+    else if(c > 86) body = 'you have stopped shivering';
+    else if(c > 68) body = 'you cannot feel your hands';
+    else if(c > 42) body = 'you are shivering';
+    else if(c > 22) body = 'the cold is getting in';
     else if(Player.stamina < 15) body = 'you need to stop';
-    set(this.el.body, body, c > 72 || S.sick > 0 ? 'bad' : 'warn');
+    else if(S.wet > 0.55) body = 'you are soaked';
+    else if(S.warm > 0) body = 'the warmth is getting through';
+    else if(S.indoors && c > 4) body = 'out of the weather';
+    set(this.el.body, body,
+      c > 68 || S.sick > 0 ? 'bad' : (c > 22 || S.wet > 0.55 ? 'warn' : ''));
   },
 
   update(dt){
@@ -10321,6 +10545,8 @@ const DEV = (()=>{
       + `  leak ${G.t-M.lastLeak < 25 ? 'to '+M.leakStage : '-'}   compass ${M.compassReversed?'REVERSED':'ok'}\n`
       + `\n`
       + `thirst ${S.thirst.toFixed(0).padStart(3)}  hunger ${S.hunger.toFixed(0).padStart(3)}  cold ${S.cold.toFixed(0).padStart(3)}  sick ${S.sick.toFixed(0)}\n`
+      + `body   air ${S.airC.toFixed(1)}C  felt ${S.feltC.toFixed(1)}C  wet ${S.wet.toFixed(2)}  `
+      + `roof ${S.roof.toFixed(2)} walls ${S.walls.toFixed(2)}${S.indoors?' INDOORS':''}${S.warm>0?' WARM':''}\n`
       + `stam   ${Player.stamina.toFixed(0).padStart(3)}  battery ${(Gear.battery*100).toFixed(0)}%  spares ${Gear.spares}  food ${S.food}\n`
       + `water  ${S.hasBottle ? (S.bottle>0?'bottle full':'bottle empty') : 'no bottle'}  near ${Ambience.waterNear.toFixed(2)}\n`
       + `\n`
