@@ -1035,7 +1035,6 @@ const G = {
 const clamp = (v,a,b)=> v<a?a:v>b?b:v;
 const lerp  = (a,b,t)=> a+(b-a)*t;
 const smoothstep = (a,b,x)=>{ const t=clamp((x-a)/(b-a),0,1); return t*t*(3-2*t); };
-const saturate = v => clamp(v,0,1);
 const TAU = Math.PI*2;
 const DEG = Math.PI/180;
 const mod = (a,n)=> ((a%n)+n)%n;
@@ -1188,7 +1187,6 @@ float worleyN(vec2 p){
    dev panel can show you what kind of run you are about to have (and the
    player never can).
    ===================================================================== */
-const TERRAIN_STYLES = ['alpine','rolling','ravines','plateau','basin'];
 const HALL_FLAVOURS  = ['auditory','visual','structural','navigational'];
 const WEATHER_PATTERNS = ['clear','fog','rain','storm','turning'];
 
@@ -3998,7 +3996,6 @@ function genResources(){
 function genHazards(){
   const N = Wld.N;
   const haz = [];
-  const HZ = CFG.HAZARD, HY = CFG.HYDRO;
   // sampled rather than per-cell: this list exists for the dev panel and
   // for the start-clearance guarantee, not for gameplay, which reads the
   // fields directly
@@ -5899,7 +5896,7 @@ function addBox(parent, w, h, d, mat, x, y, z, rotY){
    floorboards are a 22cm kerb around the whole building that nothing can
    enter.
    ------------------------------------------------------------------- */
-const _obbPos = new THREE.Vector3(), _obbQuat = new THREE.Quaternion(),
+const _obbQuat = new THREE.Quaternion(),
       _obbScale = new THREE.Vector3(), _obbEuler = new THREE.Euler();
 const _obbCorner = new THREE.Vector3();
 /* The mesh's eight transformed corners, kept after the fit so the
@@ -9428,7 +9425,6 @@ const Audio = (()=>{
   };
 
   function buildBank(onStep){
-    const seedR = makeRNG(P.soundSeed);
     recipeCount = 0;
     let done = 0;
     const total = Object.keys(CATS).length;
@@ -10164,12 +10160,6 @@ function findSpot({ minD=22, maxD=70, flat=0.26, clearance=0.30, inFront=null, t
   return null;
 }
 function bearingTo(x, z){ return Math.atan2(x - Player.pos.x, z - Player.pos.z); }
-function isInFront(x, z, cosLimit=0.35){
-  const dx = x-Player.pos.x, dz = z-Player.pos.z;
-  const d = Math.hypot(dx,dz) || 1e-5;
-  const fx = -Math.sin(Player.yaw), fz = -Math.cos(Player.yaw);
-  return (dx*fx + dz*fz)/d > cosLimit;
-}
 function behindPlayer(dist){
   const a = Player.yaw + (Math.random()-0.5)*1.1;
   return new THREE.Vector3(
