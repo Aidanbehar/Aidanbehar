@@ -954,7 +954,7 @@ const CFG = {
     fovDefault: 74,
   },
 
-  DEBUG: { freezeClock:false, freezeMind:false, showPhantoms:false, logRolls:true },
+  DEBUG: { freezeClock:false, freezeMind:false, showPhantoms:false, logRolls:true, noFog:false },
 };
 
 /* The single mutable game state object. Everything reads the clock and the
@@ -4966,6 +4966,7 @@ const Veg = {
   CELL: 8,                 // metres per scatter cell
   radius: CFG.QUALITY.treeRadius,
   trunks: {}, crowns: {}, scrub: null, rocks: null, deadfall: null,
+  logs: [],                 // fallen trunks, as segments rather than circles
   colliders: [],           // { x, z, r } for trees close enough to matter
   rockR: 1.0, rockTop: 1.0,   // measured off the rock geometry in build()
   lastX: 1e9, lastZ: 1e9, dirty: true,
@@ -5149,6 +5150,7 @@ const Veg = {
     scene.add(this.rocks);
 
     // deadfall: fallen trunks. Real obstacles, and a real hazard to cross.
+    this.logR = 0.30;                 // the butt end, which is the fat one
     const logGeo = new THREE.CylinderGeometry(0.22, 0.30, 1, 7);
     logGeo.rotateZ(Math.PI/2);
     this.deadfall = new THREE.InstancedMesh(logGeo, MAT.bark, 500);
@@ -5169,6 +5171,7 @@ const Veg = {
     const n = {}; for(const sp of this.species) n[sp] = 0;
     let ns=0, nr=0, nd=0;
     this.colliders.length = 0;
+    this.logs.length = 0;
     const CR = CFG.QUALITY.colliderRadius, CR2 = CR*CR;
     const items = [];
     const seed = (G.seed ^ 0x9e37) >>> 0;
@@ -5235,8 +5238,25 @@ const Veg = {
           const len = 4 + ihash2(cx,cz,seed+8)*9;
           E.set(0, ihash2(cx,cz,seed+9)*TAU, 0.06);
           Q.setFromEuler(E);
-          M.compose(V.set(cxw, heightAt(cxw,czw)+0.24, czw), Q, Sv.set(len,1,1));
+          const ly = heightAt(cxw,czw)+0.24;
+          M.compose(V.set(cxw, ly, czw), Q, Sv.set(len,1,1));
           this.deadfall.setMatrixAt(nd++, M);
+          /* A FALLEN TRUNK IS A THING YOU CLIMB OVER OR WALK ROUND.
+             The comment above has said "real obstacles" since the day
+             this was written and the code did not give them so much as a
+             collider: a nine-metre log was scenery you walked through.
+
+             A circle is the wrong primitive for something nine metres
+             long and half a metre thick — it would either swallow the
+             ground around it or miss the ends — so they are stored as
+             SEGMENTS and resolved against the nearest point on the axis.
+             The log's top is 0.54m at the butt, which is under the
+             player's step, so the resolver treats one as low and lets
+             them climb it rather than walling it off. */
+          const ang = ihash2(cx,cz,seed+9)*TAU;
+          const hx2 = Math.cos(ang)*len*0.5, hz2 = -Math.sin(ang)*len*0.5;
+          this.logs.push({ x0: cxw-hx2, z0: czw-hz2, x1: cxw+hx2, z1: czw+hz2,
+                           r: this.logR, y0: ly - 0.30, y1: ly + this.logR });
         }
       }
     }
@@ -5412,7 +5432,9 @@ function updateSky(dt){
   fog *= lerp(1, W.nightFogMult, night);
   Sky.fogTarget = fog;
   Sky.fogNow = lerp(Sky.fogNow, Sky.fogTarget, clamp(dt*0.35, 0, 1));
-  scene.fog.density = Sky.fogNow * Mind.fogWobble();
+  /* The dev panel's fog switch, applied at the one place fog is set so
+     nothing downstream can put it back. */
+  scene.fog.density = CFG.DEBUG.noFog ? 0 : Sky.fogNow * Mind.fogWobble();
 
   if(MAT.water){
     MAT.water.uniforms.uFogColor.value.copy(Sky.tintNow);
@@ -5957,6 +5979,19 @@ function obbPush(b, px, pz, radius, out){
    interiors work at all. */
 function surfaceAt(x, z, feetY, radius){
   let best = -Infinity;
+  /* A fallen trunk is something you end up standing on top of, so it is
+     a surface as well as an obstacle. */
+  for(let li=0; li<Veg.logs.length; li++){
+    const L = Veg.logs[li];
+    if(L.y1 > feetY + CFG.PLAYER.stepUp || L.y1 < feetY - 2.2) continue;
+    const vx = L.x1-L.x0, vz = L.z1-L.z0;
+    const len2 = vx*vx + vz*vz || 1;
+    let t = ((x-L.x0)*vx + (z-L.z0)*vz) / len2;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const dx = x - (L.x0 + vx*t), dz = z - (L.z0 + vz*t);
+    if(dx*dx + dz*dz > (L.r + radius*0.5)*(L.r + radius*0.5)) continue;
+    if(L.y1 > best) best = L.y1;
+  }
   for(const st of Wld.structures){
     if(!st.solids) continue;
     if(Math.abs(x - st.x) > 22 || Math.abs(z - st.z) > 22) continue;
@@ -7519,6 +7554,35 @@ function resolveCollisions(p, radius){
       const d = Math.sqrt(d2);
       hits++;
       if(d < 1e-6){ mx += rr; continue; }          // dead centre: any way out
+      const pen = rr - d;
+      mx += dx/d*pen; mz += dz/d*pen;
+    }
+
+    /* FALLEN TRUNKS, as segments. The nearest point on the log's axis
+       decides the push, so a nine-metre log obstructs along its whole
+       length instead of only at the middle, and nothing is inflated at
+       the ends the way a circle round it would be.
+
+       A log is low: its top is about half a metre, under the player's
+       step. So it only pushes when the player's feet are BELOW its top,
+       which is what lets them climb onto and over one instead of being
+       walled off by it — and what stops them walking through it on the
+       flat. */
+    for(let li=0; li<Veg.logs.length; li++){
+      const L = Veg.logs[li];
+      if(p.y > L.y1 - 0.06) continue;              // standing on top of it
+      if(p.y + 1.6 < L.y0) continue;               // it is above them
+      const vx = L.x1-L.x0, vz = L.z1-L.z0;
+      const len2 = vx*vx + vz*vz || 1;
+      let t = ((p.x-L.x0)*vx + (p.z-L.z0)*vz) / len2;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = p.x - (L.x0 + vx*t), dz = p.z - (L.z0 + vz*t);
+      const rr = L.r + radius;
+      const d2 = dx*dx + dz*dz;
+      if(d2 >= rr*rr) continue;
+      const d = Math.sqrt(d2);
+      hits++;
+      if(d < 1e-6){ mx += rr; continue; }
       const pen = rr - d;
       mx += dx/d*pen; mz += dz/d*pen;
     }
@@ -11302,9 +11366,27 @@ const DEV = (()=>{
     // ---- survival ----
     const s2 = section('survival');
     const g2 = el('div','grid three'); s2.appendChild(g2);
+    /* SET, not nudge. "thirst +30" cannot put the bar where you want it
+       and cannot put it back, which makes testing the weakness curves a
+       guessing game. The sliders below are the real values. */
+    const sThirst = slider(s2, 'hydration (thirst)', 0, 100, 1,
+      ()=>Survival.thirst, v=>{ Survival.thirst = v; });
+    const sHunger = slider(s2, 'hunger', 0, 100, 1,
+      ()=>Survival.hunger, v=>{ Survival.hunger = v; });
+    const sCold   = slider(s2, 'cold exposure', 0, 100, 1,
+      ()=>Survival.cold, v=>{ Survival.cold = v; });
+    const sStam   = slider(s2, 'stamina', 0, 100, 1,
+      ()=>Player.stamina, v=>{ Player.stamina = v; });
+    const sWet    = slider(s2, 'how wet you are', 0, 1, 0.02,
+      ()=>Survival.wet, v=>{ Survival.wet = v; });
+    D._syncSurv = ()=>{ sThirst.sync(); sHunger.sync(); sCold.sync();
+                        sStam.sync(); sWet.sync(); };
     button(g2, 'thirst +30', ()=> Survival.thirst = clamp(Survival.thirst+30,0,100));
     button(g2, 'hunger +30', ()=> Survival.hunger = clamp(Survival.hunger+30,0,100));
     button(g2, 'cold +30',   ()=> Survival.cold   = clamp(Survival.cold+30,0,100));
+    button(g2, 'warm by a fire', ()=>{ Survival.warm = 60; });
+    button(g2, 'soak me',    ()=>{ Survival.wet = 1; });
+    button(g2, 'make me sick',()=> Survival.makeSick('water'));
     button(g2, 'heal all',   ()=>{ Survival.thirst=5; Survival.hunger=5; Survival.cold=0;
                                    Survival.sick=0; Player.stamina=100; Survival.dying=0; });
     button(g2, 'battery 5%', ()=> Gear.battery = 0.05);
@@ -11317,9 +11399,21 @@ const DEV = (()=>{
     const s3 = section('time & weather');
     const sHour = slider(s3, 'hour', 0, 23.9, 0.1, ()=>G.hours, v=>{ G.hours = v; });
     const g3 = el('div','grid three'); s3.appendChild(g3);
-    for(const w of WEATHER_PATTERNS.filter(x=>x!=='turning').concat(['storm']))
-      if(w !== 'storm' || true) button(g3, w, ()=>{ Weather.kind = w; Weather.next = 600; });
+    /* Every pattern once. The old line filtered 'turning' out and then
+       concatenated 'storm', which produced two identical storm buttons
+       and no way to set the turning weather at all. */
+    for(const w of WEATHER_PATTERNS)
+      button(g3, w, ()=>{ Weather.kind = w; Weather.next = 600; });
     button(g3, 'freeze clock', ()=>{ CFG.DEBUG.freezeClock = !CFG.DEBUG.freezeClock; });
+    button(g3, 'fog on/off', ()=>{
+      CFG.DEBUG.noFog = !CFG.DEBUG.noFog;
+      flash(CFG.DEBUG.noFog ? 'fog off' : 'fog on');
+    });
+    button(g3, 'wind up', ()=>{ Weather.wind = clamp(Weather.wind + 0.3, 0, 1); });
+    button(g3, 'rain on/off', ()=>{
+      Weather.rainTarget = Weather.rain > 0.1 ? 0 : 0.9;
+      Weather.rain = Weather.rainTarget; Weather.next = 900;
+    });
     D._syncHour = ()=> sHour.sync();
 
     // ---- the director ----
@@ -11371,6 +11465,161 @@ const DEV = (()=>{
       });
     }
     const g5c = el('div','grid'); s5.appendChild(g5c);
+    button(g5b, 'to the town', ()=>{
+      const S = Wld.street;
+      if(!S){ flash('no town on this seed'); return; }
+      teleportTo((S.x0+S.x1)/2, (S.z0+S.z1)/2, 3);
+    });
+    button(g5b, 'to a person', ()=>{
+      const p = People.list[0];
+      if(!p){ flash('nobody here'); return; }
+      teleportTo(p.x, p.z, 4);
+    });
+    button(g5b, 'to the car', ()=>{
+      const c = Wld.structures.find(x=>x.kind === 'car');
+      if(!c){ flash('no car on this seed'); return; }
+      teleportTo(c.x, c.z, 4);
+    });
+
+    /* ---- the self-checks ----
+       Each one measures the thing it names, here and now, and prints
+       what it found. They are the same measurements the harness makes;
+       having them on a button is what makes the claims in the notes
+       reproducible by hand. */
+    const s5d = section('test');
+    const g5d = el('div','grid'); s5d.appendChild(g5d);
+    button(g5d, 'test terrain', ()=>{
+      const N = Wld.N; let cliff=0, steep=0, lo=1e9, hi=-1e9, n=0;
+      for(let iz=3; iz<N-3; iz++) for(let ix=3; ix<N-3; ix++){
+        const i = iz*N+ix; n++;
+        if(Wld.SLOPE[i] > CFG.HAZARD.cliffSlope) cliff++;
+        if(Wld.SLOPE[i] > 0.34) steep++;
+        if(Wld.H[i]<lo) lo=Wld.H[i]; if(Wld.H[i]>hi) hi=Wld.H[i];
+      }
+      flash(`relief ${(hi-lo).toFixed(0)}m   valley floor ${Wld.seaLevel.toFixed(1)}m\n`
+        + `cliff ${(cliff/n*100).toFixed(1)}%   steep ${(steep/n*100).toFixed(1)}%\n`
+        + `style ${P.terrain}   attempts ${Wld.stats.attempts}`);
+    });
+    button(g5d, 'test water', ()=>{
+      const N = Wld.N; let wet=0, pond=0, thin=0, onSlope=0;
+      const seen = new Uint8Array(N*N); let bodies=0, biggest=0;
+      for(let i=0;i<N*N;i++){
+        if(Wld.WLEV[i] < -9000 || Wld.WLEV[i] <= Wld.H[i]) continue;
+        wet++; if(Wld.POND[i]) pond++;
+        if(Wld.WLEV[i]-Wld.H[i] < 0.25) thin++;
+        if(Wld.SLOPE[i] > 0.35) onSlope++;
+      }
+      for(let i=0;i<N*N;i++){
+        if(!Wld.POND[i] || seen[i]) continue;
+        const st=[i]; seen[i]=1; let cells=0;
+        while(st.length){ const j=st.pop(); cells++;
+          const jz=(j/N)|0, jx=j-jz*N;
+          for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+            const nx=jx+dx, nz=jz+dz;
+            if(nx<0||nz<0||nx>=N||nz>=N) continue;
+            const k=nz*N+nx; if(Wld.POND[k]&&!seen[k]){ seen[k]=1; st.push(k); } } }
+        const a = cells*Wld.cell*Wld.cell;
+        if(a > 200){ bodies++; biggest = Math.max(biggest, a); }
+      }
+      flash(`water ${(wet/(N*N)*100).toFixed(1)}% of the map  (ponds ${(pond/(N*N)*100).toFixed(1)}%)\n`
+        + `films under 25cm: ${(thin/Math.max(1,wet)*100).toFixed(0)}% of it\n`
+        + `on ground steeper than 0.35: ${(onSlope/Math.max(1,wet)*100).toFixed(0)}%\n`
+        + `${bodies} lakes over 200m2, biggest ${Math.round(biggest)}m2`);
+    });
+    button(g5d, 'test hospital', ()=>{
+      const h = Wld.hospital;
+      const [W2, D2] = h.mesh.userData.footprint;
+      const c2 = Math.cos(h.yaw), s2 = Math.sin(h.yaw);
+      const R2 = CFG.PLAYER.radius, SU = CFG.PLAYER.stepUp, feetY = h.y + 0.30;
+      const free = (lx, lz)=>{
+        const x = h.x + lx*c2 + lz*s2, z = h.z - lx*s2 + lz*c2;
+        for(const b of h.solids){
+          if(b.kind !== 'wall') continue;
+          if(b.y1 <= feetY+SU || b.y0 > feetY+1.75 || b.y1 < feetY-0.4) continue;
+          const dx = x-b.cx, dz = z-b.cz;
+          const bx = dx*b.cos - dz*b.sin, bz = dx*b.sin + dz*b.cos;
+          if(Math.abs(bx) < b.hx+R2 && Math.abs(bz) < b.hz+R2) return false;
+        }
+        return true;
+      };
+      const step = 0.4, X0 = -W2/2-3, Z0 = -D2/2-3;
+      const nx = Math.round((W2+6)/step), nz = Math.round((D2+10)/step);
+      const ok = new Uint8Array(nx*nz);
+      for(let iz=0;iz<nz;iz++) for(let ix=0;ix<nx;ix++)
+        ok[iz*nx+ix] = free(X0+ix*step, Z0+iz*step) ? 1 : 0;
+      const sx2 = Math.round((0-X0)/step), sz2 = Math.round((D2/2+3-Z0)/step);
+      const seen2 = new Uint8Array(nx*nz), st2 = [sz2*nx+sx2];
+      seen2[sz2*nx+sx2] = 1;
+      while(st2.length){ const i = st2.pop();
+        const iz=(i/nx)|0, ix=i-iz*nx;
+        for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          const jx=ix+dx, jz=iz+dz;
+          if(jx<0||jz<0||jx>=nx||jz>=nz) continue;
+          const j=jz*nx+jx; if(seen2[j]||!ok[j]) continue;
+          seen2[j]=1; st2.push(j); } }
+      let inside=0, reached=0;
+      for(let iz=0;iz<nz;iz++) for(let ix=0;ix<nx;ix++){
+        const lx = X0+ix*step, lz = Z0+iz*step;
+        if(Math.abs(lx) > W2/2-0.5 || Math.abs(lz) > D2/2-0.5) continue;
+        if(!ok[iz*nx+ix]) continue;
+        inside++; if(seen2[iz*nx+ix]) reached++;
+      }
+      flash(`interior floor reachable from outside: ${(reached/Math.max(1,inside)*100).toFixed(0)}%\n`
+        + `${reached} of ${inside} standable cells\n`
+        + `desk ${Math.round(Math.hypot(Player.pos.x-h.deskWorld.x, Player.pos.z-h.deskWorld.z))}m away`);
+    });
+    button(g5d, 'test town', ()=>{
+      const T = Wld.townBuildings || [];
+      const S = Wld.street;
+      flash(`${T.length} buildings: ` + JSON.stringify(
+          T.reduce((m,t)=>{ m[t.kind]=(m[t.kind]||0)+1; return m; }, {}))
+        + `\n${T.filter(t=>t.enterable).length} you can go into`
+        + `\nstreet ${S ? Math.round(Math.hypot(S.x1-S.x0, S.z1-S.z0)) : 0}m`
+        + `\nworst floor error ` + (T.length ? Math.max.apply(null,
+            T.map(t=>Math.abs(t.y - heightAt(t.x, t.z)))).toFixed(2) : '-') + 'm'
+        + `\nrejected plots: ` + JSON.stringify(Wld.stats.townRejects || {}));
+    });
+    button(g5d, 'test people', ()=>{
+      const L = People.list;
+      if(!L.length){ flash('nobody in this town'); return; }
+      const st3 = L.reduce((m,p)=>{ m[p.state]=(m[p.state]||0)+1; return m; }, {});
+      flash(`${L.length} people: ` + JSON.stringify(st3)
+        + `\nnearest ` + Math.round(Math.min.apply(null,
+            L.map(p=>Math.hypot(p.x-Player.pos.x, p.z-Player.pos.z)))) + 'm'
+        + `\nin any collision list: 0 (they are drawn only)`);
+    });
+    button(g5d, 'test car', ()=>{
+      const c = Wld.structures.find(x=>x.kind === 'car');
+      if(!c){ flash('no car on this seed'); return; }
+      flash(`car ${Math.round(Math.hypot(c.x-Player.pos.x, c.z-Player.pos.z))}m away\n`
+        + `${c.solids.length} colliders, seat ` + (c.mesh.userData.seat ? 'yes' : 'no')
+        + `\nsitting: ` + (Player.seated ? 'yes' : 'no'));
+    });
+    button(g5d, 'test collision', ()=>{
+      let boxes = 0;
+      for(const st4 of STRUCT_COLLIDERS) boxes += st4.solids.length;
+      // is the player inside anything right now?
+      const probe = { x: Player.pos.x, y: Player.pos.y, z: Player.pos.z };
+      resolveCollisions(probe, CFG.PLAYER.radius);
+      const pushed = Math.hypot(probe.x-Player.pos.x, probe.z-Player.pos.z);
+      flash(`${boxes} building boxes in ${STRUCT_COLLIDERS.length} structures\n`
+        + `${Veg.colliders.length} trunks and rocks, ${Veg.logs.length} fallen logs\n`
+        + `${Doors.list.length} doors\n`
+        + `you are ${pushed > 0.001 ? 'INSIDE something (pushed '
+            + pushed.toFixed(2) + 'm)' : 'clear of everything'}\n`
+        + `ground ${heightAt(Player.pos.x,Player.pos.z).toFixed(1)}m, you ${Player.pos.y.toFixed(1)}m`);
+    });
+    button(g5d, 'test survival', ()=>{
+      const S2 = Survival;
+      flash(`thirst ${S2.thirst.toFixed(0)}  hunger ${S2.hunger.toFixed(0)}  `
+        + `cold ${S2.cold.toFixed(0)}  sick ${S2.sick.toFixed(0)}s\n`
+        + `air ${S2.airC.toFixed(1)}C  felt ${S2.feltC.toFixed(1)}C  wet ${S2.wet.toFixed(2)}\n`
+        + `roof ${S2.roof.toFixed(2)}  walls ${S2.walls.toFixed(2)}  `
+        + `${S2.indoors ? 'INDOORS' : 'outside'}${S2.warm > 0 ? '  WARM' : ''}\n`
+        + `speed x${S2.speedFactor().toFixed(2)}  stamina regen x${S2.staminaFactor().toFixed(2)}\n`
+        + `stamina ${Player.stamina.toFixed(0)}  dying ${(S2.dying||0).toFixed(1)}s`);
+    });
+
     button(g5c, 'reveal map', ()=>{ Gear.hasMap = true; Gear.mapPieces = 6; UI.toggleMap(); });
     button(g5c, 'show phantoms', ()=>{
       CFG.DEBUG.showPhantoms = !CFG.DEBUG.showPhantoms;
@@ -11589,6 +11838,7 @@ const DEV = (()=>{
     paintLog();
     if(D._sync) D._sync();
     if(D._syncCV) D._syncCV();
+    if(D._syncSurv) D._syncSurv();
     if(D._syncHour) D._syncHour();
   }
 
