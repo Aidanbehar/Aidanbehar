@@ -596,6 +596,9 @@ const CFG = {
        These are hard floors now, checked by guarantee G7 on every seed,
        and a seed that cannot meet them is rejected and generated again.
        Only the two documented Easter-egg seeds are allowed past them. */
+    rimStep: 5.0,        // the biggest step allowed between cells in the
+                         // outer band, which is the map's frame
+    hospitalInset: 70,   // metres the hospital keeps from the playable edge
     minCivDist: 600,     // metres, straight line from the start to the hospital
     minCivPath: 720,     // ... and along ground you can actually walk
     civExclusion: 420,   // no road may come nearer the start than this
@@ -759,6 +762,7 @@ const CFG = {
     accel: 13, damp: 10.5,
     staminaMax: 100, staminaDrain: 17, staminaRegen: 11, staminaFloor: 12,
     stepUp: 0.55,        // metres of terrain step taken without slowing
+    climbLog: 0.85,      // ... and how high a fallen trunk you get over
     swimDepth: 1.05,     // above this you are swimming, not wading
     /* WITHOUT A REFERENCE POINT YOU DO NOT WALK STRAIGHT.
        Real people in real forests circle. This is a slow bias added to
@@ -873,6 +877,11 @@ const CFG = {
        0.0125 was the first guess and put the MEDIAN run at over an hour,
        with stage 1 fourteen minutes in — long enough that most of a run
        happened in a forest with nothing wrong with it. */
+    /* How much the sight of the town slows the decline, and over what
+       distance. See the note in update(). */
+    civCalmRange: 240,   // metres from the hospital where it starts
+    civCalmClose: 25,    // ... and where it is at its strongest
+    civCalmAt: 0.25,     // the multiplier on the decline, at the doors
     baseRate: 0.018,
     stageAt: [0, 0.16, 0.36, 0.60, 0.84],   // progress -> stage boundary
     leakChance: 0.13,        // a draw reaching one stage above current
@@ -2969,6 +2978,40 @@ function genHydrology(){
   }
   for(let i=0;i<n2;i++) if(POND[i]) WLEV[i] = pondLevel[i];
 
+  /* ---- THE RIM IS A FRAME, NOT A CLIFF.
+     The breacher cuts its outflow trenches to the map's edge, which is
+     right: that is where the water goes, and protecting the border left
+     basins undrained and cost six points of cliff fraction inside the
+     playable map. What it leaves behind is the problem — a trench cut to
+     the floor limit beside untouched ground is a wall, and measured
+     around four hospitals there were between 546 and 1667 steps of over
+     four metres between neighbouring cells, the worst of them 105m.
+
+     The hospital stands at the outlet, so the town is near the rim, so
+     those chasms are exactly where the player arrives. One of four
+     journey runs ended in a fall thirty metres from the hospital.
+
+     So the outer band — and only the outer band, where there is no
+     gameplay but the edge of the world — has its steps limited to
+     something a person could scramble. The interior, with the mountains
+     the game is made of, is not touched. ---- */
+  {
+    const band = Wld.size*0.40, lim = CFG.WORLD.rimStep;
+    const inBand = (ix, iz)=> Math.abs(wxOf(ix)) > band || Math.abs(wzOf(iz)) > band;
+    for(let pass=0; pass<6; pass++){
+      let moved = 0;
+      for(let iz=1; iz<N-1; iz++) for(let ix=1; ix<N-1; ix++){
+        if(!inBand(ix,iz)) continue;
+        const i = iz*N+ix;
+        for(const j of [i+1, i-1, i+N, i-N]){
+          const d = H[i] - H[j];
+          if(d > lim){ const fix = (d-lim)*0.5; H[i] -= fix; H[j] += fix; moved++; }
+        }
+      }
+      if(!moved) break;
+    }
+  }
+
   /* THE VALLEY FLOOR, for the temperature model: the tenth percentile of
      the land, which is the river's level rather than the deepest hole in
      it. Everything above this is colder, by the lapse rate. */
@@ -3023,6 +3066,18 @@ function cellHazard(i){
   return null;
 }
 function cellWalkCost(i){
+  /* A WALL IS NOT A WALKWAY. The cost field is built from the ground,
+     and for a long time that was all there was — but there are buildings
+     on it now, and a route that runs through the end wall of somebody's
+     house is not the walkable path the guarantee promises. Measured, the
+     last twenty waypoints of one seed's route went through a house, and
+     a walker following it circled the building for twenty minutes eighty
+     metres from the hospital.
+
+     The hospital itself is deliberately NOT blocked: it has a door, its
+     interior is walkable end to end, and the route is supposed to finish
+     inside it. */
+  if(Wld.BLOCK && Wld.BLOCK[i]) return Infinity;
   const dep = Wld.WLEV[i] > -9000 ? Wld.WLEV[i] - Wld.H[i] : 0;
   const sl = Wld.SLOPE[i];
   if(sl > CFG.HAZARD.cliffSlope) return Infinity;      // that is a cliff
@@ -3157,6 +3212,16 @@ function placeHospital(){
         if(!inGrid(ix,iz)) continue;
         const i = iz*N+ix;
         if(ix<6||iz<6||ix>N-7||iz>N-7) continue;
+        /* AND WELL INSIDE THE MAP. The outlet is on the rim by
+           definition, so a hospital sited "near the outlet" can end up
+           a dozen metres from the edge of the world — with the town,
+           and the player's arrival, in the band where the outflow
+           trenches are cut. */
+        {
+          const inset = CFG.WORLD.hospitalInset;
+          const half = Wld.size*0.5;
+          if(Math.abs(wxOf(ix)) > half - inset || Math.abs(wzOf(iz)) > half - inset) continue;
+        }
         if(Wld.WLEV[i] > Wld.H[i]) continue;                 // not in the river
         let maxS = 0;
         for(let dz=-4; dz<=4; dz++) for(let dx=-4; dx<=4; dx++){
@@ -3580,6 +3645,58 @@ function carvePad(cx, cz, hx, hz, yaw, floorY, relief){
 
 /* Level the ground under everything that has been placed, and give each
    building the floor height it will actually be built at. */
+/* Which cells a building stands on, for the router. Built after the
+   foundations are cut, because that is when every building's final
+   position and floor are known. */
+function markBuildings(){
+  const N = Wld.N;
+  const B = new Uint8Array(N*N);
+  const stamp = (spec, kind, style)=>{
+    if(!spec) return;
+    const [hx, hz] = padExtent(kind, style);
+    const c = Math.cos(spec.yaw||0), s2 = Math.sin(spec.yaw||0);
+    const reach = Math.hypot(hx, hz) + Wld.cell;
+    const ix0 = Math.max(0, Math.floor(gxOf(spec.x-reach))), ix1 = Math.min(N-1, Math.ceil(gxOf(spec.x+reach)));
+    const iz0 = Math.max(0, Math.floor(gzOf(spec.z-reach))), iz1 = Math.min(N-1, Math.ceil(gzOf(spec.z+reach)));
+    for(let iz=iz0; iz<=iz1; iz++) for(let ix=ix0; ix<=ix1; ix++){
+      const dx = wxOf(ix)-spec.x, dz = wzOf(iz)-spec.z;
+      const lx = dx*c - dz*s2, lz = dx*s2 + dz*c;
+      /* The footprint less a margin: the router should go round a house,
+         not treat its garden as a wall. */
+      if(Math.abs(lx) < hx-0.6 && Math.abs(lz) < hz-0.6) B[iz*N+ix] = 1;
+    }
+  };
+  for(const st of Wld.structures) stamp(st, st.kind, st.style);
+  for(const t of (Wld.townBuildings||[])) stamp(t, t.kind, t.style);
+
+  /* THE HOSPITAL IS ENTERED THROUGH ITS DOOR.
+     Leaving it unblocked let the router walk in through whichever wall
+     was nearest, so the route's last twenty metres went through solid
+     concrete — and a walker following it circled the building instead
+     of arriving. Its footprint is blocked like any other, and then a
+     corridor is cleared from the doors down the middle of the lobby to
+     the desk, which is the way in that the interior's own flood test
+     says is open. */
+  const h = Wld.hospital;
+  if(h && h.mesh && h.mesh.userData.footprint){
+    const [HW, HD] = h.mesh.userData.footprint;
+    const c = Math.cos(h.yaw), s2 = Math.sin(h.yaw);
+    const reach = Math.hypot(HW, HD)*0.5 + Wld.cell*2;
+    const ix0 = Math.max(0, Math.floor(gxOf(h.x-reach))), ix1 = Math.min(N-1, Math.ceil(gxOf(h.x+reach)));
+    const iz0 = Math.max(0, Math.floor(gzOf(h.z-reach))), iz1 = Math.min(N-1, Math.ceil(gzOf(h.z+reach)));
+    for(let iz=iz0; iz<=iz1; iz++) for(let ix=ix0; ix<=ix1; ix++){
+      const dx = wxOf(ix)-h.x, dz = wzOf(iz)-h.z;
+      const lx = dx*c - dz*s2, lz = dx*s2 + dz*c;
+      const inside = Math.abs(lx) < HW/2 && Math.abs(lz) < HD/2;
+      if(!inside) continue;
+      const i = iz*N+ix;
+      // the way in: a strip on the entrance axis, from the doors inward
+      B[i] = Math.abs(lx) < 2.4 ? 0 : 1;
+    }
+  }
+  Wld.BLOCK = B;
+}
+
 function carveFoundations(){
   let moved = 0, pads = 0;
   const one = (spec, kind, style)=>{
@@ -4441,6 +4558,7 @@ function generateWorld(onProgress){
          BEFORE resources and hazards go onto it, so nothing is ever left
          sitting on terrain that has since moved. */
       carveFoundations();
+      markBuildings();
       genResources();
       genHazards();
       result = validateWorld();
@@ -5983,7 +6101,7 @@ function surfaceAt(x, z, feetY, radius){
      a surface as well as an obstacle. */
   for(let li=0; li<Veg.logs.length; li++){
     const L = Veg.logs[li];
-    if(L.y1 > feetY + CFG.PLAYER.stepUp || L.y1 < feetY - 2.2) continue;
+    if(L.y1 > feetY + CFG.PLAYER.climbLog || L.y1 < feetY - 2.2) continue;
     const vx = L.x1-L.x0, vz = L.z1-L.z0;
     const len2 = vx*vx + vz*vz || 1;
     let t = ((x-L.x0)*vx + (z-L.z0)*vz) / len2;
@@ -7570,7 +7688,21 @@ function resolveCollisions(p, radius){
        flat. */
     for(let li=0; li<Veg.logs.length; li++){
       const L = Veg.logs[li];
-      if(p.y > L.y1 - 0.06) continue;              // standing on top of it
+      /* A LOG IS CLIMBED, NOT WALLED OFF.
+         Its top stands about half a metre above the ground it lies on,
+         which is under the player's step — but only measured from ITS
+         ground. Approached from below on a slope the same log is 0.6m
+         up, over the step, and then the player can neither climb it nor
+         be pushed past it: they stand against it and slide, at full
+         speed, going nowhere. Measured on one seed, five places on the
+         guaranteed route stopped a walker dead for exactly that reason.
+
+         So the height that counts is measured from the PLAYER's feet,
+         and anything up to climbLog above them is something they get
+         over rather than something that stops them. Above that — a log
+         across a bank, well over waist height — it is an obstacle
+         again, which is correct. */
+      if(L.y1 - p.y <= CFG.PLAYER.climbLog) continue;
       if(p.y + 1.6 < L.y0) continue;               // it is above them
       const vx = L.x1-L.x0, vz = L.z1-L.z0;
       const len2 = vx*vx + vz*vz || 1;
@@ -8945,6 +9077,24 @@ const Mind = {
     if(Survival.sick > 0) mul *= M.mulSick;
     if(Player.stamina < CFG.PLAYER.staminaMax*0.25) mul *= M.mulExhausted;
     mul *= 1 + this.agitation*0.85;
+
+    /* ---- CIVILISATION STEADIES YOU.
+       The whole of this game is being alone in a wood that lies to you,
+       so the one place where that stops is the place with the lights on
+       and people in the street. Inside the town the decline slows, and
+       it slows more the closer the hospital gets; at the doors it has
+       nearly stopped.
+
+       This is not the clock being made kind. It is the last two hundred
+       metres of a walk that takes the better part of an hour behaving
+       like an arrival instead of like more forest — measured, a walker
+       who wandered badly enough to cover four times the direct route
+       was dying sixty metres from the doors, having already walked past
+       the houses and the people. */
+    const civ = Wld.hospital ? Math.hypot(Player.pos.x - Wld.hospital.x,
+                                          Player.pos.z - Wld.hospital.z) : 1e9;
+    if(civ < M.civCalmRange)
+      mul *= lerp(M.civCalmAt, 1, smoothstep(M.civCalmClose, M.civCalmRange, civ));
 
     /* ---- the pauses. The mind having a good stretch: progression holds
        still for a while regardless of what the player is doing. Common in
