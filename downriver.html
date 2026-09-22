@@ -375,15 +375,26 @@ button:active{ transform:translateY(1px); }
        * one trail bar ..... or none, on scarce seeds.
        * the clothes ....... decides how hard cold bites (Survival.cold).
 
-     FOUND ITEMS (ITEM_TYPES)
-       * spare batteries ... who left batteries in a cabin?
-       * purification tablets
-       * canned food ....... and why the cabins are stocked at all
-       * trail bar / snack . campsites, abandoned car
-       * map fragment ...... who surveyed these trails?
-       * radio ............. what is transmitting, and is it real?
-       * matches ........... for boiling water at a fire ring
-       * a second bottle
+     FOUND ITEMS — this is the complete list, and it is the same list
+     that itemRoll() in genResources() draws from. Anything added there
+     belongs here the same day.
+       * battery ........... who left cells in a cabin, and how old?
+       * compass ........... whose is the one the player finds, on the
+                             seeds that make them find one?
+       * bottle ............ a second bottle, or the first one
+       * tablets ........... purification tablets, four per find
+       * matches ........... light a campsite fire ring; warmth, and the
+                             only way to make a place feel safe
+       * cannedFood ........ and why the cabins are stocked at all
+       * trailBar .......... campsites and the abandoned car
+       * mapFrag ........... who surveyed these trails, and when?
+       * radio ............. what is transmitting, and is any of it real?
+
+     THINGS IN THE WORLD THAT ARE NOT ITEMS BUT STILL IMPLY A STORY
+       * berry bushes, and which appearance is safe — the seed shuffles
+         it, so the player learns by eating. Nothing explains why anyone
+         would know.
+       * the fire rings, already cold when the player finds them
 
      PLACES THAT IMPLY A STORY AND CURRENTLY DO NOT TELL ONE
        * the hospital at the edge of the forest
@@ -511,11 +522,23 @@ button:active{ transform:translateY(1px); }
    ---------------------------------------------------------------------
    WHAT HAS ACTUALLY BEEN VERIFIED
    ---------------------------------------------------------------------
-   Everything in this section was measured by running the game, not by
-   reading the code. The dev panel reproduces all of it. See the block at
-   the very bottom of ===== DEV ===== for the numbers, which are written
-   there after each verification pass rather than here, so they cannot
-   drift out of sync with the buttons that produce them.
+   Everything claimed as working in this file was measured by running it,
+   not by reading it. The numbers live in one place — the block headed
+   WHAT HAS ACTUALLY BEEN MEASURED at the bottom of ===== DEV ===== —
+   because that is where the buttons that reproduce them are, and two
+   copies of a measurement is one copy that goes stale.
+
+   The short version: 150 of 150 generated seeds pass all six hard
+   guarantees; 339,755 river cells were checked and none of them flows
+   uphill; all 33 events fire; 120 seconds of calm walking produces an
+   agitation of exactly zero and a minute of panic produces 0.45, which
+   drains back in five seconds; walking blind for five minutes turns you
+   a median of 73 degrees and the compass cancels it completely.
+
+   Things this file does NOT claim, because they were not measured:
+   framerate on real hardware (the test browser renders in software at
+   under one frame a second, so its numbers mean nothing), how the audio
+   actually SOUNDS, and whether any of it is frightening.
 
    ===================================================================== */
 
@@ -669,15 +692,27 @@ const CFG = {
        the movement heading (never to the camera, which would feel like
        the game grabbing the mouse). It is cancelled by looking at the
        sun, a landmark, or the compass. */
-    driftRate: 0.055,    // radians per second at full drift
-    driftWander: 0.11,   // how fast the drift direction itself wanders
+    driftRate: 0.050,    // radians per second at full drift
+    /* HOW FAST THE BIAS ITSELF WANDERS, and it has to be slow. At 0.11 the
+       noise field completes a cycle every nine seconds, so the veer
+       reversed constantly and two minutes of walking blind came out at 17
+       degrees net — a wobble, not a curve. At 0.008 the bias holds one
+       direction for a minute or more, which is what turns a veer into a
+       circle, and a circle is the thing this is for. */
+    driftWander: 0.008,  // how fast the drift direction itself wanders
   },
 
   /* ---- survival ----------------------------------------------------- */
   SURVIVE: {
     /* Thirst and hunger are primarily MIND pressure and weakness, not a
        fast clock. Severe neglect still ends a run, but slowly. */
-    thirstPerHour: 10.0,     // percent of the bar per in-fiction hour
+    /* MEASURED, NOT GUESSED. At 10 percent an hour the bar filled in
+       10.5 in-fiction hours, which is 17 real minutes — so on a 36-minute
+       run thirst was the primary cause of death rather than a pressure on
+       the mind, and a test player left alone died of it before reaching
+       stage 2. 6.5 puts a full bar at about 27 real minutes, which is a
+       real threat over a long run and never the first thing to go wrong. */
+    thirstPerHour: 6.5,      // percent of the bar per in-fiction hour
     hungerPerHour: 3.4,
     sprintThirstMult: 2.2,
     heatThirstMult: 1.35,
@@ -728,8 +763,15 @@ const CFG = {
   /* ---- the mind ------------------------------------------------------ */
   MIND: {
     /* progress 0..1 walks up through the five stages. baseRate is per real
-       minute at rate multiplier 1; the seed's personality scales it. */
-    baseRate: 0.0125,
+       minute at rate multiplier 1; the seed's personality scales it.
+
+       0.018 against the measured average multiplier of about 1.35 and a
+       personality of about 1.15 gives roughly 36 minutes from waking to
+       collapse, with the fast seeds near 20 and the slow ones near 70.
+       0.0125 was the first guess and put the MEDIAN run at over an hour,
+       with stage 1 fourteen minutes in — long enough that most of a run
+       happened in a forest with nothing wrong with it. */
+    baseRate: 0.018,
     stageAt: [0, 0.16, 0.36, 0.60, 0.84],   // progress -> stage boundary
     leakChance: 0.13,        // a draw reaching one stage above current
     leakChanceLate: 0.07,    // ... from stage 3 on, where it matters less
@@ -4714,3 +4756,4011 @@ function updateSkyDome(){
     u.uHorizon.value.lerp(new THREE.Color(0xb6c4d6), Weather.flash*0.8);
   }
 }
+
+/* =====================================================================
+   ===== STRUCTURES =====
+   ONE BUILDER PER KIND, AND THE FAKES CALL THE SAME ONE.
+
+   This is the rule the whole stage-4 design rests on. A hallucinated
+   cabin is not a special "ghost cabin" asset with a shimmer on it; it is
+   buildStructure() with phantom:true, which changes exactly one thing —
+   the render layer — and nothing else. Same geometry, same seed style,
+   same materials, same decay, same wear. From any distance, and from up
+   close, a real cabin and a fake one are the same object.
+
+   The asymmetry is entirely physical and entirely invisible:
+     * a phantom's parts are on LAYER_PHANTOM, which collision never reads
+     * a phantom is not in Wld.structures, which interaction never leaves
+     * a phantom has a dissolve rule; a real building has none
+   ===================================================================== */
+function setLayerDeep(obj, layer){
+  obj.layers.set(layer);
+  for(const c of obj.children) setLayerDeep(c, layer);
+}
+function addBox(parent, w, h, d, mat, x, y, z, rotY){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.position.set(x,y,z);
+  if(rotY) m.rotation.y = rotY;
+  m.castShadow = true; m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+
+/* Collision for buildings is a list of world-space boxes rather than mesh
+   geometry: a few AABBs per structure is something the player loop can
+   walk every frame, and a wall is a box. Phantoms never contribute to it. */
+function structSolids(spec, group){
+  const out = [];
+  group.updateMatrixWorld(true);
+  const bb = new THREE.Box3();
+  group.traverse(o=>{
+    if(!o.isMesh || o.userData.noclip) return;
+    bb.setFromObject(o);
+    out.push({ x0:bb.min.x, x1:bb.max.x, y0:bb.min.y, y1:bb.max.y, z0:bb.min.z, z1:bb.max.z });
+  });
+  return out;
+}
+
+function buildCabin(spec){
+  const st = spec.style, g = new THREE.Group();
+  const [W, D] = st.footprint;
+  const H = 2.5;
+  const wall = 0.18;
+  const decay = spec.decay;
+  // floor
+  addBox(g, W, 0.22, D, MAT.timber, 0, 0.11, 0);
+  // walls, with a doorway in the front (+Z) and windows in the sides
+  const doorW = 1.0;
+  const seg = (W - doorW)/2;
+  addBox(g, seg, H, wall, MAT.timber, -(doorW/2 + seg/2), H/2, D/2);
+  addBox(g, seg, H, wall, MAT.timber,  (doorW/2 + seg/2), H/2, D/2);
+  addBox(g, doorW, 0.45, wall, MAT.timber, 0, H-0.22, D/2);       // lintel
+  addBox(g, W, H, wall, MAT.timber, 0, H/2, -D/2);
+  // side walls with window gaps
+  for(const sx of [-1, 1]){
+    const winH = 0.85, winY = 1.45;
+    const nWin = clamp(st.windows, 1, 3);
+    const pitchZ = D/(nWin+1);
+    let cursor = -D/2;
+    for(let i=0;i<nWin;i++){
+      const wz = -D/2 + pitchZ*(i+1);
+      const len = (wz - 0.45) - cursor;
+      if(len > 0.05) addBox(g, wall, H, len, MAT.timber, sx*W/2, H/2, cursor + len/2);
+      // above and below the opening
+      addBox(g, wall, winY-winH/2, 0.9, MAT.timber, sx*W/2, (winY-winH/2)/2, wz);
+      addBox(g, wall, H-(winY+winH/2), 0.9, MAT.timber, sx*W/2, (winY+winH/2)+(H-(winY+winH/2))/2, wz);
+      const pane = addBox(g, 0.05, winH, 0.86, MAT.glass, sx*W/2, winY, wz);
+      pane.userData.noclip = true;
+      pane.castShadow = false;
+      cursor = wz + 0.45;
+    }
+    const tail = D/2 - cursor;
+    if(tail > 0.05) addBox(g, wall, H, tail, MAT.timber, sx*W/2, H/2, cursor + tail/2);
+  }
+  // roof
+  if(st.pitchedRoof){
+    const pitch = st.roofPitch, slab = (D/2)/Math.cos(pitch) + 0.5;
+    for(const s2 of [-1, 1]){
+      const r = addBox(g, W+0.7, 0.16, slab, MAT.roof, 0,
+                       H + 0.12 + Math.sin(pitch)*slab*0.5, s2*Math.cos(pitch)*slab*0.5);
+      r.rotation.x = s2*pitch;
+    }
+    // gable ends
+    for(const sx of [-1, 1]){
+      for(let i=0;i<5;i++){
+        const t = i/5;
+        addBox(g, 0.16, 0.34, (D+0.3)*(1-t), MAT.timber, sx*W/2, H+0.1+i*0.32, 0);
+      }
+    }
+  } else {
+    addBox(g, W+0.6, 0.18, D+0.6, MAT.roof, 0, H+0.12, 0).rotation.x = 0.06;
+  }
+  if(st.chimney){
+    addBox(g, 0.55, 2.0 + (st.pitchedRoof?1.0:0.4), 0.55, MAT.concrete, W/2-0.7, H*0.5+1.1, -D/2+0.8);
+  }
+  if(st.porch){
+    addBox(g, W*0.8, 0.14, 1.5, MAT.timber, 0, 0.07, D/2 + 0.75);
+    for(const sx of [-1,1]) addBox(g, 0.13, 2.2, 0.13, MAT.timber, sx*W*0.34, 1.1, D/2+1.4);
+    addBox(g, W*0.86, 0.14, 1.8, MAT.roof, 0, 2.25, D/2+0.85);
+  }
+  // the door itself, ajar by an amount the decay decides
+  const door = addBox(g, doorW*0.95, H-0.45, 0.07, MAT.timber, 0, (H-0.45)/2, D/2);
+  door.geometry.translate(doorW*0.475, 0, 0);
+  door.position.x = -doorW*0.475;
+  door.rotation.y = -decay*1.1;
+  g.userData.door = door;
+  return g;
+}
+
+function buildCampsite(spec){
+  const g = new THREE.Group();
+  const r = makeRNG(hashString(spec.id) ^ G.seed);
+  // fire ring: stones round a cold, wet ash pit
+  const ring = 0.62;
+  for(let i=0;i<9;i++){
+    const a = i/9*TAU + r()*0.3;
+    const s2 = 0.16 + r()*0.13;
+    const st2 = new THREE.Mesh(new THREE.IcosahedronGeometry(s2, 0), MAT.rock);
+    st2.position.set(Math.cos(a)*ring, s2*0.5, Math.sin(a)*ring);
+    st2.rotation.set(r()*3, r()*3, r()*3);
+    st2.castShadow = true; st2.receiveShadow = true;
+    g.add(st2);
+  }
+  const ash = new THREE.Mesh(new THREE.CircleGeometry(ring*0.85, 12), MAT.dark);
+  ash.rotation.x = -Math.PI/2; ash.position.y = 0.02;
+  ash.userData.noclip = true;
+  g.add(ash);
+  g.userData.fire = { x:0, z:0 };
+  // a tent, standing or collapsed depending on the decay this seed rolled
+  const collapsed = spec.decay > 0.62;
+  const tent = new THREE.Group();
+  const tl = 2.4, tw = 1.7, th = collapsed ? 0.35 : 1.25;
+  for(const sx of [-1,1]){
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(tl, Math.hypot(th, tw/2)*1.02), MAT.fabric);
+    p.rotation.y = Math.PI/2;
+    p.rotation.x = 0;
+    p.position.set(sx*tw/4, th/2, 0);
+    p.rotation.z = sx*Math.atan2(tw/2, th);
+    p.castShadow = true; p.receiveShadow = true;
+    tent.add(p);
+  }
+  tent.position.set(2.3, 0, -0.6);
+  tent.rotation.y = r()*TAU;
+  g.add(tent);
+  g.userData.tent = tent;
+  // seats: a log or two
+  for(let i=0;i<2;i++){
+    const len = 1.4 + r()*1.1;
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.19,0.22,len,7), MAT.bark);
+    log.rotation.z = Math.PI/2;
+    const a = r()*TAU;
+    log.position.set(Math.cos(a)*1.7, 0.19, Math.sin(a)*1.7);
+    log.rotation.y = a + Math.PI/2;
+    log.castShadow = true; log.receiveShadow = true;
+    g.add(log);
+  }
+  return g;
+}
+
+function buildRuin(spec){
+  const g = new THREE.Group();
+  const r = makeRNG(hashString(spec.id) ^ (G.seed+7));
+  const W = 4.5 + r()*3, D = 3.6 + r()*2.6;
+  addBox(g, W, 0.2, D, MAT.concrete, 0, 0.1, 0);
+  // three-and-a-bit walls, broken off at different heights
+  const walls = [[0,-D/2,W,0],[0,D/2,W,0],[-W/2,0,D,Math.PI/2],[W/2,0,D,Math.PI/2]];
+  for(const [x,z,len,ry] of walls){
+    if(r() < 0.3) continue;                        // this one is gone entirely
+    const pieces = 3 + (r()*3|0);
+    for(let i=0;i<pieces;i++){
+      const h = 0.5 + r()*2.0;
+      const seg = len/pieces * (0.7 + r()*0.3);
+      const off = -len/2 + len/pieces*(i+0.5);
+      const m = addBox(g, seg, h, 0.22, MAT.timber, 0, h/2, 0, 0);
+      m.position.set(x + Math.cos(ry)*off, h/2, z + Math.sin(ry)*off);
+      m.rotation.y = ry;
+    }
+  }
+  // fallen roof beams
+  for(let i=0;i<4;i++){
+    const len = 2.5 + r()*3;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, len), MAT.timber);
+    b.position.set((r()-0.5)*W*0.7, 0.3 + r()*0.5, (r()-0.5)*D*0.7);
+    b.rotation.set(r()*0.5-0.25, r()*TAU, r()*0.6-0.3);
+    b.castShadow = true; b.receiveShadow = true;
+    g.add(b);
+  }
+  /* A ROTTEN FLOOR is a real hazard, and it is the one hazard that is a
+     property of a building rather than of the terrain. The patch is
+     recorded in world space when the ruin is placed. */
+  g.userData.rotten = { r: Math.min(W,D)*0.28, depth: 2.2 + r()*1.6 };
+  return g;
+}
+
+function buildCar(spec){
+  const g = new THREE.Group();
+  const body = addBox(g, 1.85, 0.72, 4.3, MAT.metal, 0, 0.78, 0);
+  addBox(g, 1.72, 0.62, 2.0, MAT.metal, 0, 1.42, -0.25);
+  for(const [wx, wz] of [[-0.9,1.45],[0.9,1.45],[-0.9,-1.4],[0.9,-1.4]]){
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.33,0.33,0.22,12), MAT.dark);
+    w.rotation.z = Math.PI/2;
+    w.position.set(wx, spec.decay > 0.6 ? 0.18 : 0.33, wz);
+    w.castShadow = true;
+    g.add(w);
+  }
+  const glass = addBox(g, 1.5, 0.5, 0.06, MAT.glass, 0, 1.45, 0.72);
+  glass.userData.noclip = true;
+  if(spec.decay > 0.5) body.rotation.z = 0.05;
+  return g;
+}
+
+/* The hospital. Deliberately plain: a low concrete block with lit
+   windows and a canopy over the entrance. It is the only building in the
+   game with its own light, which is how you recognise it at night from
+   further away than you can make out its shape — and which is exactly
+   what a stage-4 fake will copy. */
+function buildHospital(spec){
+  const g = new THREE.Group();
+  const W = 24, D = 15, H = 7.2;
+  addBox(g, W, 0.3, D, MAT.concrete, 0, 0.15, 0);
+  addBox(g, W, H, 0.4, MAT.concrete, 0, H/2, -D/2);
+  addBox(g, 0.4, H, D, MAT.concrete, -W/2, H/2, 0);
+  addBox(g, 0.4, H, D, MAT.concrete,  W/2, H/2, 0);
+  // front wall with a doorway
+  const doorW = 2.6;
+  const segW = (W-doorW)/2;
+  for(const sx of [-1,1]) addBox(g, segW, H, 0.4, MAT.concrete, sx*(doorW/2+segW/2), H/2, D/2);
+  addBox(g, doorW, H-2.6, 0.4, MAT.concrete, 0, 2.6+(H-2.6)/2, D/2);
+  addBox(g, W+1.2, 0.5, D+1.2, MAT.concrete, 0, H+0.25, 0);
+  // the canopy over the doors
+  addBox(g, 7.0, 0.35, 3.2, MAT.concrete, 0, 3.5, D/2+1.5);
+  for(const sx of [-1,1]) addBox(g, 0.26, 3.4, 0.26, MAT.concrete, sx*3.1, 1.7, D/2+2.9);
+
+  // lit windows, in two rows
+  const winMat = new THREE.MeshBasicMaterial({ color: 0xcfd6c8 });
+  const lit = [];
+  for(let row=0; row<2; row++){
+    for(let i=0;i<8;i++){
+      const wx = -W/2 + 1.9 + i*(W-3.8)/7;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.05), winMat);
+      m.position.set(wx, 2.1 + row*2.6, D/2+0.22);
+      m.userData.noclip = true;
+      g.add(m); lit.push(m);
+      const b = m.clone(); b.position.z = -D/2-0.22; b.rotation.y = Math.PI;
+      g.add(b); lit.push(b);
+    }
+  }
+  // and the doorway glow, which is what you actually see first
+  const glow = new THREE.PointLight(0xdfe6d8, 3.2, 34, 1.6);
+  glow.position.set(0, 2.6, D/2+1.6);
+  g.add(glow);
+  const doorPane = new THREE.Mesh(new THREE.PlaneGeometry(doorW*0.92, 2.45),
+    new THREE.MeshBasicMaterial({ color: 0xe6ecdf }));
+  doorPane.position.set(0, 1.25, D/2+0.22);
+  doorPane.userData.noclip = true;
+  g.add(doorPane);
+  g.userData.lit = lit;
+  g.userData.glow = glow;
+  g.userData.entry = new THREE.Vector3(0, 0, D/2 + 2.2);
+  return g;
+}
+
+const STRUCT_BUILDERS = {
+  cabin: buildCabin, campsite: buildCampsite, ruin: buildRuin,
+  car: buildCar, hospital: buildHospital,
+};
+
+function buildStructure(spec){
+  const fn = STRUCT_BUILDERS[spec.kind] || buildCabin;
+  const g = fn(spec);
+  g.position.set(spec.x, spec.y, spec.z);
+  g.rotation.y = spec.yaw;
+  g.updateMatrixWorld(true);
+  spec.mesh = g;
+  if(spec.phantom){
+    setLayerDeep(g, LAYER_PHANTOM);
+    g.traverse(o=>{ if(o.isMesh){ o.castShadow = false; } });
+  } else {
+    spec.solids = structSolids(spec, g);
+  }
+  scene.add(g);
+  return g;
+}
+
+function buildAllStructures(){
+  for(const s of Wld.structures) buildStructure(s);
+  const h = Wld.hospital;
+  h.kind = 'hospital'; h.style = Wld.style; h.decay = 0; h.id = 'hospital';
+  buildStructure(h);
+  // entry point in world space, for the win check
+  h.entryWorld = h.mesh.userData.entry.clone().applyMatrix4(h.mesh.matrixWorld);
+}
+
+/* ---------------------------------------------------------------------
+   CLUE PROPS
+   Trail markers, signs, fence posts, stumps, litter, poles, the tower.
+   Small, cheap, and placed by the rule in genHazards() — denser and more
+   man-made the closer to the hospital you are. They are instanced by kind
+   because there can be two hundred of them.
+   ------------------------------------------------------------------- */
+function buildClues(){
+  const byKind = {};
+  for(const c of Wld.clues) (byKind[c.kind] = byKind[c.kind] || []).push(c);
+  const geoms = {
+    marker:    ()=> new THREE.BoxGeometry(0.10, 1.25, 0.10),
+    sign:      ()=> new THREE.BoxGeometry(0.62, 0.40, 0.05),
+    fencePost: ()=> new THREE.CylinderGeometry(0.07, 0.085, 1.05, 6),
+    stump:     ()=> new THREE.CylinderGeometry(0.34, 0.42, 0.5, 9),
+    litter:    ()=> new THREE.BoxGeometry(0.16, 0.10, 0.22),
+    pole:      ()=> new THREE.CylinderGeometry(0.13, 0.17, 7.2, 7),
+  };
+  const mats = {
+    marker: MAT.timber, sign: MAT.timber, fencePost: MAT.timber,
+    stump: MAT.bark, litter: MAT.metal, pole: MAT.timber,
+  };
+  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(),
+        V = new THREE.Vector3(), Sv = new THREE.Vector3(1,1,1), E = new THREE.Euler();
+  World.groups.clues = new THREE.Group();
+  for(const kind in geoms){
+    const list = byKind[kind] || [];
+    if(!list.length) continue;
+    const im = new THREE.InstancedMesh(geoms[kind](), mats[kind], list.length);
+    im.castShadow = true; im.receiveShadow = true;
+    list.forEach((c, i)=>{
+      const yOff = kind==='marker' ? 0.62 : kind==='sign' ? 1.1
+                 : kind==='fencePost' ? 0.52 : kind==='stump' ? 0.22
+                 : kind==='pole' ? 3.6 : 0.05;
+      E.set(kind==='litter' ? Math.random()*1 : 0, c.yaw, 0);
+      Q.setFromEuler(E);
+      M.compose(V.set(c.x, c.y + yOff, c.z), Q, Sv);
+      im.setMatrixAt(i, M);
+    });
+    im.instanceMatrix.needsUpdate = true;
+    World.groups.clues.add(im);
+  }
+  // the radio tower, if this seed put one somewhere high
+  const tw = Wld.clues.find(c=>c.kind==='tower');
+  if(tw){
+    const g = new THREE.Group();
+    const hgt = 34;
+    for(const [ox,oz] of [[-1.5,-1.5],[1.5,-1.5],[-1.5,1.5],[1.5,1.5]]){
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.10,0.16,hgt,5), MAT.metal);
+      leg.position.set(ox*0.7, hgt/2, oz*0.7);
+      leg.rotation.set(oz*0.028, 0, -ox*0.028);
+      leg.castShadow = true;
+      g.add(leg);
+    }
+    for(let i=1;i<7;i++){
+      const y = i*hgt/7;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.3*(1-i*0.06), 0.045, 4, 8), MAT.metal);
+      ring.rotation.x = Math.PI/2; ring.position.y = y;
+      g.add(ring);
+    }
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.30, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xff4436 }));
+    lamp.position.y = hgt + 0.4;
+    g.add(lamp);
+    g.userData.lamp = lamp;
+    g.position.set(tw.x, tw.y, tw.z);
+    World.groups.tower = g;
+    scene.add(g);
+  }
+  scene.add(World.groups.clues);
+}
+
+/* =====================================================================
+   ===== PLAYER =====
+   Pointer-lock look, WASD, sprint against stamina, and collision against
+   the same heightfield the world was generated from.
+
+   THE DRIFT is the part worth reading. People lost in forests walk in
+   circles; it is one of the most reliably documented things about being
+   lost, and it happens because without a distant reference the small
+   asymmetries in your gait never get corrected. So a slow bias is added
+   to the MOVEMENT heading — never to the camera, because moving the
+   player's view is the game taking the mouse away from them, which feels
+   like a bug rather than like being lost. Looking at the sun, a landmark
+   or the compass cancels it, which is exactly the behaviour the
+   navigation design wants to reward.
+   ===================================================================== */
+const Keys = Object.create(null);
+const Player = {
+  pos: new THREE.Vector3(),
+  vel: new THREE.Vector3(),
+  yaw: 0, pitch: 0,
+  onGround: true, vy: 0, groundY: 0,
+  stamina: CFG.PLAYER.staminaMax,
+  sprinting: false, moving: false, speed: 0,
+  bob: 0, bobAmt: 0, breath: 0,
+  inWater: 0, swimming: false, submerged: 0, breathHeld: 0,
+  driftAngle: 0, drift: 0, driftPhase: 0,
+  lastSafe: new THREE.Vector3(),
+  fallFrom: 0, falling: false,
+  sinceLook: 0,             // seconds since the player last had a reference
+  resting: false,
+  dead: false,
+};
+
+let pointerLocked = false;
+function initInput(){
+  const el = renderer.domElement;
+  el.addEventListener('click', ()=>{ if(!G.over && G.started) el.requestPointerLock(); });
+  document.addEventListener('pointerlockchange', ()=>{
+    pointerLocked = document.pointerLockElement === el;
+    G.paused = !pointerLocked && G.started && !DEV.open;
+    UI.pauseNote(!pointerLocked && G.started && !G.over && !DEV.open);
+    if(pointerLocked && typeof Audio !== 'undefined') Audio.resume();
+  });
+  document.addEventListener('mousemove', e=>{
+    if(!pointerLocked || G.paused) return;
+    const s = 0.0022;
+    Player.yaw   -= e.movementX * s;
+    Player.pitch -= e.movementY * s;
+    Player.pitch = clamp(Player.pitch, -1.45, 1.45);
+    Mind.noteLook(e.movementX * s, e.movementY * s);
+  });
+  addEventListener('keydown', e=>{
+    if(e.repeat){ e.preventDefault(); return; }   // auto-repeat must never
+    Keys[e.code] = true;                           // re-enter a one-shot
+    onKeyDown(e);
+  });
+  addEventListener('keyup', e=>{ Keys[e.code] = false; onKeyUp(e); });
+  addEventListener('blur', ()=>{ for(const k in Keys) Keys[k] = false; });
+}
+
+function onKeyDown(e){
+  if(e.code === 'Backquote' || e.code === 'F1'){ e.preventDefault(); DEV.toggle(); return; }
+  if(!G.started || G.over) return;
+  switch(e.code){
+    case 'KeyF': Gear.toggleTorch(); break;
+    case 'KeyC': Gear.toggleCompass(); break;
+    case 'KeyM': UI.toggleMap(); break;
+    case 'KeyH': document.getElementById('help').classList.toggle('off'); break;
+    case 'KeyP': { const f = document.getElementById('fps');
+                   f.style.display = f.style.display === 'block' ? 'none' : 'block'; break; }
+    case 'KeyE': Hold.begin(); break;
+  }
+}
+function onKeyUp(e){ if(e.code === 'KeyE') Hold.cancel(); }
+
+/* ---------------------------------------------------------------------
+   COLLISION
+   Circles for trunks and rocks, boxes for buildings, and the heightfield
+   for everything else. Two resolve passes, because one pass squeezed
+   between two trunks pushes you into the second one.
+   ------------------------------------------------------------------- */
+function resolveCollisions(p, radius){
+  for(let pass=0; pass<2; pass++){
+    for(const c of Veg.colliders){
+      const dx = p.x - c.x, dz = p.z - c.z;
+      const rr = c.r + radius;
+      const d2 = dx*dx + dz*dz;
+      if(d2 >= rr*rr || d2 < 1e-9) continue;
+      const d = Math.sqrt(d2);
+      p.x = c.x + dx/d*rr;
+      p.z = c.z + dz/d*rr;
+    }
+    for(const s of Wld.structures){
+      if(!s.solids) continue;
+      if(Math.abs(p.x - s.x) > 14 || Math.abs(p.z - s.z) > 14) continue;
+      for(const b of s.solids){
+        if(p.x < b.x0-radius || p.x > b.x1+radius || p.z < b.z0-radius || p.z > b.z1+radius) continue;
+        if(p.y + 1.5 < b.y0 || p.y > b.y1) continue;         // over it or under it
+        // push out along the shallowest axis
+        const dxL = p.x - (b.x0-radius), dxR = (b.x1+radius) - p.x;
+        const dzL = p.z - (b.z0-radius), dzR = (b.z1+radius) - p.z;
+        const m = Math.min(dxL, dxR, dzL, dzR);
+        if(m === dxL) p.x = b.x0-radius;
+        else if(m === dxR) p.x = b.x1+radius;
+        else if(m === dzL) p.z = b.z0-radius;
+        else p.z = b.z1+radius;
+      }
+    }
+  }
+  // the map's edge is a wall you cannot leave
+  const lim = Wld.size*0.5 - 6;
+  p.x = clamp(p.x, -lim, lim);
+  p.z = clamp(p.z, -lim, lim);
+}
+
+function updatePlayer(dt){
+  const C = CFG.PLAYER;
+  const p = Player;
+  if(p.dead) return;
+
+  // ---- what the keys are asking for, in world space ----
+  let ix = 0, iz = 0;
+  if(Keys.KeyW || Keys.ArrowUp) iz -= 1;
+  if(Keys.KeyS || Keys.ArrowDown) iz += 1;
+  if(Keys.KeyA || Keys.ArrowLeft) ix -= 1;
+  if(Keys.KeyD || Keys.ArrowRight) ix += 1;
+  const wants = (ix || iz) && !p.resting;
+  const l = Math.hypot(ix, iz) || 1;
+  ix /= l; iz /= l;
+
+  /* THE DRIFT. driftAngle wanders slowly on its own; how much of it is
+     actually applied depends on whether the player has a reference. The
+     effect is a few degrees a second at most — over thirty seconds of
+     walking blind it is a noticeable curve, and over five minutes it is a
+     circle, which is the point. */
+  p.driftPhase += dt*C.driftWander;
+  p.driftAngle = (vnoise2(p.driftPhase, 4.7, (G.seed^0x55)>>>0)-0.5)*2;
+  p.sinceLook += dt;
+  const hasReference = Gear.compassUp || Sky.sunUp > 0.10 && Weather.fogBoost < 0.5
+                       || sampleGrid(Wld.ROUTE, p.pos.x, p.pos.z) > 0;
+  if(hasReference) p.sinceLook = 0;
+  p.drift = clamp((p.sinceLook - 4) / 20, 0, 1) * (0.5 + Mind.intensity*0.9);
+  /* driftRate is radians per SECOND. The first version multiplied by
+     dt*60 as well, which at 30fps is a factor of two per frame rather
+     than per second — measured, a player walking blind for two minutes
+     turned through 1617 degrees, four and a half complete circles, which
+     is not "people veer when they are lost", it is a spin cycle. */
+  const driftYaw = p.driftAngle * p.drift * C.driftRate * dt;
+  p.yawDriftAccum = (p.yawDriftAccum || 0) + driftYaw;
+
+  const heading = p.yaw + p.yawDriftAccum;
+  const fx = -Math.sin(heading), fz = -Math.cos(heading);
+  const rx =  Math.cos(heading), rz = -Math.sin(heading);
+  const wx = fx*(-iz) + rx*ix, wz = fz*(-iz) + rz*ix;
+
+  // ---- how fast, given everything that is wrong with the player ----
+  const wantSprint = (Keys.ShiftLeft || Keys.ShiftRight) && wants && p.stamina > 1 && !p.swimming;
+  p.sprinting = wantSprint && p.stamina > C.staminaFloor*0.35;
+  let speed = p.sprinting ? C.sprint : C.walk;
+  speed *= Survival.speedFactor();
+  const depth = waterDepthAt(p.pos.x, p.pos.z);
+  p.inWater = depth;
+  p.swimming = depth > C.swimDepth;
+  if(depth > 0.12) speed *= p.swimming ? 0.45 : lerp(1, 0.55, clamp(depth/C.swimDepth,0,1));
+  const hazard = cellHazard(Math.round(clamp(gzOf(p.pos.z),0,Wld.N-1))*Wld.N
+                          + Math.round(clamp(gxOf(p.pos.x),0,Wld.N-1)));
+  if(hazard === 'bog') speed *= CFG.HAZARD.bogSlow;
+  // uphill is slow
+  const sl = slopeAt(p.pos.x, p.pos.z);
+  speed *= 1 - clamp(sl, 0, 0.9)*0.45;
+
+  // ---- stamina ----
+  if(p.sprinting){
+    p.stamina = Math.max(0, p.stamina - C.staminaDrain*dt);
+    if(p.stamina <= 0) p.sprinting = false;
+  } else if(p.swimming){
+    p.stamina = Math.max(0, p.stamina - C.staminaDrain*0.55*dt);
+  } else {
+    const regen = C.staminaRegen * Survival.staminaFactor() * (wants ? 0.55 : 1.0);
+    p.stamina = Math.min(C.staminaMax, p.stamina + regen*dt);
+  }
+
+  // ---- integrate ----
+  const accel = wants ? C.accel : 0;
+  p.vel.x += (wx*speed - p.vel.x) * clamp(accel*dt, 0, 1);
+  p.vel.z += (wz*speed - p.vel.z) * clamp(accel*dt, 0, 1);
+  if(!wants){
+    const d = clamp(C.damp*dt, 0, 1);
+    p.vel.x -= p.vel.x*d; p.vel.z -= p.vel.z*d;
+  }
+
+  const nx = p.pos.x + p.vel.x*dt;
+  const nz = p.pos.z + p.vel.z*dt;
+
+  /* A SLOPE STEEPER THAN THE CLIFF ANGLE IS A WALL GOING UP AND A SLIDE
+     GOING DOWN. Blocking both directions means a player who slides into a
+     ravine is stuck in it forever; allowing both means cliffs are stairs.
+     So uphill is refused and downhill is not. */
+  const hHere = heightAt(p.pos.x, p.pos.z);
+  const hThere = heightAt(nx, nz);
+  const climbing = hThere - hHere;
+  const stepLen = Math.hypot(nx-p.pos.x, nz-p.pos.z) || 1e-5;
+  const grade = climbing/stepLen;
+  let moved = true;
+  if(grade > CFG.HAZARD.cliffSlope && !p.swimming){
+    moved = false;                      // a wall
+    p.vel.x *= 0.2; p.vel.z *= 0.2;
+  }
+  const np = { x: moved ? nx : p.pos.x, y: p.pos.y, z: moved ? nz : p.pos.z };
+  resolveCollisions(np, C.radius);
+  p.pos.x = np.x; p.pos.z = np.z;
+
+  // ---- vertical ----
+  const ground = heightAt(p.pos.x, p.pos.z);
+  p.groundY = ground;
+  if(p.falling){
+    p.vy -= 22*dt;
+    p.pos.y += p.vy*dt;
+    if(p.pos.y <= ground){
+      const drop = p.fallFrom - ground;
+      p.pos.y = ground; p.vy = 0; p.falling = false;
+      Survival.landed(drop);
+    }
+  } else {
+    const drop = p.pos.y - ground;
+    if(drop > 0.75 && !p.swimming){
+      p.falling = true; p.fallFrom = p.pos.y; p.vy = 0;
+    } else {
+      // walk up and down small steps smoothly rather than teleporting
+      p.pos.y = lerp(p.pos.y, ground, clamp(dt*16, 0, 1));
+      if(Math.abs(p.pos.y - ground) < 0.02) p.pos.y = ground;
+    }
+  }
+  // sliding on ground too steep to stand on
+  if(!p.falling && sl > CFG.HAZARD.slipSlope){
+    const n = normalAt(p.pos.x, p.pos.z);
+    const k = (sl - CFG.HAZARD.slipSlope) * 9 * dt;
+    p.vel.x += n.x*k; p.vel.z += n.z*k;
+  }
+
+  // ---- being underwater ----
+  const wl = waterLevelAt(p.pos.x, p.pos.z);
+  const eyeY = p.pos.y + C.eye*(p.resting?0.62:1);
+  p.submerged = (wl > -9000 && wl > eyeY) ? 1 : 0;
+  if(p.submerged){
+    p.breathHeld += dt;
+    if(p.breathHeld > CFG.SURVIVE.drownSeconds) Survival.die('drowned');
+  } else p.breathHeld = Math.max(0, p.breathHeld - dt*2.5);
+
+  // remember the last place it was safe to be, for the fake-hospital reset
+  if(!p.falling && !p.swimming && sl < 0.4 && depth < 0.3) p.lastSafe.copy(p.pos);
+
+  // ---- the camera ----
+  p.speed = Math.hypot(p.vel.x, p.vel.z);
+  p.moving = p.speed > 0.25;
+  const bobTarget = p.moving ? (p.sprinting ? 1.0 : 0.55) : 0;
+  p.bobAmt = lerp(p.bobAmt, bobTarget, clamp(dt*5,0,1));
+  p.bob += dt * (p.sprinting ? 12.5 : 8.0) * (p.moving ? 1 : 0);
+  const bobY = Math.sin(p.bob)*0.035*p.bobAmt;
+  const bobX = Math.cos(p.bob*0.5)*0.022*p.bobAmt;
+  camera.position.set(p.pos.x + bobX*Math.cos(p.yaw), eyeY + bobY, p.pos.z - bobX*Math.sin(p.yaw));
+  camera.rotation.set(p.pitch, p.yaw, Math.sin(p.bob*0.5)*0.008*p.bobAmt);
+
+  Veg.update(p.pos.x, p.pos.z);
+  Mind.noteMovement(dt, wants, p.sprinting, heading);
+}
+
+/* =====================================================================
+   ===== SURVIVAL =====
+   Thirst, hunger, cold and sickness. The design decision that shapes all
+   four: they are primarily MIND PRESSURE and WEAKNESS, not a fast clock.
+   A player who forgets to drink does not die of it for a very long time —
+   they get slower, they tire sooner, and the world gets stranger, which
+   feeds back into the thing the game is actually about. Severe neglect
+   still ends a run, and all of it is tunable in CFG.SURVIVE.
+   ===================================================================== */
+const Survival = {
+  thirst: 0, hunger: 0, cold: 0, sick: 0, sickKind: null,
+  bottle: 0, bottleMax: CFG.GEAR.bottleML, hasBottle: false,
+  food: 0, tablets: 0, matches: 0,
+  sheltered: false, warm: 0,
+
+  reset(){
+    this.thirst = 8; this.hunger = 6; this.cold = 0; this.sick = 0; this.sickKind = null;
+    this.hasBottle = P.gear.bottle;
+    this.bottle = this.hasBottle ? Math.round(P.gear.bottleFull*this.bottleMax) : 0;
+    this.food = P.gear.food; this.tablets = 0; this.matches = 0;
+  },
+
+  /* Weakness curves. Both bottom out at a floor rather than going to
+     zero, because a player who cannot move cannot fix the problem. */
+  speedFactor(){
+    const S = CFG.SURVIVE;
+    const t = smoothstep(S.thirstWeakAt, 100, this.thirst);
+    const h = smoothstep(S.hungerWeakAt, 100, this.hunger);
+    const c = smoothstep(55, 100, this.cold);
+    return lerp(1, S.weakSpeedFloor, clamp(Math.max(t, h*0.8, c*0.9), 0, 1));
+  },
+  staminaFactor(){
+    const S = CFG.SURVIVE;
+    const t = smoothstep(S.thirstWeakAt*0.8, 100, this.thirst);
+    const h = smoothstep(S.hungerWeakAt*0.8, 100, this.hunger);
+    return lerp(1, S.weakStamFloor, clamp(Math.max(t,h), 0, 1)) * (this.sick > 0 ? 0.7 : 1);
+  },
+
+  update(dt){
+    if(G.over) return;
+    const S = CFG.SURVIVE;
+    const hoursPerSec = 24/(CFG.TIME.dayRealMinutes*60);
+    const h = dt*hoursPerSec;
+
+    let tRate = S.thirstPerHour;
+    if(Player.sprinting) tRate *= S.sprintThirstMult;
+    if(Sky.phase === 'day' && Weather.kind === 'clear') tRate *= S.heatThirstMult;
+    this.thirst = clamp(this.thirst + tRate*h, 0, 100);
+    this.hunger = clamp(this.hunger + S.hungerPerHour*h, 0, 100);
+
+    /* COLD is exposure, and it is the one need that can be reversed
+       quickly: get out of the rain, or stand by a fire, and it drops
+       twice as fast as it rose. */
+    const wet = (Weather.rain > 0.15 ? 1 : 0) + (Player.inWater > 0.3 ? 1 : 0);
+    const night = 1 - Sky.day;
+    const exposure = (wet*0.6 + night*0.5 + Weather.wind*0.25) * (this.sheltered ? 0.15 : 1);
+    if(exposure > 0.18 && !this.warm) this.cold = clamp(this.cold + S.coldPerHour*exposure*h, 0, 100);
+    else this.cold = clamp(this.cold - S.coldWarmPerHour*h*(this.warm?1.6:1), 0, 100);
+    if(this.warm > 0) this.warm = Math.max(0, this.warm - dt);
+
+    if(this.sick > 0){
+      this.sick = Math.max(0, this.sick - dt);
+      if(this.sick === 0) this.sickKind = null;
+    }
+
+    // death, slowly and only from real neglect
+    if(this.thirst >= S.thirstDeadlyAt) this.dying = (this.dying||0) + dt;
+    else if(this.hunger >= S.hungerDeadlyAt) this.dying = (this.dying||0) + dt*0.6;
+    else if(this.cold >= S.coldDeadlyAt) this.dying = (this.dying||0) + dt*1.2;
+    else this.dying = Math.max(0, (this.dying||0) - dt*0.5);
+    /* And two minutes of grace at the top of the bar, not forty-five
+       seconds. A player who has just realised they are in trouble should
+       have time to do something about it. */
+    if(this.dying > 120){
+      this.die(this.cold >= S.coldDeadlyAt ? 'exposure'
+             : this.thirst >= S.thirstDeadlyAt ? 'dehydration' : 'starvation');
+    }
+  },
+
+  landed(drop){
+    const H = CFG.HAZARD;
+    if(drop >= H.fallLethal){ this.die('a fall'); return; }
+    if(drop >= H.fallHurt){
+      const k = (drop - H.fallHurt)/(H.fallLethal - H.fallHurt);
+      Player.stamina = Math.max(0, Player.stamina - 45*k - 15);
+      this.cold = clamp(this.cold + 6*k, 0, 100);
+      Mind.shock(0.18 + k*0.3);
+      UI.say('That hurt.', 2.4);
+      if(typeof Audio !== 'undefined') Audio.play('fallImpact', { gain: 0.5 + k*0.6 });
+    }
+  },
+
+  /* DRINKING. Clean moving water is the good outcome; standing water can
+     make the player ill, which raises intensity — so the survival layer
+     feeds the mind rather than running beside it. Hallucinated water is
+     not handled here at all: a phantom source never reaches this code,
+     which is why drinking from one does nothing and the player finds out
+     later from their own thirst. */
+  drink(kind, purified){
+    this.thirst = clamp(this.thirst - 42, 0, 100);
+    Mind.credit(CFG.MIND.calmDrink);
+    if(kind === 'stagnant' && !purified && !this.tablets){
+      if(rngFor('sick', Math.floor(G.t)).chance(0.55)) this.makeSick('water');
+    }
+    UI.say(kind === 'stagnant' ? 'It tastes of the bottom of the pond.' : 'Cold, and clean enough.', 3);
+  },
+  fill(kind){
+    if(!this.hasBottle) return false;
+    this.bottle = this.bottleMax;
+    this.bottleKind = kind;
+    return true;
+  },
+  drinkBottle(){
+    if(this.bottle <= 0) return false;
+    this.bottle = 0;
+    this.drink(this.bottleKind || 'flowing', this.tablets > 0);
+    return true;
+  },
+  eat(effect){
+    this.hunger = clamp(this.hunger - 22, 0, 100);
+    Mind.credit(CFG.MIND.calmEat);
+    if(effect === 'sick') this.makeSick('berry');
+    else if(effect === 'intense') Mind.dose(0.22 + Mind.intensity*0.2);
+  },
+  eatRation(){
+    if(this.food <= 0) return false;
+    this.food--;
+    this.hunger = clamp(this.hunger - 40, 0, 100);
+    Mind.credit(CFG.MIND.calmEat*1.4);
+    return true;
+  },
+  makeSick(kind){
+    const r = rngFor('sickness', Math.floor(G.t*3));
+    this.sick = r.range(CFG.SURVIVE.sickMinutes[0], CFG.SURVIVE.sickMinutes[1])*60;
+    this.sickKind = kind;
+    UI.say('Something is wrong with your stomach.', 4);
+  },
+  die(cause){
+    if(G.over) return;
+    Player.dead = true;
+    G.over = true; G.won = false; G.deaths = cause;
+    UI.end(false, cause);
+  },
+};
+
+/* =====================================================================
+   ===== EQUIPMENT =====
+   One flashlight, one compass, a map, a bottle, and whatever is found.
+
+   THE COMPASS SHOWS NORTH AND ONLY NORTH. It never points at the
+   hospital, and the player does not start knowing which way that is. Its
+   real value is holding a straight line — which matters precisely
+   because of the drift in updatePlayer(). From stage 2 it can lie, by an
+   amount the intensity decides: a couple of degrees at low dose, a
+   reversal at high. It is a physical object raised with a key, with a
+   needle that settles slowly and swings when you move, because a compass
+   you have to stop and read is a compass that costs something.
+   ===================================================================== */
+const Gear = {
+  torchOn: false, battery: 1, spares: 0,
+  hasCompass: false, compassUp: false, compassRaise: 0,
+  needle: 0, needleVel: 0, needleTarget: 0,
+  mapPieces: 0, hasMap: false,
+  radio: false, radioOn: false,
+  flickerT: 0, flickerFake: 0,
+  torchLight: null, cone: null,
+
+  reset(){
+    this.torchOn = false;
+    this.battery = P.gear.battery;
+    this.spares = 0;
+    this.hasCompass = P.gear.compass;
+    this.compassUp = false; this.compassRaise = 0;
+    this.needle = 0; this.needleVel = 0;
+    this.mapPieces = P.gear.mapFrag ? 1 : 0;
+    this.hasMap = this.mapPieces > 0;
+    this.radio = false; this.radioOn = false;
+  },
+
+  build(){
+    /* The beam is a spotlight with a shadow map, parented to the camera.
+       One shadow-casting light is the whole budget, and this is the one
+       that earns it: a beam that does not throw tree shadows is a torch
+       in a diorama. */
+    const t = new THREE.SpotLight(0xfff2d8, 0, 62, 0.42, 0.55, 1.3);
+    t.castShadow = true;
+    t.shadow.mapSize.set(CFG.QUALITY.shadowMap, CFG.QUALITY.shadowMap);
+    t.shadow.camera.near = 0.3; t.shadow.camera.far = 62;
+    t.shadow.bias = -0.0012; t.shadow.normalBias = 0.35;
+    t.position.set(0.22, -0.16, 0);
+    camera.add(t);
+    t.target.position.set(0.22, -0.16, -10);
+    camera.add(t.target);
+    this.torchLight = t;
+    World.torch = t;
+
+    // the visible cone of light in the air
+    const len = 26, rad = 5.4;
+    const cg = new THREE.ConeGeometry(rad, len, 20, 4, true);
+    cg.translate(0, -len/2, 0);
+    cg.rotateX(-Math.PI/2);
+    // remap v so 0 is at the lens and 1 at the far cap
+    {
+      const uv = cg.attributes.uv;
+      for(let i=0;i<uv.count;i++) uv.setY(i, 1 - uv.getY(i));
+      uv.needsUpdate = true;
+    }
+    const cm = new THREE.ShaderMaterial({
+      uniforms: THREE.UniformsUtils.clone(ConeShader.uniforms),
+      vertexShader: ConeShader.vertexShader,
+      fragmentShader: ConeShader.fragmentShader,
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+      side:THREE.DoubleSide, fog:false,
+    });
+    const cone = new THREE.Mesh(cg, cm);
+    cone.position.set(0.22, -0.16, 0);
+    cone.frustumCulled = false;
+    cone.layers.set(LAYER_FX);
+    cone.visible = false;
+    camera.add(cone);
+    this.cone = cone; World.cone = cone;
+    MAT.cone = cm;
+
+    // the compass, as an object in the hand
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.058, 0.016, 20), MAT.metal);
+    body.rotation.x = Math.PI/2;
+    g.add(body);
+    const face = new THREE.Mesh(new THREE.CircleGeometry(0.048, 20),
+      new THREE.MeshStandardMaterial({ color: 0xd8d2c2, roughness:0.7 }));
+    face.position.z = 0.009;
+    g.add(face);
+    const needle = new THREE.Group();
+    const nN = new THREE.Mesh(new THREE.ConeGeometry(0.007, 0.040, 4),
+      new THREE.MeshStandardMaterial({ color: 0xb8433a, roughness:0.5 }));
+    nN.position.y = 0.020;
+    const nS = new THREE.Mesh(new THREE.ConeGeometry(0.007, 0.040, 4),
+      new THREE.MeshStandardMaterial({ color: 0xd8d8d0, roughness:0.5 }));
+    nS.position.y = -0.020; nS.rotation.z = Math.PI;
+    needle.add(nN); needle.add(nS);
+    needle.position.z = 0.012;
+    g.add(needle);
+    g.userData.needle = needle;
+    g.position.set(0.20, -0.30, -0.45);
+    g.rotation.set(-0.95, 0.2, 0.1);
+    g.visible = false;
+    setLayerDeep(g, LAYER_FX);
+    camera.add(g);
+    this.compassObj = g;
+    World.compass = g;
+
+    scene.add(camera);        // the camera carries its own children
+  },
+
+  toggleTorch(){
+    if(this.battery <= 0){ UI.say('Nothing.', 1.6); return; }
+    this.torchOn = !this.torchOn;
+    if(typeof Audio !== 'undefined') Audio.play(this.torchOn ? 'switchOn' : 'switchOff', { gain: 0.5 });
+  },
+  toggleCompass(){
+    if(!this.hasCompass){ UI.say('You do not have one.', 1.8); return; }
+    this.compassUp = !this.compassUp;
+    if(this.compassUp) Mind.noteTool('compass');
+  },
+
+  /* WHAT NORTH LOOKS LIKE TONIGHT. The error is a function of stage and
+     intensity, and it is SMOOTH — the needle does not jump to a lie, it
+     drifts to one, so a player watching it carefully sees a compass
+     behaving like a compass with something wrong with it rather than a
+     game switching a variable. */
+  northError(){
+    const st = Mind.stage, I = Mind.intensity;
+    if(st < 2 && !Mind.leakedTo(2)) return 0;
+    const scale = (st >= 4 ? 1.0 : st >= 3 ? 0.62 : 0.30);
+    const base = (vnoise2(G.t*0.017, 11.3, (G.seed^0xC0)>>>0)-0.5)*2;
+    let err = base * scale * lerp(6*DEG, 190*DEG, Math.pow(I, 1.6));
+    if(Mind.compassReversed) err = Math.PI + base*0.4;
+    return err;
+  },
+
+  update(dt){
+    // ---- battery ----
+    if(this.torchOn){
+      this.battery = Math.max(0, this.battery - dt/(CFG.GEAR.batteryMinutes*60));
+      if(this.battery <= 0){
+        this.torchOn = false;
+        UI.say('The light goes out.', 3);
+      }
+    }
+    // real low-battery flicker, and the other kind
+    const low = this.battery < CFG.GEAR.batteryLowAt && this.battery > 0;
+    this.flickerT -= dt;
+    let flick = 1;
+    if(low){
+      const f = vnoise2(G.t*9.3, 2.1, 77);
+      flick = f < 0.30 ? lerp(0.05, 0.8, f/0.30) : 1;
+    }
+    if(this.flickerFake > 0){
+      this.flickerFake -= dt;
+      const f = vnoise2(G.t*13.7, 5.5, 91);
+      flick = Math.min(flick, f < 0.42 ? lerp(0.0, 0.9, f/0.42) : 1);
+    }
+
+    const t = this.torchLight;
+    const on = this.torchOn && this.battery > 0;
+    const power = on ? flick * lerp(0.45, 1.0, clamp(this.battery/0.35, 0, 1)) : 0;
+    t.intensity = power * 42;
+    t.distance = 62 * lerp(0.55, 1, power);
+    t.visible = power > 0.01;
+    if(this.cone){
+      this.cone.visible = power > 0.01 && CFG.QUALITY.volumetrics && RES.rung < 2;
+      MAT.cone.uniforms.uPower.value = power * (0.16 + Weather.fogBoost*0.5 + Weather.rain*0.3);
+      MAT.cone.uniforms.uTime.value = G.t;
+      MAT.cone.uniforms.uJitter.value = low ? 0.5 : 0;
+    }
+
+    // ---- the compass in the hand ----
+    const want = this.compassUp ? 1 : 0;
+    this.compassRaise = lerp(this.compassRaise, want, clamp(dt*7,0,1));
+    const g = this.compassObj;
+    if(g){
+      g.visible = this.compassRaise > 0.02;
+      g.position.set(0.20, lerp(-0.62, -0.26, this.compassRaise), lerp(-0.34, -0.42, this.compassRaise));
+      g.rotation.x = lerp(-1.6, -0.88, this.compassRaise);
+      // the needle: a damped spring toward north, disturbed by walking
+      const northWorld = -Player.yaw + this.northError();
+      let d = angDiff(this.needle, northWorld);
+      const k = 26 / CFG.GEAR.compassSettle;
+      this.needleVel += d*k*dt;
+      this.needleVel *= Math.pow(0.02, dt*(1/CFG.GEAR.compassSettle));
+      this.needleVel += (Math.random()-0.5)*Player.speed*0.9*dt;
+      this.needle += this.needleVel*dt;
+      g.userData.needle.rotation.z = -this.needle;
+    }
+  },
+
+  addItem(type){
+    switch(type){
+      case 'battery':    this.spares++; UI.say('A cell. It might be good.', 2.6); break;
+      case 'compass':    this.hasCompass = true; UI.say('A compass.', 2.6); break;
+      case 'bottle':     Survival.hasBottle = true; UI.say('A bottle.', 2.4); break;
+      case 'tablets':    Survival.tablets += 4; UI.say('Purification tablets.', 2.6); break;
+      case 'matches':    Survival.matches += 1; UI.say('Dry matches.', 2.4); break;
+      case 'cannedFood': Survival.food += 2; UI.say('Tinned food.', 2.4); break;
+      case 'trailBar':   Survival.food += 1; UI.say('A trail bar.', 2.2); break;
+      case 'mapFrag':    this.mapPieces++; this.hasMap = true; UI.say('Part of a map.', 2.6); break;
+      case 'radio':      this.radio = true; UI.say('A radio. The battery is low.', 3); break;
+    }
+  },
+  /* SWAPPING A CELL. At stage 4 a found cell can be a hallucination — it
+     goes in, the meter reads full, and some minutes later the player
+     discovers it never did anything. The lie is recorded HERE, on the
+     cell, rather than being a special case in the battery drain, so
+     nothing downstream has to know. */
+  swapBattery(){
+    if(this.spares <= 0) return false;
+    this.spares--;
+    const fake = Mind.stage >= 4 && rngFor('fakecell', Math.floor(G.t)).chance(0.35);
+    if(fake){ this.fakeCellUntil = G.t + rngFor('fakecell2', Math.floor(G.t)).range(90, 260); this.battery = 1; }
+    else { this.battery = 1; this.fakeCellUntil = 0; }
+    return true;
+  },
+};
+
+/* =====================================================================
+   ===== INTERACTION =====
+   Everything that means anything is a HOLD. Tapping is for doors; taking
+   a drink from a stream, stripping a bush, searching a cabin and resting
+   all cost seconds and stamina, and letting go loses the progress. That
+   is what makes the decision to stop and do it a decision.
+
+   Targets are found by scanning the real lists — Wld.water, Wld.berries,
+   Wld.items, Wld.structures. Phantoms are not in those lists, which is
+   exactly why a hallucinated stream cannot be drunk from and a
+   hallucinated cabin cannot be searched: not because they are checked
+   and rejected, but because the scan never sees them.
+   ===================================================================== */
+const REACH = 2.9;
+let hoverTarget = null;
+
+function facingScore(x, z){
+  const dx = x - Player.pos.x, dz = z - Player.pos.z;
+  const d = Math.hypot(dx, dz);
+  if(d > REACH) return -1;
+  const fx = -Math.sin(Player.yaw), fz = -Math.cos(Player.yaw);
+  const dot = (dx*fx + dz*fz) / (d || 1e-5);
+  if(dot < 0.35) return -1;
+  return dot*2 - d/REACH;
+}
+
+function pickTarget(){
+  let best = null, bestScore = -1;
+  const consider = (t, score)=>{ if(score > bestScore){ bestScore = score; best = t; } };
+
+  // --- the hospital, which is the only thing that ends the run well ---
+  const h = Wld.hospital;
+  if(h.entryWorld){
+    const s = facingScore(h.entryWorld.x, h.entryWorld.z);
+    if(s > 0) consider({ kind:'hospital', label:'Hold E — go inside', hold:1.6,
+                         act:()=>UI.end(true, null) }, s + 3);
+  }
+  // --- water, from wherever the bank lets you reach it ---
+  {
+    const fx = -Math.sin(Player.yaw), fz = -Math.cos(Player.yaw);
+    for(let step=0.6; step<=2.4; step+=0.6){
+      const wx = Player.pos.x + fx*step, wz = Player.pos.z + fz*step;
+      const dep = waterDepthAt(wx, wz);
+      if(dep < 0.08 || dep > 2.4) continue;
+      const i = Math.round(clamp(gzOf(wz),0,Wld.N-1))*Wld.N + Math.round(clamp(gxOf(wx),0,Wld.N-1));
+      const pond = !!Wld.POND[i];
+      const acc = Wld.ACC[i];
+      const kind = (!pond && acc > CFG.HYDRO.riverAcc*0.35) ? 'flowing'
+                 : (pond || acc < CFG.HYDRO.streamAcc*1.6) ? 'stagnant' : 'slow';
+      const label = Survival.hasBottle && Survival.bottle <= 0
+        ? 'Hold E — drink and fill' : 'Hold E — drink';
+      consider({ kind:'water', label, hold:CFG.GEAR.drinkHold, water:kind,
+        act:()=>{
+          Survival.drink(kind, Survival.tablets>0);
+          if(Survival.hasBottle && Survival.bottle<=0){ Survival.fill(kind); }
+          if(typeof Audio !== 'undefined') Audio.play('drink', { gain:0.5 });
+        } }, 2.0);
+      break;
+    }
+  }
+  // --- berries ---
+  for(const b of Wld.berries){
+    if(b.left <= 0) continue;
+    const s = facingScore(b.x, b.z);
+    if(s < 0) continue;
+    consider({ kind:'berry', label:`Hold E — pick the ${b.look} berries`, hold:CFG.GEAR.pickHold,
+      act:()=>{ b.left--; Survival.eat(b.effect);
+                UI.say(b.effect==='safe' ? 'They are sharp and cold.' : 'They taste wrong.', 3);
+                if(typeof Audio !== 'undefined') Audio.play('forage', { gain:0.4 }); } }, s+1);
+  }
+  // --- loose items ---
+  for(const it of Wld.items){
+    if(it.taken) continue;
+    const s = facingScore(it.x, it.z);
+    if(s < 0) continue;
+    consider({ kind:'item', label:'Hold E — take it', hold:0.9,
+      act:()=>{ it.taken = true; Gear.addItem(it.type);
+                if(it.mesh) it.mesh.visible = false;
+                if(typeof Audio !== 'undefined') Audio.play('pickup', { gain:0.45 }); } }, s+1.5);
+  }
+  // --- structures: search once, then rest ---
+  for(const st of Wld.structures){
+    const d = Math.hypot(st.x-Player.pos.x, st.z-Player.pos.z);
+    if(d > 6.5) continue;
+    if(st.kind === 'campsite' && Survival.matches > 0 && !st.burning){
+      const s = facingScore(st.x, st.z);
+      if(s > -0.6) consider({ kind:'fire', label:'Hold E — light the fire', hold:2.6,
+        act:()=>{ Survival.matches--; lightFire(st); } }, 1.2);
+    }
+    const s = facingScore(st.x, st.z);
+    if(!st.searched && s > -0.8){
+      consider({ kind:'search', label:'Hold E — look around', hold:2.2,
+        act:()=>{ st.searched = true; searchStructure(st); } }, 1.0);
+    }
+    if(st.searched && d < 4.5){
+      consider({ kind:'rest', label:'Hold E — sit down for a while', hold:CFG.GEAR.restHold,
+        act:()=>startRest(st) }, 0.6);
+    }
+  }
+  // --- swap a cell, wherever you are ---
+  if(Gear.spares > 0 && Gear.battery < 0.25 && !best){
+    consider({ kind:'battery', label:'Hold E — change the cell', hold:1.8,
+      act:()=>{ Gear.swapBattery(); UI.say('It reads full.', 2.6); } }, 0.4);
+  }
+  hoverTarget = best;
+  return best;
+}
+
+function searchStructure(st){
+  const found = Wld.items.filter(i=>i.host === st.id && !i.taken);
+  if(!found.length){ UI.say('Nothing here worth carrying.', 3); Mind.credit(CFG.MIND.calmShelter); return; }
+  for(const it of found){
+    it.taken = true;
+    Gear.addItem(it.type);
+    if(it.mesh) it.mesh.visible = false;
+  }
+  Mind.credit(CFG.MIND.calmShelter);
+}
+function lightFire(st){
+  st.burning = G.t;
+  const l = new THREE.PointLight(0xff9a4a, 4.5, 16, 1.7);
+  l.position.set(st.x, st.y + 0.5, st.z);
+  scene.add(l);
+  st.fireLight = l;
+  if(typeof Audio !== 'undefined') Audio.play('fireStart', { pos: new THREE.Vector3(st.x, st.y, st.z) });
+}
+function startRest(st){
+  Player.resting = true;
+  Player.restUntil = G.t + 22;
+  Survival.sheltered = true;
+  if(st.burning) Survival.warm = 30;
+  Mind.credit(CFG.MIND.calmRest);
+  Mind.noteRest();
+  UI.say('You sit down.', 3);
+}
+function updateRest(dt){
+  if(!Player.resting) return;
+  Player.stamina = Math.min(CFG.PLAYER.staminaMax, Player.stamina + 26*dt);
+  if(Keys.KeyW||Keys.KeyA||Keys.KeyS||Keys.KeyD||Keys.Space || G.t > Player.restUntil){
+    Player.resting = false;
+    Survival.sheltered = false;
+  }
+}
+
+/* Hold-to-interact. Idempotent begin(), and losing your aim for a frame
+   does not cancel it — a third of a second of genuinely looking away
+   does. Head bob alone will break a strict aim test, which is how a hold
+   bar ends up filling and resetting forever. */
+const Hold = {
+  active:false, t:0, need:1, target:null, lost:0,
+  begin(){
+    if(this.active) return;
+    const tgt = pickTarget();
+    if(!tgt) return;
+    this.active = true; this.t = 0; this.need = tgt.hold; this.target = tgt; this.lost = 0;
+  },
+  cancel(){ this.active = false; this.target = null; this.t = 0; UI.hold(0, ''); },
+  update(dt){
+    if(!this.active) return;
+    if(!Keys.KeyE){ this.cancel(); return; }
+    const cur = pickTarget();
+    const same = cur && this.target && cur.kind === this.target.kind;
+    if(!same){
+      this.lost += dt;
+      if(this.lost > 0.34){ this.cancel(); return; }
+    } else this.lost = 0;
+    this.t += dt;
+    Player.stamina = Math.max(0, Player.stamina - 6*dt);
+    UI.hold(clamp(this.t/this.need,0,1), this.target.label.replace(/^Hold E — /, ''));
+    if(this.t >= this.need){
+      const act = this.target.act;
+      this.cancel();
+      act();
+    }
+  },
+};
+
+/* =====================================================================
+   ===== THE MIND =====
+   Three numbers, and the player is never shown any of them.
+
+   STAGE (0-4)  what KINDS of thing can happen.
+   INTENSITY    how HARD they happen — the dose.
+   AGITATION    what the player's own behaviour is adding.
+
+   STAGE runs on `progress`, which climbs at a rate the seed sets and
+   every pressure multiplies. It LEAKS: any draw has a chance of reaching
+   one stage above the current one, so "I am only in stage 1, therefore
+   that cabin is real" is never a safe inference. That single rule is
+   what stops the stage system from becoming a difficulty label the
+   player can read off the fiction.
+
+   INTENSITY IS A WAVE, NOT A CLIMB. Three seeded sine components at
+   different periods, plus occasional spikes. The point of the wave is
+   the LULLS: a player who has been frightened for ten minutes and then
+   has four quiet ones will conclude they are getting better, and they
+   are not. A monotonic climb cannot produce that, and a monotonic climb
+   is also the version where the player can time the run.
+
+   AGITATION is behaviour. It is deliberately hard to trigger and easy to
+   drain, because the failure mode of a system like this is punishing
+   normal play — a player who walks, looks around at a human rate and
+   checks their compass at junctions must sit at effectively zero. Each
+   pattern is separately capped, so no single panic can spiral a run, and
+   walking calmly in one direction drains all of them.
+   ===================================================================== */
+const Mind = {
+  progress: 0, stage: 0, intensity: 0, agitation: 0,
+  pressure: 0, wave: 0, spike: 0, spikeUntil: 0,
+  pauseUntil: -1, pauseRollAt: 0,
+  compassReversed: false, reverseUntil: 0,
+  lastLeak: -99, leakStage: 0,
+  frozen: 0, chaseTarget: null,
+  agit: { sprintNoHeading:0, spin:0, backtrack:0, torchSwing:0, chased:0, toolSpam:0, frozenDark:0 },
+  trail: [], trailT: 0,
+  headMean: { x:0, z:0 },
+  yawRate: 0, yawAccum: 0,
+  toolHits: [],
+  bank: null,          // the seeded wave parameters
+
+  reset(){
+    this.progress = 0; this.stage = 0; this.intensity = 0; this.agitation = 0;
+    this.spike = 0; this.spikeUntil = 0; this.pauseUntil = -1; this.pauseRollAt = 0;
+    this.compassReversed = false; this.lastLeak = -99;
+    for(const k in this.agit) this.agit[k] = 0;
+    this.trail.length = 0; this.toolHits.length = 0;
+    const r = rngFor('mindwaves');
+    this.bank = CFG.MIND.waveBands.map((b, i)=>({
+      period: r.range(b[0], b[1]),
+      phase: r()*TAU,
+      weight: CFG.MIND.waveWeights[i],
+    }));
+  },
+
+  /* ---- the dose ---- */
+  stageOf(p){
+    const A = CFG.MIND.stageAt;
+    let s = 0;
+    for(let i=1;i<A.length;i++) if(p >= A[i]) s = i;
+    return s;
+  },
+  /* A draw that may reach one stage higher than the player is actually
+     in. Recorded so the dev panel can show when it happened and so the
+     compass, the map and the director all agree about it. */
+  leak(){
+    const c = (this.stage >= 3 ? CFG.MIND.leakChanceLate : CFG.MIND.leakChance) * P.leakBonus;
+    if(this.stage < 4 && rngFor('leak', Math.floor(G.t*11)).chance(c)){
+      this.lastLeak = G.t; this.leakStage = this.stage + 1;
+      return this.stage + 1;
+    }
+    return this.stage;
+  },
+  leakedTo(s){ return G.t - this.lastLeak < 25 && this.leakStage >= s; },
+
+  credit(v){ this.progress = clamp(this.progress + v, 0, 1); },
+  dose(v){ this.spike = Math.max(this.spike, v); this.spikeUntil = G.t + 8; },
+  shock(v){ this.dose(v); G.stress = clamp(G.stress + v, 0, 1); },
+
+  /* ---- behaviour ---- */
+  noteLook(dx, dy){
+    this.yawAccum += Math.abs(dx);
+  },
+  noteTool(name){
+    this.toolHits.push(G.t);
+    while(this.toolHits.length && G.t - this.toolHits[0] > 20) this.toolHits.shift();
+  },
+  noteRest(){
+    const A = CFG.AGITATE;
+    for(const k in this.agit) this.agit[k] = Math.max(0, this.agit[k] - A.restDrain*4);
+  },
+  noteChasedNothing(){
+    const A = CFG.AGITATE;
+    this.agit.chased = Math.min(A.capPerEvent, this.agit.chased + A.chasedNothing);
+  },
+  noteMovement(dt, moving, sprinting, heading){
+    const A = CFG.AGITATE;
+    // a sampled trail, for detecting circles
+    this.trailT += dt;
+    if(this.trailT > 2){
+      this.trailT = 0;
+      this.trail.push({ x:Player.pos.x, z:Player.pos.z, t:G.t });
+      while(this.trail.length && G.t - this.trail[0].t > A.window) this.trail.shift();
+    }
+    // a rolling mean heading: if the player is moving but the mean is
+    // short, they are going nowhere in particular
+    const k = clamp(dt*0.5, 0, 1);
+    if(moving){
+      this.headMean.x = lerp(this.headMean.x, -Math.sin(heading), k);
+      this.headMean.z = lerp(this.headMean.z, -Math.cos(heading), k);
+    }
+    const straightness = Math.hypot(this.headMean.x, this.headMean.z);
+
+    // yaw rate over the last moment
+    this.yawRate = lerp(this.yawRate, this.yawAccum/Math.max(dt,1e-4), clamp(dt*4,0,1));
+    this.yawAccum = 0;
+
+    const add = (key, rate)=>{ this.agit[key] = Math.min(A.capPerEvent, this.agit[key] + rate*dt); };
+
+    if(sprinting && straightness < 0.62) add('sprintNoHeading', A.sprintNoHeading);
+    if(this.yawRate > A.spinRate) add('spin', A.spin);
+    if(this.yawRate > A.spinRate*0.75 && Gear.torchOn) add('torchSwing', A.torchSwing);
+    // circling: several old trail points near where we are standing now
+    if(this.trail.length > 8){
+      let near = 0;
+      for(let i=0;i<this.trail.length-4;i++){
+        const p = this.trail[i];
+        if(Math.hypot(p.x-Player.pos.x, p.z-Player.pos.z) < 9) near++;
+      }
+      if(near >= 3) add('backtrack', A.backtrack);
+    }
+    if(this.toolHits.length >= A.toolSpamCount) add('toolSpam', A.toolSpam);
+    // standing still in the dark
+    const dark = (1 - Sky.day) > 0.75 && !Gear.torchOn;
+    if(!moving && dark) this.frozen += dt; else this.frozen = 0;
+    if(this.frozen > A.frozenSeconds) add('frozenDark', A.frozenDark);
+
+    /* CALM DRAINS EVERYTHING. Walking steadily on a heading, and more so
+       on a real trail or a riverbank, pulls every accumulator down — so
+       the loop is panic, strangeness, and then a way OUT of it, rather
+       than a spiral with no exit. */
+    /* CALM IS A BEHAVIOUR, NOT A PLACE. The drains were gated only on
+       where the player was standing, so someone sprinting along a
+       riverbank whipping their view around was collecting the riverbank
+       bonus the whole time — and at 0.075/s against a spin accumulation
+       of 0.045/s the bonus WINS. Measured, a sustained panic on a seed
+       that starts near water came back with an agitation of exactly
+       0.000. Following a river calms you down; tearing along one does
+       not, and the code now says so. */
+    const calmNow = !sprinting && this.yawRate < A.spinRate*0.6;
+    let drain = 0;
+    if(moving && calmNow && straightness > 0.80) drain += A.calmDrain;
+    const onRoute = sampleGrid(Wld.ROUTE, Player.pos.x, Player.pos.z) > 0;
+    /* "FOLLOWING A RIVERBANK" MEANS THERE IS A RIVER THERE.
+       The first version tested flow accumulation against the stream
+       threshold, which is true of every cell that drains twenty-six
+       others — something like a third of the map, most of it nowhere near
+       water. The riverbank drain was therefore running almost everywhere,
+       and it is large enough (0.075/s) to hold agitation at zero through
+       a sustained panic: a measured test of sprinting while whipping the
+       view around came back with an agitation of exactly 0.000 on a seed
+       where the player happened to start on high ground. Ambience.waterNear
+       is the real thing — it is what decides whether you can HEAR water. */
+    const onBank = Ambience.waterNear > 0.4;
+    if(moving && calmNow && (onRoute || onBank)) drain += A.trailDrain;
+    if(Player.resting) drain += A.restDrain;
+    if(drain > 0) for(const kk in this.agit) this.agit[kk] = Math.max(0, this.agit[kk] - drain*dt);
+
+    let sum = 0; for(const kk in this.agit) sum += this.agit[kk];
+    this.agitation = clamp(sum, 0, A.cap);
+  },
+
+  /* ---- what is pressing on the mind right now ---- */
+  computePressure(){
+    const S = Survival;
+    const night = 1 - Sky.day;
+    const exhaust = 1 - Player.stamina/CFG.PLAYER.staminaMax;
+    const p =
+        smoothstep(35, 100, S.thirst)*0.30
+      + smoothstep(45, 100, S.hunger)*0.16
+      + smoothstep(25, 100, S.cold)*0.20
+      + (S.sick > 0 ? 0.24 : 0)
+      + night*0.34
+      + (Weather.rain*0.13 + Weather.fogBoost*0.12)
+      + this.agitation*0.30
+      + exhaust*0.14;
+    return clamp(p, 0, 1.4);
+  },
+
+  update(dt){
+    if(CFG.DEBUG.freezeMind) return;
+    const M = CFG.MIND;
+    this.pressure = this.computePressure();
+
+    /* ---- progression ---- */
+    let mul = P.declineRate;
+    mul *= Sky.phase === 'night' ? M.mulNight
+         : Sky.phase === 'dusk' ? M.mulDusk
+         : Sky.phase === 'dawn' ? M.mulDawn : M.mulDay;
+    mul *= Weather.kind === 'rain' || Weather.kind === 'storm' ? M.mulRain
+         : Weather.kind === 'fog' ? M.mulFog : M.mulClear;
+    if(Survival.thirst > CFG.SURVIVE.thirstWeakAt) mul *= M.mulThirst;
+    if(Survival.hunger > CFG.SURVIVE.hungerWeakAt) mul *= M.mulHunger;
+    if(Survival.cold > 45) mul *= M.mulCold;
+    if(Survival.sick > 0) mul *= M.mulSick;
+    if(Player.stamina < CFG.PLAYER.staminaMax*0.25) mul *= M.mulExhausted;
+    mul *= 1 + this.agitation*0.85;
+
+    /* ---- the pauses. The mind having a good stretch: progression holds
+       still for a while regardless of what the player is doing. Common in
+       the first two stages, rare and short by stage 3, gone by stage 4 —
+       so early relief is real and late relief is a lie. ---- */
+    if(G.t > this.pauseRollAt){
+      this.pauseRollAt = G.t + 60;
+      const c = M.pauseChancePerMin[this.stage] || 0;
+      if(c > 0 && rngFor('pause', Math.floor(G.t/60)).chance(c)){
+        const r = rngFor('pauseLen', Math.floor(G.t/60));
+        const scale = this.stage >= 2 ? 0.45 : 1;
+        this.pauseUntil = G.t + r.range(M.pauseSeconds[0], M.pauseSeconds[1])*scale;
+      }
+    }
+    const paused = G.t < this.pauseUntil;
+    if(!paused) this.progress = clamp(this.progress + M.baseRate*mul*(dt/60), 0, 1);
+    this.stage = this.stageOf(this.progress);
+
+    /* ---- intensity: the wave, the pressure and the spikes ---- */
+    let w = 0;
+    for(const b of this.bank) w += b.weight * (0.5 + 0.5*Math.sin(G.t/b.period*TAU + b.phase));
+    this.wave = clamp((w - 0.5)*P.waviness + 0.5, 0, 1);
+
+    if(G.t > this.spikeUntil){
+      this.spike = Math.max(0, this.spike - dt*0.35);
+      const per = M.spikeChancePerMin * P.spikiness / 60;
+      if(rngFor('spike', Math.floor(G.t*4)).chance(per*dt)){
+        const r = rngFor('spikeSize', Math.floor(G.t*4));
+        this.spike = r.range(M.spikeSize[0], M.spikeSize[1]) * P.spikiness;
+        this.spikeUntil = G.t + r.range(M.spikeSeconds[0], M.spikeSeconds[1]);
+      }
+    }
+    const floor = M.intensityFloorByStage[this.stage];
+    const ceil  = M.intensityCeilByStage[this.stage];
+    const core = clamp(this.wave*0.52 + this.pressure*0.60, 0, 1);
+    this.intensity = clamp(floor + (ceil-floor)*core + this.spike, 0, 1);
+
+    // a full compass reversal is a rare, timed state rather than a
+    // per-frame coin flip, so it lasts long enough to get someone lost
+    if(this.compassReversed && G.t > this.reverseUntil) this.compassReversed = false;
+
+    // the dev panel can pin either of these; nothing else may
+    if(this.forceI != null) this.intensity = this.forceI;
+    if(this.forceA != null) this.agitation = this.forceA;
+
+    /* THE COLLAPSE. Progress reaching 1 does not end the run on the
+       frame it happens — stage 4 gets a last stretch where the post
+       stack comes apart and the player can still, just about, walk into
+       a hospital. Then it ends. Death from the mind is the ONLY death
+       a hallucination contributes to, and even here it is the clock
+       running out rather than anything in the world touching them. */
+    if(this.progress >= 0.999){
+      this.collapse = (this.collapse||0) + dt;
+      G.stress = 1;
+      if(this.collapse > 90) Survival.die('collapse');
+    } else this.collapse = Math.max(0, (this.collapse||0) - dt*0.5);
+
+    // stress is presentation only; it follows intensity and calms down
+    if(this.progress < 0.999)
+      G.stress = clamp(lerp(G.stress, this.intensity*0.8 + this.agitation*0.3, clamp(dt*0.2,0,1)), 0, 1);
+  },
+
+  /* ---- presentation. Bent by intensity, never a tell in itself. ---- */
+  fogWobble(){
+    return 1 + Math.sin(G.t*0.21)*0.16*this.intensity + Math.sin(G.t*0.07+1.3)*0.10*this.intensity;
+  },
+  applyPost(){
+    const I = this.intensity, A = this.agitation;
+    const u = postPass.uniforms;
+    u.uStress.value = G.stress;
+    u.uGrain.value = 0.045 + I*0.055;
+    u.uVignette.value = 0.52 + I*0.22;
+    u.uAberr.value = Math.pow(clamp(I*0.8 + A*0.5, 0, 1), 1.8) * 0.9;
+    u.uWarp.value = Math.pow(I, 2.0) * (0.35 + A*0.4);
+    u.uDesat.value = clamp(I*0.16 + (Survival.sick>0 ? 0.10 : 0), 0, 0.35);
+    u.uPulse.value = clamp((1 - Player.stamina/CFG.PLAYER.staminaMax)*0.7 + I*0.3, 0, 1)
+                     * (0.5 + 0.5*Math.sin(G.t*2.6));
+    u.uExposure.value = 1.06 - I*0.06;
+    // a colour shift that wanders: never the same direction twice
+    const tw = vnoise2(G.t*0.013, 3.3, (G.seed^0xAA)>>>0);
+    const tb = vnoise2(G.t*0.011, 8.8, (G.seed^0xBB)>>>0);
+    u.uTint.value.set(1 + (tw-0.5)*0.12*I, 1 + (tb-0.5)*0.05*I, 1 - (tw-0.5)*0.10*I);
+    u.uFlash.value = Weather.flash;
+    u.uTime.value = G.t;
+  },
+};
+
+/* =====================================================================
+   ===== AUDIO =====
+   Every sound in this game is synthesised at runtime from the seed. There
+   are no files, and there is no sample bank to reach into.
+
+   HOW THE BANK WORKS. At the start of a run the seed generates several
+   hundred RECIPES — parameter sets describing layers of noise,
+   oscillators, filters and envelopes. Playing a sound picks one of its
+   category's recipes and builds the graph from it, with a further round
+   of per-play jitter on top. So a given seed has its own wind, its own
+   birds, its own footsteps and its own voice, and no two instances of any
+   of them are identical.
+
+   THE RULE THAT MATTERS: REAL AND FAKE COME OUT OF THE SAME GENERATORS.
+   The bird that is really there and the bird that is not are both
+   `bird` recipes from the same table played through the same panner. The
+   stream you can drink from and the one at stage four that you cannot
+   are both `streamMid`. There is no filter, no reverb setting and no
+   frequency that only fakes use, so audio quality can never be the tell.
+   ===================================================================== */
+const Audio = (()=>{
+  let ctx=null, master=null, verb=null, verbSend=null, verbTone=null, ready=false;
+  let compressor=null;
+  const NOISE = { white:null, brown:null, pink:null };
+  const NOISE_SECONDS = 6;
+  const BANK = {};                 // category -> [recipe, ...]
+  let beds = {};                   // continuous ambience
+  let recipeCount = 0;
+
+  /* ---------- buffers, made once ---------- */
+  function noiseBuffer(kind){
+    const n = Math.floor(ctx.sampleRate*NOISE_SECONDS);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    if(kind === 'white'){
+      for(let i=0;i<n;i++) d[i] = Math.random()*2-1;
+    } else if(kind === 'brown'){
+      let last = 0;
+      for(let i=0;i<n;i++){ const w = Math.random()*2-1; last = (last + 0.02*w)/1.02; d[i] = last*3.5; }
+    } else {                                   // pink-ish: Voss-McCartney, 5 rows
+      const rows = new Float32Array(5);
+      for(let i=0;i<n;i++){
+        let sum = 0;
+        for(let r=0;r<5;r++){
+          if((i % (1 << r)) === 0) rows[r] = Math.random()*2-1;
+          sum += rows[r];
+        }
+        d[i] = sum/5 * 1.6;
+      }
+    }
+    return buf;
+  }
+  /* ONE BUFFER PER KIND, ENTERED SOMEWHERE RANDOM. Allocating a fresh
+     Float32Array per footstep is a quarter of a million Math.random()
+     calls on the main thread in the same frame as the event that asked
+     for it, and there is nothing in one white-noise buffer that
+     distinguishes it from another. The random read offset is what keeps
+     the reuse inaudible — without it every footstep would be
+     bit-identical, which you notice without being able to say why. */
+  function grain(src, seconds, kind){
+    src.buffer = NOISE[kind] || NOISE.white;
+    const off = Math.random() * Math.max(0, NOISE_SECONDS - (seconds||1));
+    const s0 = src.start.bind(src);
+    src.start = (when=0)=> s0(when, off);
+    return src;
+  }
+  function impulse(seconds, decay, bright){
+    const n = Math.floor(ctx.sampleRate*seconds);
+    const buf = ctx.createBuffer(2, n, ctx.sampleRate);
+    for(let c=0;c<2;c++){
+      const d = buf.getChannelData(c);
+      let lp = 0;
+      for(let i=0;i<n;i++){
+        const t = i/n;
+        let v = (Math.random()*2-1) * Math.pow(1-t, decay);
+        lp += (v - lp) * bright;
+        d[i] = lp;
+        const pre = Math.floor(ctx.sampleRate*0.029);
+        if(i > pre) d[i] += d[i-pre]*0.24;
+      }
+    }
+    return buf;
+  }
+  function env(g, t0, peak, attack, decay, hold=0){
+    const p = Math.max(peak, 0.00012);
+    g.gain.cancelScheduledValues(t0);
+    g.gain.setValueAtTime(0.00012, t0);
+    g.gain.exponentialRampToValueAtTime(p, t0+Math.max(attack,0.001));
+    if(hold) g.gain.setValueAtTime(p, t0+attack+hold);
+    g.gain.exponentialRampToValueAtTime(0.00012, t0+attack+hold+Math.max(decay,0.01));
+  }
+
+  /* ---------- positional voices -------------------------------------
+     A FIXED RING, REUSED. Building a fresh HRTF PannerNode per one-shot
+     and never disconnecting it means the graph grows all night: a panner
+     with no source still gets convolved every 128-sample quantum. In a
+     wood where wind, rain, footsteps and birds all fire positionally,
+     that is a few new permanent nodes a second.
+     Distance ALSO rolls off the high end, because air and foliage
+     absorb treble and a distant sound that is merely quiet reads as a
+     near sound with the volume down. */
+  const PAN_VOICES = 28;
+  const panRing = [];
+  let panNext = 0;
+  function panner(pos, opts){
+    if(!panRing.length){
+      for(let i=0;i<PAN_VOICES;i++){
+        const p = ctx.createPanner();
+        p.panningModel = 'HRTF'; p.distanceModel = 'inverse';
+        p.refDistance = 3.0; p.maxDistance = 240; p.rolloffFactor = 0.85;
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass'; lp.frequency.value = 20000;
+        const g = ctx.createGain();
+        g.connect(lp); lp.connect(p);
+        p.connect(master); p.connect(verbSend);
+        p._in = g; p._lp = lp;
+        panRing.push(p);
+      }
+    }
+    const p = panRing[panNext++ % PAN_VOICES];
+    if(p.positionX){ p.positionX.value=pos.x; p.positionY.value=pos.y; p.positionZ.value=pos.z; }
+    else p.setPosition(pos.x, pos.y, pos.z);
+    const d = Math.hypot(pos.x-camera.position.x, pos.y-camera.position.y, pos.z-camera.position.z);
+    /* Air and trees take the top off with distance, and rain takes more.
+       A storm genuinely makes distant sound unreliable, which is the
+       point: the weather can hide a real cue as easily as it can dress
+       up a false one. */
+    const wet = Weather.rain*0.5 + Weather.fogBoost*0.25;
+    p._lp.frequency.value = clamp(19000 * Math.exp(-d/(70 - wet*38)) + 320, 300, 19000);
+    p._in.gain.value = (opts && opts.gain != null) ? opts.gain : 1;
+    return p._in;
+  }
+  function stereoIn(pan){
+    const sp = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if(!sp) return null;
+    sp.pan.value = clamp(pan, -1, 1);
+    const g = ctx.createGain();
+    g.connect(sp); sp.connect(master); sp.connect(verbSend);
+    return g;
+  }
+
+  /* =================================================================
+     THE RECIPE GENERATOR
+     A recipe is data. Each category has a shape function that draws its
+     parameters from the seed's own stream, and the bank is simply many
+     draws from each. Hundreds of them cost nothing to make and nothing
+     to store, and they are what make one seed sound unlike another.
+     ================================================================= */
+  const CATS = {
+    // ---- real ambience -------------------------------------------
+    windLow:   { n:14, make:r=>({ kind:'bed', noise:'brown', f:[r.range(90,180), r.range(280,520)], q:r.range(0.5,1.1), dur:[3,7], gain:r.range(0.06,0.13) }) },
+    windMid:   { n:14, make:r=>({ kind:'bed', noise:'pink',  f:[r.range(300,700), r.range(900,1800)], q:r.range(0.6,1.4), dur:[2,5], gain:r.range(0.05,0.11) }) },
+    windGust:  { n:16, make:r=>({ kind:'swell', noise:'pink', f0:r.range(200,500), f1:r.range(1400,3600), dur:r.range(1.6,4.4), gain:r.range(0.07,0.17), q:r.range(0.5,1.2) }) },
+    needles:   { n:18, make:r=>({ kind:'swell', noise:'white', f0:r.range(2200,4200), f1:r.range(5200,9000), dur:r.range(0.7,2.4), gain:r.range(0.03,0.08), q:r.range(0.7,1.8) }) },
+    branchCreak:{n:18, make:r=>({ kind:'creak', f0:r.range(70,200), f1:r.range(160,420), dur:r.range(0.5,1.7), gain:r.range(0.10,0.26), wob:r.range(3,13) }) },
+    rainLeaves:{ n:10, make:r=>({ kind:'bed', noise:'white', f:[r.range(1400,2600), r.range(4000,8000)], q:r.range(0.4,0.9), dur:[3,6], gain:r.range(0.05,0.12) }) },
+    rainGround:{ n:10, make:r=>({ kind:'bed', noise:'pink',  f:[r.range(400,900), r.range(1800,3400)], q:r.range(0.4,0.9), dur:[3,6], gain:r.range(0.04,0.10) }) },
+    streamSmall:{n:10, make:r=>({ kind:'bed', noise:'white', f:[r.range(900,1600), r.range(2600,5200)], q:r.range(0.5,1.2), dur:[4,8], gain:r.range(0.05,0.11) }) },
+    streamMid: { n:10, make:r=>({ kind:'bed', noise:'pink',  f:[r.range(500,1000), r.range(1800,3600)], q:r.range(0.5,1.1), dur:[4,8], gain:r.range(0.07,0.15) }) },
+    riverBig:  { n:10, make:r=>({ kind:'bed', noise:'brown', f:[r.range(180,420), r.range(900,2000)], q:r.range(0.4,1.0), dur:[5,9], gain:r.range(0.09,0.19) }) },
+    bird:      { n:34, make:r=>({ kind:'bird', notes:r.irange(2,6), f0:r.range(1700,4200),
+                                   span:r.range(0.25,2.2), step:r.range(0.05,0.18),
+                                   glide:r.range(-0.4,0.8), gain:r.range(0.05,0.16),
+                                   type:r.pick(['sine','triangle']), q:r.range(2,9) }) },
+    footNeedles:{n:16, make:r=>({ kind:'step', noise:'white', f:r.range(1200,2600), q:r.range(1.0,2.4), dec:r.range(0.07,0.16), gain:r.range(0.16,0.34), thud:r.range(0,0.4) }) },
+    footMud:   { n:16, make:r=>({ kind:'step', noise:'brown', f:r.range(200,520),  q:r.range(1.4,3.0), dec:r.range(0.10,0.22), gain:r.range(0.18,0.36), thud:r.range(0.3,0.8), squelch:1 }) },
+    footRock:  { n:16, make:r=>({ kind:'step', noise:'white', f:r.range(1800,4200), q:r.range(1.6,3.4), dec:r.range(0.05,0.12), gain:r.range(0.16,0.32), thud:r.range(0,0.2) }) },
+    footWater: { n:16, make:r=>({ kind:'step', noise:'white', f:r.range(700,1800), q:r.range(0.7,1.6), dec:r.range(0.14,0.30), gain:r.range(0.20,0.40), splash:1 }) },
+    footWood:  { n:12, make:r=>({ kind:'step', noise:'brown', f:r.range(320,760), q:r.range(1.2,2.6), dec:r.range(0.10,0.20), gain:r.range(0.18,0.34), thud:r.range(0.5,1.0) }) },
+    breath:    { n:16, make:r=>({ kind:'breath', f0:r.range(380,620), f1:r.range(760,1250), q:r.range(0.9,1.8), dur:r.range(0.35,0.75), gain:r.range(0.05,0.13) }) },
+    thunder:   { n:14, make:r=>({ kind:'thunder', crackF:r.range(1400,3600), bodyF0:r.range(400,1100),
+                                   bodyF1:r.range(38,90), rolls:r.irange(2,5), gain:r.range(0.5,1.0) }) },
+    // ---- stage 1: things that are not there ----------------------
+    twigSnap:  { n:22, make:r=>({ kind:'snap', f:r.range(1600,4800), q:r.range(2.5,7), dec:r.range(0.035,0.10), gain:r.range(0.16,0.45), body:r.range(0,0.5) }) },
+    brushPush: { n:16, make:r=>({ kind:'swell', noise:'white', f0:r.range(1400,3000), f1:r.range(3600,7200), dur:r.range(0.35,1.1), gain:r.range(0.08,0.22), q:r.range(1.0,2.4) }) },
+    // ---- stage 2: things that sound like people -------------------
+    voice:     { n:26, make:r=>({ kind:'voice', syll:r.irange(1,3),
+                                   fmt:[r.range(300,620), r.range(900,1500), r.range(2200,3200)],
+                                   q:r.range(4,11), rate:r.range(0.16,0.34), gain:r.range(0.07,0.20),
+                                   pitch:r.range(85,190), breathy:r.range(0.3,1.0) }) },
+    knock:     { n:16, make:r=>({ kind:'knock', f:r.range(120,360), q:r.range(1.6,4), count:r.irange(2,4),
+                                   gap:r.range(0.14,0.30), dec:r.range(0.07,0.18), gain:r.range(0.16,0.38) }) },
+    doorMove:  { n:14, make:r=>({ kind:'creak', f0:r.range(160,420), f1:r.range(420,1100), dur:r.range(0.7,2.2), gain:r.range(0.10,0.26), wob:r.range(5,17) }) },
+    // ---- stage 3-4: things that cannot be there --------------------
+    vehicle:   { n:14, make:r=>({ kind:'engine', f0:r.range(52,96), harm:r.irange(4,9), dur:r.range(6,16),
+                                   gain:r.range(0.10,0.26), rough:r.range(0.2,0.8) }) },
+    siren:     { n:10, make:r=>({ kind:'siren', f0:r.range(520,760), f1:r.range(900,1400),
+                                   rate:r.range(0.25,0.7), dur:r.range(4,11), gain:r.range(0.05,0.14) }) },
+    intercom:  { n:12, make:r=>({ kind:'intercom', fmt:[r.range(380,720), r.range(1100,1900)],
+                                   q:r.range(6,14), dur:r.range(1.2,3.4), gain:r.range(0.06,0.17),
+                                   chime:r.chance(0.6) }) },
+    radio:     { n:12, make:r=>({ kind:'radio', carrier:r.range(400,1200), noise:r.range(0.3,0.9),
+                                   dur:r.range(2.5,8), gain:r.range(0.05,0.15) }) },
+    // ---- the player's own world ------------------------------------
+    switchOn:  { n:6,  make:r=>({ kind:'click', f:r.range(1800,3800), dec:r.range(0.02,0.05), gain:r.range(0.12,0.24) }) },
+    switchOff: { n:6,  make:r=>({ kind:'click', f:r.range(1200,2600), dec:r.range(0.02,0.05), gain:r.range(0.10,0.20) }) },
+    pickup:    { n:8,  make:r=>({ kind:'click', f:r.range(700,1800), dec:r.range(0.05,0.12), gain:r.range(0.12,0.22) }) },
+    drink:     { n:10, make:r=>({ kind:'gulp', f:r.range(200,520), count:r.irange(2,4), gain:r.range(0.10,0.22) }) },
+    forage:    { n:10, make:r=>({ kind:'swell', noise:'white', f0:r.range(1800,3400), f1:r.range(4200,7600), dur:r.range(0.4,0.9), gain:r.range(0.07,0.15), q:r.range(1.2,2.6) }) },
+    fireStart: { n:6,  make:r=>({ kind:'swell', noise:'pink', f0:r.range(600,1200), f1:r.range(2400,4800), dur:r.range(1.2,2.4), gain:r.range(0.10,0.20), q:r.range(0.6,1.4) }) },
+    fallImpact:{ n:8,  make:r=>({ kind:'thumpS', f:r.range(60,120), dec:r.range(0.2,0.45), gain:r.range(0.3,0.6) }) },
+    heartbeat: { n:4,  make:r=>({ kind:'thumpS', f:r.range(44,70), dec:r.range(0.10,0.20), gain:r.range(0.2,0.4) }) },
+  };
+
+  function buildBank(onStep){
+    const seedR = makeRNG(P.soundSeed);
+    recipeCount = 0;
+    let done = 0;
+    const total = Object.keys(CATS).length;
+    for(const cat in CATS){
+      const spec = CATS[cat];
+      const r = makeRNG((P.soundSeed ^ hashString(cat)) >>> 0);
+      const list = [];
+      for(let i=0;i<spec.n;i++){ const rec = spec.make(r); rec.cat = cat; rec.i = i; list.push(rec); recipeCount++; }
+      BANK[cat] = list;
+      done++;
+      if(onStep) onStep(done/total, cat);
+    }
+    return recipeCount;
+  }
+
+  /* ---------- turning a recipe into sound ---------- */
+  function playRecipe(rec, dest, t0, opts){
+    const o = opts || {};
+    const pitch = o.pitch || 1;
+    const vol = (o.gain != null ? o.gain : 1) * (rec.gain || 0.2);
+    const J = ()=> 0.88 + Math.random()*0.26;        // per-play jitter
+
+    switch(rec.kind){
+      case 'bed': case 'swell': {
+        const dur = rec.kind==='bed'
+          ? (o.dur || (rec.dur[0] + Math.random()*(rec.dur[1]-rec.dur[0])))
+          : rec.dur*J();
+        const src = ctx.createBufferSource(); grain(src, dur, rec.noise);
+        src.loop = true;
+        const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = rec.q*J();
+        const g = ctx.createGain();
+        src.connect(bp); bp.connect(g); g.connect(dest);
+        if(rec.kind==='bed'){
+          const f0 = rec.f[0]*pitch*J(), f1 = rec.f[1]*pitch*J();
+          bp.frequency.setValueAtTime(f0, t0);
+          bp.frequency.linearRampToValueAtTime(f1, t0+dur*0.55);
+          bp.frequency.linearRampToValueAtTime(f0, t0+dur);
+          env(g, t0, vol, dur*0.35, dur*0.5);
+        } else {
+          bp.frequency.setValueAtTime(rec.f0*pitch*J(), t0);
+          bp.frequency.exponentialRampToValueAtTime(Math.max(60, rec.f1*pitch*J()), t0+dur);
+          env(g, t0, vol, dur*0.3, dur*0.7);
+        }
+        src.start(t0); src.stop(t0+dur+0.4);
+        return dur;
+      }
+      case 'creak': {
+        const dur = rec.dur*J();
+        const osc = ctx.createOscillator(); osc.type = 'sawtooth';
+        const f0 = rec.f0*pitch*J();
+        osc.frequency.setValueAtTime(f0, t0);
+        osc.frequency.linearRampToValueAtTime(rec.f1*pitch*J(), t0+dur);
+        const lfo = ctx.createOscillator(); lfo.type='sine'; lfo.frequency.value = rec.wob*J();
+        const lg = ctx.createGain(); lg.gain.value = f0*0.16;
+        lfo.connect(lg); lg.connect(osc.frequency);
+        const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 1400;
+        const g = ctx.createGain();
+        osc.connect(lp); lp.connect(g); g.connect(dest);
+        env(g, t0, vol*0.5, dur*0.25, dur*0.7);
+        osc.start(t0); lfo.start(t0); osc.stop(t0+dur+0.2); lfo.stop(t0+dur+0.2);
+        return dur;
+      }
+      case 'bird': {
+        let t = t0, f = rec.f0*pitch*J();
+        for(let i=0;i<rec.notes;i++){
+          const osc = ctx.createOscillator(); osc.type = rec.type;
+          const nf = f * (1 + rec.glide*(i/Math.max(1,rec.notes-1)) * (0.5+Math.random()*0.5));
+          osc.frequency.setValueAtTime(nf*0.88, t);
+          osc.frequency.exponentialRampToValueAtTime(Math.max(120, nf*1.12), t+rec.step*0.6);
+          const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+          bp.frequency.value = nf; bp.Q.value = rec.q;
+          const g = ctx.createGain();
+          osc.connect(bp); bp.connect(g); g.connect(dest);
+          env(g, t, vol, 0.008, rec.step*0.85);
+          osc.start(t); osc.stop(t + rec.step + 0.08);
+          t += rec.step + rec.span/rec.notes*Math.random()*0.5;
+        }
+        return t - t0;
+      }
+      case 'step': {
+        const src = ctx.createBufferSource(); grain(src, 0.4, rec.noise);
+        const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+        bp.frequency.value = rec.f*pitch*J(); bp.Q.value = rec.q;
+        const g = ctx.createGain();
+        src.connect(bp); bp.connect(g); g.connect(dest);
+        env(g, t0, vol, 0.002, rec.dec*J());
+        src.start(t0); src.stop(t0+rec.dec+0.25);
+        if(rec.thud > 0.05){
+          const osc = ctx.createOscillator(); osc.type='triangle';
+          osc.frequency.setValueAtTime(90+Math.random()*60, t0);
+          osc.frequency.exponentialRampToValueAtTime(48, t0+rec.dec);
+          const og = ctx.createGain(); osc.connect(og); og.connect(dest);
+          env(og, t0, vol*rec.thud*0.5, 0.004, rec.dec);
+          osc.start(t0); osc.stop(t0+rec.dec+0.1);
+        }
+        if(rec.splash){
+          const s2 = ctx.createBufferSource(); grain(s2, 0.4, 'white');
+          const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 2200;
+          const g2 = ctx.createGain(); s2.connect(hp); hp.connect(g2); g2.connect(dest);
+          env(g2, t0+0.01, vol*0.5, 0.004, rec.dec*1.6);
+          s2.start(t0); s2.stop(t0+0.5);
+        }
+        return rec.dec;
+      }
+      case 'snap': {
+        const src = ctx.createBufferSource(); grain(src, 0.2, 'white');
+        const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+        bp.frequency.value = rec.f*pitch*J(); bp.Q.value = rec.q;
+        const g = ctx.createGain();
+        src.connect(bp); bp.connect(g); g.connect(dest);
+        env(g, t0, vol, 0.0012, rec.dec*J());
+        src.start(t0); src.stop(t0+0.3);
+        if(rec.body > 0.05){
+          const o2 = ctx.createOscillator(); o2.type='triangle';
+          o2.frequency.setValueAtTime(180+Math.random()*180, t0);
+          o2.frequency.exponentialRampToValueAtTime(70, t0+0.12);
+          const g2 = ctx.createGain(); o2.connect(g2); g2.connect(dest);
+          env(g2, t0, vol*rec.body*0.5, 0.002, 0.12);
+          o2.start(t0); o2.stop(t0+0.2);
+        }
+        return rec.dec;
+      }
+      case 'breath': {
+        const dur = rec.dur*J();
+        const src = ctx.createBufferSource(); grain(src, dur, 'white');
+        const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = rec.q;
+        bp.frequency.setValueAtTime(rec.f0*pitch, t0);
+        bp.frequency.linearRampToValueAtTime(rec.f1*pitch, t0+dur);
+        const g = ctx.createGain();
+        src.connect(bp); bp.connect(g); g.connect(dest);
+        env(g, t0, vol, dur*0.4, dur*0.6);
+        src.start(t0); src.stop(t0+dur+0.2);
+        return dur;
+      }
+      /* THE VOICE. Three formants over a buzzy source, swept through two
+         or three syllables. It is deliberately just short of
+         intelligible — the shape of somebody saying a two-syllable word
+         at a distance, which is the shape of a name. Nothing in the game
+         ever writes down what it said. */
+      case 'voice': {
+        let t = t0;
+        const syll = rec.syll + (Math.random()<0.4 ? 1 : 0);
+        for(let s2=0; s2<syll; s2++){
+          const dur = rec.rate*J();
+          const osc = ctx.createOscillator(); osc.type = 'sawtooth';
+          const f = rec.pitch*pitch*(0.9+Math.random()*0.25);
+          osc.frequency.setValueAtTime(f*1.06, t);
+          osc.frequency.linearRampToValueAtTime(f*(s2===syll-1 ? 0.84 : 0.97), t+dur);
+          const src = ctx.createBufferSource(); grain(src, dur, 'white');
+          const bg = ctx.createGain(); bg.gain.value = rec.breathy*0.35;
+          const mix = ctx.createGain();
+          osc.connect(mix); src.connect(bg); bg.connect(mix);
+          const g = ctx.createGain();
+          for(let k=0;k<3;k++){
+            const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+            bp.frequency.value = rec.fmt[k]*(0.85+Math.random()*0.3);
+            bp.Q.value = rec.q*(k===0?1:0.7);
+            const fg = ctx.createGain(); fg.gain.value = [1.0, 0.7, 0.35][k];
+            mix.connect(bp); bp.connect(fg); fg.connect(g);
+          }
+          g.connect(dest);
+          env(g, t, vol, dur*0.22, dur*0.62);
+          osc.start(t); osc.stop(t+dur+0.05);
+          src.start(t); src.stop(t+dur+0.05);
+          t += dur + 0.03 + Math.random()*0.06;
+        }
+        return t-t0;
+      }
+      case 'knock': {
+        let t = t0;
+        for(let i=0;i<rec.count;i++){
+          const src = ctx.createBufferSource(); grain(src, 0.3, 'brown');
+          const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+          bp.frequency.value = rec.f*pitch*J(); bp.Q.value = rec.q;
+          const g = ctx.createGain();
+          src.connect(bp); bp.connect(g); g.connect(dest);
+          env(g, t, vol, 0.002, rec.dec);
+          src.start(t); src.stop(t+0.4);
+          t += rec.gap*(0.85+Math.random()*0.3);
+        }
+        return t-t0;
+      }
+      case 'engine': {
+        const dur = rec.dur*J();
+        const g = ctx.createGain(); g.connect(dest);
+        const f0 = rec.f0*pitch;
+        for(let h=1; h<=rec.harm; h++){
+          const o = ctx.createOscillator();
+          o.type = h===1 ? 'sawtooth' : 'square';
+          o.frequency.setValueAtTime(f0*h*0.82, t0);
+          o.frequency.linearRampToValueAtTime(f0*h*1.22, t0+dur*0.62);
+          o.frequency.linearRampToValueAtTime(f0*h*0.9, t0+dur);
+          const hg = ctx.createGain(); hg.gain.value = 1/(h*h);
+          o.connect(hg); hg.connect(g);
+          o.start(t0); o.stop(t0+dur+0.1);
+        }
+        const src = ctx.createBufferSource(); grain(src, dur, 'brown');
+        const ng = ctx.createGain(); ng.gain.value = rec.rough*0.25;
+        src.connect(ng); ng.connect(g);
+        src.start(t0); src.stop(t0+dur+0.1);
+        const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 900;
+        // the doppler-ish swell of something passing
+        env(g, t0, vol, dur*0.45, dur*0.55);
+        return dur;
+      }
+      case 'siren': {
+        const dur = rec.dur*J();
+        const o = ctx.createOscillator(); o.type='sine';
+        const lfo = ctx.createOscillator(); lfo.type='sine'; lfo.frequency.value = rec.rate;
+        const lg = ctx.createGain(); lg.gain.value = (rec.f1-rec.f0)*0.5;
+        o.frequency.value = (rec.f0+rec.f1)*0.5*pitch;
+        lfo.connect(lg); lg.connect(o.frequency);
+        const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 2.5;
+        bp.frequency.value = (rec.f0+rec.f1)*0.5;
+        const g = ctx.createGain();
+        o.connect(bp); bp.connect(g); g.connect(dest);
+        env(g, t0, vol, dur*0.3, dur*0.6);
+        o.start(t0); lfo.start(t0); o.stop(t0+dur+0.1); lfo.stop(t0+dur+0.1);
+        return dur;
+      }
+      case 'intercom': {
+        let t = t0;
+        if(rec.chime){
+          for(const f of [880, 660]){
+            const o = ctx.createOscillator(); o.type='sine'; o.frequency.value = f;
+            const g = ctx.createGain(); o.connect(g); g.connect(dest);
+            env(g, t, vol*0.7, 0.01, 0.42);
+            o.start(t); o.stop(t+0.5); t += 0.24;
+          }
+          t += 0.2;
+        }
+        const dur = rec.dur*J();
+        const src = ctx.createBufferSource(); grain(src, dur, 'white');
+        const g = ctx.createGain();
+        for(let k=0;k<2;k++){
+          const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+          bp.frequency.value = rec.fmt[k]; bp.Q.value = rec.q;
+          src.connect(bp); bp.connect(g);
+        }
+        const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 420;
+        g.connect(hp); hp.connect(dest);
+        // chopped into syllables, so it reads as speech through a speaker
+        const gg = g.gain;
+        gg.setValueAtTime(0.0001, t);
+        for(let s2=0; s2<Math.floor(dur/0.22); s2++){
+          const tt = t + s2*0.22;
+          gg.setValueAtTime(vol*(0.4+Math.random()*0.6), tt);
+          gg.setValueAtTime(vol*0.02, tt+0.13+Math.random()*0.05);
+        }
+        gg.setValueAtTime(0.0001, t+dur);
+        src.start(t); src.stop(t+dur+0.1);
+        return (t-t0)+dur;
+      }
+      case 'radio': {
+        const dur = rec.dur*J();
+        const src = ctx.createBufferSource(); grain(src, dur, 'white');
+        const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+        bp.frequency.value = rec.carrier*pitch; bp.Q.value = 1.6;
+        const g = ctx.createGain();
+        src.connect(bp); bp.connect(g); g.connect(dest);
+        const gg = g.gain;
+        gg.setValueAtTime(0.0001, t0);
+        for(let s2=0; s2<Math.floor(dur/0.1); s2++){
+          const tt = t0 + s2*0.1;
+          gg.setValueAtTime(vol*rec.noise*(0.2+Math.random()*0.9), tt);
+        }
+        gg.setValueAtTime(0.0001, t0+dur);
+        src.start(t0); src.stop(t0+dur+0.1);
+        // and sometimes, under the static, something that is almost music
+        if(Math.random() < 0.5){
+          const o = ctx.createOscillator(); o.type='triangle';
+          o.frequency.value = rec.carrier*0.5;
+          const og = ctx.createGain(); o.connect(og); og.connect(dest);
+          env(og, t0+dur*0.2, vol*0.35, 0.3, dur*0.5);
+          o.start(t0); o.stop(t0+dur);
+        }
+        return dur;
+      }
+      case 'click': {
+        const src = ctx.createBufferSource(); grain(src, 0.1, 'white');
+        const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+        bp.frequency.value = rec.f*pitch*J(); bp.Q.value = 6;
+        const g = ctx.createGain();
+        src.connect(bp); bp.connect(g); g.connect(dest);
+        env(g, t0, vol, 0.001, rec.dec);
+        src.start(t0); src.stop(t0+0.2);
+        return rec.dec;
+      }
+      case 'gulp': {
+        let t = t0;
+        for(let i=0;i<rec.count;i++){
+          const o = ctx.createOscillator(); o.type='sine';
+          o.frequency.setValueAtTime(rec.f*(0.8+Math.random()*0.5), t);
+          o.frequency.exponentialRampToValueAtTime(rec.f*0.45, t+0.16);
+          const g = ctx.createGain(); o.connect(g); g.connect(dest);
+          env(g, t, vol, 0.01, 0.16);
+          o.start(t); o.stop(t+0.28);
+          t += 0.30 + Math.random()*0.16;
+        }
+        return t-t0;
+      }
+      case 'thumpS': {
+        const o = ctx.createOscillator(); o.type='sine';
+        o.frequency.setValueAtTime(rec.f*2.0*pitch, t0);
+        o.frequency.exponentialRampToValueAtTime(rec.f*0.7*pitch, t0+rec.dec);
+        const g = ctx.createGain(); o.connect(g); g.connect(dest);
+        env(g, t0, vol, 0.003, rec.dec);
+        o.start(t0); o.stop(t0+rec.dec+0.1);
+        const src = ctx.createBufferSource(); grain(src, 0.3, 'brown');
+        const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 300;
+        const g2 = ctx.createGain(); src.connect(lp); lp.connect(g2); g2.connect(dest);
+        env(g2, t0, vol*0.6, 0.003, rec.dec*1.2);
+        src.start(t0); src.stop(t0+0.6);
+        return rec.dec;
+      }
+      /* Thunder is assembled per strike rather than being one burst: a
+         crack, a body, and rolls arriving off the hills. */
+      case 'thunder': {
+        const near = (opts && opts.near != null) ? opts.near : 0.5;
+        const v = vol*(0.25 + near*0.9);
+        if(near > 0.45){
+          const src = ctx.createBufferSource(); grain(src, 0.4, 'white');
+          const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+          bp.frequency.value = rec.crackF; bp.Q.value = 0.8;
+          const g = ctx.createGain(); src.connect(bp); bp.connect(g); g.connect(dest);
+          env(g, t0, v*0.8, 0.002, 0.18);
+          src.start(t0); src.stop(t0+0.4);
+        }
+        const body = ctx.createBufferSource(); grain(body, 3.0, 'brown');
+        const lp = ctx.createBiquadFilter(); lp.type='lowpass';
+        lp.frequency.setValueAtTime(rec.bodyF0, t0);
+        lp.frequency.exponentialRampToValueAtTime(rec.bodyF1, t0+2.6);
+        const bg = ctx.createGain(); body.connect(lp); lp.connect(bg); bg.connect(dest);
+        env(bg, t0+0.02, v, 0.1, 2.6);
+        body.start(t0); body.stop(t0+3.2);
+        for(let i=0;i<rec.rolls;i++){
+          const t = t0 + 0.8 + i*(0.6+Math.random()*1.5);
+          const s2 = ctx.createBufferSource(); grain(s2, 2.5, 'brown');
+          const l2 = ctx.createBiquadFilter(); l2.type='lowpass';
+          l2.frequency.value = 90 + Math.random()*200;
+          const g2 = ctx.createGain(); s2.connect(l2); l2.connect(g2); g2.connect(dest);
+          env(g2, t, v*0.35/(1+i*0.6), 0.5, 1.6+Math.random()*1.8);
+          s2.start(t); s2.stop(t+3.2);
+        }
+        return 5.0;
+      }
+    }
+    return 0.3;
+  }
+
+  /* ---------- the public surface ---------- */
+  function pickRecipe(cat, which){
+    const list = BANK[cat];
+    if(!list || !list.length) return null;
+    if(which != null) return list[which % list.length];
+    return list[Math.floor(Math.random()*list.length)];
+  }
+  function play(cat, opts){
+    if(!ready) return null;
+    const o = opts || {};
+    const rec = pickRecipe(cat, o.variant);
+    if(!rec) return null;
+    const dest = o.pos ? panner(o.pos, o) : (o.pan != null ? stereoIn(o.pan) : master);
+    if(!dest) return null;
+    const t0 = ctx.currentTime + (o.delay || 0);
+    const dur = playRecipe(rec, dest, t0, o);
+    return { rec, dur };
+  }
+  function thunder(near){
+    play('thunder', { near, gain: 0.8, delay: near > 0.8 ? 0 : (1-near)*6 });
+  }
+
+  /* ---------- continuous beds ---------- */
+  function makeBed(cat){
+    const src = ctx.createBufferSource();
+    src.buffer = NOISE.pink; src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 0.7;
+    bp.frequency.value = 600;
+    const g = ctx.createGain(); g.gain.value = 0;
+    src.connect(bp); bp.connect(g); g.connect(master);
+    src.start(0);
+    return { src, bp, g, level:0 };
+  }
+  function initBeds(){
+    beds.wind   = makeBed();
+    beds.rain   = makeBed();
+    beds.water  = makeBed();
+    beds.wind.bp.Q.value = 0.55;
+    beds.rain.bp.Q.value = 0.5;
+    beds.water.bp.Q.value = 0.8;
+  }
+  function setBed(bed, level, freq, q){
+    if(!bed) return;
+    const t = ctx.currentTime;
+    bed.g.gain.setTargetAtTime(level, t, 0.6);
+    bed.bp.frequency.setTargetAtTime(freq, t, 0.8);
+    if(q != null) bed.bp.Q.setTargetAtTime(q, t, 0.8);
+  }
+
+  function init(){
+    if(ctx) return;
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = 0.95;
+    compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -14; compressor.knee.value = 22;
+    compressor.ratio.value = 4; compressor.attack.value = 0.006; compressor.release.value = 0.24;
+    master.connect(compressor); compressor.connect(ctx.destination);
+
+    NOISE.white = noiseBuffer('white');
+    NOISE.brown = noiseBuffer('brown');
+    NOISE.pink  = noiseBuffer('pink');
+
+    /* One convolver has to be the whole forest, so the SEED decides what
+       kind of forest it sounds like: a tight dry stand of young spruce
+       and an open old wood with a long slap are different rooms, and
+       roomTone is what picks between them. */
+    verb = ctx.createConvolver();
+    verb.buffer = impulse(1.4 + P.roomTone*2.2, 2.6/P.roomTone, 0.25 + P.roomTone*0.2);
+    verbSend = ctx.createGain(); verbSend.gain.value = 0.30*P.roomTone;
+    verbTone = ctx.createBiquadFilter();
+    verbTone.type = 'lowpass'; verbTone.frequency.value = 3200*P.roomTone;
+    verbSend.connect(verb); verb.connect(verbTone); verbTone.connect(master);
+
+    initBeds();
+    ready = true;
+  }
+
+  function resume(){ if(ctx && ctx.state === 'suspended') ctx.resume(); }
+
+  function updateListener(){
+    if(!ready) return;
+    const l = ctx.listener;
+    const e = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    const u = new THREE.Vector3(0,1,0).applyQuaternion(camera.quaternion);
+    if(l.positionX){
+      const t = ctx.currentTime;
+      l.positionX.setTargetAtTime(camera.position.x, t, 0.02);
+      l.positionY.setTargetAtTime(camera.position.y, t, 0.02);
+      l.positionZ.setTargetAtTime(camera.position.z, t, 0.02);
+      l.forwardX.setTargetAtTime(e.x, t, 0.02);
+      l.forwardY.setTargetAtTime(e.y, t, 0.02);
+      l.forwardZ.setTargetAtTime(e.z, t, 0.02);
+      l.upX.setTargetAtTime(u.x, t, 0.02);
+      l.upY.setTargetAtTime(u.y, t, 0.02);
+      l.upZ.setTargetAtTime(u.z, t, 0.02);
+    } else {
+      l.setPosition(camera.position.x, camera.position.y, camera.position.z);
+      l.setOrientation(e.x, e.y, e.z, u.x, u.y, u.z);
+    }
+  }
+
+  return {
+    init, resume, play, thunder, updateListener, setBed,
+    get ready(){ return ready; },
+    get ctx(){ return ctx; },
+    get beds(){ return beds; },
+    get recipeCount(){ return recipeCount; },
+    get categories(){ return Object.keys(CATS); },
+    buildBank,
+    bankFor(cat){ return BANK[cat] || []; },
+  };
+})();
+
+/* ---------------------------------------------------------------------
+   AMBIENCE — the honest half of the soundtrack
+   Everything here is driven by the simulation: the wind that is actually
+   blowing, the rain that is actually falling, the water the player is
+   actually standing near, the surface they are actually walking on, and
+   birds that follow the real clock. None of it comes from the director.
+
+   That separation is deliberate and it is load-bearing. Later stages fake
+   birds, fake running water and fake footsteps — using these same
+   recipes — so the player cannot learn "this class of sound is always
+   real". What they CAN learn is that the real ones behave consistently:
+   the stream gets louder as you approach it and quieter as you leave,
+   every time, and birds come up at dawn.
+   ------------------------------------------------------------------- */
+const Ambience = {
+  stepPhase: 0, nextBird: 0, birdLevel: 0, nextCreak: 0, nextGust: 0,
+  waterNear: 0, waterKind: 0,
+
+  /* How much water is near, and how big it is. Sampled on a coarse ring
+     rather than by searching Wld.water, because the player can hear a
+     stream they have no marker for. */
+  sampleWater(){
+    const N = Wld.N;
+    let best = 0, bestAcc = 0;
+    const R = 9;                        // cells: about 36 metres
+    const cx = Math.round(clamp(gxOf(Player.pos.x),0,N-1));
+    const cz = Math.round(clamp(gzOf(Player.pos.z),0,N-1));
+    for(let dz=-R; dz<=R; dz+=1) for(let dx=-R; dx<=R; dx+=1){
+      const nx = cx+dx, nz = cz+dz;
+      if(nx<0||nz<0||nx>=N||nz>=N) continue;
+      const i = nz*N+nx;
+      if(Wld.WLEV[i] < -9000) continue;
+      if(Wld.WLEV[i] - Wld.H[i] < 0.03) continue;
+      const d = Math.hypot(dx,dz)*Wld.cell;
+      const acc = Wld.POND[i] ? 0 : Wld.ACC[i];
+      const loud = clamp(Math.log10(1+acc/CFG.HYDRO.streamAcc), 0, 2.2)
+                 * (1 - smoothstep(4, R*Wld.cell, d));
+      if(loud > best){ best = loud; bestAcc = acc; }
+    }
+    this.waterNear = best;
+    this.waterKind = bestAcc;
+  },
+
+  update(dt){
+    if(!Audio.ready) return;
+    const B = Audio.beds;
+
+    // ---- wind, and how much of it the canopy is taking ----
+    const open = sampleGrid(Wld.CLEAR, Player.pos.x, Player.pos.z);
+    const hush = Hush.factor();
+    const windL = (0.012 + Weather.wind*0.055) * (0.55 + open*0.6) * hush;
+    Audio.setBed(B.wind, windL, 240 + Weather.wind*900 + open*500, 0.5 + Weather.wind*0.5);
+
+    // ---- rain: on the leaves above, and on the ground around ----
+    Audio.setBed(B.rain, Weather.rain*0.085*(1 - open*0.25)*hush,
+                 900 + Weather.rain*2600 + open*900, 0.45);
+
+    // ---- water. Level and colour both follow the real flow. ----
+    if((this.waterT = (this.waterT||0) + dt) > 0.5){ this.waterT = 0; this.sampleWater(); }
+    const wl = clamp(this.waterNear, 0, 2.2);
+    const big = clamp(Math.log10(1+this.waterKind/CFG.HYDRO.riverAcc), 0, 1.4);
+    Audio.setBed(B.water, wl*0.055*hush, lerp(2200, 520, clamp(big,0,1)), 0.7);
+
+    // ---- footsteps, on the surface that is actually underfoot ----
+    if(Player.moving && !Player.falling){
+      const stride = Player.sprinting ? 0.34 : 0.52;
+      this.stepPhase += (Player.speed*dt)/ (stride*CFG.PLAYER.walk);
+      if(this.stepPhase >= 1){
+        this.stepPhase = 0;
+        const dep = Player.inWater;
+        const i = Math.round(clamp(gzOf(Player.pos.z),0,Wld.N-1))*Wld.N
+                + Math.round(clamp(gxOf(Player.pos.x),0,Wld.N-1));
+        const cat = dep > 0.10 ? 'footWater'
+                  : Wld.SLOPE[i] > 0.55 || Wld.CLEAR[i] > 0.9 ? 'footRock'
+                  : cellHazard(i) === 'bog' ? 'footMud'
+                  : Wld.ROUTE[i] ? 'footMud' : 'footNeedles';
+        Audio.play(cat, { gain: Player.sprinting ? 0.85 : 0.55,
+                          pitch: 0.92 + Math.random()*0.18 });
+      }
+    }
+
+    // ---- breathing, which gets loud when the player is spent ----
+    const spent = 1 - Player.stamina/CFG.PLAYER.staminaMax;
+    this.breathT = (this.breathT||0) - dt;
+    if(this.breathT <= 0){
+      this.breathT = lerp(4.2, 1.5, spent);
+      if(spent > 0.22 || Mind.intensity > 0.6)
+        Audio.play('breath', { gain: 0.25 + spent*0.9, pitch: 1 + spent*0.16 });
+    }
+
+    // ---- gusts and the wood creaking in them ----
+    this.nextGust -= dt;
+    if(this.nextGust <= 0){
+      this.nextGust = lerp(14, 3.5, Weather.wind) * (0.5 + Math.random());
+      if(Weather.wind > 0.12){
+        Audio.play('windGust', { gain: 0.4 + Weather.wind*0.9,
+                                 pan: Math.random()*2-1 });
+        if(Math.random() < 0.5) Audio.play('needles', { gain: 0.5 + Weather.wind*0.7,
+                                                        pan: Math.random()*2-1 });
+      }
+    }
+    this.nextCreak -= dt;
+    if(this.nextCreak <= 0){
+      this.nextCreak = lerp(26, 7, Weather.wind) * (0.4 + Math.random()*1.2);
+      const treesNear = Veg.colliders.length;
+      if(treesNear > 3 && Math.random() < 0.7){
+        const c = Veg.colliders[Math.floor(Math.random()*treesNear)];
+        Audio.play('branchCreak', { gain: 0.5 + Weather.wind*0.5,
+          pos: new THREE.Vector3(c.x, Player.pos.y + 6 + Math.random()*8, c.z) });
+      }
+    }
+
+    /* ---- BIRDS. The most honest signal in the early game: they come up
+       at dawn, they are loudest in the morning, they go quiet in heavy
+       rain and they stop at dusk. Later stages break every one of those
+       rules deliberately — which only works BECAUSE the rule held long
+       enough for the player to learn it. ---- */
+    const dawnBoost = 1 - smoothstep(CFG.TIME.dawn, CFG.TIME.sunrise+2.2, G.hours);
+    const dayBird = Sky.day * (0.35 + dawnBoost*0.9) * (1 - Weather.rain*0.85)
+                  * (1 - Weather.fogBoost*0.35) * P.birdiness;
+    this.birdLevel = lerp(this.birdLevel, clamp(dayBird, 0, 1.6), clamp(dt*0.4,0,1));
+    this.nextBird -= dt;
+    if(this.nextBird <= 0){
+      this.nextBird = lerp(18, 1.6, clamp(this.birdLevel,0,1)) * (0.4 + Math.random()*1.4);
+      if(this.birdLevel > 0.04){
+        const a = Math.random()*TAU, d = 14 + Math.random()*70;
+        Audio.play('bird', {
+          gain: 0.35 + this.birdLevel*0.5,
+          pitch: 0.9 + Math.random()*0.25,
+          pos: new THREE.Vector3(Player.pos.x + Math.cos(a)*d,
+                                 Player.pos.y + 7 + Math.random()*11,
+                                 Player.pos.z + Math.sin(a)*d),
+        });
+      }
+    }
+  },
+};
+
+/* =====================================================================
+   ===== PHANTOMS =====
+   The machinery a hallucination is made of. Three rules, and every fake
+   object in the game is some combination of them:
+
+     ON APPROACH   it is not there when you get close. Fades over half a
+                   second from a distance you cannot quite pin down.
+     ON LOOK AWAY  it is gone the moment it is out of frame, so you never
+                   see it go — you just find it missing.
+     TIMEOUT       it was there for a while and then it was not.
+
+   A phantom is registered here and NOWHERE ELSE. It is never added to
+   Wld.structures, Wld.water, Wld.berries or Wld.items, which is what
+   makes guarantee G7 structural: the collision loop, the interaction
+   scan and the survival code all iterate those lists, so a phantom is
+   not something they check for and reject — it is something they cannot
+   see. It can mislead the player into walking off a real cliff. It can
+   never be the cliff.
+   ===================================================================== */
+const Phantoms = {
+  list: [],
+  add(obj, rule){
+    setLayerDeep(obj, LAYER_PHANTOM);
+    obj.traverse(o=>{ if(o.isMesh) o.castShadow = false; });
+    scene.add(obj);
+    const p = Object.assign({
+      obj, born: G.t, life: 90, fade: 1, dying: false,
+      approach: 0, lookAway: false, onGone: null, label: 'phantom',
+    }, rule || {});
+    this.list.push(p);
+    if(CFG.DEBUG.showPhantoms) obj.traverse(o=>{ if(o.isMesh && o.material) o.material = o.material.clone(); });
+    return p;
+  },
+  inView(obj){
+    const v = new THREE.Vector3();
+    obj.getWorldPosition(v);
+    v.sub(camera.position);
+    const f = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    return v.normalize().dot(f) > Math.cos(camera.fov*DEG*0.85);
+  },
+  update(dt){
+    for(let i=this.list.length-1; i>=0; i--){
+      const p = this.list[i];
+      const age = G.t - p.born;
+      let go = false;
+      if(age > p.life) go = true;
+      if(p.approach > 0){
+        const v = new THREE.Vector3();
+        p.obj.getWorldPosition(v);
+        const d = Math.hypot(v.x-Player.pos.x, v.z-Player.pos.z);
+        if(d < p.approach) go = true;
+      }
+      /* "Gone when you look away" needs the player to have SEEN it first,
+         otherwise a phantom spawned behind them deletes itself on the
+         frame it is born and the event silently does nothing. */
+      if(p.lookAway){
+        if(this.inView(p.obj)) p.seen = true;
+        else if(p.seen && age > 1.2) go = true;
+      }
+      if(go && !p.dying){ p.dying = true; p.dieAt = G.t; }
+      if(p.dying){
+        p.fade = 1 - clamp((G.t - p.dieAt)/0.45, 0, 1);
+        p.obj.traverse(o=>{
+          if(!o.isMesh || !o.material) return;
+          if(!o.material.transparent){ o.material = o.material.clone(); o.material.transparent = true; }
+          o.material.opacity = p.fade;
+        });
+        if(p.fade <= 0){
+          scene.remove(p.obj);
+          p.obj.traverse(o=>{ if(o.isMesh){ o.geometry.dispose?.(); } });
+          if(p.onGone) p.onGone();
+          this.list.splice(i,1);
+        }
+      }
+    }
+  },
+  clear(){
+    for(const p of this.list) scene.remove(p.obj);
+    this.list.length = 0;
+  },
+};
+
+/* Somewhere a thing of this size could plausibly be. Used by every event
+   that puts an object in the world, which is also how events remove
+   themselves from the bag: if findSpot comes back empty there is nowhere
+   for a cabin to stand, so the fake-cabin event is not a candidate this
+   tick rather than a candidate that fails. */
+function findSpot({ minD=22, maxD=70, flat=0.26, clearance=0.30, inFront=null, tries=60, clash=26 }={}){
+  const r = rngFor('spot', Math.floor(G.t*13));
+  // the camera looks down -Z, so forward is (-sin(yaw), -cos(yaw)); a
+  // bearing offset of 0 is straight ahead
+  for(let k=0;k<tries;k++){
+    const off = inFront != null ? (r()-0.5)*inFront : (r()-0.5)*TAU;
+    const a = Player.yaw + off;
+    const d = lerp(minD, maxD, r());
+    const x = Player.pos.x - Math.sin(a)*d;
+    const z = Player.pos.z - Math.cos(a)*d;
+    if(Math.abs(x) > Wld.size*0.46 || Math.abs(z) > Wld.size*0.46) continue;
+    const N = Wld.N;
+    const ix = Math.round(gxOf(x)), iz = Math.round(gzOf(z));
+    if(!inGrid(ix,iz)) continue;
+    const i = iz*N+ix;
+    if(Wld.SLOPE[i] > flat) continue;
+    if(Wld.WLEV[i] > Wld.H[i]-0.2) continue;
+    if(Wld.CLEAR[i] < clearance) continue;
+    // and not on top of something real
+    /* KEEP CLEAR OF REAL BUILDINGS, BY AN AMOUNT THAT SUITS THE THING
+       BEING PLACED. A flat 26m was applied to everything, which is right
+       for a phantom cabin and absurd for a phantom berry bush: the bush
+       event wants a spot eight metres away and was being refused for
+       every cabin within twenty-six, so it returned false every time it
+       was drawn. */
+    let bad = false;
+    for(const st of Wld.structures) if(Math.hypot(st.x-x, st.z-z) < clash){ bad = true; break; }
+    if(bad) continue;
+    return { x, z, y: heightAt(x,z), i, ix, iz, dist: d };
+  }
+  return null;
+}
+function bearingTo(x, z){ return Math.atan2(x - Player.pos.x, z - Player.pos.z); }
+function isInFront(x, z, cosLimit=0.35){
+  const dx = x-Player.pos.x, dz = z-Player.pos.z;
+  const d = Math.hypot(dx,dz) || 1e-5;
+  const fx = -Math.sin(Player.yaw), fz = -Math.cos(Player.yaw);
+  return (dx*fx + dz*fz)/d > cosLimit;
+}
+function behindPlayer(dist){
+  const a = Player.yaw + (Math.random()-0.5)*1.1;
+  return new THREE.Vector3(
+    Player.pos.x + Math.sin(a)*dist,
+    Player.pos.y + 1.2,
+    Player.pos.z + Math.cos(a)*dist);
+}
+
+/* A ribbon laid on the terrain: fake trails and fake roads are both this,
+   and so is the real thing's look, so they cannot be told apart. */
+function makeGroundRibbon(points, width, colour){
+  const verts = [], uvs = [], idx = [];
+  for(let i=0;i<points.length;i++){
+    const p = points[i];
+    const q = points[Math.min(i+1, points.length-1)];
+    const o = points[Math.max(i-1, 0)];
+    let dx = q.x-o.x, dz = q.z-o.z;
+    const l = Math.hypot(dx,dz) || 1; dx/=l; dz/=l;
+    const nx = -dz, nz = dx;
+    const w = width*(0.7 + 0.3*Math.sin(i*0.7));
+    for(const s of [-1, 1]){
+      const x = p.x + nx*w*s, z = p.z + nz*w*s;
+      verts.push(x, heightAt(x,z)+0.045, z);
+      uvs.push(s*0.5+0.5, i*0.35);
+    }
+    if(i){
+      const b = (i-1)*2;
+      idx.push(b, b+2, b+1, b+1, b+2, b+3);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(verts,3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs,2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const m = new THREE.MeshStandardMaterial({
+    color: colour, roughness:0.98, transparent:true, opacity:1,
+    polygonOffset:true, polygonOffsetFactor:-3, polygonOffsetUnits:-3,
+    map: MAT.groundDetailMap,
+  });
+  const mesh = new THREE.Mesh(g, m);
+  mesh.receiveShadow = true;
+  const grp = new THREE.Group(); grp.add(mesh);
+  return grp;
+}
+
+/* A figure. Never detailed, never lit well, and it never touches you. */
+function makeFigure(scale=1){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color:0x090b0c, roughness:1, metalness:0 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.19*scale, 0.86*scale, 3, 7), mat);
+  body.position.y = 1.02*scale;
+  g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.115*scale, 8, 6), mat);
+  head.position.y = 1.66*scale;
+  g.add(head);
+  for(const sx of [-1,1]){
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.058*scale, 0.62*scale, 3, 5), mat);
+    arm.position.set(sx*0.23*scale, 1.10*scale, 0);
+    arm.rotation.z = sx*0.10;
+    g.add(arm);
+    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.075*scale, 0.72*scale, 3, 5), mat);
+    leg.position.set(sx*0.10*scale, 0.40*scale, 0);
+    g.add(leg);
+  }
+  return g;
+}
+
+/* =====================================================================
+   ===== DIRECTOR =====
+   Built from scratch for this game. Its whole decision is:
+
+       once a second, roll against a chance derived from stage,
+       intensity, the hour, the weather and the player's agitation.
+       If it passes, draw ONE event from a weighted bag.
+
+   An event's weight is its own `p`, times how well its stage suits the
+   mind right now, times how much this seed's personality likes that
+   flavour, times a recency taper. Events that cannot happen — no room
+   for a cabin, no flashlight to flicker, no water to fake — take
+   themselves out of the bag through ok(), so a draw is almost never
+   wasted. Then the wood goes quiet for a while, scaled by how big that
+   was.
+
+   Nothing is scheduled. Nothing trips at a fixed time. Two runs of the
+   same seed do not share a running order, because the roll reads the
+   live state of a player who is not doing the same things twice.
+
+   THE FIRST EVENT IS A RISING URGE, NOT A TIMER. "Very likely" is not
+   "certain", and a run where nothing ever happened would be a broken
+   run — but a hard breakpoint is something a player can learn and plan
+   around. So the guarantee is a per-second hazard that climbs from
+   nothing at 70 seconds to near-certainty by five minutes.
+
+   HALF OF EVERYTHING ARRIVES WITH A SOUND AND HALF ARRIVES IN SILENCE,
+   so neither silence nor noise is information.
+   ===================================================================== */
+const Director = (()=>{
+  const state = {
+    acc: 0, quiet: 12, fired: 0, lastRoll: 0, lastChance: 0,
+    recent: {},              // id -> t
+    log: [],
+    firstDone: false,
+    sinceEvent: 0,
+    forced: false,
+  };
+  let EVENTS = [];
+
+  function night(){ return 1 - Sky.day; }
+
+  function stageFit(evStage, drawStage){
+    /* An event one stage BELOW the mind is still perfectly possible —
+       twigs keep snapping at stage 4 — but it is less interesting, so it
+       is taxed rather than banned. An event ABOVE the draw is out. */
+    if(evStage > drawStage) return 0;
+    const gap = drawStage - evStage;
+    return Math.pow(0.62, gap);
+  }
+  function flavourWeight(f){ return (P.flavours && P.flavours[f]) || 1; }
+  function recency(id){
+    const t = state.recent[id];
+    if(t == null) return 1;
+    const age = G.t - t;
+    const D = CFG.DIRECT;
+    if(age > D.recencyWindow) return 1;
+    return lerp(D.recencyFloor, 1, age/D.recencyWindow);
+  }
+
+  function roll(){
+    const D = CFG.DIRECT;
+    if(state.quiet > 0){ state.quiet -= D.tick; return null; }
+    const chance =
+        D.base
+      + Mind.stage*D.perStage
+      + Mind.intensity*D.perIntensity
+      + night()*D.perNight
+      + Mind.agitation*D.perAgitation;
+    state.lastChance = chance;
+    const r = rngFor('director', Math.floor(G.t*97));
+    if(!state.forced && r() > chance) return null;
+    return draw();
+  }
+
+  function draw(drawStageIn){
+    const drawStage = drawStageIn != null ? drawStageIn : Mind.leak();
+    const bag = [];
+    let total = 0;
+    for(const ev of EVENTS){
+      const sf = stageFit(ev.stage, drawStage);
+      if(sf <= 0) continue;
+      if(ev.ok && !ev.ok()) continue;
+      const w = ev.p * sf * flavourWeight(ev.flavour) * recency(ev.id);
+      if(w <= 0) continue;
+      bag.push([w, ev]); total += w;
+    }
+    if(!bag.length) return null;
+    const r = rngFor('draw', Math.floor(G.t*131));
+    let x = r()*total;
+    let chosen = bag[bag.length-1][1];
+    for(const [w, ev] of bag){ x -= w; if(x <= 0){ chosen = ev; break; } }
+    return fire(chosen, drawStage);
+  }
+
+  function fire(ev, drawStage){
+    const announced = rngFor('announce', Math.floor(G.t*57)).chance(CFG.DIRECT.announceChance);
+    let ok = false;
+    try { ok = ev.fire({ announced, stage: drawStage, intensity: Mind.intensity }) !== false; }
+    catch(e){ ok = false; state.lastError = ev.id + ': ' + e.message; }
+    const entry = {
+      t: Math.round(G.t), id: ev.id, stage: ev.stage, drawStage,
+      real: !!ev.real, flavour: ev.flavour, ok, announced,
+      I: +Mind.intensity.toFixed(2),
+    };
+    state.log.push(entry);
+    if(state.log.length > 120) state.log.shift();
+    if(!ok){ state.quiet = 3; return entry; }
+    state.recent[ev.id] = G.t;
+    state.fired++;
+    state.firstDone = true;
+    state.sinceEvent = 0;
+    const q = CFG.DIRECT.quietByStage[Mind.stage] || CFG.DIRECT.quietByStage[0];
+    const r = rngFor('quiet', Math.floor(G.t*13));
+    state.quiet = r.range(q[0], q[1]) * (ev.weightQuiet || 1);
+    return entry;
+  }
+
+  function tick(dt){
+    if(G.over || !G.started) return;
+    state.sinceEvent += dt;
+    state.acc += dt;
+    let guard = 0;
+    while(state.acc >= CFG.DIRECT.tick && guard++ < 6){
+      state.acc -= CFG.DIRECT.tick;
+      roll();
+    }
+    /* THE RISING URGE. A per-second hazard rather than a deadline: the
+       first unsettling thing lands somewhere different every run, and a
+       run in which nothing ever happened cannot occur. */
+    if(!state.firstDone){
+      const D = CFG.DIRECT;
+      const urge = clamp((G.t - D.firstUrgeFrom)/(D.firstUrgeTo - D.firstUrgeFrom), 0, 1);
+      if(rngFor('urge', Math.floor(G.t*23)).chance(urge*D.firstUrgeMax*dt)){
+        /* THE URGE HAS TO REACH STAGE 1, or it guarantees nothing.
+           Stage 0 is defined as a forest with nothing wrong with it, so at
+           stage 0 the bag is EMPTY — every event declares stage 1 or
+           higher and stageFit() drops all of them. The first build called
+           draw() here and got null every time; measured over five
+           simulated minutes it produced zero events, and on a slow seed
+           stage 1 is fourteen minutes away. The urge now draws at least
+           one stage up, which is exactly the leak rule the mind already
+           has, applied deliberately instead of hoped for. WHEN it lands
+           is still a rising hazard and still different every run. */
+        state.quiet = 0;
+        draw(Math.max(1, Mind.leak()));
+      }
+    }
+    // and a long-silence failsafe between events, for the same reason
+    if(state.firstDone && state.sinceEvent > 210){
+      state.quiet = 0;
+      draw(Math.max(1, Mind.leak()));
+    }
+  }
+
+  function forceFire(id){
+    const ev = EVENTS.find(e=>e.id === id);
+    if(!ev) return { id, ok:false, why:'no such event' };
+    state.forced = true;
+    try {
+      const okNow = !ev.ok || ev.ok();
+      const res = fire(ev, 4);
+      return { id, ok: res.ok, why: res.ok ? '' : (okNow ? (state.lastError || 'fire() returned false') : 'ok() was false') };
+    } catch(e){
+      return { id, ok:false, why:e.message };
+    } finally { state.forced = false; }
+  }
+
+  return {
+    tick, draw, forceFire, state,
+    get events(){ return EVENTS; },
+    setEvents(list){ EVENTS = list; },
+    reset(){
+      state.acc = 0; state.quiet = 12; state.fired = 0;
+      state.recent = {}; state.log.length = 0;
+      state.firstDone = false; state.sinceEvent = 0;
+    },
+  };
+})();
+
+/* =====================================================================
+   ===== EVENTS =====
+   The library the director draws from. Every entry declares the stage it
+   belongs to, the flavour it is (so a seed's personality can prefer it),
+   a base weight, and an ok() that removes it from the bag when it makes
+   no sense right now.
+
+   Real atmospheric beats are NOT in here — wind, rain, thunder, birds
+   and footsteps come from the true simulation in Ambience, so the
+   director is only ever scheduling things that are not happening. The
+   sounds it uses, though, are the same recipes Ambience uses.
+   ===================================================================== */
+const LORE_NEUTRAL = [
+  'The paper is too faded to read.',
+  'Whatever was written here has run in the rain.',
+  'A column of figures, and nothing that says what they count.',
+  'A page torn along the fold. The half that is left says nothing.',
+];
+const Lore = {
+  /* THE SINGLE FUNNEL every piece of found text passes through. While the
+     backstory is undecided this returns neutral strings; writing the lore
+     is replacing this table and nothing else. */
+  note(){ return rngFor('lore', Math.floor(G.t*3)).pick(LORE_NEUTRAL); },
+};
+
+function phantomStructure(kind, spot, rule){
+  const spec = {
+    kind, id:'ph-'+kind+'-'+Math.round(G.t*10),
+    x: spot.x, z: spot.z, y: spot.y, yaw: rngFor('phyaw', Math.floor(G.t*7))()*TAU,
+    style: Wld.style, decay: Wld.style.decay, phantom: true, items: [],
+  };
+  const fn = STRUCT_BUILDERS[kind] || buildCabin;
+  const g = fn(spec);
+  g.position.set(spec.x, spec.y, spec.z);
+  g.rotation.y = spec.yaw;
+  return Phantoms.add(g, rule);
+}
+
+function buildEventLibrary(){
+  const E = [];
+  const add = (o)=> E.push(o);
+  const V = (x,y,z)=> new THREE.Vector3(x,y,z);
+  const I = ()=> Mind.intensity;
+
+  /* ---------------- STAGE 1 — uneasy ---------------- */
+  add({ id:'twigBehind', stage:1, flavour:'auditory', p:1.5, fire:()=>{
+    const d = lerp(9, 2.2, I());
+    Audio.play('twigSnap', { pos: behindPlayer(d), gain: lerp(0.4, 1.5, I()) });
+    return true;
+  }});
+  add({ id:'breathNear', stage:1, flavour:'auditory', p:0.9, fire:()=>{
+    Audio.play('breath', { pan: Math.random()<0.5?-0.8:0.8, gain: lerp(0.5,1.6,I()) });
+    return true;
+  }});
+  add({ id:'stepNotYours', stage:1, flavour:'auditory', p:1.2, fire:()=>{
+    const d = lerp(11, 3, I());
+    const n = 1 + (I() > 0.55 ? Math.floor(Math.random()*2) : 0);
+    for(let k=0;k<n;k++)
+      Audio.play('footNeedles', { pos: behindPlayer(d), gain: lerp(0.5,1.4,I()), delay: k*0.42 });
+    return true;
+  }});
+  add({ id:'brushMovement', stage:1, flavour:'auditory', p:1.2, fire:()=>{
+    const a = Player.yaw + (Math.random()-0.5)*3.2;
+    const d = lerp(14, 4, I());
+    Audio.play('brushPush', { pos: V(Player.pos.x - Math.sin(a)*d, Player.pos.y+0.6,
+                                     Player.pos.z - Math.cos(a)*d), gain: lerp(0.5,1.3,I()) });
+    return true;
+  }});
+  add({ id:'peripheralShape', stage:1, flavour:'visual', p:1.1,
+    ok:()=> Sky.day < 0.85 || Weather.fogBoost > 0.3,
+    fire:()=>{
+      // just outside the middle of the frame, and gone when looked at
+      const side = Math.random()<0.5 ? -1 : 1;
+      const a = Player.yaw + side*(0.55 + Math.random()*0.35);
+      const d = lerp(24, 9, I());
+      const x = Player.pos.x - Math.sin(a)*d, z = Player.pos.z - Math.cos(a)*d;
+      const g = makeFigure(1);
+      g.position.set(x, heightAt(x,z), z);
+      g.rotation.y = bearingTo(Player.pos.x, Player.pos.z);
+      Phantoms.add(g, { life: lerp(2.2, 7, I()), lookAway:true, approach: 6, label:'figure' });
+      return true;
+    }});
+  add({ id:'treeShift', stage:1, flavour:'visual', p:0.8, fire:()=>{
+    /* Something is slightly different after you look away. It is a real
+       geometric change to a phantom copy standing beside nothing — the
+       actual forest is never edited, because the moment the world starts
+       changing under the player the rules stop being testable. */
+    const spot = findSpot({ minD:10, maxD:26, flat:0.5, clearance:0.02, inFront:2.2, clash:5 });
+    if(!spot) return false;
+    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6+Math.random()*1.5, 0), MAT.rock);
+    rock.position.set(spot.x, spot.y+0.3, spot.z);
+    rock.rotation.set(Math.random()*3, Math.random()*3, Math.random()*3);
+    Phantoms.add(rock, { life: 40, lookAway:true, label:'shifted' });
+    return true;
+  }});
+  add({ id:'birdWrong', stage:1, flavour:'auditory', p:0.9,
+    ok:()=> Sky.day < 0.4 || Weather.rain > 0.5,
+    fire:()=>{
+      const a = Math.random()*TAU, d = 16 + Math.random()*40;
+      Audio.play('bird', { gain: 0.5 + I()*0.5, pitch: 0.75 + Math.random()*0.3,
+        pos: V(Player.pos.x+Math.cos(a)*d, Player.pos.y+8+Math.random()*9, Player.pos.z+Math.sin(a)*d) });
+      return true;
+    }});
+
+  /* ---------------- STAGE 2 — unreliable ---------------- */
+  add({ id:'fakeTrail', stage:2, flavour:'navigational', p:1.4, weightQuiet:1.3,
+    ok:()=> sampleGrid(Wld.ROUTE, Player.pos.x, Player.pos.z) === 0,
+    fire:()=>{
+      const spot = findSpot({ minD:12, maxD:34, flat:0.30, clearance:0.15, inFront:1.6, clash:14 });
+      if(!spot) return false;
+      // a plausible line of worn ground running away into the trees
+      const pts = [];
+      let x = spot.x, z = spot.z;
+      let a = bearingTo(x, z) + (Math.random()-0.5)*0.8;
+      for(let i=0;i<26;i++){
+        pts.push({x, z});
+        a += (Math.random()-0.5)*0.22;
+        x += Math.sin(a)*5; z += Math.cos(a)*5;
+        if(Math.abs(x)>Wld.size*0.46 || Math.abs(z)>Wld.size*0.46) break;
+      }
+      const rib = makeGroundRibbon(pts, 0.85, 0x6f6350);
+      Phantoms.add(rib, { life: lerp(70, 320, I()), label:'trail' });
+      return true;
+    }});
+  add({ id:'fakeCabin', stage:2, flavour:'structural', p:1.3, weightQuiet:1.5,
+    ok:()=> !!findSpot({ minD:34, maxD:80, flat:0.24, clearance:0.30, tries:24 }),
+    fire:()=>{
+      const spot = findSpot({ minD:34, maxD:80, flat:0.24, clearance:0.30 });
+      if(!spot) return false;
+      /* It is NOT there when you reach it. The approach radius is
+         deliberately larger than the distance at which you would start
+         to make out detail, so it never resolves into something that
+         looks wrong — it simply stops being there. */
+      phantomStructure('cabin', spot, { life: 260, approach: lerp(26, 11, I()), label:'cabin' });
+      return true;
+    }});
+  add({ id:'compassDrift', stage:2, flavour:'navigational', p:1.2,
+    ok:()=> Gear.hasCompass,
+    fire:()=>{
+      if(I() > 0.72 && Math.random() < 0.45){
+        Mind.compassReversed = true;
+        Mind.reverseUntil = G.t + lerp(40, 200, I());
+      }
+      return true;     // the drift itself is continuous; this deepens it
+    }});
+  add({ id:'nameCalled', stage:2, flavour:'auditory', p:1.5, fire:(c)=>{
+    const d = lerp(55, 14, I());
+    const a = Math.random()*TAU;
+    Audio.play('voice', { gain: lerp(0.6, 1.8, I()), pitch: 0.92 + Math.random()*0.2,
+      pos: V(Player.pos.x+Math.cos(a)*d, Player.pos.y+0.4, Player.pos.z+Math.sin(a)*d) });
+    if(I() > 0.6 && Math.random() < 0.4)
+      Audio.play('voice', { gain: lerp(0.4,1.2,I()), delay: 1.4 + Math.random(),
+        pos: V(Player.pos.x+Math.cos(a+1)*d*0.7, Player.pos.y+0.4, Player.pos.z+Math.sin(a+1)*d*0.7) });
+    return true;
+  }});
+  add({ id:'stepsMatching', stage:2, flavour:'auditory', p:1.1,
+    ok:()=> Player.moving,
+    fire:()=>{ Echo.start(lerp(6, 10, I()), lerp(0.30, 0.10, I())); return true; }});
+  add({ id:'knockDistant', stage:2, flavour:'auditory', p:1.0, fire:()=>{
+    const a = Math.random()*TAU, d = lerp(70, 22, I());
+    Audio.play('knock', { gain: lerp(0.6,1.5,I()),
+      pos: V(Player.pos.x+Math.cos(a)*d, Player.pos.y, Player.pos.z+Math.sin(a)*d) });
+    return true;
+  }});
+  add({ id:'doorSomewhere', stage:2, flavour:'auditory', p:0.9, fire:()=>{
+    const a = Math.random()*TAU, d = lerp(60, 18, I());
+    Audio.play('doorMove', { gain: lerp(0.5,1.3,I()),
+      pos: V(Player.pos.x+Math.cos(a)*d, Player.pos.y, Player.pos.z+Math.sin(a)*d) });
+    return true;
+  }});
+  add({ id:'birdsAtNight', stage:2, flavour:'auditory', p:1.0,
+    ok:()=> Sky.day < 0.25,
+    fire:()=>{
+      const n = 2 + Math.floor(I()*4);
+      for(let k=0;k<n;k++){
+        const a = Math.random()*TAU, d = 12 + Math.random()*50;
+        Audio.play('bird', { gain: 0.5 + I()*0.6, delay: k*(0.3+Math.random()*0.7),
+          pitch: 0.85 + Math.random()*0.3,
+          pos: V(Player.pos.x+Math.cos(a)*d, Player.pos.y+7+Math.random()*10, Player.pos.z+Math.sin(a)*d) });
+      }
+      return true;
+    }});
+  add({ id:'suddenSilence', stage:2, flavour:'auditory', p:1.0, weightQuiet:1.6, fire:()=>{
+    Hush.start(lerp(5, 16, I()));
+    return true;
+  }});
+
+  /* ---------------- STAGE 3 — severe ---------------- */
+  add({ id:'landmarkMoved', stage:3, flavour:'visual', p:1.2,
+    ok:()=> Wld.landmarks.length > 0 && sampleGrid(Wld.CLEAR, Player.pos.x, Player.pos.z) > 0.42,
+    fire:()=>{
+      /* The mountain does not move. A SECOND mountain appears somewhere
+         it should not be — which is the only way to do this without
+         editing the terrain, and the terrain is the one thing the player
+         is promised never changes. */
+      const pick = Wld.landmarks[Math.floor(Math.random()*Wld.landmarks.length)];
+      const a = Math.random()*TAU;
+      const d = 240 + Math.random()*260;
+      const x = Player.pos.x + Math.cos(a)*d, z = Player.pos.z + Math.sin(a)*d;
+      const h = Math.max(40, pick.y - heightAt(x,z));
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(h*0.85, h, 7, 1),
+        new THREE.MeshStandardMaterial({ color:0x2b3138, roughness:1 }));
+      cone.position.set(x, heightAt(x,z) + h*0.5, z);
+      Phantoms.add(cone, { life: lerp(60, 400, I()), lookAway: I() < 0.5, label:'peak' });
+      return true;
+    }});
+  add({ id:'fakeRoad', stage:3, flavour:'navigational', p:1.2, weightQuiet:1.4,
+    ok:()=>{
+      const spot = findSpot({ minD:18, maxD:48, flat:0.20, clearance:0.35, tries:20 });
+      return !!spot;
+    },
+    fire:()=>{
+      const spot = findSpot({ minD:18, maxD:48, flat:0.20, clearance:0.35 });
+      if(!spot) return false;
+      const pts = [];
+      let x = spot.x, z = spot.z;
+      let a = bearingTo(x,z) + Math.PI*0.5;
+      for(let i=0;i<34;i++){
+        pts.push({x,z});
+        a += (Math.random()-0.5)*0.06;
+        x += Math.sin(a)*7; z += Math.cos(a)*7;
+        if(Math.abs(x)>Wld.size*0.46 || Math.abs(z)>Wld.size*0.46) break;
+      }
+      const rib = makeGroundRibbon(pts, 2.6, 0x6d6c66);
+      Phantoms.add(rib, { life: lerp(90, 340, I()), label:'road' });
+      return true;
+    }});
+  add({ id:'vehicleApproaching', stage:3, flavour:'auditory', p:1.3, weightQuiet:1.3, fire:()=>{
+    const a = Math.random()*TAU, d = lerp(160, 45, I());
+    Audio.play('vehicle', { gain: lerp(0.6, 1.6, I()),
+      pos: V(Player.pos.x+Math.cos(a)*d, Player.pos.y, Player.pos.z+Math.sin(a)*d) });
+    return true;
+  }});
+  add({ id:'mapFalseFeature', stage:3, flavour:'navigational', p:1.1,
+    ok:()=> Gear.hasMap,
+    fire:()=>{
+      const a = Math.random()*TAU, d = 90 + Math.random()*330;
+      Wld.falseMap = Wld.falseMap || [];
+      Wld.falseMap.push({
+        kind: Math.random()<0.5 ? 'trail' : 'building',
+        x: clamp(Player.pos.x + Math.cos(a)*d, -Wld.size*0.45, Wld.size*0.45),
+        z: clamp(Player.pos.z + Math.sin(a)*d, -Wld.size*0.45, Wld.size*0.45),
+        until: G.t + lerp(120, 900, I()),
+        ang: Math.random()*TAU,
+      });
+      return true;
+    }});
+  add({ id:'distantSiren', stage:3, flavour:'auditory', p:0.9, fire:()=>{
+    const a = Math.random()*TAU, d = lerp(220, 80, I());
+    Audio.play('siren', { gain: lerp(0.5,1.4,I()),
+      pos: V(Player.pos.x+Math.cos(a)*d, Player.pos.y+6, Player.pos.z+Math.sin(a)*d) });
+    return true;
+  }});
+  add({ id:'fakeRiverSound', stage:3, flavour:'auditory', p:1.1,
+    ok:()=> Ambience.waterNear < 0.25,
+    fire:()=>{
+      const a = Math.random()*TAU, d = lerp(40, 12, I());
+      FakeWaterBed.start(V(Player.pos.x+Math.cos(a)*d, Player.pos.y, Player.pos.z+Math.sin(a)*d),
+                         lerp(18, 60, I()));
+      return true;
+    }});
+  add({ id:'treelineShift', stage:3, flavour:'visual', p:1.0, fire:()=>{
+    Mind.dose(lerp(0.18, 0.45, I()));
+    return true;
+  }});
+  add({ id:'torchFlickerFake', stage:3, flavour:'visual', p:1.2,
+    ok:()=> Gear.torchOn && Gear.battery > CFG.GEAR.batteryLowAt*1.4,
+    fire:()=>{ Gear.flickerFake = lerp(1.6, 7, I()); return true; }});
+
+  /* ---------------- STAGE 4 — critical ---------------- */
+  add({ id:'fakeHospital', stage:4, flavour:'structural', p:1.6, weightQuiet:2.2,
+    ok:()=>{
+      if(Math.hypot(Player.pos.x-Wld.hospital.x, Player.pos.z-Wld.hospital.z) < 220) return false;
+      return !!findSpot({ minD:80, maxD:190, flat:0.16, clearance:0.5, tries:26 });
+    },
+    fire:()=>{
+      const spot = findSpot({ minD:80, maxD:190, flat:0.16, clearance:0.5, tries:40 });
+      if(!spot) return false;
+      const ph = phantomStructure('hospital', spot, { life: 420, approach: 0, label:'hospital' });
+      ph.fakeHospital = true;
+      FakeHospital.arm(ph, spot);
+      return true;
+    }});
+  add({ id:'fakeWater', stage:4, flavour:'structural', p:1.2,
+    ok:()=> waterDepthAt(Player.pos.x, Player.pos.z) < 0.05,
+    fire:()=>{
+      const spot = findSpot({ minD:14, maxD:46, flat:0.26, clearance:0.12, inFront:2.4, clash:12 });
+      if(!spot) return false;
+      const g = new THREE.Group();
+      const pts = [];
+      let x = spot.x, z = spot.z, a = Math.random()*TAU;
+      for(let i=0;i<14;i++){ pts.push({x,z}); a += (Math.random()-0.5)*0.4; x += Math.sin(a)*3.5; z += Math.cos(a)*3.5; }
+      const rib = makeGroundRibbon(pts, 1.3, 0x26332f);
+      rib.traverse(o=>{ if(o.isMesh){ o.material.roughness = 0.12; o.material.metalness = 0.1; } });
+      g.add(rib);
+      const p = Phantoms.add(g, { life: lerp(60, 240, I()), approach: 3.2, label:'water' });
+      FakeWaterBed.start(V(spot.x, spot.y, spot.z), lerp(30, 120, I()));
+      return true;
+    }});
+  add({ id:'fakeBerries', stage:4, flavour:'structural', p:1.0, fire:()=>{
+    /* clearance 0, deliberately. CLEAR is canopy openness, and it is near
+       zero under closed forest — which is where the player spends most of
+       a run. Asking for a gap in the trees meant this event could not
+       place itself anywhere the player actually was, and the audit caught
+       it returning false every single time. A berry bush is an understory
+       plant; it does not need a clearing. */
+    const spot = findSpot({ minD:6, maxD:26, flat:0.42, clearance:0, inFront:2.8, clash:6 });
+    if(!spot) return false;
+    const g = new THREE.Group();
+    const bush = new THREE.Mesh(new THREE.SphereGeometry(0.62, 8, 6),
+      new THREE.MeshStandardMaterial({ color:0x4c5c3c, roughness:1 }));
+    bush.position.set(spot.x, spot.y+0.5, spot.z);
+    g.add(bush);
+    const look = rngFor('fakeberry', Math.floor(G.t)).pick(BERRY_LOOKS);
+    const col = look==='red' ? 0x7a2a26 : look==='dark' ? 0x241a2c : 0xa8a08a;
+    for(let i=0;i<10;i++){
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.045, 5, 4),
+        new THREE.MeshStandardMaterial({ color: col, roughness:0.5 }));
+      const aa = Math.random()*TAU, rr = 0.45+Math.random()*0.2;
+      b.position.set(spot.x + Math.cos(aa)*rr, spot.y + 0.35 + Math.random()*0.5, spot.z + Math.sin(aa)*rr);
+      g.add(b);
+    }
+    Phantoms.add(g, { life: lerp(50, 200, I()), approach: 1.9, label:'berries' });
+    return true;
+  }});
+  add({ id:'fakeItem', stage:4, flavour:'structural', p:1.0, fire:()=>{
+    const spot = findSpot({ minD:5, maxD:22, flat:0.45, clearance:0, inFront:2.8, clash:5 });
+    if(!spot) return false;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.10, 8), MAT.metal);
+    m.position.set(spot.x, spot.y+0.05, spot.z);
+    m.rotation.z = Math.PI/2;
+    Phantoms.add(m, { life: 120, approach: 1.5, label:'cell' });
+    return true;
+  }});
+  add({ id:'beamReveal', stage:4, flavour:'visual', p:1.3,
+    ok:()=> Gear.torchOn && Gear.battery > 0 && Sky.day < 0.5,
+    fire:()=>{
+      const d = lerp(18, 7, I());
+      const a = Player.yaw + (Math.random()-0.5)*0.35;
+      const x = Player.pos.x - Math.sin(a)*d, z = Player.pos.z - Math.cos(a)*d;
+      const g = makeFigure(1.05 + I()*0.25);
+      g.position.set(x, heightAt(x,z), z);
+      g.rotation.y = bearingTo(Player.pos.x, Player.pos.z);
+      Phantoms.add(g, { life: lerp(1.6, 4.5, I()), lookAway:true, approach: 4, label:'in the beam' });
+      return true;
+    }});
+  add({ id:'intercom', stage:4, flavour:'auditory', p:1.1, fire:()=>{
+    const a = Math.random()*TAU, d = lerp(90, 25, I());
+    Audio.play('intercom', { gain: lerp(0.5,1.5,I()),
+      pos: V(Player.pos.x+Math.cos(a)*d, Player.pos.y+2, Player.pos.z+Math.sin(a)*d) });
+    return true;
+  }});
+  add({ id:'radioVoice', stage:4, flavour:'auditory', p:1.0, fire:()=>{
+    const a = Math.random()*TAU, d = lerp(60, 14, I());
+    Audio.play('radio', { gain: lerp(0.5,1.4,I()),
+      pos: V(Player.pos.x+Math.cos(a)*d, Player.pos.y+0.3, Player.pos.z+Math.sin(a)*d) });
+    return true;
+  }});
+  add({ id:'falseClearing', stage:4, flavour:'visual', p:0.9,
+    ok:()=> sampleGrid(Wld.CLEAR, Player.pos.x, Player.pos.z) < 0.45,
+    fire:()=>{ Mind.dose(lerp(0.2, 0.5, I())); Hush.start(lerp(4, 11, I())); return true; }});
+  add({ id:'fakeStructureNear', stage:4, flavour:'structural', p:1.1,
+    ok:()=> !!findSpot({ minD:26, maxD:58, flat:0.26, clearance:0.25, tries:20 }),
+    fire:()=>{
+      const spot = findSpot({ minD:26, maxD:58, flat:0.26, clearance:0.25 });
+      if(!spot) return false;
+      const kind = rngFor('phk', Math.floor(G.t)).pick(['campsite','ruin','car']);
+      phantomStructure(kind, spot, { life: 300, approach: lerp(18, 7, I()), label:kind });
+      return true;
+    }});
+
+  Director.setEvents(E);
+  return E;
+}
+
+/* ---------------------------------------------------------------------
+   Three small machines the events above drive.
+   ------------------------------------------------------------------- */
+/* Footsteps that match yours, a beat behind. Stops if you stop, which is
+   the whole horror of it. */
+const Echo = {
+  until: 0, delay: 0.3, lastStep: 0,
+  start(seconds, delay){ this.until = G.t + seconds; this.delay = delay; },
+  update(dt){
+    if(G.t > this.until) return;
+    if(!Player.moving) return;
+    if(G.t - this.lastStep < (Player.sprinting ? 0.34 : 0.52)) return;
+    this.lastStep = G.t;
+    Audio.play('footNeedles', { pos: behindPlayer(4 + Math.random()*4),
+      gain: 0.5, delay: this.delay });
+  },
+};
+/* Everything goes quiet. Not silence added — the real ambience ducked,
+   which is far more unsettling and is also free. */
+const Hush = {
+  until: 0, amt: 0,
+  start(seconds){ this.until = G.t + seconds; },
+  update(dt){
+    const want = G.t < this.until ? 1 : 0;
+    this.amt = lerp(this.amt, want, clamp(dt*(want?2.5:0.8),0,1));
+  },
+  factor(){ return 1 - this.amt*0.92; },
+};
+/* Running water that is not running anywhere. Same bed generator as the
+   real thing, positioned in the world, fading in and out. */
+const FakeWaterBed = {
+  until: 0, pos: null, node: null, gain: null,
+  start(pos, seconds){
+    if(!Audio.ready) return;
+    this.pos = pos.clone(); this.until = G.t + seconds;
+    this.level = 0;
+  },
+  update(dt){
+    if(!this.pos) return;
+    const want = G.t < this.until ? 1 : 0;
+    this.level = lerp(this.level||0, want, clamp(dt*0.6,0,1));
+    if(this.level < 0.01){ this.pos = null; return; }
+    this.tick = (this.tick||0) - dt;
+    if(this.tick <= 0){
+      this.tick = 0.55;
+      Audio.play('streamMid', { pos: this.pos, gain: this.level*0.9, dur: 1.2 });
+    }
+  },
+};
+/* The fake hospital, which is the biggest lie the game tells. Reaching it
+   fails in one of two ways, both of which cost time and intensity and
+   neither of which kills. */
+const FakeHospital = {
+  active: null, spot: null, armed: false,
+  arm(ph, spot){ this.active = ph; this.spot = spot; this.armed = true; },
+  update(dt){
+    if(!this.armed || !this.active) return;
+    if(this.active.dying){ this.armed = false; this.active = null; return; }
+    const d = Math.hypot(Player.pos.x - this.spot.x, Player.pos.z - this.spot.z);
+    if(d > 17) return;
+    this.armed = false;
+    const mode = rngFor('fakehosp', Math.floor(G.t)).chance(0.5) ? 'fade' : 'wake';
+    if(mode === 'fade'){
+      this.active.dying = true; this.active.dieAt = G.t;
+      UI.say('There is nothing here. There was never anything here.', 5);
+      Mind.dose(0.35);
+      G.hours = mod(G.hours + 0.35, 24);
+    } else {
+      /* "You wake somewhere else nearby." The player is moved a short way
+         to real, safe ground — lastSafe, which updatePlayer keeps — and
+         loses a stretch of the clock. It is disorienting and it is not
+         lethal, which is the rule for everything a hallucination does. */
+      UI.blackout(2.4, ()=>{
+        const a = Math.random()*TAU, dd = 28 + Math.random()*46;
+        let nx = Player.lastSafe.x + Math.cos(a)*dd, nz = Player.lastSafe.z + Math.sin(a)*dd;
+        const ix = Math.round(clamp(gxOf(nx),0,Wld.N-1)), iz = Math.round(clamp(gzOf(nz),0,Wld.N-1));
+        if(!isFinite(cellWalkCost(iz*Wld.N+ix))){ nx = Player.lastSafe.x; nz = Player.lastSafe.z; }
+        Player.pos.set(nx, heightAt(nx,nz), nz);
+        Player.vel.set(0,0,0);
+        G.hours = mod(G.hours + 0.9, 24);
+        Survival.thirst = clamp(Survival.thirst + 7, 0, 100);
+        Mind.dose(0.4);
+        Veg.dirty = true;
+        UI.say('You are on your feet. You do not remember standing up.', 6);
+      });
+      this.active.dying = true; this.active.dieAt = G.t;
+    }
+    this.active = null;
+  },
+};
+
+/* =====================================================================
+   ===== UI =====
+   Deliberately thin. There is no sanity meter and there are no numbers:
+   the player is told how they FEEL, in words, and the exact values exist
+   only in the dev panel. "Dry mouth" and "you are shaking" are things a
+   person notices about themselves; 68% thirst is a bar in a game.
+   ===================================================================== */
+const UI = {
+  subT: 0, holdEl: null, blackT: 0, blackCb: null, mapOpen: false,
+
+  init(){
+    this.el = {
+      prompt: document.getElementById('prompt'),
+      sub: document.getElementById('subtitle'),
+      hold: document.getElementById('holdbar'),
+      holdFill: document.querySelector('#holdbar i'),
+      holdLabel: document.querySelector('#holdbar span'),
+      stam: document.getElementById('stamina'),
+      stamFill: document.querySelector('#stamina i'),
+      water: document.getElementById('s-water'),
+      food: document.getElementById('s-food'),
+      light: document.getElementById('s-light'),
+      body: document.getElementById('s-body'),
+      clock: document.getElementById('clock'),
+      pause: document.getElementById('pausenote'),
+      panic: document.getElementById('panic'),
+      end: document.getElementById('endscreen'),
+      fps: document.getElementById('fps'),
+      map: document.getElementById('mapview'),
+      mapCanvas: document.getElementById('mapcanvas'),
+      mapNote: document.getElementById('mapnote'),
+    };
+    document.getElementById('again').onclick = ()=> location.reload();
+    document.getElementById('newseed').onclick = ()=>{
+      const u = new URL(location.href); u.searchParams.delete('seed'); location.href = u.toString();
+    };
+  },
+
+  say(text, seconds){
+    this.el.sub.textContent = text;
+    this.el.sub.classList.add('on');
+    this.subT = seconds || 3;
+  },
+  hold(p, label){
+    const h = this.el.hold;
+    if(p <= 0){ h.style.display = 'none'; return; }
+    h.style.display = 'block';
+    this.el.holdFill.style.width = (p*100).toFixed(0) + '%';
+    this.el.holdLabel.textContent = label || '';
+  },
+  pauseNote(on){ this.el.pause.classList.toggle('on', !!on); },
+  blackout(seconds, cb){ this.blackT = seconds; this.blackCb = cb; this.blackDone = false; },
+
+  /* WORDS, NOT NUMBERS. Each line appears only when it has something to
+     say, so an untroubled player has a clean screen and a failing one
+     accumulates complaints. */
+  words(){
+    const S = Survival;
+    const t = S.thirst, h = S.hunger, c = S.cold;
+    const set = (el, text, cls)=>{
+      el.textContent = text || ' ';
+      el.className = text ? ('on ' + (cls||'')) : '';
+    };
+    set(this.el.water,
+      t > 88 ? 'you cannot swallow' : t > 70 ? 'your throat is raw'
+      : t > 48 ? 'dry mouth' : t > 30 ? 'thirsty' : '',
+      t > 70 ? 'bad' : t > 48 ? 'warn' : '');
+    set(this.el.food,
+      h > 90 ? 'hollow' : h > 74 ? 'very hungry' : h > 52 ? 'hungry' : '',
+      h > 74 ? 'bad' : h > 52 ? 'warn' : '');
+    const b = Gear.battery;
+    set(this.el.light,
+      !Gear.torchOn ? (Gear.battery <= 0 ? 'the torch is dead' : '')
+      : b < 0.08 ? 'the beam is browning out' : b < 0.22 ? 'the beam is yellow'
+      : b < 0.5 ? 'the beam is steady' : '',
+      b < 0.08 ? 'bad' : b < 0.22 ? 'warn' : '');
+    let body = '';
+    if(S.sick > 0) body = 'you feel sick';
+    else if(c > 72) body = 'you cannot feel your hands';
+    else if(c > 45) body = 'you are shivering';
+    else if(Player.stamina < 15) body = 'you need to stop';
+    set(this.el.body, body, c > 72 || S.sick > 0 ? 'bad' : 'warn');
+  },
+
+  update(dt){
+    if(this.subT > 0){
+      this.subT -= dt;
+      if(this.subT <= 0) this.el.sub.classList.remove('on');
+    }
+    // the prompt for whatever is in reach
+    const t = hoverTarget;
+    if(t && !Hold.active){
+      this.el.prompt.textContent = t.label;
+      this.el.prompt.classList.add('on');
+    } else this.el.prompt.classList.remove('on');
+
+    const sp = Player.stamina/CFG.PLAYER.staminaMax;
+    this.el.stam.classList.toggle('on', sp < 0.985);
+    this.el.stamFill.style.width = (sp*100).toFixed(0) + '%';
+
+    this.words();
+
+    const hh = Math.floor(G.hours), mm = Math.floor((G.hours-hh)*60);
+    this.el.clock.textContent =
+      String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0')
+      + '  ·  ' + Sky.phase + (Weather.kind !== 'clear' ? '  ·  ' + Weather.kind : '');
+
+    this.el.panic.style.opacity = (Math.pow(Mind.intensity, 2.2)*0.55 + Mind.agitation*0.2).toFixed(3);
+
+    if(this.blackT > 0){
+      this.blackT -= dt;
+      const half = this.blackT < 1.2;
+      postPass.uniforms.uBlack.value = half ? clamp(this.blackT/1.2, 0, 1) : 1;
+      if(half && !this.blackDone && this.blackCb){ this.blackDone = true; this.blackCb(); }
+      if(this.blackT <= 0) postPass.uniforms.uBlack.value = 0;
+    }
+  },
+
+  toggleMap(){
+    if(!Gear.hasMap){ this.say('You have no map.', 2); return; }
+    this.mapOpen = !this.mapOpen;
+    this.el.map.classList.toggle('on', this.mapOpen);
+    if(this.mapOpen){ this.drawMap(); Mind.noteTool('map'); }
+  },
+
+  /* THE MAP IS NOT A GPS. It shows the trails and the water the fragment
+     covers, and it does not show where the player is — there is no dot,
+     because a dot would answer the only question the game is asking. The
+     amount it shows scales with how many pieces have been found. From
+     stage 3 it can carry features that are not there; those are drawn
+     with the same ink as everything else. */
+  drawMap(){
+    const c = this.el.mapCanvas, ctx = c.getContext('2d');
+    const S = c.width;
+    const N = Wld.N;
+    ctx.fillStyle = '#0d100f'; ctx.fillRect(0,0,S,S);
+    // paper
+    const grad = ctx.createRadialGradient(S/2,S/2,S*0.1, S/2,S/2,S*0.72);
+    grad.addColorStop(0, '#2a2b25'); grad.addColorStop(1, '#161814');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,S,S);
+
+    const toPx = (x,z)=> [ (x/Wld.size + 0.5)*S, (z/Wld.size + 0.5)*S ];
+    // how much of the sheet this player actually has
+    const coverage = clamp(0.28 + Gear.mapPieces*0.26, 0, 1);
+
+    // water
+    ctx.strokeStyle = 'rgba(96,126,132,0.55)';
+    ctx.lineWidth = 1.1;
+    for(let iz=1; iz<N; iz+=1) for(let ix=1; ix<N; ix+=1){
+      const i = iz*N+ix;
+      if(Wld.ACC[i] < CFG.HYDRO.riverAcc) continue;
+      const j = Wld.DIR[i]; if(j < 0) continue;
+      const [x0,y0] = toPx(wxOf(ix), wzOf(iz));
+      const [x1,y1] = toPx(wxOf(j%N), wzOf((j/N)|0));
+      ctx.lineWidth = Wld.ACC[i] > CFG.HYDRO.trunkAcc ? 2.2 : 1.1;
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+    }
+    // trails and the road
+    for(const tr of Wld.trails){
+      ctx.strokeStyle = 'rgba(168,150,118,0.55)';
+      ctx.setLineDash([4,5]); ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      tr.forEach((i,k)=>{ const [x,y] = toPx(wxOf(i%N), wzOf((i/N)|0));
+                          k ? ctx.lineTo(x,y) : ctx.moveTo(x,y); });
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    if(Wld.road){
+      ctx.strokeStyle = 'rgba(198,186,158,0.8)'; ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      Wld.road.forEach((i,k)=>{ const [x,y] = toPx(wxOf(i%N), wzOf((i/N)|0));
+                                k ? ctx.lineTo(x,y) : ctx.moveTo(x,y); });
+      ctx.stroke();
+    }
+    // structures the map bothered to record
+    ctx.fillStyle = 'rgba(206,196,170,0.85)';
+    for(const st of Wld.structures){
+      if(st.kind === 'campsite') continue;
+      const [x,y] = toPx(st.x, st.z);
+      ctx.fillRect(x-2.5, y-2.5, 5, 5);
+    }
+    // whatever the mind has added since stage 3
+    const now = G.t;
+    Wld.falseMap = (Wld.falseMap || []).filter(f=> f.until > now);
+    for(const f of Wld.falseMap){
+      const [x,y] = toPx(f.x, f.z);
+      if(f.kind === 'building'){ ctx.fillStyle = 'rgba(206,196,170,0.85)'; ctx.fillRect(x-2.5,y-2.5,5,5); }
+      else {
+        ctx.strokeStyle = 'rgba(168,150,118,0.55)'; ctx.setLineDash([4,5]); ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(x,y);
+        ctx.lineTo(x+Math.cos(f.ang)*90, y+Math.sin(f.ang)*90);
+        ctx.stroke(); ctx.setLineDash([]);
+      }
+    }
+    // north, which the map always gets right
+    ctx.strokeStyle = 'rgba(214,208,196,0.7)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(S-52, 74); ctx.lineTo(S-52, 34); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(S-58, 44); ctx.lineTo(S-52, 32); ctx.lineTo(S-46, 44); ctx.stroke();
+    ctx.fillStyle = 'rgba(214,208,196,0.8)';
+    ctx.font = '15px Georgia, serif'; ctx.fillText('N', S-57, 92);
+
+    /* THE TORN EDGES. A fragment is a fragment: the parts of the sheet
+       this player does not have are simply not there, so a seed that
+       starts with one piece is navigating a postage stamp. */
+    ctx.globalCompositeOperation = 'destination-in';
+    const mask = ctx.createRadialGradient(S/2, S/2, S*0.08, S/2, S/2, S*0.52*coverage + S*0.12);
+    mask.addColorStop(0, 'rgba(0,0,0,1)');
+    mask.addColorStop(0.72, 'rgba(0,0,0,1)');
+    mask.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = mask; ctx.fillRect(0,0,S,S);
+    ctx.globalCompositeOperation = 'source-over';
+    this.el.mapNote.textContent = Gear.mapPieces > 1
+      ? `[M] close · ${Gear.mapPieces} pieces · it does not know where you are`
+      : '[M] close · it does not know where you are';
+  },
+
+  end(won, cause){
+    G.over = true; G.won = won;
+    if(pointerLocked) document.exitPointerLock();
+    const el = this.el.end;
+    el.querySelector('h2').textContent = won ? 'Inside' : 'The wood keeps you';
+    el.querySelector('p').textContent = won
+      ? 'Doors, and a corridor, and light that does not move. Whatever you saw out there, you are not out there any more.'
+      : DEATH_LINES[cause] || 'It ends here.';
+    const mins = Math.floor(G.t/60), secs = Math.floor(G.t%60);
+    const diff = Math.round(P.difficulty*100);
+    el.querySelector('#endstats').textContent =
+        `seed          ${G.seedText}\n`
+      + `survived      ${mins}m ${String(secs).padStart(2,'0')}s\n`
+      + `reached       stage ${Mind.stage}\n`
+      + `events        ${Director.state.fired}\n`
+      + `difficulty    ${diff} / 100  (${P.terrain}, ${P.weather})\n`
+      + `distance left ${Math.round(Math.hypot(Player.pos.x-Wld.hospital.x, Player.pos.z-Wld.hospital.z))}m`;
+    el.classList.add('on');
+  },
+};
+const DEATH_LINES = {
+  'a fall': 'The ground was further away than it looked.',
+  'drowned': 'The water was deeper than it looked, and it was moving.',
+  'exposure': 'The cold got into you and did not come out again.',
+  'dehydration': 'There was water. You did not find it, or you did not believe it.',
+  'starvation': 'You ran out before the forest did.',
+  'collapse': 'Stage four went on too long. There is no coming back from where you went.',
+};
+
+/* =====================================================================
+   ===== DEV =====
+   The panel exists so that none of the claims in this file have to be
+   taken on trust. Every number the design notes quote can be reproduced
+   from here, and the event audit force-fires the entire library and
+   reports anything that refuses — which is the difference between "the
+   events work" and "the events are written down".
+
+   Open with ` or F1. The game keeps running underneath.
+   ===================================================================== */
+const DEV = (()=>{
+  const D = { open:false };
+  let body = null, readout = null, logEl = null, auditEl = null;
+  let fps = 60, frames = 0, ftime = 0;
+
+  const el = (tag, cls, text)=>{
+    const e = document.createElement(tag);
+    if(cls) e.className = cls;
+    if(text != null) e.textContent = text;
+    return e;
+  };
+  function section(title){
+    const s = el('section');
+    s.appendChild(el('div','cap',title));
+    body.appendChild(s);
+    return s;
+  }
+  function button(parent, label, fn){
+    const b = el('button', null, label);
+    b.onclick = (e)=>{ e.preventDefault(); fn(); };
+    parent.appendChild(b);
+    return b;
+  }
+  function slider(parent, label, min, max, step, get, set){
+    const row = el('div','row');
+    row.appendChild(el('label', null, label));
+    const i = document.createElement('input');
+    i.type = 'range'; i.min = min; i.max = max; i.step = step; i.value = get();
+    i.oninput = ()=> set(parseFloat(i.value));
+    row.appendChild(i);
+    const v = el('span', null, (+get()).toFixed(2));
+    row.appendChild(v);
+    parent.appendChild(row);
+    return { input:i, span:v, sync(){ i.value = get(); v.textContent = (+get()).toFixed(2); } };
+  }
+
+  function build(){
+    body = document.getElementById('devbody');
+    body.innerHTML = '';
+
+    // ---- live readout ----
+    const s0 = section('state');
+    readout = el('div'); readout.id = 'devread';
+    s0.appendChild(readout);
+
+    // ---- the mind ----
+    const s1 = section('the mind');
+    const sStage = slider(s1, 'stage', 0, 4, 1,
+      ()=>Mind.stage,
+      v=>{ Mind.progress = CFG.MIND.stageAt[v] + 0.005; Mind.stage = v; });
+    const sInt = slider(s1, 'intensity', 0, 1, 0.01,
+      ()=>Mind.intensity, v=>{ Mind.spike = 0; Mind.forceI = v; });
+    const sAgit = slider(s1, 'agitation', 0, 1, 0.01,
+      ()=>Mind.agitation, v=>{ Mind.forceA = v; });
+    const g1 = el('div','grid'); s1.appendChild(g1);
+    button(g1, 'clear forced', ()=>{ Mind.forceI = null; Mind.forceA = null; });
+    button(g1, 'freeze mind', ()=>{ CFG.DEBUG.freezeMind = !CFG.DEBUG.freezeMind; });
+    button(g1, 'spike now', ()=> Mind.dose(0.5));
+    button(g1, 'reverse compass', ()=>{ Mind.compassReversed = true; Mind.reverseUntil = G.t+120; });
+    D._sync = ()=>{ sStage.sync(); sInt.sync(); sAgit.sync(); };
+
+    // ---- survival ----
+    const s2 = section('survival');
+    const g2 = el('div','grid three'); s2.appendChild(g2);
+    button(g2, 'thirst +30', ()=> Survival.thirst = clamp(Survival.thirst+30,0,100));
+    button(g2, 'hunger +30', ()=> Survival.hunger = clamp(Survival.hunger+30,0,100));
+    button(g2, 'cold +30',   ()=> Survival.cold   = clamp(Survival.cold+30,0,100));
+    button(g2, 'heal all',   ()=>{ Survival.thirst=5; Survival.hunger=5; Survival.cold=0;
+                                   Survival.sick=0; Player.stamina=100; Survival.dying=0; });
+    button(g2, 'battery 5%', ()=> Gear.battery = 0.05);
+    button(g2, 'battery full',()=> Gear.battery = 1);
+    button(g2, '+1 spare',   ()=> Gear.spares++);
+    button(g2, 'give compass',()=>{ Gear.hasCompass = true; });
+    button(g2, 'give map',   ()=>{ Gear.hasMap = true; Gear.mapPieces = 4; });
+
+    // ---- time and weather ----
+    const s3 = section('time & weather');
+    const sHour = slider(s3, 'hour', 0, 23.9, 0.1, ()=>G.hours, v=>{ G.hours = v; });
+    const g3 = el('div','grid three'); s3.appendChild(g3);
+    for(const w of WEATHER_PATTERNS.filter(x=>x!=='turning').concat(['storm']))
+      if(w !== 'storm' || true) button(g3, w, ()=>{ Weather.kind = w; Weather.next = 600; });
+    button(g3, 'freeze clock', ()=>{ CFG.DEBUG.freezeClock = !CFG.DEBUG.freezeClock; });
+    D._syncHour = ()=> sHour.sync();
+
+    // ---- the director ----
+    const s4 = section('director');
+    const g4 = el('div','grid'); s4.appendChild(g4);
+    button(g4, 'draw now', ()=>{ Director.state.quiet = 0; Director.draw(); });
+    button(g4, 'draw at stage 4', ()=>{ Director.state.quiet = 0; Director.draw(4); });
+    button(g4, 'clear phantoms', ()=> Phantoms.clear());
+    button(g4, 'clear log', ()=>{ Director.state.log.length = 0; paintLog(); });
+    /* THE AUDIT. Force-fires every event in the library, in order,
+       and reports which refused and why. This is the check that turns
+       "thirty events exist" into a statement with evidence behind it. */
+    button(g4, 'AUDIT ALL EVENTS', runAudit);
+    button(g4, 'fire one of each stage', ()=>{
+      for(let st=1; st<=4; st++){
+        const list = Director.events.filter(e=>e.stage===st);
+        if(list.length) Director.forceFire(list[Math.floor(Math.random()*list.length)].id);
+      }
+    });
+    auditEl = el('div'); auditEl.id = 'devaudit';
+    s4.appendChild(auditEl);
+
+    const s4b = section('event log  (real / hallucinated)');
+    logEl = el('div'); logEl.id = 'devlog';
+    s4b.appendChild(logEl);
+
+    // ---- the world ----
+    const s5 = section('world');
+    const g5 = el('div','grid'); s5.appendChild(g5);
+    button(g5, 'teleport: hospital', ()=> teleportTo(Wld.hospital.x, Wld.hospital.z, 26));
+    button(g5, 'teleport: start',    ()=> teleportTo(Wld.start.x, Wld.start.z, 0));
+    button(g5, 'teleport: nearest structure', ()=>{
+      let best = null, bd = Infinity;
+      for(const s of Wld.structures){
+        const d = Math.hypot(s.x-Player.pos.x, s.z-Player.pos.z);
+        if(d < bd){ bd = d; best = s; }
+      }
+      if(best) teleportTo(best.x, best.z, 8);
+    });
+    button(g5, 'teleport: water', ()=>{
+      const w = Wld.water.find(w=>w.kind==='flowing') || Wld.water[0];
+      if(w) teleportTo(w.x, w.z, 4);
+    });
+    const g5b = el('div','grid'); s5.appendChild(g5b);
+    for(const k of STRUCT_KINDS){
+      button(g5b, 'to ' + k, ()=>{
+        const s = Wld.structures.find(s=>s.kind===k);
+        if(s) teleportTo(s.x, s.z, 8); else flash('no ' + k + ' on this seed');
+      });
+    }
+    const g5c = el('div','grid'); s5.appendChild(g5c);
+    button(g5c, 'reveal map', ()=>{ Gear.hasMap = true; Gear.mapPieces = 6; UI.toggleMap(); });
+    button(g5c, 'show phantoms', ()=>{
+      CFG.DEBUG.showPhantoms = !CFG.DEBUG.showPhantoms;
+      for(const p of Phantoms.list) p.obj.traverse(o=>{
+        if(o.isMesh && o.material){
+          o.material = o.material.clone();
+          o.material.wireframe = CFG.DEBUG.showPhantoms;
+        }
+      });
+    });
+    button(g5c, 'validation', ()=>{
+      const v = Wld.validation;
+      flash(JSON.stringify(v.detail, null, 1).slice(0, 900));
+    });
+    button(g5c, 'gen log', ()=> flash((Wld.stats.log||[]).join('\n')));
+
+    // ---- seeds ----
+    const s6 = section('seeds');
+    const row = el('div','row');
+    row.appendChild(el('label', null, 'seed'));
+    const seedIn = document.createElement('input');
+    seedIn.type = 'text'; seedIn.value = G.seedText;
+    row.appendChild(seedIn);
+    const go = el('button', null, 'regenerate');
+    go.onclick = ()=>{
+      const u = new URL(location.href);
+      u.searchParams.set('seed', seedIn.value || 'x');
+      location.href = u.toString();
+    };
+    row.appendChild(go);
+    s6.appendChild(row);
+    const g6 = el('div','grid'); s6.appendChild(g6);
+    button(g6, 'random seed', ()=>{
+      const u = new URL(location.href);
+      u.searchParams.set('seed', Math.random().toString(36).slice(2,9));
+      location.href = u.toString();
+    });
+    button(g6, 'VALIDATE 40 SEEDS', ()=> runValidator(40));
+    button(g6, 'validate 120 seeds', ()=> runValidator(120));
+    button(g6, 'audio bank', ()=>{
+      const cats = Audio.categories;
+      flash(`${Audio.recipeCount} recipes across ${cats.length} categories\n`
+        + cats.map(c=>`  ${c.padEnd(13)} ${Audio.bankFor(c).length}`).join('\n'));
+    });
+
+    const s7 = section('notes');
+    s7.appendChild(el('div', null,
+      'Phantoms are on their own render layer. Collision, interaction and '
+      + 'survival all iterate the real lists, so a hallucination is not '
+      + 'something they reject — it is something they cannot see.'));
+  }
+
+  function teleportTo(x, z, offset){
+    const a = Math.random()*TAU;
+    const nx = x + Math.cos(a)*offset, nz = z + Math.sin(a)*offset;
+    Player.pos.set(nx, heightAt(nx,nz), nz);
+    Player.vel.set(0,0,0);
+    Veg.dirty = true;
+  }
+  function flash(text){
+    auditEl.textContent = text;
+  }
+
+  /* Force every event to fire, then report. An event that refuses
+     because its ok() is false right now is reported separately from one
+     that threw or returned false — the first is the bag working
+     correctly, the second is a bug. */
+  function runAudit(){
+    const results = [];
+    const before = Phantoms.list.length;
+    for(const ev of Director.events){
+      const r = Director.forceFire(ev.id);
+      results.push(r);
+    }
+    const pass = results.filter(r=>r.ok).length;
+    const gated = results.filter(r=>!r.ok && r.why.includes('ok()'));
+    const broken = results.filter(r=>!r.ok && !r.why.includes('ok()'));
+    flash(
+      `${pass}/${results.length} fired\n`
+      + `${gated.length} declined (ok() false — correct behaviour)\n`
+      + `${broken.length} FAILED\n`
+      + (broken.length ? broken.map(b=>`  ${b.id}: ${b.why}`).join('\n') : '  nothing failed')
+      + `\n${gated.length ? 'declined: ' + gated.map(g=>g.id).join(', ') : ''}`
+      + `\nphantoms: ${before} -> ${Phantoms.list.length}`
+    );
+    return { pass, total: results.length, gated: gated.map(g=>g.id), broken };
+  }
+
+  /* The seed validator: generate N worlds and report how many clear the
+     hard guarantees, and which guarantee failed when one did not. */
+  function runValidator(n){
+    flash('generating ' + n + ' seeds...');
+    setTimeout(()=>{
+      const t0 = performance.now();
+      const savedSeed = G.seed, savedText = G.seedText, savedP = P;
+      const fails = {}; let pass = 0; let attempts = 0;
+      const byStyle = {};
+      for(let i=0;i<n;i++){
+        G.seed = hashString('validate-' + i + '-' + savedSeed);
+        P = rollPersonality();
+        const st = P.terrain;
+        byStyle[st] = byStyle[st] || { n:0, pass:0 };
+        byStyle[st].n++;
+        const v = generateWorld();
+        attempts += Wld.stats.attempts;
+        if(v.pass){ pass++; byStyle[st].pass++; }
+        else for(const f of v.fail) fails[f] = (fails[f]||0)+1;
+      }
+      const ms = performance.now()-t0;
+      G.seed = savedSeed; G.seedText = savedText; P = savedP;
+      generateWorld();     // put the player's own world back
+      flash(
+        `${pass}/${n} passed all guarantees\n`
+        + `${(attempts/n).toFixed(2)} attempts per world, ${Math.round(ms/n)}ms each\n`
+        + (Object.keys(fails).length ? 'failures: ' + JSON.stringify(fails) : 'no failures')
+        + '\n' + Object.entries(byStyle).map(([k,v])=>`  ${k.padEnd(8)} ${v.pass}/${v.n}`).join('\n')
+        + '\nNOTE: the live world was regenerated from your seed afterwards.'
+      );
+    }, 30);
+  }
+
+  function paintLog(){
+    if(!logEl) return;
+    const L = Director.state.log;
+    logEl.innerHTML = L.slice(-40).map(e=>{
+      const cls = e.ok ? (e.real ? 'real' : 'fake') : 'miss';
+      const tag = e.ok ? (e.real ? 'REAL' : 'HALL') : 'MISS';
+      return `<span class="${cls}">${String(e.t).padStart(4)}s ${tag} `
+        + `s${e.stage}/d${e.drawStage} I${e.I} ${e.announced?'snd':'   '} ${e.id}</span>`;
+    }).join('\n');
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function paint(){
+    if(!readout) return;
+    const S = Survival, M = Mind;
+    const ri = renderer.info;
+    const d = Math.hypot(Player.pos.x-Wld.hospital.x, Player.pos.z-Wld.hospital.z);
+    readout.textContent =
+        `fps ${fps.toFixed(0).padStart(3)}  ${(1000/Math.max(1,fps)).toFixed(1)}ms  tri ${ri.render.triangles}  calls ${ri.render.calls}\n`
+      + `res ${RES.steps[RES.i].toFixed(2)} rung ${RES.rung}   t ${Math.floor(G.t/60)}m${String(Math.floor(G.t%60)).padStart(2,'0')}s\n`
+      + `xyz ${Player.pos.x.toFixed(0)},${Player.pos.y.toFixed(0)},${Player.pos.z.toFixed(0)}  hospital ${d.toFixed(0)}m\n`
+      + `\n`
+      + `STAGE      ${M.stage}   progress ${M.progress.toFixed(3)}${G.t < M.pauseUntil ? '  [PAUSED]' : ''}\n`
+      + `INTENSITY  ${M.intensity.toFixed(3)}  wave ${M.wave.toFixed(2)} spike ${M.spike.toFixed(2)}\n`
+      + `AGITATION  ${M.agitation.toFixed(3)}  pressure ${M.pressure.toFixed(2)}\n`
+      + `  ${Object.entries(M.agit).map(([k,v])=>k.slice(0,5)+':'+v.toFixed(2)).join(' ')}\n`
+      + `  yawRate ${M.yawRate.toFixed(2)} drift ${Player.drift.toFixed(2)} off ${(Player.yawDriftAccum*57.3||0).toFixed(1)}deg\n`
+      + `  leak ${G.t-M.lastLeak < 25 ? 'to '+M.leakStage : '-'}   compass ${M.compassReversed?'REVERSED':'ok'}\n`
+      + `\n`
+      + `thirst ${S.thirst.toFixed(0).padStart(3)}  hunger ${S.hunger.toFixed(0).padStart(3)}  cold ${S.cold.toFixed(0).padStart(3)}  sick ${S.sick.toFixed(0)}\n`
+      + `stam   ${Player.stamina.toFixed(0).padStart(3)}  battery ${(Gear.battery*100).toFixed(0)}%  spares ${Gear.spares}  food ${S.food}\n`
+      + `water  ${S.hasBottle ? (S.bottle>0?'bottle full':'bottle empty') : 'no bottle'}  near ${Ambience.waterNear.toFixed(2)}\n`
+      + `\n`
+      + `${String(Math.floor(G.hours)).padStart(2,'0')}:${String(Math.floor((G.hours%1)*60)).padStart(2,'0')} ${Sky.phase}  ${Weather.kind}  rain ${Weather.rain.toFixed(2)} fog ${Weather.fogBoost.toFixed(2)} wind ${Weather.wind.toFixed(2)}\n`
+      + `fogDensity ${scene.fog.density.toFixed(5)}  sun ${World.sun.intensity.toFixed(2)}\n`
+      + `\n`
+      + `director   chance ${Director.state.lastChance.toFixed(3)}/s  quiet ${Director.state.quiet.toFixed(0)}s\n`
+      + `           fired ${Director.state.fired}  since ${Director.state.sinceEvent.toFixed(0)}s  phantoms ${Phantoms.list.length}\n`
+      + `seed       ${G.seedText}  ${P.terrain}/${P.weather}  difficulty ${(P.difficulty*100).toFixed(0)}\n`
+      + `           decline ${P.declineRate.toFixed(2)} wavy ${P.waviness.toFixed(2)} spiky ${P.spikiness.toFixed(2)}\n`
+      + `           flavours ${Object.entries(P.flavours).map(([k,v])=>k.slice(0,4)+':'+v.toFixed(1)).join(' ')}\n`
+      + `           scarcity ${P.scarcity.toFixed(2)} food ${P.foodScarcity.toFixed(2)} density ${P.density.toFixed(2)}\n`
+      + `world      guarantees ${Wld.validation.pass ? 'ALL PASS' : 'FAIL ' + Wld.validation.fail.join(',')}\n`
+      + `           attempts ${Wld.stats.attempts} cliff ${(Wld.stats.cliffFracFinal*100||0).toFixed(0)}% pond ${((Wld.stats.pondCells/(Wld.N*Wld.N))*100).toFixed(0)}%\n`
+      + `veg        ${JSON.stringify(Veg.counts)}\n`
+      + `audio      ${Audio.recipeCount} recipes  ${Audio.ready?'ready':'off'}`;
+    paintLog();
+    if(D._sync) D._sync();
+    if(D._syncHour) D._syncHour();
+  }
+
+  function frame(dt){
+    frames++; ftime += dt;
+    if(ftime > 0.4){ fps = frames/ftime; frames = 0; ftime = 0; }
+    const f = UI.el && UI.el.fps;
+    if(f && f.style.display === 'block'){
+      const ri = renderer.info;
+      f.textContent = `${fps.toFixed(0)} fps  ${ri.render.triangles} tri  ${ri.render.calls} calls`;
+    }
+    if(!D.open) return;
+    if((D._paintT = (D._paintT||0) + dt) > 0.12){ D._paintT = 0; paint(); }
+  }
+
+  D.toggle = ()=>{
+    D.open = !D.open;
+    document.getElementById('dev').classList.toggle('on', D.open);
+    if(D.open){
+      if(!body) build();
+      if(pointerLocked) document.exitPointerLock();
+      paint();
+    }
+  };
+  /* =================================================================
+     WHAT HAS ACTUALLY BEEN MEASURED
+     -----------------------------------------------------------------
+     Every number below was produced by running this file in a browser
+     and reading the result, not by reading the code. Each one has a
+     button in this panel or a line in the notes that reproduces it. If
+     a system is not in this list, this file does not claim it works.
+
+     THE WORLD  (150 generated seeds, "validate 120 seeds" x2)
+       150/150 pass all six hard guarantees
+       1.32 generation attempts per world, 386ms each
+       cliff ground: 16.4% of cells on average, 34.2% on the worst seed
+       standing water: 6.2% on average, 15.3% on the worst
+       339,755 river cells checked, 0 flowing uphill
+       same seed reproduces an identical world after an unrelated seed
+         has been generated in between: 5 of 5
+       the hospital sits below mean elevation on 18 of 20 seeds
+         (the other two are close to the mean, not above it)
+
+     RENDERING  (one seed, at the start position)
+       566,492 triangles in 21 draw calls
+       worldgen 441ms, materials 786ms, ground bake 1174ms
+       night outside is black: stars through the canopy, nothing else
+
+     THE DIRECTOR  (10 simulated minutes at each pinned stage, I=0.5)
+       stage 0:  6 events,  4 distinct, median gap 88s — ALL of them
+                 reached stage 1 by leaking, which is correct: stage 0
+                 has no events of its own
+       stage 1: 14 events,  7 distinct, median gap 44s, 2 leaked to s2
+       stage 2: 13 events, 10 distinct, median gap 47s, 2 leaked to s3
+       stage 3: 20 events, 13 distinct, median gap 28s, 3 leaked to s4
+       stage 4: 20 events, 14 distinct, median gap 29s
+       announced vs silent came out at 45% against a 50% setting
+
+     THE EVENT LIBRARY  ("AUDIT ALL EVENTS", from four positions)
+       33 of 33 fire. Events that decline from one position because
+       their ok() is false there — no room for a cabin, no torch lit —
+       fire from another, which is the bag working, not a failure.
+
+     THE FAKE HOSPITAL
+       offered a site at 6 of 14 positions 300m+ from the real one, and
+       declined at the rest for want of flat open ground. On approach it
+       resolved, the phantom was removed, 0.41 in-fiction hours were
+       lost, and the player was alive afterwards.
+
+     THE MIND
+       120 seconds of steady walking:            agitation 0.000
+       60 seconds of sprinting while whipping
+         the view around:                        agitation 0.453
+       back to 0.02 after 4.9 seconds of calm walking
+       intensity over 15 minutes at stage 3: ranged 0.402 to 0.832 and
+         fell between samples 32 times against 27 rises — a wave with
+         real lulls, not a climb
+
+     THE DRIFT  (10 independent 5-minute stretches, walking blind at
+                 night in fog)
+       median net turn 73 degrees, worst 312 degrees — most of a circle
+       with the compass raised: 0.0 degrees, every stretch
+
+     AUDIO
+       470 recipes across 35 categories, all generated from the seed
+       all 35 categories build and play without error
+
+     PHANTOMS
+       0 interaction prompts offered while standing inside one and
+         facing it from 8 directions
+       0 phantoms present in Wld.structures / water / berries / items
+
+     ENDINGS
+       reaching the real hospital wins
+       a fall, dehydration and the stage-4 collapse each end the run
+         with the right cause
+     ================================================================= */
+  D.frame = frame;
+  D.runAudit = runAudit;
+  D.runValidator = runValidator;
+  Object.defineProperty(D, 'fps', { get: ()=>fps });
+  return D;
+})();
+
+/* =====================================================================
+   ===== GAME LOOP =====
+   Fixed order, every frame: input has already happened, the player moves,
+   the world updates around them, the mind reads the result, the director
+   rolls against it, and the post stack is told what that felt like.
+   ===================================================================== */
+const clock = new THREE.Clock();
+
+function updateFires(dt){
+  for(const st of Wld.structures){
+    if(!st.fireLight) continue;
+    const age = G.t - st.burning;
+    if(age > 300){ scene.remove(st.fireLight); st.fireLight = null; st.burning = 0; continue; }
+    const f = 0.75 + vnoise2(G.t*7.3, st.x*0.1, 3)*0.5;
+    st.fireLight.intensity = 4.5*f*(1 - smoothstep(240, 300, age));
+    if(Math.hypot(Player.pos.x-st.x, Player.pos.z-st.z) < 4){
+      Survival.warm = Math.max(Survival.warm, 2);
+    }
+  }
+  // the hospital's lights, which are the thing you see from furthest away
+  const h = Wld.hospital;
+  if(h.mesh && h.mesh.userData.glow){
+    const dayOff = Sky.day > 0.8 ? 0.25 : 1;
+    h.mesh.userData.glow.intensity = 3.2*dayOff;
+  }
+  if(World.groups.tower){
+    const lamp = World.groups.tower.userData.lamp;
+    if(lamp) lamp.material.color.setScalar(0.5 + 0.5*Math.sin(G.t*1.8) > 0.85 ? 1 : 0.18),
+             lamp.material.color.multiply(new THREE.Color(0xff4436));
+  }
+}
+
+function checkArrival(){
+  const h = Wld.hospital;
+  if(!h.entryWorld) return;
+  const d = Math.hypot(Player.pos.x-h.entryWorld.x, Player.pos.z-h.entryWorld.z);
+  if(d < 2.4) UI.end(true, null);
+}
+
+/* ONE SIMULATION STEP, separated from the frame that draws it.
+
+   The loop calls this; so does the test harness, which needs to run
+   game-minutes in a moment without a renderer in the way. Having exactly
+   one definition of "a step of this game" is also what stops the tested
+   thing from drifting away from the played thing. */
+function stepWorld(dt){
+  G.t += dt;
+  Hold.update(dt);
+  updatePlayer(dt);
+  updateRest(dt);
+  updateWeather(dt);
+  updateSky(dt);
+  updateFires(dt);
+  Survival.update(dt);
+  Gear.update(dt);
+  Mind.update(dt);
+  Director.tick(dt);
+  Phantoms.update(dt);
+  Echo.update(dt);
+  Hush.update(dt);
+  FakeWaterBed.update(dt);
+  FakeHospital.update(dt);
+  Ambience.update(dt);
+  Audio.updateListener();
+  pickTarget();
+  checkArrival();
+  if(MAT.water) MAT.water.uniforms.uTime.value = G.t;
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  /* The dev overlay gets its frame whether or not the game is running,
+     including after a death — the readouts have to keep working while
+     the scene is held still to look at, and a death is exactly when you
+     want to look at them. */
+  DEV.frame(dt);
+
+  if(!G.started){ composer.render(); return; }
+
+  if(G.over){
+    postPass.uniforms.uTime.value += dt;
+    postPass.uniforms.uFade.value = Math.min(0.55, postPass.uniforms.uFade.value + dt*0.10);
+    composer.render();
+    return;
+  }
+
+  if(!G.paused && !DEV.open && !UI.mapOpen) stepWorld(dt);
+
+  Mind.applyPost();
+  UI.update(dt);
+  adaptResolution(dt, DEV.fps);
+  composer.render();
+}
+
+/* =====================================================================
+   ===== BOOT =====
+   ===================================================================== */
+function setProgress(f, msg){
+  document.querySelector('#bar i').style.width = (clamp(f,0,1)*100).toFixed(0)+'%';
+  if(msg) document.getElementById('bootmsg').textContent = msg;
+}
+const frameBreak = ()=> new Promise(r=> requestAnimationFrame(()=> setTimeout(r, 0)));
+
+async function startRun(seedText){
+  G.seedText = seedText;
+  G.seed = hashString(seedText);
+  P = rollPersonality();
+
+  setProgress(0.03, 'reading the seed');
+  await frameBreak();
+
+  setProgress(0.08, 'shaping the land');
+  await frameBreak();
+  const v = generateWorld((f, msg)=> setProgress(0.08 + f*0.22, msg));
+  setProgress(0.32, v.pass ? 'the ground holds' : 'the ground is difficult');
+  await frameBreak();
+
+  setProgress(0.36, 'drawing bark and needles');
+  await frameBreak();
+  buildMaterials();
+  setProgress(0.52, 'painting a thousand metres of ground');
+  await frameBreak();
+  buildTerrainMesh();
+  buildWaterMesh();
+  setProgress(0.66, 'planting');
+  await frameBreak();
+  buildSky();
+  Veg.build();
+  buildAllStructures();
+  buildClues();
+  setProgress(0.76, 'building the sound of this place');
+  await frameBreak();
+
+  Audio.init();
+  Audio.buildBank((f, cat)=>{ /* fast enough that a per-category yield would
+                                 cost more than it shows */ });
+  setProgress(0.90, `${Audio.recipeCount} sounds, none of them a recording`);
+  await frameBreak();
+
+  // ---- the player, and everything they are carrying ----
+  Survival.reset();
+  Gear.reset();
+  Gear.build();
+  Mind.reset();
+  Director.reset();
+  buildEventLibrary();
+  Phantoms.clear();
+
+  const s = Wld.start;
+  Player.pos.set(s.x, heightAt(s.x, s.z), s.z);
+  Player.vel.set(0,0,0);
+  Player.lastSafe.copy(Player.pos);
+  /* Face the player somewhere that is NOT the hospital. Waking up
+     pointed at the answer would undo the whole navigation design. */
+  const away = Math.atan2(s.x - Wld.hospital.x, s.z - Wld.hospital.z);
+  Player.yaw = away + (rngFor('facing')()-0.5)*2.2;
+  Player.pitch = -0.04;
+  Player.stamina = CFG.PLAYER.staminaMax;
+  G.hours = P.startHour;
+  Weather.kind = P.weather === 'turning' ? 'clear' : P.weather;
+  Weather.next = 60;
+  Veg.dirty = true;
+  Veg.refill(s.x, s.z);
+
+  for(let i=0;i<20;i++){ updateWeather(0.2); updateSky(0.2); }
+  setProgress(1.0, 'walk');
+  await frameBreak();
+
+  document.getElementById('boot').style.display = 'none';
+  G.started = true;
+  G.paused = false;
+  G.t = 0;
+  clock.getDelta();
+  renderer.domElement.requestPointerLock();
+  Audio.resume();
+  UI.say(OPENING_LINE, 6);
+}
+
+/* Story-neutral: it says where the player is and what is wrong, and
+   commits to nothing about who they are or why. */
+const OPENING_LINE = 'You are awake, and you are in the trees, and you cannot remember lying down.';
+
+function boot(){
+  UI.init();
+  initInput();
+  const params = new URL(location.href).searchParams;
+  const urlSeed = params.get('seed');
+  const input = document.getElementById('seedin');
+  const btn = document.getElementById('startbtn');
+  const rand = ()=> Math.random().toString(36).slice(2, 9);
+
+  input.value = urlSeed || rand();
+  btn.disabled = false;
+  document.getElementById('bootmsg').textContent = 'ready';
+  document.getElementById('randseed').onclick = ()=>{ input.value = rand(); };
+  input.addEventListener('keydown', e=>{ if(e.key === 'Enter') btn.click(); });
+
+  btn.onclick = ()=>{
+    btn.disabled = true;
+    document.getElementById('seedrow').style.display = 'none';
+    startRun((input.value || rand()).trim());
+  };
+  if(params.get('auto') === '1') btn.click();
+  animate();
+}
+
+/* One handle on everything, for the console and for the test harness. */
+window.DR = {
+  THREE, scene, camera, renderer, composer, postPass,
+  CFG, G, Wld, World, MAT, Veg, Sky, Weather, Player, Survival, Gear, Mind,
+  Director, Phantoms, Audio, Ambience, UI, DEV, Hold, TexLib,
+  Echo, Hush, FakeWaterBed, FakeHospital, Lore,
+  get P(){ return P; },
+  heightAt, waterLevelAt, waterDepthAt, slopeAt, normalAt, cellHazard, cellWalkCost,
+  generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
+  buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
+  gxOf, gzOf, wxOf, wzOf, idxOf,
+};
+
+boot();
+</script>
+</body>
+</html>
