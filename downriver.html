@@ -3479,6 +3479,9 @@ function padExtent(kind, style){
     case 'campsite': return [2.60 + PAD.margin, 2.60 + PAD.margin];
     case 'car':      return [1.25 + PAD.margin, 2.40 + PAD.margin];
     case 'hospital': return [12.6 + PAD.margin, 9.2 + PAD.margin];
+    case 'house':
+    case 'shed':     return [style.footprint[0]*0.5 + PAD.margin,
+                             style.footprint[1]*0.5 + PAD.margin];
     default:         return [3, 3];
   }
 }
@@ -3553,6 +3556,7 @@ function carveFoundations(){
   const h = Wld.hospital;
   if(h) one(h, 'hospital', Wld.style);
   for(const st of Wld.structures) one(st, st.kind, st.style);
+  for(const t of (Wld.townBuildings || [])) one(t, t.kind, t.style);
   recomputeSlope();
   /* The floor is read back from the carved ground rather than trusted,
      because two pads close enough to overlap leave the later one's skirt
@@ -3565,6 +3569,7 @@ function carveFoundations(){
   };
   if(h) settle(h, 'hospital', Wld.style);
   for(const st of Wld.structures) settle(st, st.kind, st.style);
+  for(const t of (Wld.townBuildings || [])) settle(t, t.kind, t.style);
   Wld.stats.pads = pads;
   Wld.stats.padMoved = +moved.toFixed(1);
   return pads;
@@ -4343,6 +4348,10 @@ function generateWorld(onProgress){
     genTerrain(attempt);
     genHydrology();
     placeHospital();
+    /* The town is laid out and levelled here, with the hospital, so that
+       the start, the pass, the routes and the canopy are all placed on
+       the ground the town will actually stand on. */
+    genTown();
     /* The start and the pass come BEFORE routes, canopy, structures and
        resources. ensureCorridor() edits the heightfield, and everything
        after it is placed on the ground: generating them first and cutting
@@ -6159,55 +6168,202 @@ function buildCar(spec){
    game with its own light, which is how you recognise it at night from
    further away than you can make out its shape — and which is exactly
    what a stage-4 fake will copy. */
+/* ---------------------------------------------------------------------
+   THE HOSPITAL
+
+   This is the only place in the world the player is trying to reach, and
+   it used to be a concrete box: six walls, a lit doorway, and nothing
+   behind it. Reaching it ended the run from the step outside, so the
+   building the entire walk is about was a marker with a texture.
+
+   It is a building now. A lobby with a reception desk, a corridor with
+   doors off it, two wards with beds, a store room, and the lights on.
+   The run ends at the desk, INSIDE, so the last thing the player does is
+   walk in out of the dark and stand in a lit room — which is the ending
+   the walk has been earning.
+
+   It is built from the same parts as everything else, for the same
+   reason: walls are boxes with gaps left for openings, every opening is
+   at least as wide as the front door, and the one moving part is a leaf
+   hinged on its jamb. Nothing here needs new collision.
+   ------------------------------------------------------------------- */
 function buildHospital(spec){
   const g = new THREE.Group();
-  const W = 24, D = 15, H = 7.2;
-  addBox(g, W, 0.3, D, MAT.concrete, 0, 0.15, 0);
-  addBox(g, W, H, 0.4, MAT.concrete, 0, H/2, -D/2);
-  addBox(g, 0.4, H, D, MAT.concrete, -W/2, H/2, 0);
-  addBox(g, 0.4, H, D, MAT.concrete,  W/2, H/2, 0);
-  // front wall with a doorway
-  const doorW = 2.6;
-  const segW = (W-doorW)/2;
-  for(const sx of [-1,1]) addBox(g, segW, H, 0.4, MAT.concrete, sx*(doorW/2+segW/2), H/2, D/2);
-  addBox(g, doorW, H-2.6, 0.4, MAT.concrete, 0, 2.6+(H-2.6)/2, D/2);
-  addBox(g, W+1.2, 0.5, D+1.2, MAT.concrete, 0, H+0.25, 0);
-  // the canopy over the doors
-  addBox(g, 7.0, 0.35, 3.2, MAT.concrete, 0, 3.5, D/2+1.5);
-  for(const sx of [-1,1]) addBox(g, 0.26, 3.4, 0.26, MAT.concrete, sx*3.1, 1.7, D/2+2.9);
-
-  // lit windows, in two rows
-  const winMat = new THREE.MeshBasicMaterial({ color: 0xcfd6c8 });
+  const W = 26, D = 17, H = 3.4;      // one honest storey, not a bunker
+  const wall = 0.34;
   const lit = [];
-  for(let row=0; row<2; row++){
-    for(let i=0;i<8;i++){
-      const wx = -W/2 + 1.9 + i*(W-3.8)/7;
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.05), winMat);
-      m.position.set(wx, 2.1 + row*2.6, D/2+0.22);
-      m.userData.noclip = true;
-      g.add(m); lit.push(m);
-      const b = m.clone(); b.position.z = -D/2-0.22; b.rotation.y = Math.PI;
-      g.add(b); lit.push(b);
-    }
+
+  /* ---- shell ---- */
+  addBox(g, W, 0.30, D, MAT.concrete, 0, 0.15, 0);                 // floor slab
+  addBox(g, W, H, wall, MAT.concrete, 0, H/2, -D/2);               // back
+  for(const sx of [-1, 1]) addBox(g, wall, H, D, MAT.concrete, sx*W/2, H/2, 0);
+
+  // front wall, with the entrance left open
+  const doorW = 2.6;
+  const segW = (W - doorW)/2;
+  for(const sx of [-1, 1])
+    addBox(g, segW, H, wall, MAT.concrete, sx*(doorW/2 + segW/2), H/2, D/2);
+  addBox(g, doorW, H-2.5, wall, MAT.concrete, 0, 2.5 + (H-2.5)/2, D/2);
+
+  // roof, and the canopy over the doors
+  addBox(g, W+1.4, 0.45, D+1.4, MAT.concrete, 0, H+0.22, 0);
+  addBox(g, 8.0, 0.35, 3.4, MAT.concrete, 0, 3.0, D/2+1.6);
+  for(const sx of [-1, 1]) addBox(g, 0.26, 2.85, 0.26, MAT.concrete, sx*3.5, 1.42, D/2+3.0);
+
+  /* ---- the plan ----
+     A corridor runs the width of the building behind the lobby. The
+     lobby is the front strip; the wards and the store open off the far
+     side of the corridor. Every opening is 2.0m, which is three times
+     the player's width. */
+  const OPEN = 2.0;
+  const lobbyZ = D/2 - 6.0;          // back wall of the lobby
+  const corrZ  = lobbyZ - 2.8;       // far side of the corridor
+
+  /* lobby / corridor partition, with a wide way through on the axis of
+     the front door so the route in is a straight line */
+  {
+    const side = (W - wall*2 - OPEN)/2;
+    for(const sx of [-1, 1])
+      addBox(g, side, H, wall, MAT.concrete, sx*(OPEN/2 + side/2), H/2, lobbyZ);
+    addBox(g, OPEN, H-2.3, wall, MAT.concrete, 0, 2.3 + (H-2.3)/2, lobbyZ);
   }
-  // and the doorway glow, which is what you actually see first
-  const glow = new THREE.PointLight(0xdfe6d8, 3.2, 34, 1.6);
-  glow.position.set(0, 2.6, D/2+1.6);
-  g.add(glow);
-  const doorPane = new THREE.Mesh(new THREE.PlaneGeometry(doorW*0.92, 2.45),
-    new THREE.MeshBasicMaterial({ color: 0xe6ecdf }));
-  doorPane.position.set(0, 1.25, D/2+0.22);
-  doorPane.userData.noclip = true;
-  g.add(doorPane);
+  /* the far side of the corridor: three rooms, so two partitions across
+     it and a doorway into each room */
+  const roomX = [-W/2 + wall, -3.0, 6.0, W/2 - wall];   // wall positions
+  for(let i=1; i<roomX.length-1; i++)
+    addBox(g, wall, H, (corrZ - (-D/2 + wall)), MAT.concrete, roomX[i], H/2,
+           (corrZ + (-D/2 + wall))/2);
+  // the corridor wall itself, with a door into each of the three rooms
+  for(let r=0; r<3; r++){
+    const x0 = roomX[r], x1 = roomX[r+1];
+    const cx = (x0 + x1)/2;
+    const span = x1 - x0;
+    const side = (span - OPEN)/2;
+    if(side > 0.05){
+      addBox(g, side, H, wall, MAT.concrete, x0 + side/2, H/2, corrZ);
+      addBox(g, side, H, wall, MAT.concrete, x1 - side/2, H/2, corrZ);
+    }
+    addBox(g, OPEN, H-2.3, wall, MAT.concrete, cx, 2.3 + (H-2.3)/2, corrZ);
+  }
+
+  /* ---- what is in the rooms ---- */
+  const bed = (x, z, ry)=>{
+    const b = new THREE.Group();
+    addBox(b, 0.95, 0.16, 2.05, MAT.fabric, 0, 0.62, 0);       // mattress
+    addBox(b, 1.02, 0.10, 2.12, MAT.metal,  0, 0.52, 0);       // frame
+    for(const [ox, oz] of [[-0.42,-0.92],[0.42,-0.92],[-0.42,0.92],[0.42,0.92]])
+      addBox(b, 0.06, 0.52, 0.06, MAT.metal, ox, 0.26, oz);
+    addBox(b, 0.98, 0.52, 0.06, MAT.metal, 0, 0.82, -1.04);    // headboard
+    addBox(b, 0.98, 0.34, 0.06, MAT.metal, 0, 0.72,  1.04);
+    b.position.set(x, 0.30, z); b.rotation.y = ry || 0;
+    b.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+    g.add(b);
+  };
+  const trolley = (x, z)=>{
+    addBox(g, 0.62, 0.06, 1.05, MAT.metal, x, 1.14, z);
+    addBox(g, 0.58, 0.05, 1.00, MAT.metal, x, 0.72, z);
+    for(const [ox, oz] of [[-0.26,-0.44],[0.26,-0.44],[-0.26,0.44],[0.26,0.44]])
+      addBox(g, 0.05, 0.84, 0.05, MAT.metal, x+ox, 0.72, z+oz);
+  };
+  // ward one and ward two
+  const wardZ = (corrZ + (-D/2 + wall))/2;
+  bed(roomX[0] + 2.2, wardZ + 1.1, 0);
+  bed(roomX[0] + 4.6, wardZ + 1.1, 0);
+  bed(roomX[0] + 2.2, wardZ - 2.2, 0);
+  trolley(roomX[0] + 3.4, wardZ - 0.6);
+  bed(roomX[1] + 2.4, wardZ + 1.1, 0);
+  bed(roomX[1] + 5.4, wardZ + 1.1, 0);
+  trolley(roomX[1] + 3.9, wardZ - 1.4);
+  // the store room: shelving along the back
+  for(let i=0;i<3;i++)
+    addBox(g, 0.5, 1.9, 2.6, MAT.metal, roomX[2] + 0.9 + i*1.5, 0.95 + 0.30, -D/2 + 2.2);
+
+  /* ---- the lobby, and the desk the run ends at ---- */
+  /* THE DESK STANDS TO ONE SIDE, and that is not decoration.
+     Centred, it sat exactly across the way through to the corridor: the
+     opening was clear, the approach to it was not, and a flood fill of
+     the finished interior reached the lobby and nothing else — 38% of
+     the floor, with every room behind it sealed off by the furniture.
+     The line from the front door to the corridor is kept clear, and the
+     desk is against the left-hand wall where a reception desk goes. */
+  const deskX = -W/2 + 4.6;
+  const deskZ = lobbyZ + 1.9;
+  addBox(g, 4.4, 1.08, 0.75, MAT.timber, deskX, 0.54 + 0.30, deskZ);
+  addBox(g, 4.4, 0.10, 1.25, MAT.timber, deskX, 1.08 + 0.30, deskZ - 0.25);
+  addBox(g, 1.6, 0.46, 0.55, MAT.fabric,  5.2, 0.23 + 0.30, deskZ + 0.2);  // a bench
+  addBox(g, 1.6, 0.52, 0.10, MAT.fabric,  5.2, 0.72 + 0.30, deskZ + 0.45);
+  for(const sx of [-1, 1])
+    addBox(g, 0.7, 1.15, 0.7, MAT.concrete, sx*(W/2 - 2.2), 0.57 + 0.30, D/2 - 1.6);
+
+  /* ---- light, which is what the player sees from the trees ---- */
+  /* THE LIGHTS ARE THE POINT OF THE PLACE, so they are lights rather
+     than hints of lights. At decay 1.9 over 16 metres a 2.2 lamp gives
+     about a quarter of its strength three metres away, which left the
+     lobby of the one lit building in the world darker than the forest
+     outside it: the ceiling came out black, and the grain of the post
+     stack on black reads as a starfield. Slower falloff, more of it, and
+     a low fill so the corners are rooms rather than voids. */
+  const lamp = (x, z, power)=>{
+    const l = new THREE.PointLight(0xdfe8dc, power*4.2, 24, 1.35);
+    l.position.set(x, H - 0.45, z);
+    g.add(l); lit.push(l);
+    const panel = addBox(g, 1.3, 0.08, 0.36, MAT.glass, x, H - 0.18, z);
+    panel.userData.noclip = true; panel.castShadow = false;
+  };
+  lamp(0, D/2 - 2.6, 2.6);
+  lamp(deskX, deskZ - 1.2, 2.2);
+  lamp(0, (lobbyZ + corrZ)/2, 2.0);
+  lamp(roomX[0] + 3.2, wardZ, 1.7);
+  lamp(roomX[1] + 3.6, wardZ, 1.7);
+
+  // the windows, which are why it is visible at all from outside
+  const winMat = new THREE.MeshBasicMaterial({ color: 0xcfd6c8 });
+  for(let row=0; row<1; row++) for(let i=0;i<8;i++){
+    const wx = -W/2 + 2.4 + i*(W-4.8)/7;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.45, 1.15), winMat);
+    m.position.set(wx, 2.0, D/2+0.19);
+    m.userData.noclip = true;
+    g.add(m);
+  }
+  // and the doorway glow
+  const glow = new THREE.PointLight(0xdfe6d8, 6.5, 38, 1.5);
+  glow.position.set(0, 2.6, D/2+1.7);
+  g.add(glow); lit.push(glow);
+  /* NOT a hemisphere light, however tempting: a hemisphere light has no
+     position and no falloff, so parenting one to the building would
+     have lit every tree on the map from inside the hospital. The fill is
+     two more lamps, low and wide, which are local by construction. */
+  for(const fx2 of [-W/4, W/4]){
+    const f = new THREE.PointLight(0xc9d6cc, 2.2, 30, 1.2);
+    f.position.set(fx2, H*0.55, 0);
+    g.add(f); lit.push(f);
+  }
+
+  /* The doors: a pair, hinged on their own jambs, standing open. A
+     hospital's doors are open. */
+  for(const sx of [-1, 1]){
+    const leafW = doorW/2;
+    const leaf = addBox(g, leafW, 2.42, 0.06, MAT.glass, 0, 1.21 + 0.30, D/2);
+    leaf.geometry.translate(sx*leafW*0.5, 0, 0);
+    leaf.position.x = sx*doorW*0.5;
+    leaf.rotation.y = -sx*2.0;
+    leaf.userData.noclip = true;      // propped open, and never in the way
+    leaf.castShadow = false;
+  }
+
   g.userData.lit = lit;
   g.userData.glow = glow;
   g.userData.entry = new THREE.Vector3(0, 0, D/2 + 2.2);
+  /* WHERE THE RUN ACTUALLY ENDS: the desk, inside the building. The
+     player has to walk in. */
+  g.userData.reception = new THREE.Vector3(deskX, 0, deskZ + 1.35);
+  g.userData.footprint = [W, D];
   return g;
 }
 
 const STRUCT_BUILDERS = {
   cabin: buildCabin, campsite: buildCampsite, ruin: buildRuin,
-  car: buildCar, hospital: buildHospital,
+  car: buildCar, hospital: buildHospital, house: buildHouse, shed: buildShed,
 };
 
 function buildStructure(spec){
@@ -6293,6 +6449,272 @@ const Doors = {
   clear(){ this.list.length = 0; },
 };
 
+/* ---------------------------------------------------------------------
+   ===== THE TOWN =====
+
+   The hospital used to stand by itself in the woods: one concrete box at
+   the end of a road, with nothing around it and nothing inside it. The
+   walk is the whole game, so the end of the walk has to be worth the
+   walk — the player should come out of the trees onto a road, pass
+   houses, and find the hospital among them, rather than find a marker in
+   a clearing.
+
+   The layout is deliberate rather than scattered. A main street runs
+   across the front of the hospital, on the hospital's own axis, because
+   the hospital was already turned to face along the river and the road
+   was already going to leave that way. Houses line both sides of it,
+   spaced the way houses on a road out of a small town are spaced —
+   irregularly, in ones and twos, with gaps. The ground in front of the
+   entrance is left open so the building can be seen from the street.
+
+   Every plot is tested the same way a cabin's is: on the map, out of the
+   water, and level enough that its foundation is a foundation rather
+   than a quarry. A plot that fails is skipped, so a town on a tight site
+   is a smaller town rather than a broken one.
+   ------------------------------------------------------------------- */
+const TOWN = {
+  streetOffset: 21,      // metres from the hospital's front to the street
+  streetHalfLength: 78,  // how far the street runs either way
+  rowNear: 13.5,         // house rows, as offsets from the hospital front
+  rowFar: 31,
+  gapAtEntrance: 13,     // no house directly in front of the doors
+  spacing: [15, 26],     // metres between neighbours along the street
+  houses: [5, 9],
+  sheds: [1, 3],
+};
+
+function genTown(){
+  const out = [];
+  const hos = Wld.hospital;
+  if(!hos) { Wld.townBuildings = out; return; }
+  const rng = rngFor('town');
+  const c = Math.cos(hos.yaw), s = Math.sin(hos.yaw);
+  /* The hospital's own frame: +Z local is the way its doors face, which
+     is the convention every structure in this file is built on. */
+  const toWorld = (lx, lz)=>({ x: hos.x + lx*c + lz*s, z: hos.z - lx*s + lz*c });
+  const LIM = Wld.size*0.46;
+
+  const want = rng.irange(TOWN.houses[0], TOWN.houses[1]);
+  const plots = [];
+  /* Walk out from the middle of the street in both directions, dropping
+     a house on one side or the other as the gaps come up. */
+  for(const side of [-1, 1]){
+    let along = TOWN.gapAtEntrance + rng.range(0, 9);
+    while(along < TOWN.streetHalfLength && plots.length < want + 4){
+      const far = rng.chance(0.55);
+      const lz = far ? TOWN.rowFar : TOWN.rowNear;
+      plots.push({ lx: side*along, lz, far, kind:'house' });
+      along += rng.range(TOWN.spacing[0], TOWN.spacing[1]);
+    }
+  }
+  rng.shuffle(plots);
+
+  /* Why plots are turned down, so "the town is small on this seed" has
+     a reason attached to it rather than being a mystery. */
+  const rej = { offMap:0, wet:0, rough:0, tried:0 };
+  const place = (p, kind)=>{
+    const w = toWorld(p.lx, p.lz);
+    if(Math.abs(w.x) > LIM || Math.abs(w.z) > LIM){ rej.offMap++; return false; }
+    /* Facing the street: the near row looks back at the hospital, the
+       far row looks across the street toward it. */
+    const yaw = hos.yaw + (p.far ? Math.PI : 0);
+    const style = kind === 'shed'
+      ? { footprint:[3.6, 3.0], height:2.2, rooms:1, windows:0 }
+      : { footprint:[rng.range(7.2, 9.6), rng.range(6.0, 7.8)],
+          height:2.62, rooms: rng.chance(0.62) ? 2 : 1,
+          windows: rng.irange(1, 2) };
+    const [phx, phz] = [style.footprint[0]*0.5 + PAD.margin,
+                        style.footprint[1]*0.5 + PAD.margin];
+    const g = padGround(w.x, w.z, phx, phz, yaw);
+    if(g.wet > 0){ rej.wet++; return false; }
+    if(g.relief > PAD.maxRelief*2.2){ rej.rough++; return false; }
+    // not on top of the hospital or a neighbour
+    if(Math.hypot(w.x-hos.x, w.z-hos.z) < 19) return false;
+    /* Neighbours keep a house's distance from each other; a shed is
+       meant to sit in somebody's yard, so it only has to miss the
+       building it belongs to. Applying the house spacing to sheds put
+       every one of them inside the rule that placed it. */
+    const near = kind === 'shed' ? 5.5 : 11;
+    for(const o of out) if(Math.hypot(o.x-w.x, o.z-w.z) < near) return false;
+    rej.tried++;
+    const spec = {
+      kind, id: kind + '-' + out.length, x: w.x, z: w.z, y: g.mean, yaw,
+      style, decay: rng.range(0.05, 0.35),
+      enterable: kind === 'house' && rng.chance(0.75),
+      lit: rng.chance(0.45),
+      clearR: Math.max(style.footprint[0], style.footprint[1])*0.5 + 5.5,
+      searched:false, items:[], mesh:null, town:true,
+    };
+    out.push(spec);
+    carvePad(w.x, w.z, phx, phz, yaw, g.mean, g.relief);
+    return true;
+  };
+
+  let made = 0;
+  for(const p of plots){
+    if(made >= want) break;
+    if(place(p, 'house')) made++;
+  }
+  // a couple of outbuildings, tucked behind the houses
+  const sheds = rng.irange(TOWN.sheds[0], TOWN.sheds[1]);
+  for(let i=0;i<sheds;i++){
+    const host = out[rng.irange(0, Math.max(0, out.length-1))];
+    if(!host) break;
+    const a = rng()*TAU, d = rng.range(7, 11);
+    const sx = host.x + Math.cos(a)*d, sz = host.z + Math.sin(a)*d;
+    const lx = (sx-hos.x)*c - (sz-hos.z)*s, lz = (sx-hos.x)*s + (sz-hos.z)*c;
+    place({ lx, lz, far:false, kind:'shed' }, 'shed');
+  }
+
+  /* The street itself, as a line the route layer can follow and the
+     ground painter can darken. Two points is enough: it is straight. */
+  const a0 = toWorld(-TOWN.streetHalfLength, TOWN.streetOffset);
+  const a1 = toWorld( TOWN.streetHalfLength, TOWN.streetOffset);
+  Wld.street = { x0:a0.x, z0:a0.z, x1:a1.x, z1:a1.z, width: 6.5 };
+  Wld.townBuildings = out;
+  recomputeSlope();
+  Wld.stats.townBuildings = out.length;
+  Wld.stats.townRejects = rej;
+  Wld.stats.townWanted = want;
+}
+
+/* ---------------------------------------------------------------------
+   A HOUSE, WITH AN INSIDE
+
+   Built from the same parts as a cabin — walls with window openings, a
+   pitched roof, one real hinged leaf on the jamb — because those parts
+   are the ones whose collision has been measured and fixed. What is new
+   is the inside: a partition with a clear opening, and furniture that is
+   solid enough to walk around and low enough to read as furniture.
+
+   The internal opening is as wide as the front door for the same reason
+   the front door is that wide: the player is 0.68m across, and anything
+   that leaves less than a metre of clear channel turns into a doorway
+   the player bounces off.
+   ------------------------------------------------------------------- */
+function buildHouse(spec){
+  const g = new THREE.Group();
+  const st = spec.style;
+  const [W, D] = st.footprint;
+  const H = st.height;
+  const wall = 0.20;
+  const inside = spec.enterable;
+
+  // floor slab, and a low step at the door
+  addBox(g, W, 0.24, D, MAT.timber, 0, 0.12, 0);
+  addBox(g, 1.9, 0.14, 0.7, MAT.concrete, 0, 0.07, D/2 + 0.35);
+
+  const doorW = 1.80;
+  const segW = (W - doorW)/2;
+  addBox(g, segW, H, wall, MAT.timber, -(doorW/2 + segW/2), H/2, D/2);
+  addBox(g, segW, H, wall, MAT.timber,  (doorW/2 + segW/2), H/2, D/2);
+  addBox(g, doorW, H-2.15, wall, MAT.timber, 0, 2.15 + (H-2.15)/2, D/2);
+  addBox(g, W, H, wall, MAT.timber, 0, H/2, -D/2);
+
+  // side walls, with windows
+  for(const sx of [-1, 1]){
+    const nWin = clamp(st.windows, 0, 3);
+    if(!nWin){ addBox(g, wall, H, D, MAT.timber, sx*W/2, H/2, 0); continue; }
+    const winH = 1.0, winY = 1.5, halfGap = 0.55;
+    const pitchZ = D/(nWin+1);
+    let cursor = -D/2;
+    for(let i=0;i<nWin;i++){
+      const wz = -D/2 + pitchZ*(i+1);
+      const len = (wz - halfGap) - cursor;
+      if(len > 0.05) addBox(g, wall, H, len, MAT.timber, sx*W/2, H/2, cursor + len/2);
+      addBox(g, wall, winY-winH/2, halfGap*2, MAT.timber, sx*W/2, (winY-winH/2)/2, wz);
+      const topH = H-(winY+winH/2);
+      addBox(g, wall, topH, halfGap*2, MAT.timber, sx*W/2, (winY+winH/2)+topH/2, wz);
+      const pane = addBox(g, 0.05, winH, halfGap*2-0.08, MAT.glass, sx*W/2, winY, wz);
+      pane.userData.noclip = true; pane.castShadow = false;
+      cursor = wz + halfGap;
+    }
+    const tail = D/2 - cursor;
+    if(tail > 0.05) addBox(g, wall, H, tail, MAT.timber, sx*W/2, H/2, cursor + tail/2);
+  }
+
+  // a pitched roof, overhanging
+  const pitch = 0.52, slab = (D/2)/Math.cos(pitch) + 0.55;
+  for(const s2 of [-1, 1]){
+    const r = addBox(g, W+0.9, 0.18, slab, MAT.roof, 0,
+                     H + 0.14 + Math.sin(pitch)*slab*0.5, s2*Math.cos(pitch)*slab*0.5);
+    r.rotation.x = s2*pitch;
+  }
+  for(const sx of [-1, 1]) for(let i=0;i<5;i++){
+    const t = i/5;
+    addBox(g, 0.18, 0.36, (D+0.4)*(1-t), MAT.timber, sx*W/2, H+0.12+i*0.34, 0);
+  }
+  addBox(g, 0.62, 2.1, 0.62, MAT.concrete, W/2-0.9, H*0.5+1.2, -D/2+0.9);
+
+  /* ---- the inside ---- */
+  if(inside){
+    if(st.rooms > 1){
+      /* One partition, with an opening as wide as the front door. The
+         two pieces are placed from the ends inward so the gap is exact
+         whatever the house's width. */
+      const pz = -D*0.12;
+      const gapW = 1.85, side = (W - gapW)/2;
+      addBox(g, side, H, wall, MAT.timber, -(gapW/2 + side/2), H/2, pz);
+      addBox(g, side, H, wall, MAT.timber,  (gapW/2 + side/2), H/2, pz);
+      addBox(g, gapW, H-2.1, wall, MAT.timber, 0, 2.1 + (H-2.1)/2, pz);
+    }
+    // furniture, against the walls where furniture goes
+    const fx = W/2 - 0.75, fz = D/2 - 0.8;
+    addBox(g, 1.05, 0.52, 2.05, MAT.fabric, -fx + 0.2, 0.36, -fz + 0.3);   // bed
+    addBox(g, 1.15, 0.62, 2.15, MAT.timber, -fx + 0.2, 0.05, -fz + 0.3);   // its frame
+    const table = addBox(g, 1.35, 0.10, 0.85, MAT.timber, fx - 0.7, 0.78, -0.2);
+    for(const [ox, oz] of [[-0.55,-0.33],[0.55,-0.33],[-0.55,0.33],[0.55,0.33]])
+      addBox(g, 0.09, 0.74, 0.09, MAT.timber, fx - 0.7 + ox, 0.37, -0.2 + oz);
+    addBox(g, 0.42, 0.48, 0.42, MAT.timber, fx - 1.65, 0.36, -0.2);        // a chair
+    addBox(g, 0.42, 0.46, 0.06, MAT.timber, fx - 1.65, 0.70, -0.4);
+    addBox(g, 0.55, 1.55, 0.95, MAT.timber, -fx + 0.25, 0.9, fz - 1.4);    // dresser
+    addBox(g, 0.70, 0.90, 0.62, MAT.metal,   fx - 0.5, 0.45, fz - 0.9);    // stove
+    addBox(g, 0.26, 1.9, 0.26, MAT.metal,    fx - 0.5, 1.85, fz - 0.9);    // its flue
+    if(spec.lit){
+      const bulb = new THREE.PointLight(0xffd9a0, 1.35, 9.5, 2.0);
+      bulb.position.set(0, H-0.45, 0);
+      g.add(bulb);
+      const shade = addBox(g, 0.34, 0.16, 0.34, MAT.fabric, 0, H-0.34, 0);
+      shade.userData.noclip = true; shade.castShadow = false;
+    }
+  } else {
+    // boarded up: the opening is filled, and there is nothing inside
+    addBox(g, doorW, 2.15, 0.09, MAT.timber, 0, 1.07, D/2);
+  }
+
+  /* The door: the cabin's pattern exactly, hinged on the jamb, because
+     that is the arrangement whose clear channel has been measured. */
+  if(inside){
+    const leafW = doorW;
+    const door = addBox(g, leafW, 2.10, 0.07, MAT.timber, 0, 1.05, D/2);
+    door.geometry.translate(leafW*0.5, 0, 0);
+    door.position.x = -doorW*0.5;
+    door.userData.isDoor = true;
+    g.userData.door = door;
+    g.userData.doorOpen = spec.decay > 0.28 ? 2.75 : 0;
+    door.rotation.y = -g.userData.doorOpen;
+  }
+  g.userData.entry = new THREE.Vector3(0, 0, D/2 + 1.2);
+  return g;
+}
+
+function buildShed(spec){
+  const g = new THREE.Group();
+  const [W, D] = spec.style.footprint;
+  const H = spec.style.height;
+  addBox(g, W, 0.16, D, MAT.timber, 0, 0.08, 0);
+  const doorW = 1.2, segW = (W-doorW)/2;
+  addBox(g, segW, H, 0.14, MAT.timber, -(doorW/2+segW/2), H/2, D/2);
+  addBox(g, segW, H, 0.14, MAT.timber,  (doorW/2+segW/2), H/2, D/2);
+  addBox(g, doorW, H-1.95, 0.14, MAT.timber, 0, 1.95+(H-1.95)/2, D/2);
+  addBox(g, W, H, 0.14, MAT.timber, 0, H/2, -D/2);
+  for(const sx of [-1,1]) addBox(g, 0.14, H, D, MAT.timber, sx*W/2, H/2, 0);
+  const r = addBox(g, W+0.5, 0.14, D+0.6, MAT.roof, 0, H+0.22, 0);
+  r.rotation.x = 0.16;
+  g.userData.entry = new THREE.Vector3(0, 0, D/2 + 1.0);
+  return g;
+}
+
 function buildAllStructures(){
   /* Every collider the view is holding belongs to the world being
      replaced, so it goes off before they are thrown away. */
@@ -6300,11 +6722,21 @@ function buildAllStructures(){
   Doors.clear();
   for(const s of Wld.structures){ buildStructure(s); }
   for(const s of Wld.structures) if(s.mesh) Doors.register(s, s.mesh);
+  for(const t of (Wld.townBuildings || [])){
+    buildStructure(t);
+    if(t.mesh) Doors.register(t, t.mesh);
+  }
   const h = Wld.hospital;
   h.kind = 'hospital'; h.style = Wld.style; h.decay = 0; h.id = 'hospital';
   buildStructure(h);
   // entry point in world space, for the win check
   h.entryWorld = h.mesh.userData.entry.clone().applyMatrix4(h.mesh.matrixWorld);
+  /* AND WHERE THE RUN ENDS, which is not the same place. The hospital
+     has an inside now, so arriving means walking into it and reaching
+     the desk — not touching the outside of the building. */
+  h.deskWorld = h.mesh.userData.reception
+    ? h.mesh.userData.reception.clone().applyMatrix4(h.mesh.matrixWorld)
+    : h.entryWorld.clone();
   registerColliders();
   Veg.rebuildClearings();
   Veg.dirty = true;
@@ -7468,9 +7900,9 @@ function pickTarget(){
 
   // --- the hospital, which is the only thing that ends the run well ---
   const h = Wld.hospital;
-  if(h.entryWorld){
-    const s = facingScore(h.entryWorld.x, h.entryWorld.z);
-    if(s > 0) consider({ kind:'hospital', label:'Hold E — go inside', hold:1.6,
+  if(h.deskWorld){
+    const s = facingScore(h.deskWorld.x, h.deskWorld.z);
+    if(s > 0) consider({ kind:'hospital', label:'Hold E \u2014 ring the bell', hold:1.8,
                          act:()=>UI.end(true, null) }, s + 3);
   }
   // --- water, from wherever the bank lets you reach it ---
@@ -10132,8 +10564,8 @@ const CollisionView = (()=>{
       mark(wx, d.spec.y, wz, 3.4, 'door');
     }
     const h = Wld.hospital;
-    if(h && h.entryWorld && Math.abs(h.entryWorld.x-p.x) < far*2 && Math.abs(h.entryWorld.z-p.z) < far*2)
-      mark(h.entryWorld.x, h.entryWorld.y, h.entryWorld.z, REACH, 'hospital');
+    if(h && h.deskWorld && Math.abs(h.deskWorld.x-p.x) < far*2 && Math.abs(h.deskWorld.z-p.z) < far*2)
+      mark(h.deskWorld.x, h.deskWorld.y, h.deskWorld.z, REACH, 'hospital');
     V.counts.triggers = n;
   }
 
@@ -10747,10 +11179,13 @@ function updateFires(dt){
   }
 }
 
+/* Arriving is being INSIDE, at the desk. Standing at the doors is being
+   at the doors, which is a different thing and one the player has
+   earned the right to do slowly. */
 function checkArrival(){
   const h = Wld.hospital;
-  if(!h.entryWorld) return;
-  const d = Math.hypot(Player.pos.x-h.entryWorld.x, Player.pos.z-h.entryWorld.z);
+  if(!h.deskWorld) return;
+  const d = Math.hypot(Player.pos.x-h.deskWorld.x, Player.pos.z-h.deskWorld.z);
   if(d < 2.4) UI.end(true, null);
 }
 
