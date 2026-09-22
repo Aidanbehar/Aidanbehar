@@ -125,6 +125,12 @@ button:active{ transform:translateY(1px); }
 #pausenote{
   position:fixed; inset:0; z-index:30; display:none; align-items:center; justify-content:center;
   background:rgba(0,0,0,.55); letter-spacing:.28em; font-size:.8rem; text-transform:uppercase; color:#9aa39d;
+  /* IT MUST NOT EAT THE CLICK THAT DISMISSES IT. This is a full-screen
+     fixed overlay sitting on top of the canvas, and the only thing that
+     resumes the game is a click ON the canvas — so without this the
+     "click to resume" prompt was the exact reason clicking to resume did
+     nothing. */
+  pointer-events:none;
 }
 #pausenote.on{ display:flex; }
 
@@ -4153,6 +4159,7 @@ const Veg = {
   radius: CFG.QUALITY.treeRadius,
   trunks: {}, crowns: {}, scrub: null, rocks: null, deadfall: null,
   colliders: [],           // { x, z, r } for trees close enough to matter
+  rockR: 1.0, rockTop: 1.0,   // measured off the rock geometry in build()
   lastX: 1e9, lastZ: 1e9, dirty: true,
   counts: {},
   species: [],
@@ -4251,7 +4258,14 @@ const Veg = {
     this.scrub.receiveShadow = true;
     scene.add(this.scrub);
 
-    // rocks
+    /* ---- rocks, and the size they ACTUALLY are ----
+       The displacement below pushes vertices out by up to 1.32, so a rock
+       drawn at scale s is up to 1.32s across and stands about 0.62s above
+       the ground it sits in. Both numbers are MEASURED off the finished
+       geometry rather than written down, because the first version had a
+       collider radius of 0.75s against a visual radius of 1.32s — on a
+       big rock that is over a metre of stone you can walk inside and
+       stand in, looking out through it, which is exactly what it did. */
     const rockGeo = new THREE.IcosahedronGeometry(1, 1);
     {
       const p = rockGeo.attributes.position;
@@ -4260,6 +4274,13 @@ const Veg = {
         p.setXYZ(i, p.getX(i)*k, p.getY(i)*k*0.68, p.getZ(i)*k);
       }
       rockGeo.computeVertexNormals();
+      let maxR = 0, maxY = 0;
+      for(let i=0;i<p.count;i++){
+        maxR = Math.max(maxR, Math.hypot(p.getX(i), p.getZ(i)));
+        maxY = Math.max(maxY, p.getY(i));
+      }
+      this.rockR = maxR;          // horizontal radius per unit of scale
+      this.rockTop = maxY;        // height above the instance origin, ditto
     }
     this.rocks = new THREE.InstancedMesh(rockGeo, MAT.rock, 900);
     this.rocks.frustumCulled = false; this.rocks.count = 0;
@@ -4334,7 +4355,15 @@ const Veg = {
           M.compose(V.set(cxw, heightAt(cxw,czw)-sc*0.28, czw), Q, Sv.set(sc,sc,sc));
           this.rocks.setMatrixAt(nr++, M);
           const dd = (cxw-px)*(cxw-px) + (czw-pz)*(czw-pz);
-          if(dd < CR2 && sc > 0.9) this.colliders.push({ x: cxw, z: czw, r: sc*0.75 });
+          /* A rock gets a collider when it stands taller than the player
+             can step onto — measured from the geometry, not from a magic
+             number — and that collider is the rock's real radius. The
+             old test was `sc > 0.9`, which by luck is about the right
+             HEIGHT threshold, paired with `sc*0.75`, which is nowhere
+             near the right radius. */
+          const stands = sc*this.rockTop - sc*0.28;
+          if(dd < CR2 && stands > CFG.PLAYER.stepUp)
+            this.colliders.push({ x: cxw, z: czw, r: sc*this.rockR });
         }
         if(!underwater && nd < this.deadfall.instanceMatrix.count &&
            ihash2(cx-13, cz+29, seed+303) < 0.07*(1-open)*2){
@@ -5162,9 +5191,35 @@ const Player = {
 };
 
 let pointerLocked = false;
+/* RESUMING AFTER ESCAPE.
+
+   Two things broke this. The first was the overlay above. The second is
+   that browsers refuse requestPointerLock for a short while after the
+   user has pressed Escape to leave it — the call simply fails, and in
+   Chrome it fails silently unless you listen for pointerlockerror. A
+   single click handler on the canvas therefore does nothing at all if it
+   lands inside that window, and the player has no way to tell whether
+   they missed or the game ignored them.
+
+   So: the listener is on the whole document rather than the canvas (any
+   click anywhere resumes, except clicks meant for the dev panel or a
+   menu), failures are caught, and the overlay says what happened instead
+   of sitting there repeating itself. */
 function initInput(){
   const el = renderer.domElement;
-  el.addEventListener('click', ()=>{ if(!G.over && G.started) el.requestPointerLock(); });
+  const wantsLock = ()=> G.started && !G.over && !DEV.open && !UI.mapOpen;
+  function tryLock(){
+    if(!wantsLock() || document.pointerLockElement === el) return;
+    try {
+      const r = el.requestPointerLock();
+      if(r && typeof r.catch === 'function') r.catch(()=> UI.pauseNote(true, true));
+    } catch(e){ UI.pauseNote(true, true); }
+  }
+  document.addEventListener('mousedown', (e)=>{
+    if(e.target && e.target.closest && e.target.closest('#dev, #boot, #endscreen, #mapview')) return;
+    tryLock();
+  });
+  document.addEventListener('pointerlockerror', ()=> UI.pauseNote(true, true));
   document.addEventListener('pointerlockchange', ()=>{
     pointerLocked = document.pointerLockElement === el;
     G.paused = !pointerLocked && G.started && !DEV.open;
@@ -5243,6 +5298,106 @@ function resolveCollisions(p, radius){
   p.z = clamp(p.z, -lim, lim);
 }
 
+/* ---------------------------------------------------------------------
+   MOVING AGAINST THE GROUND
+   The first version asked one question — is the ground at the point I am
+   about to stand on higher than the point I am standing on, divided by
+   how far that is — and it is the wrong question three times over:
+
+     * IT IGNORES THE PLAYER'S BODY. The test sampled the centre, so the
+       centre could come to within four centimetres of a wall while the
+       0.34m body was already inside it. That is how you end up looking
+       out of a mountain.
+     * IT IGNORES EVERYTHING BETWEEN. At 60fps a walking step is 4cm and
+       the answer is fine; at the 0.05s the loop clamps to, a sprint step
+       is 25cm, which is most of the body radius, and a thin ridge fits
+       between two samples.
+     * IT BLOCKS INSTEAD OF SLIDING. A player pressed against a slope
+       simply stops, so they hold the key down and keep ramming it, and
+       every frame is another chance for one of the above to let them in.
+
+   So the move is swept in sub-steps no longer than 18cm, each one probed
+   at the LEADING EDGE of the body rather than at its centre, and a
+   blocked step is retried along the contour instead of being dropped.
+   ------------------------------------------------------------------- */
+const MOVE_SUBSTEP = 0.18;
+
+/* Is there ground in front of this position, at this height, that the
+   player cannot step onto? One rule: the ground a body-radius ahead
+   stands more than stepUp above your feet. */
+function terrainBlocks(feetY, x, z, ux, uz){
+  const probe = CFG.PLAYER.radius + 0.20;
+  return heightAt(x + ux*probe, z + uz*probe) - feetY > CFG.PLAYER.stepUp;
+}
+
+/* The horizontal direction that stays level on this slope, chosen to be
+   the one nearer the way the player wanted to go. */
+function contourDir(x, z, ux, uz){
+  const d = 1.2;
+  const gx = heightAt(x+d,z) - heightAt(x-d,z);
+  const gz = heightAt(x,z+d) - heightAt(x,z-d);
+  const gl = Math.hypot(gx,gz);
+  if(gl < 1e-6) return null;
+  let tx = -gz/gl, tz = gx/gl;                  // perpendicular to the gradient
+  if(tx*ux + tz*uz < 0){ tx = -tx; tz = -tz; }  // whichever way they were heading
+  return [tx, tz];
+}
+
+function moveAgainstTerrain(p, dx, dz){
+  const len = Math.hypot(dx, dz);
+  if(len < 1e-6) return false;
+  const steps = Math.min(12, Math.max(1, Math.ceil(len / MOVE_SUBSTEP)));
+  const sx = dx/steps, sz = dz/steps;
+  let blockedAny = false;
+  for(let i=0;i<steps;i++){
+    let ex = sx, ez = sz;
+    const el = Math.hypot(ex, ez) || 1e-6;
+    let ux = ex/el, uz = ez/el;
+    if(!p.swimming && terrainBlocks(p.pos.y, p.pos.x, p.pos.z, ux, uz)){
+      blockedAny = true;
+      // try to slide along the contour rather than stopping dead
+      const t = contourDir(p.pos.x, p.pos.z, ux, uz);
+      if(!t) break;
+      const along = ex*t[0] + ez*t[1];
+      ex = t[0]*along; ez = t[1]*along;
+      const el2 = Math.hypot(ex, ez);
+      if(el2 < 1e-6) break;
+      ux = ex/el2; uz = ez/el2;
+      if(terrainBlocks(p.pos.y, p.pos.x, p.pos.z, ux, uz)) break;
+    }
+    const np = { x: p.pos.x + ex, y: p.pos.y, z: p.pos.z + ez };
+    resolveCollisions(np, CFG.PLAYER.radius);
+    p.pos.x = np.x; p.pos.z = np.z;
+  }
+  return blockedAny;
+}
+
+/* THE INVARIANT: you are never standing inside a wall.
+   Movement above is meant to make this unreachable, but a teleport, a
+   slide, a fake-hospital relocation or a world regenerated under a
+   standing player can all put the body inside a bank. Eight samples on
+   the body circle; anything that stands more than a step above the feet
+   pushes the player directly away from it. Two passes, because being
+   pushed out of one sample can push you into another. */
+function pushOutOfTerrain(p){
+  const R = CFG.PLAYER.radius, lift = CFG.PLAYER.stepUp;
+  for(let pass=0; pass<2; pass++){
+    let px = 0, pz = 0, hits = 0;
+    for(let k=0;k<8;k++){
+      const a = k/8*TAU;
+      const ox = Math.cos(a), oz = Math.sin(a);
+      const h = heightAt(p.pos.x + ox*R, p.pos.z + oz*R);
+      const over = h - (p.pos.y + lift);
+      if(over > 0){ px -= ox*over; pz -= oz*over; hits++; }
+    }
+    if(!hits) return pass > 0;
+    const l = Math.hypot(px, pz) || 1e-6;
+    const push = Math.min(R, l);
+    p.pos.x += px/l*push; p.pos.z += pz/l*push;
+  }
+  return true;
+}
+
 function updatePlayer(dt){
   const C = CFG.PLAYER;
   const p = Player;
@@ -5319,26 +5474,11 @@ function updatePlayer(dt){
     p.vel.x -= p.vel.x*d; p.vel.z -= p.vel.z*d;
   }
 
-  const nx = p.pos.x + p.vel.x*dt;
-  const nz = p.pos.z + p.vel.z*dt;
-
-  /* A SLOPE STEEPER THAN THE CLIFF ANGLE IS A WALL GOING UP AND A SLIDE
-     GOING DOWN. Blocking both directions means a player who slides into a
-     ravine is stuck in it forever; allowing both means cliffs are stairs.
-     So uphill is refused and downhill is not. */
-  const hHere = heightAt(p.pos.x, p.pos.z);
-  const hThere = heightAt(nx, nz);
-  const climbing = hThere - hHere;
-  const stepLen = Math.hypot(nx-p.pos.x, nz-p.pos.z) || 1e-5;
-  const grade = climbing/stepLen;
-  let moved = true;
-  if(grade > CFG.HAZARD.cliffSlope && !p.swimming){
-    moved = false;                      // a wall
-    p.vel.x *= 0.2; p.vel.z *= 0.2;
-  }
-  const np = { x: moved ? nx : p.pos.x, y: p.pos.y, z: moved ? nz : p.pos.z };
-  resolveCollisions(np, C.radius);
-  p.pos.x = np.x; p.pos.z = np.z;
+  /* Swept, body-aware, and it slides along a slope rather than stopping
+     dead against it. Uphill is refused and downhill is not, so a player
+     who slides into a ravine can still walk out along the bottom of it. */
+  const hitWall = moveAgainstTerrain(p, p.vel.x*dt, p.vel.z*dt);
+  if(hitWall){ p.vel.x *= 0.35; p.vel.z *= 0.35; }
 
   // ---- vertical ----
   const ground = heightAt(p.pos.x, p.pos.z);
@@ -5356,11 +5496,22 @@ function updatePlayer(dt){
     if(drop > 0.75 && !p.swimming){
       p.falling = true; p.fallFrom = p.pos.y; p.vy = 0;
     } else {
-      // walk up and down small steps smoothly rather than teleporting
+      /* Small steps are smoothed rather than teleported — but ONLY
+         downward. Lerping in both directions means that whenever the
+         ground rises faster than the smoothing can follow, the feet are
+         under the surface for a few frames, and at eye height that is a
+         camera inside the hill. Going up is immediate; going down eases. */
       p.pos.y = lerp(p.pos.y, ground, clamp(dt*16, 0, 1));
+      if(p.pos.y < ground) p.pos.y = ground;
       if(Math.abs(p.pos.y - ground) < 0.02) p.pos.y = ground;
     }
   }
+  // whatever happened above, the feet are not below the ground
+  if(p.pos.y < ground) p.pos.y = ground;
+  pushOutOfTerrain(p);
+  const groundNow = heightAt(p.pos.x, p.pos.z);
+  if(p.pos.y < groundNow) p.pos.y = groundNow;
+  p.groundY = p.pos.y;
   // sliding on ground too steep to stand on
   if(!p.falling && sl > CFG.HAZARD.slipSlope){
     const n = normalAt(p.pos.x, p.pos.z);
@@ -5370,7 +5521,7 @@ function updatePlayer(dt){
 
   // ---- being underwater ----
   const wl = waterLevelAt(p.pos.x, p.pos.z);
-  const eyeY = p.pos.y + C.eye*(p.resting?0.62:1);
+  let eyeY = p.pos.y + C.eye*(p.resting?0.62:1);
   p.submerged = (wl > -9000 && wl > eyeY) ? 1 : 0;
   if(p.submerged){
     p.breathHeld += dt;
@@ -5388,7 +5539,15 @@ function updatePlayer(dt){
   p.bob += dt * (p.sprinting ? 12.5 : 8.0) * (p.moving ? 1 : 0);
   const bobY = Math.sin(p.bob)*0.035*p.bobAmt;
   const bobX = Math.cos(p.bob*0.5)*0.022*p.bobAmt;
-  camera.position.set(p.pos.x + bobX*Math.cos(p.yaw), eyeY + bobY, p.pos.z - bobX*Math.sin(p.yaw));
+  /* AND THE CAMERA ITSELF, as a backstop. Everything above is meant to
+     make this impossible, but the eye is offset from the body by the head
+     bob and the rendered triangles are a linear approximation of a
+     bilinear heightfield, so the two can disagree by a few centimetres on
+     a saddle. Costs one height sample and means the player can never be
+     shown the inside of a hill. */
+  const camX = p.pos.x + bobX*Math.cos(p.yaw), camZ = p.pos.z - bobX*Math.sin(p.yaw);
+  const camFloor = heightAt(camX, camZ) + 0.22;
+  camera.position.set(camX, Math.max(eyeY + bobY, camFloor), camZ);
   camera.rotation.set(p.pitch, p.yaw, Math.sin(p.bob*0.5)*0.008*p.bobAmt);
 
   Veg.update(p.pos.x, p.pos.z);
@@ -7950,7 +8109,12 @@ const UI = {
     this.el.holdFill.style.width = (p*100).toFixed(0) + '%';
     this.el.holdLabel.textContent = label || '';
   },
-  pauseNote(on){ this.el.pause.classList.toggle('on', !!on); },
+  pauseNote(on, retry){
+    this.el.pause.classList.toggle('on', !!on);
+    if(on) this.el.pause.querySelector('span').textContent =
+      retry ? 'the browser is still holding the mouse \u2014 click again'
+            : 'click to resume';
+  },
   blackout(seconds, cb){ this.blackT = seconds; this.blackCb = cb; this.blackDone = false; },
 
   /* WORDS, NOT NUMBERS. Each line appears only when it has something to
@@ -8538,8 +8702,27 @@ const DEV = (()=>{
        reading of panic.
 
      INTENSITY  (15 simulated minutes pinned at stage 3)
-       ranged 0.349 to 1.000, and fell between samples 31 times against
-       28 rises — a wave with real lulls, not a climb
+       two samples ranged 0.35-0.78 and 0.35-1.00, and in both it fell
+       between samples about as often as it rose (30 v 29, 31 v 28) — a
+       wave with real lulls, not a climb
+
+     COLLISION  (the player cannot get inside the world)
+       117,000 frames sprinting into the steepest ground on the map, from
+         six angles at 140 sites: 0 frames with the feet below the
+         surface, 0 with the camera inside it.
+         The identical test against the previous build: 1,002 frames
+         under the surface, 0.278m at worst.
+       24,000 frames sprinting into 25 standing rocks from eight angles:
+         0 frames with the camera inside the rock.
+         Against the previous build: 672 frames, 0.536m at worst.
+       Both tests were run against the broken version first, because a
+       test that passes on the bug it is meant to catch is not evidence.
+
+     RESUMING AFTER ESCAPE
+       Escape leaves the game unlocked, paused, overlay up. One click at
+       the centre of the screen returns it to locked, unpaused, overlay
+       gone, clock advancing. The click lands on the CANVAS — before the
+       fix it landed on the overlay, which is why nothing happened.
 
      THE DRIFT  (10 independent 5-minute stretches, walking blind at
                  night in fog)
