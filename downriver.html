@@ -1,0 +1,2918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Downriver</title>
+<!--
+  DOWNRIVER — a single-file seeded forest survival / psychological horror game.
+  Everything (markup, styles, shaders, textures, audio, world, game code) lives
+  in this one document. Open it by double-clicking; the only network access is
+  the Three.js CDN import map near the bottom of <head>.
+-->
+<style>
+/* ===================================================================== */
+/* =====                        STYLES                             ===== */
+/* ===================================================================== */
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; height:100%; overflow:hidden; background:#000; }
+body{
+  font-family:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+  color:#cfc9bd; -webkit-font-smoothing:antialiased; cursor:default;
+}
+#app{ position:fixed; inset:0; }
+#app canvas{ display:block; width:100%; height:100%; }
+
+/* ---------- shared bits ---------- */
+.mono{ font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; }
+button{
+  font:inherit; color:#e6e0d4; background:#15181a; border:1px solid #3a3f42;
+  padding:.5em 1.1em; border-radius:2px; cursor:pointer; letter-spacing:.04em;
+}
+button:hover{ background:#1e2225; border-color:#5a6166; }
+button:active{ transform:translateY(1px); }
+
+/* ---------- boot / start screen ---------- */
+#boot{
+  position:fixed; inset:0; z-index:90; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:.9rem; text-align:center;
+  background:radial-gradient(120% 90% at 50% 40%, #0d1113 0%, #050709 60%, #000 100%);
+}
+#boot h1{
+  margin:0; font-size:clamp(2.4rem,7vw,4.6rem); font-weight:400;
+  letter-spacing:.42em; text-indent:.42em; color:#d8d2c4;
+  text-shadow:0 0 34px rgba(90,110,100,.32);
+}
+#boot .sub{ color:#6e7873; letter-spacing:.3em; font-size:.76rem; text-transform:uppercase; margin-top:-.4rem; }
+#seedrow{ display:flex; gap:.5rem; align-items:center; margin-top:1.2rem; flex-wrap:wrap; justify-content:center; }
+#seedrow label{ color:#77817c; letter-spacing:.22em; font-size:.68rem; text-transform:uppercase; }
+#seedin{
+  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:1rem; letter-spacing:.14em;
+  width:15ch; text-align:center; padding:.5em .6em; color:#e6e0d4;
+  background:#0b0e10; border:1px solid #333a3d; border-radius:2px; outline:none;
+}
+#seedin:focus{ border-color:#6f7a74; }
+#bar{ width:min(420px,72vw); height:2px; background:#1a1f21; margin-top:1.1rem; overflow:hidden; }
+#bar i{ display:block; height:100%; width:0%; background:#7d8c82; transition:width .18s linear; }
+#bootmsg{ color:#5f6a65; font-size:.72rem; letter-spacing:.2em; min-height:1.2em; text-transform:uppercase; }
+#startbtn{ margin-top:.6rem; padding:.7em 2.2em; letter-spacing:.2em; text-transform:uppercase; font-size:.8rem; }
+#startbtn[disabled]{ opacity:.35; cursor:default; }
+#boot .legal{ position:absolute; bottom:1.4rem; color:#3f4744; font-size:.64rem; letter-spacing:.16em; }
+#boot .hint{ color:#59625e; font-size:.7rem; letter-spacing:.1em; max-width:46ch; line-height:1.7; }
+
+/* ---------- HUD ---------- */
+#hud{ position:fixed; inset:0; z-index:20; pointer-events:none; }
+#crosshair{
+  position:absolute; left:50%; top:50%; width:3px; height:3px; margin:-1.5px 0 0 -1.5px;
+  border-radius:50%; background:rgba(214,208,196,.30);
+}
+#prompt{
+  position:absolute; left:50%; top:calc(50% + 34px); transform:translateX(-50%);
+  font-size:.82rem; letter-spacing:.1em; color:#d6d0c4; text-shadow:0 1px 6px #000;
+  white-space:nowrap; opacity:0; transition:opacity .14s;
+}
+#prompt.on{ opacity:.92; }
+/* Diegetic status. Words, not numbers: the player is not reading a gauge,
+   they are noticing how they feel. Exact values live in the dev panel only. */
+#status{
+  position:absolute; left:26px; bottom:24px; display:flex; flex-direction:column; gap:.28rem;
+  font-size:.74rem; letter-spacing:.14em; text-transform:lowercase;
+  text-shadow:0 1px 7px #000;
+}
+#status div{ opacity:0; transition:opacity .5s; color:#a9a397; }
+#status div.on{ opacity:.85; }
+#status div.warn{ color:#c7a98a; }
+#status div.bad{ color:#c08a7c; }
+#stamina{
+  position:absolute; left:50%; bottom:46px; transform:translateX(-50%);
+  width:150px; height:2px; background:rgba(255,255,255,.07); opacity:0; transition:opacity .35s;
+}
+#stamina.on{ opacity:1; }
+#stamina i{ display:block; height:100%; width:100%; background:rgba(216,210,196,.55); }
+#holdbar{
+  position:absolute; left:50%; top:calc(50% + 58px); transform:translateX(-50%);
+  width:118px; height:3px; background:rgba(255,255,255,.10); display:none;
+}
+#holdbar i{ display:block; height:100%; width:0%; background:#cfc9bd; }
+#holdbar span{
+  position:absolute; left:50%; top:10px; transform:translateX(-50%);
+  font-size:.66rem; letter-spacing:.16em; color:#b9b3a7; white-space:nowrap;
+}
+#subtitle{
+  position:absolute; left:50%; bottom:84px; transform:translateX(-50%);
+  max-width:60ch; text-align:center; font-size:.88rem; line-height:1.6;
+  color:#cdc7ba; text-shadow:0 1px 8px #000; opacity:0; transition:opacity .45s;
+}
+#subtitle.on{ opacity:.95; }
+#clock{
+  position:absolute; right:26px; bottom:24px; text-align:right;
+  font-size:.72rem; letter-spacing:.2em; color:#8d968f; text-shadow:0 1px 7px #000; opacity:.75;
+}
+#panic{
+  position:absolute; inset:0; pointer-events:none; opacity:0;
+  background:radial-gradient(circle at 50% 50%, transparent 52%, rgba(24,8,8,.55) 100%);
+  transition:opacity .8s;
+}
+#breathmask{
+  position:absolute; inset:0; pointer-events:none; opacity:0;
+  background:radial-gradient(circle at 50% 54%, rgba(190,200,205,.10) 0%, transparent 46%);
+}
+#fps{
+  position:fixed; right:8px; top:8px; z-index:40; display:none;
+  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:#7f8a84;
+  background:rgba(0,0,0,.45); padding:2px 6px; white-space:pre;
+}
+#pausenote{
+  position:fixed; inset:0; z-index:30; display:none; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.55); letter-spacing:.28em; font-size:.8rem; text-transform:uppercase; color:#9aa39d;
+}
+#pausenote.on{ display:flex; }
+
+/* ---------- map overlay ---------- */
+#mapview{
+  position:fixed; inset:0; z-index:35; display:none; align-items:center; justify-content:center;
+  background:rgba(4,6,7,.88);
+}
+#mapview.on{ display:flex; }
+#mapwrap{ position:relative; box-shadow:0 18px 70px rgba(0,0,0,.8); }
+#mapcanvas{ display:block; width:min(78vmin,760px); height:min(78vmin,760px); image-rendering:auto; }
+#mapnote{
+  position:absolute; left:0; right:0; bottom:-2.2rem; text-align:center;
+  font-size:.7rem; letter-spacing:.2em; color:#6d756f; text-transform:uppercase;
+}
+
+/* ---------- end screen ---------- */
+#endscreen{
+  position:fixed; inset:0; z-index:80; display:none; flex-direction:column;
+  align-items:center; justify-content:center; gap:1rem; text-align:center;
+  background:rgba(3,5,6,.94);
+}
+#endscreen.on{ display:flex; }
+#endscreen h2{ margin:0; font-weight:400; font-size:2.2rem; letter-spacing:.3em; color:#d6d0c4; }
+#endscreen p{ margin:0; color:#8b948e; max-width:52ch; line-height:1.8; font-size:.92rem; }
+#endstats{
+  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.78rem; letter-spacing:.06em;
+  color:#79837d; white-space:pre; line-height:1.9; margin-top:.4rem;
+}
+#endscreen .btns{ display:flex; gap:.6rem; margin-top:.6rem; }
+
+/* ---------- help ---------- */
+#help{
+  position:fixed; left:26px; top:22px; z-index:25; font-size:.72rem; line-height:1.95;
+  color:#79837d; letter-spacing:.08em; text-shadow:0 1px 6px #000; pointer-events:none;
+}
+#help.off{ display:none; }
+#help b{ color:#b3aca0; font-weight:400; }
+
+/* ---------- dev panel ---------- */
+#dev{
+  position:fixed; right:0; top:0; bottom:0; width:430px; z-index:70; display:none;
+  flex-direction:column; background:rgba(6,9,11,.96); border-left:1px solid #22282b;
+  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:#9aa49e;
+}
+#dev.on{ display:flex; }
+#dev h3{
+  margin:0; padding:8px 12px; font-size:10px; letter-spacing:.24em; text-transform:uppercase;
+  color:#5f6a65; background:#0b0f11; border-bottom:1px solid #1b2124; font-weight:400;
+  font-family:inherit;
+}
+#devbody{ flex:1; overflow-y:auto; padding:10px 12px; }
+#devbody section{ margin-bottom:14px; }
+#devbody .cap{ color:#556059; letter-spacing:.2em; font-size:9px; text-transform:uppercase; margin-bottom:5px; }
+#devread{ white-space:pre; line-height:1.55; color:#93a09a; }
+#devlog{
+  height:190px; overflow-y:auto; background:#080b0d; border:1px solid #171c1f;
+  padding:5px 7px; line-height:1.5; white-space:pre-wrap; color:#818d87;
+}
+#devlog .real{ color:#79a08a; }
+#devlog .fake{ color:#b58b7e; }
+#devlog .miss{ color:#4d5650; }
+#dev .grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:4px; }
+#dev .grid.three{ grid-template-columns:repeat(3,1fr); }
+#dev button{
+  font-family:inherit; font-size:10px; padding:4px 5px; letter-spacing:.04em;
+  background:#11161a; border:1px solid #232b2f; color:#93a09a; border-radius:2px;
+}
+#dev button:hover{ background:#182025; color:#c3cec8; }
+#dev .row{ display:flex; align-items:center; gap:6px; margin:3px 0; }
+#dev .row label{ min-width:74px; color:#5f6a65; }
+#dev input[type=range]{ flex:1; accent-color:#6d8578; }
+#dev input[type=text],#dev input[type=number]{
+  background:#080b0d; border:1px solid #1d2427; color:#9aa49e; padding:3px 5px;
+  font-family:inherit; font-size:10px; width:9ch;
+}
+#devaudit{ max-height:150px; overflow-y:auto; white-space:pre-wrap; line-height:1.5; color:#818d87; }
+#devhint{ padding:6px 12px; border-top:1px solid #1b2124; color:#4d5650; font-size:10px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- ===== HUD ===== -->
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="prompt"></div>
+  <div id="status">
+    <div id="s-water">&nbsp;</div>
+    <div id="s-food">&nbsp;</div>
+    <div id="s-light">&nbsp;</div>
+    <div id="s-body">&nbsp;</div>
+  </div>
+  <div id="stamina"><i></i></div>
+  <div id="holdbar"><i></i><span></span></div>
+  <div id="subtitle"></div>
+  <div id="clock"></div>
+  <div id="panic"></div>
+  <div id="breathmask"></div>
+</div>
+
+<div id="help">
+  <div><b>W A S D</b> move &nbsp; <b>SHIFT</b> run &nbsp; <b>E</b> interact (hold)</div>
+  <div><b>F</b> flashlight &nbsp; <b>C</b> compass &nbsp; <b>M</b> map</div>
+  <div><b>H</b> hide this &nbsp; <b>P</b> fps &nbsp; <b>`</b> dev panel &nbsp; <b>ESC</b> release mouse</div>
+</div>
+
+<div id="fps"></div>
+<div id="pausenote"><span>click to resume</span></div>
+
+<!-- ===== MAP OVERLAY ===== -->
+<div id="mapview">
+  <div id="mapwrap">
+    <canvas id="mapcanvas" width="760" height="760"></canvas>
+    <div id="mapnote">[M] close &middot; the map does not know where you are</div>
+  </div>
+</div>
+
+<!-- ===== END SCREEN ===== -->
+<div id="endscreen">
+  <h2></h2>
+  <p></p>
+  <div id="endstats"></div>
+  <div class="btns">
+    <button id="again">Same seed again</button>
+    <button id="newseed">New seed</button>
+  </div>
+</div>
+
+<!-- ===== DEV PANEL ===== -->
+<div id="dev">
+  <h3>developer</h3>
+  <div id="devbody"></div>
+  <div id="devhint">` or F1 closes &middot; the game keeps running</div>
+</div>
+
+<!-- ===== BOOT / START SCREEN ===== -->
+<div id="boot">
+  <h1>Downriver</h1>
+  <div class="sub">a forest, a seed, and whatever you decide is real</div>
+  <div class="hint">
+    You wake in the trees. Find the hospital before your mind does.<br>
+    Nothing in this game will ever tell you what was real.
+  </div>
+  <div id="seedrow">
+    <label for="seedin">seed</label>
+    <input id="seedin" class="mono" maxlength="14" spellcheck="false" autocomplete="off" />
+    <button id="randseed">random</button>
+  </div>
+  <div id="bar"><i></i></div>
+  <div id="bootmsg">enter a seed</div>
+  <button id="startbtn" disabled>walk</button>
+  <div class="legal">headphones recommended &middot; every texture, sound and tree is generated at runtime</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+/* =====================================================================
+   README — DOWNRIVER
+   =====================================================================
+
+   A first-person seeded forest survival / psychological horror game in one
+   HTML file. You wake somewhere in a large forest. Your mind is failing.
+   Find the hospital before it finishes.
+
+   ---------------------------------------------------------------------
+   HOW TO RUN
+   ---------------------------------------------------------------------
+   Double-click the file. The only network request is the Three.js module
+   and a few addons from jsdelivr, resolved through the <script type=
+   "importmap"> above; jsdelivr serves CORS headers so file:// works.
+   Everything else — every texture, every normal map, every shader, every
+   sound, the whole world — is generated at runtime from the seed. There
+   is no build step and no asset folder.
+
+   ---------------------------------------------------------------------
+   CONTROLS
+   ---------------------------------------------------------------------
+     W A S D ... walk             SHIFT ..... run (costs stamina)
+     MOUSE ..... look             E ......... interact — HOLD for effort
+     F ......... flashlight       C ......... raise the compass
+     M ......... map              H ......... hide the control list
+     P ......... fps readout      ` or F1 ... developer panel
+     ESC ....... release the mouse
+
+   Anything that means something is a HOLD, not a tap: drinking, filling a
+   bottle, picking berries, forcing a door, resting. Holding costs seconds
+   and stamina, and letting go loses the progress.
+
+   ---------------------------------------------------------------------
+   FILE MAP (search for the banner text)
+   ---------------------------------------------------------------------
+     ===== CONFIG =====          every tunable in the game, in one object
+     ===== MATH & NOISE =====    seeded RNG, hash/value noise, fbm, ridged,
+                                 worley, and the GLSL twin of all of it
+     ===== SEED =====            seed parsing and the seed "personality"
+     ===== PROCEDURAL TEXTURES ===== canvas-2D art + sobel normal maps
+     ===== SHADERS =====         terrain splat, water, volumetric cone,
+                                 rain, and the screen-space post stack
+     ===== RENDERING =====       renderer, composer, adaptive quality
+     ===== WORLDGEN =====        terrain, hydrology, routes, structures,
+                                 resources, hazards, and the validator
+     ===== VEGETATION =====      streamed instanced trees, scrub, rocks
+     ===== SKY & WEATHER =====   time of day, weather state machine, rain
+     ===== AUDIO =====           the generated sound bank and the mixer
+     ===== PLAYER =====          movement, collision, stamina, drift
+     ===== SURVIVAL =====        thirst, hunger, sickness, cold, death
+     ===== EQUIPMENT =====       flashlight, compass, map, items, holds
+     ===== THE MIND =====        stage, intensity, agitation
+     ===== DIRECTOR =====        the probabilistic event scheduler
+     ===== EVENTS =====          every hallucination and atmospheric beat
+     ===== UI =====              HUD binding, prompts, map drawing
+     ===== DEV =====             the developer panel and seed validator
+     ===== GAME LOOP =====       fixed-step update + render
+     ===== BOOT =====            start screen, loading, launch
+
+   ---------------------------------------------------------------------
+   ===== LORE =====
+   ---------------------------------------------------------------------
+   TO BE DEVELOPED.
+
+   There is deliberately no backstory in this build. Nothing in the world
+   states who the player is, why they are in the forest, why their mind is
+   going, or what the hospital is to them. Campsites are staged with
+   physical arrangements only — a cold fire ring, a collapsed tent, an
+   empty pack — and no readable text commits to anything. `Lore.note()` in
+   ===== EVENTS ===== is the single funnel every piece of found text would
+   pass through, and it currently returns the neutral strings listed in
+   LORE_NEUTRAL; replacing that table is the whole job of writing a story.
+
+   EVERY PIECE OF GEAR AND EVERY ITEM THAT WILL NEED A LORE REASON:
+
+     STARTING GEAR (Gear.START, which seeds vary — see personality.gear)
+       * flashlight ........ why does the player have a torch, and whose?
+       * battery in it ..... how much was already spent before we start?
+       * compass ........... some seeds start with it, some do not. If the
+                             player owns one, why? If not, whose is the one
+                             they find?
+       * water bottle ...... empty or partly full depending on the seed.
+       * one trail bar ..... or none, on scarce seeds.
+       * the clothes ....... decides how hard cold bites (Survival.cold).
+
+     FOUND ITEMS (ITEM_TYPES)
+       * spare batteries ... who left batteries in a cabin?
+       * purification tablets
+       * canned food ....... and why the cabins are stocked at all
+       * trail bar / snack . campsites, abandoned car
+       * map fragment ...... who surveyed these trails?
+       * radio ............. what is transmitting, and is it real?
+       * matches ........... for boiling water at a fire ring
+       * a second bottle
+
+     PLACES THAT IMPLY A STORY AND CURRENTLY DO NOT TELL ONE
+       * the hospital at the edge of the forest
+       * cabins (occupied recently? abandoned for years?)
+       * the abandoned car
+       * the logging stumps, the old fence line, the radio tower
+       * the campsites, and who left them
+
+   Keep this list current: anything added to ITEM_TYPES or to the structure
+   builders belongs here the moment it exists.
+
+   ---------------------------------------------------------------------
+   THE ONE RULE
+   ---------------------------------------------------------------------
+   THE GAME NEVER TELLS THE PLAYER WHAT IS REAL. There is no sanity meter,
+   no hallucination label, no colour grade that means "this is fake", and
+   no sound that only fakes make. Real and hallucinated objects are built
+   by the same builders from the same seed and the same textures; real and
+   hallucinated sounds come out of the same generators in the same bank.
+   The only asymmetry is physical: a hallucination cannot touch the player,
+   cannot block them, and cannot kill them. It can only be believed.
+
+   The dev panel is the exception, and it exists precisely so this file
+   does not have to be taken on trust — see ===== DEV =====.
+
+   ---------------------------------------------------------------------
+   WHAT IS TRUE OF THE WORLD, ALWAYS (the rules a player can test)
+   ---------------------------------------------------------------------
+   These hold on every seed, and they are what an attentive player uses to
+   navigate and to catch the world lying:
+
+     1. The sun rises in the east and sets in the west. Always. No stage
+        and no intensity moves it.
+     2. Water flows downhill. The river network is built by real flow
+        accumulation over the heightfield (see Hydro), not drawn on, so
+        following a river downstream genuinely descends.
+     3. The hospital is downstream. It sits in the lower third of the
+        terrain near the trunk river's exit from the map.
+     4. Trails get more worn closer to civilisation, and human traces get
+        denser with them.
+     5. Real terrain never changes. Hallucinations are layered on top of a
+        simulation that is never edited — not the heightfield, not the
+        water, not the collision. When a landmark "moves" it is a second
+        object placed elsewhere, never the mountain itself.
+
+   Rule 5 is the load-bearing one. It is what makes the fakes catchable and
+   what stops a bad roll from making the world unplayable.
+
+   ---------------------------------------------------------------------
+   HOW A SEED BECOMES A WORLD (and why in this order)
+   ---------------------------------------------------------------------
+   Worldgen runs in layers, and each layer can only read the layers under
+   it. That ordering is what keeps a seed from producing nonsense:
+
+     1. TERRAIN. Ridged multifractal for mountains, warped fbm for hills,
+        a valley mask, and erosion-ish smoothing. Pure noise, no gameplay.
+     2. HYDROLOGY. Priority-flood the depressions so every cell drains,
+        then accumulate flow downhill. Streams and rivers ARE the high-
+        accumulation cells; they are found, not drawn. Channels are carved
+        back into the heightfield, which is why banks are real geometry.
+        Filled depressions that were deep enough become ponds.
+     3. THE HOSPITAL. Placed where the trunk river leaves the map, on flat
+        ground, in the downstream third.
+     4. ROUTES. One road out of the hospital, then trails to it by an A*
+        that prefers valleys and riverbanks and hates slope. Wornness is
+        a function of network distance to the hospital, so "more worn
+        means closer" is a consequence of how they were built rather than
+        a decoration.
+     5. STRUCTURES. Cabins, campsites and ruins, mostly on routes.
+     6. RESOURCES. Water access points on real water, berry bushes in real
+        clearings, items in real structures.
+     7. HAZARDS. Cliffs and steep banks come out of the terrain's own
+        gradient; deep and fast water out of depth and accumulation; bogs
+        out of the flat wet cells. Nothing is placed at the player.
+     8. CONDITIONS. Start hour and the weather pattern for the run.
+     9. VALIDATE. See below. Fail → nudge → regenerate.
+
+   ---------------------------------------------------------------------
+   THE HARD GUARANTEES, AND HOW THEY ARE ENFORCED
+   ---------------------------------------------------------------------
+   Validate.run() checks a candidate world against these and the generator
+   retries with a nudged sub-seed until they all pass:
+
+     G1 REACHABLE      A* over walkable cells finds start -> hospital.
+     G2 IN TIME        that path's walking cost fits inside the time this
+                       seed's deterioration speed allows, with slack.
+     G3 WATER          enough drinkable water within a corridor around
+                       the route, spaced so no leg is a death march.
+     G4 FOOD           at least a little real food exists.
+     G5 CLUES          honest navigation clues exist on the route.
+     G6 HAZARDS        no hazard fully blocks the corridor, and none is
+                       within HAZARD_CLEAR of the start.
+     G7 NO TRAPS       hallucinations own no collision and no damage —
+                       this one is structural, not a check: fake objects
+                       are built on the PHANTOM layer, which the collision
+                       and damage systems never read.
+
+   ---------------------------------------------------------------------
+   THE MIND, IN THREE NUMBERS
+   ---------------------------------------------------------------------
+   STAGE (0-4) is what KINDS of things can happen. It advances on
+   `progress`, which climbs at a seed-specific rate and is pushed by
+   nightfall, thirst, hunger, exhaustion, cold and agitation. Stages LEAK:
+   every draw has a small chance of reaching one stage above the current
+   one, so "I am only in stage 1" is never a safe conclusion.
+
+   INTENSITY (0-1) is HOW HARD things happen — the dose. It is a wave, not
+   a climb: a sum of seeded sine components plus occasional spikes, so
+   there are lulls that feel like recovery and are not. The same event at
+   0.2 and at 0.9 is a twig snap or a crack behind your head; a compass
+   error is two degrees or a reversal.
+
+   AGITATION (0-1) is the player's own behaviour, tracked over a rolling
+   60-second window and never shown. Sustained sprinting without a heading,
+   whipping the view around, doubling back, swinging the torch, chasing
+   things that were not there, checking the compass over and over, standing
+   frozen in the dark. It feeds intensity and progression, it is capped so
+   one panic cannot spiral a run, and it drains when the player walks in a
+   straight line, follows a real trail or river, drinks, eats or rests.
+
+   Normal play must never be punished. The thresholds are set so that a
+   player who walks, looks around at a human rate and checks their compass
+   at junctions sits at effectively zero agitation.
+
+   ---------------------------------------------------------------------
+   WHAT HAS ACTUALLY BEEN VERIFIED
+   ---------------------------------------------------------------------
+   Everything in this section was measured by running the game, not by
+   reading the code. The dev panel reproduces all of it. See the block at
+   the very bottom of ===== DEV ===== for the numbers, which are written
+   there after each verification pass rather than here, so they cannot
+   drift out of sync with the buttons that produce them.
+
+   ===================================================================== */
+
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { CopyShader } from 'three/addons/shaders/CopyShader.js';
+
+/* =====================================================================
+   ===== CONFIG =====
+   Every number that can be tuned without reading the code. Grouped by the
+   system that reads it; nothing outside this object is a magic constant
+   that a designer would want to change.
+   ===================================================================== */
+const CFG = {
+
+  /* ---- the world ---------------------------------------------------
+     SIZE is metres across. N is the heightfield resolution; the terrain
+     mesh is rendered at MESH segments, which can be lower than N because
+     the fog never lets you resolve a 3m triangle at range. Physics always
+     reads the N grid, so what you walk on and what you see agree. */
+  WORLD: {
+    SIZE: 1024,          // metres, centred on the origin: -512..512
+    N: 257,              // heightfield samples per side (2^k+1, for the
+                         // diamond-square-ish corner handling)
+    MESH: 320,           // terrain mesh segments per side
+    /* RELIEF vs SIZE is the ratio that decides whether the map is a
+       landscape or a set of walls. At 210m over a 1024m map the alpine
+       style put 300m of ridge across a 260m half-wavelength — a 49 degree
+       average mountainside, which is a cliff face, not a slope — and 56%
+       of all cells came out past the walkable angle. 150m against broader
+       ridges gives mountainsides in the high twenties, which is what a
+       mountain actually is, and leaves the genuine cliffs to the places
+       the noise happens to stack. */
+    RELIEF: 150,         // metres from the lowest point to the highest
+    SEA: 6,              // ponds/lakes fill to this above local basin floor
+    EDGE_FADE: 0.13,     // fraction of the map used to lift the rim, so the
+                         // world reads as a bowl rather than a cut square
+  },
+
+  /* ---- terrain shape ----------------------------------------------- */
+  TERRAIN: {
+    baseFreq: 1.55,      // fbm frequency in world-widths
+    ridgeFreq: 0.85,     // mountain ridge frequency (broader = gentler)
+    warp: 0.42,          // domain warp amount — what stops noise looking
+                         // like noise and starts it looking like land
+    /* OCTAVE DEPTH IS BOUNDED BY THE CELL SIZE. The heightfield samples
+       every 4m, so any octave whose wavelength is under about four cells
+       is being point-sampled out of a field it cannot represent, and what
+       comes back is not detail — it is noise between neighbouring samples,
+       which reads as slope. At six octaves the finest ridge wavelength was
+       7m and 46% of the map came out steeper than the cliff angle, cutting
+       alpine seeds into islands no route could join. Five and four put the
+       finest wavelengths at 20m and 30m: still detail, but detail the grid
+       can actually hold. */
+    octaves: 5,
+    ridgeOctaves: 4,
+    fineFreq: 8.0,
+    fineOctaves: 3,
+    /* And a backstop, because the above is a rule of thumb and the styles
+       compose differently. If more of the map than this is over the cliff
+       angle, it is smoothed again until it is not. */
+    maxCliffFrac: 0.14,
+    cliffGuardPasses: 16,
+    /* GAIN IS WHAT DECIDES HOW PITTED THE MAP IS. At the textbook 0.5 the
+       finest octave of a 210m relief carries about 6m of amplitude, and at
+       a 4m cell that is a landscape speckled with metre-deep holes: the
+       depression filler found pits deeper than pondMinDepth across 39% of
+       the map, so 39% of the map came back as pond. 0.42 puts the finest
+       octave near a metre, which is ground, not holes. */
+    gain: 0.42,
+    smoothPasses: 2,     // 3x3 blur after generation: kills single-cell pits
+    erodePasses: 3,      // cheap thermal-ish smoothing passes
+    erodeTalus: 0.021,   // slope above which material slides, per cell
+    cliffChance: 0.55,   // seed rolls against this for a cliffy personality
+  },
+
+  /* ---- hydrology ---------------------------------------------------- */
+  HYDRO: {
+    streamAcc: 26,       // flow accumulation (cells) to be a stream
+    riverAcc: 210,       // ... to be a river
+    trunkAcc: 900,       // ... to be the trunk river
+    carveStream: 0.9,    // metres of channel cut
+    carveRiver: 3.0,
+    carveTrunk: 5.4,
+    bankSmooth: 2,       // cells either side that get pulled toward the bed
+    pondMinDepth: 1.1,   // a filled depression this deep becomes a pond
+    pondMinCells: 14,
+    /* A basin bigger than this is not a pond, it is the map failing to
+       drain. breachBasins() cuts its spill point down until it is either
+       small enough to be a lake or gone. See the note there. */
+    maxLakeCells: 900,
+    breachPasses: 12,
+    breachDrop: 7.0,     // floor for how far the spill saddle comes down
+    breachFrac: 0.80,    // ... but mostly it comes down this much of the
+                         // basin's own depth, so one pass drains a big one
+    fastAcc: 420,        // accumulation above which water is "fast" (hazard)
+    deepDepth: 1.45,     // metres of depth that will drown you
+  },
+
+  /* ---- routes ------------------------------------------------------- */
+  ROUTE: {
+    roadSlopeCost: 260,  // roads hate slope more than anything
+    trailSlopeCost: 90,
+    trailValleyBonus: 26,// trails like valleys and riverbanks
+    trailWaterCost: 150, // ... but not crossing water
+    trailCount: [3, 7],  // per seed
+    markerEvery: 34,     // metres between trail markers near civilisation
+    wornNear: 120,       // metres from the hospital where a trail is a road
+    wornFar: 620,        // ... and where it is barely a deer path
+  },
+
+  /* ---- what gets built --------------------------------------------- */
+  STRUCT: {
+    cabins:    [2, 5],
+    campsites: [3, 8],
+    ruins:     [1, 4],
+    car:       [0, 2],
+    minApart:  46,       // metres between any two structures
+    routeBias: 0.72,     // fraction placed on or near a route
+  },
+  RESOURCE: {
+    berryPatches: [6, 26],   // scaled down hard on scarce seeds
+    pickedClean:  [0.15, 0.6],
+    waterPoints:  [10, 40],
+    items:        [5, 18],
+  },
+
+  /* ---- hazards ------------------------------------------------------ */
+  HAZARD: {
+    cliffSlope: 0.86,    // rise/run above which a cell is a cliff face
+    fallLethal: 7.4,     // metres of drop that kills outright
+    fallHurt: 3.6,       // ... and where it starts costing you
+    slipSlope: 0.70,     // above this you slide
+    CLEAR: 26,           // no hazard within this many metres of the start
+    bogSlow: 0.42,       // movement multiplier in a bog
+  },
+
+  /* ---- the player --------------------------------------------------- */
+  PLAYER: {
+    eye: 1.66, radius: 0.34,
+    walk: 2.55, sprint: 5.05, crouchless: true,
+    accel: 13, damp: 10.5,
+    staminaMax: 100, staminaDrain: 17, staminaRegen: 11, staminaFloor: 12,
+    stepUp: 0.55,        // metres of terrain step taken without slowing
+    swimDepth: 1.05,     // above this you are swimming, not wading
+    /* WITHOUT A REFERENCE POINT YOU DO NOT WALK STRAIGHT.
+       Real people in real forests circle. This is a slow bias added to
+       the movement heading (never to the camera, which would feel like
+       the game grabbing the mouse). It is cancelled by looking at the
+       sun, a landmark, or the compass. */
+    driftRate: 0.055,    // radians per second at full drift
+    driftWander: 0.11,   // how fast the drift direction itself wanders
+  },
+
+  /* ---- survival ----------------------------------------------------- */
+  SURVIVE: {
+    /* Thirst and hunger are primarily MIND pressure and weakness, not a
+       fast clock. Severe neglect still ends a run, but slowly. */
+    thirstPerHour: 10.0,     // percent of the bar per in-fiction hour
+    hungerPerHour: 3.4,
+    sprintThirstMult: 2.2,
+    heatThirstMult: 1.35,
+    thirstWeakAt: 62,        // where speed and stamina start to go
+    hungerWeakAt: 70,
+    thirstDeadlyAt: 100,     // and where the run can end
+    hungerDeadlyAt: 100,
+    weakSpeedFloor: 0.62,    // slowest you can get from need alone
+    weakStamFloor: 0.45,
+    sickMinutes: [3, 9],     // how long a bad drink or bad berry lasts
+    coldPerHour: 8.0,        // exposure when wet, at night, in rain
+    coldWarmPerHour: 16.0,   // and how fast shelter or a fire gives it back
+    coldDeadlyAt: 100,
+    drownSeconds: 22,        // underwater stamina, effectively
+  },
+
+  /* ---- equipment ----------------------------------------------------- */
+  GEAR: {
+    batteryMinutes: 62,      // real minutes of continuous beam, fresh cell
+    batteryLowAt: 0.17,      // fraction where the real flicker starts
+    spareBatteryChance: 0.55,// per eligible structure
+    bottleML: 900,
+    drinkHold: 2.4,          // seconds of HOLD to drink from a source
+    fillHold: 3.2,
+    pickHold: 1.9,
+    restHold: 3.0,
+    compassSettle: 2.6,      // seconds for the needle to stop swinging
+  },
+
+  /* ---- time and weather ---------------------------------------------- */
+  TIME: {
+    /* One in-fiction day in this many real minutes. A run is not meant to
+       last a day: the mind gives out first. 42 makes an hour about 105
+       real seconds, which is long enough that dusk is a slow dread and
+       short enough that a night is survivable. */
+    dayRealMinutes: 42,
+    dawn: 6.1, sunrise: 6.8, sunset: 19.4, dusk: 20.3,   // in-fiction hours
+    startHours: [6.4, 12.1, 18.6, 22.5],                 // the four openings
+  },
+  WEATHER: {
+    changeMinutes: [4, 14],  // real minutes between weather decisions
+    fogBase: 0.0062,         // FogExp2 density, clear day
+    fogThick: 0.031,
+    rainFogMult: 1.5,
+    nightFogMult: 1.22,
+  },
+
+  /* ---- the mind ------------------------------------------------------ */
+  MIND: {
+    /* progress 0..1 walks up through the five stages. baseRate is per real
+       minute at rate multiplier 1; the seed's personality scales it. */
+    baseRate: 0.0125,
+    stageAt: [0, 0.16, 0.36, 0.60, 0.84],   // progress -> stage boundary
+    leakChance: 0.13,        // a draw reaching one stage above current
+    leakChanceLate: 0.07,    // ... from stage 3 on, where it matters less
+    /* Multipliers on progression. Night is the big one. */
+    mulNight: 2.15, mulDusk: 1.35, mulDay: 1.0, mulDawn: 0.72,
+    mulRain: 1.16, mulFog: 1.14, mulClear: 0.93,
+    mulThirst: 1.5, mulHunger: 1.22, mulCold: 1.3, mulSick: 1.55,
+    mulExhausted: 1.28,
+    calmDrink: -0.030,       // one-off progress credit for good behaviour
+    calmEat: -0.022, calmRest: -0.05, calmShelter: -0.012,
+    /* Pauses: the mind having a good stretch. Stage 0-1 only at full
+       strength, tapering to nothing by stage 4. */
+    pauseChancePerMin: [0.42, 0.34, 0.15, 0.06, 0],
+    pauseSeconds: [22, 95],
+    /* Intensity waves. periods in real seconds. */
+    waveBands: [[55, 95], [140, 230], [330, 520]],
+    waveWeights: [0.30, 0.42, 0.28],
+    spikeChancePerMin: 0.55,
+    spikeSize: [0.22, 0.48],
+    spikeSeconds: [3.5, 13],
+    intensityFloorByStage: [0.00, 0.10, 0.22, 0.38, 0.55],
+    intensityCeilByStage:  [0.30, 0.52, 0.74, 0.90, 1.00],
+  },
+
+  /* ---- behaviour tracking -------------------------------------------- */
+  AGITATE: {
+    window: 60,              // seconds of history that count
+    /* Each of these is a rate of agitation-per-second while the pattern
+       holds. They are deliberately small: the cap is what matters. */
+    sprintNoHeading: 0.035,
+    spin: 0.045,             // fast camera yaw sustained
+    spinRate: 2.4,           // rad/s above which yaw counts as whipping
+    backtrack: 0.030,
+    torchSwing: 0.028,
+    chasedNothing: 0.10,     // one-off, per chase resolved as nothing
+    toolSpam: 0.022,         // compass/map checked over and over
+    toolSpamCount: 4,        // ... this many inside 20s starts counting
+    frozenDark: 0.018,
+    frozenSeconds: 14,       // standing still in the dark this long
+    calmDrain: 0.055,        // per second of steady walking on a heading
+    trailDrain: 0.075,       // ... on a real trail or riverbank
+    restDrain: 0.16,
+    cap: 1.0,
+    capPerEvent: 0.22,       // no single pattern can add more than this
+                             // in one window — the anti-death-spiral rule
+  },
+
+  /* ---- the director --------------------------------------------------- */
+  DIRECT: {
+    tick: 1.0,               // seconds between rolls
+    base: 0.055,             // chance per roll at stage 0, intensity 0
+    perStage: 0.036,
+    perIntensity: 0.075,
+    perNight: 0.030,
+    perAgitation: 0.020,
+    quietByStage: [[26, 70], [22, 58], [18, 46], [14, 36], [11, 28]],
+    recencyWindow: 260,      // seconds over which a repeat is taxed
+    recencyFloor: 0.10,      // ... down to this much of its weight
+    /* A run that never unsettles you is a broken run. This is a rising
+       per-second hazard, not a timer, so the first one is never at a
+       predictable moment. */
+    firstUrgeFrom: 70,       // real seconds before the urge starts
+    firstUrgeTo: 300,        // ... and where it is near certain
+    firstUrgeMax: 0.030,
+    announceChance: 0.5,     // half of all events arrive with a sound
+  },
+
+  /* ---- rendering ------------------------------------------------------ */
+  QUALITY: {
+    texSize: 512,
+    shadowMap: 2048,
+    volumetrics: true,
+    treeRadius: 150,         // metres of trees kept instanced around you
+    colliderRadius: 42,      // ... and how close one needs to be to block
+    grassRadius: 34,
+    maxPixelRatio: 1.5,
+    fovDefault: 74,
+  },
+
+  DEBUG: { freezeClock:false, freezeMind:false, showPhantoms:false, logRolls:true },
+};
+
+/* The single mutable game state object. Everything reads the clock and the
+   run state from here so there is one source of truth for both. */
+const G = {
+  seed: 0, seedText: '',
+  t: 0,                // real seconds since the run started
+  hours: 8,            // in-fiction hour of day, 0..24, wraps
+  day: 1,
+  started: false, paused: true, over: false, won: false,
+  stress: 0.05,        // 0..1 — drives vignette, grain, breathing. NOT sanity:
+                       // it is a presentation value and the player never sees
+                       // it as a number.
+  deaths: null,        // cause string when over
+};
+
+/* =====================================================================
+   ===== MATH & NOISE =====
+   Deterministic, integer-hashed, and used on both sides: on the CPU to
+   build the heightfield and draw canvas textures, and as a GLSL string
+   injected into every custom shader so the two agree about what the
+   ground looks like.
+
+   WHY INTEGER HASHING AND NOT sin(). The obvious one-liner,
+   fract(sin(dot(p,k))*43758.5), is what most noise in the wild uses, and
+   it is fine for a shader. It is NOT fine for a heightfield that a seed
+   has to reproduce exactly, because Math.sin is not required to be
+   bit-identical across engines or platforms — so "the same seed always
+   produces the same world" would have quietly meant "on my machine". The
+   CPU side is pure 32-bit integer arithmetic through Math.imul, which is
+   exactly specified. The GLSL twin still uses the cheap version: it only
+   ever decides what a pixel looks like, never where the ground is.
+   ===================================================================== */
+const clamp = (v,a,b)=> v<a?a:v>b?b:v;
+const lerp  = (a,b,t)=> a+(b-a)*t;
+const smoothstep = (a,b,x)=>{ const t=clamp((x-a)/(b-a),0,1); return t*t*(3-2*t); };
+const saturate = v => clamp(v,0,1);
+const TAU = Math.PI*2;
+const DEG = Math.PI/180;
+const mod = (a,n)=> ((a%n)+n)%n;
+// shortest signed angle from a to b
+const angDiff = (a,b)=>{ let d = mod(b-a+Math.PI, TAU) - Math.PI; return d; };
+
+/* ---- the PRNG. mulberry32: small, fast, and good enough that a world
+   built from it does not show structure. ---- */
+function makeRNG(seed){
+  let a = seed >>> 0;
+  const f = function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  f.int   = (n)=> Math.floor(f()*n);
+  f.range = (a2,b2)=> a2 + (b2-a2)*f();
+  f.irange= (a2,b2)=> Math.floor(a2 + (b2-a2+1)*f());
+  f.pick  = (arr)=> arr[Math.floor(f()*arr.length)];
+  f.chance= (p)=> f() < p;
+  // pick from [[weight, value], ...]
+  f.weighted = (pairs)=>{
+    let tot=0; for(const p of pairs) tot += p[0];
+    let r = f()*tot;
+    for(const p of pairs){ r -= p[0]; if(r <= 0) return p[1]; }
+    return pairs[pairs.length-1][1];
+  };
+  f.shuffle = (arr)=>{ for(let i=arr.length-1;i>0;i--){ const j=f.int(i+1); const t=arr[i]; arr[i]=arr[j]; arr[j]=t; } return arr; };
+  // gaussian-ish, for things that should cluster around a middle
+  f.bell = (a2,b2)=> a2 + (b2-a2)*((f()+f()+f())/3);
+  return f;
+}
+
+/* ---- string -> 32-bit seed (FNV-1a) ---- */
+function hashString(s){
+  let h = 0x811c9dc5;
+  for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+}
+
+/* NAMED SUB-STREAMS. Every system asks for its own RNG by name rather
+   than sharing one global stream, because otherwise adding a single
+   rand() call to the audio bank silently re-rolls the entire world. A
+   sub-stream is the master seed mixed with the name, so `rngFor('trees')`
+   is the same sequence on the same seed no matter what else ran first
+   or how many times it ran. */
+function rngFor(name, salt=0){
+  return makeRNG((hashString(name) ^ Math.imul(G.seed >>> 0, 0x9E3779B1) ^ Math.imul(salt|0, 0x85EBCA6B)) >>> 0);
+}
+
+/* ---- integer hash noise ---- */
+function ihash2(x, y, s){
+  let h = Math.imul(x|0, 0x27d4eb2d) ^ Math.imul(y|0, 0x165667b1) ^ Math.imul(s|0, 0x9e3779b9);
+  h ^= h >>> 15; h = Math.imul(h, 0x2545f491);
+  h ^= h >>> 13; h = Math.imul(h, 0x3b9e7a1b);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function ihash3(x, y, z, s){
+  let h = Math.imul(x|0, 0x27d4eb2d) ^ Math.imul(y|0, 0x165667b1) ^ Math.imul(z|0, 0x1b873593) ^ Math.imul(s|0, 0x9e3779b9);
+  h ^= h >>> 15; h = Math.imul(h, 0x2545f491);
+  h ^= h >>> 13; h = Math.imul(h, 0x3b9e7a1b);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function vnoise2(x, y, s=0){
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf*xf*(3-2*xf), v = yf*yf*(3-2*yf);
+  const a = ihash2(xi,   yi,   s), b = ihash2(xi+1, yi,   s);
+  const c = ihash2(xi,   yi+1, s), d = ihash2(xi+1, yi+1, s);
+  return lerp(lerp(a,b,u), lerp(c,d,u), v);
+}
+function fbm2(x, y, oct=5, s=0, lac=2.03, gain=0.5){
+  let sum=0, amp=0.5, f=1, norm=0;
+  for(let i=0;i<oct;i++){ sum += amp*vnoise2(x*f, y*f, s+i*37); norm += amp; amp*=gain; f*=lac; }
+  return sum/norm;
+}
+/* Ridged multifractal. This is what makes mountains have crests instead
+   of lumps: each octave is folded around its midpoint so the maxima
+   become sharp lines, and each octave is weighted by the one above it so
+   ridges only build detail where there is already a ridge. */
+function ridged2(x, y, oct=5, s=0, lac=2.07, gain=0.5){
+  let sum=0, amp=0.5, f=1, norm=0, weight=1;
+  for(let i=0;i<oct;i++){
+    let n = vnoise2(x*f, y*f, s+i*53);
+    n = 1 - Math.abs(n*2 - 1);
+    n *= n;
+    n *= weight;
+    weight = clamp(n*1.9, 0, 1);
+    sum += amp*n; norm += amp; amp*=gain; f*=lac;
+  }
+  return sum/norm;
+}
+function worley2(x, y, s=0, jitter=1){
+  const xi = Math.floor(x), yi = Math.floor(y);
+  let f1 = 9, f2 = 9;
+  for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){
+    const cx = xi+i, cy = yi+j;
+    const px = cx + ihash2(cx, cy, s)*jitter;
+    const py = cy + ihash2(cx+911, cy-407, s)*jitter;
+    const d = (px-x)*(px-x) + (py-y)*(py-y);
+    if(d < f1){ f2 = f1; f1 = d; } else if(d < f2){ f2 = d; }
+  }
+  return { f1: Math.sqrt(f1), f2: Math.sqrt(f2) };
+}
+/* Domain warp: sample the field at a position that has itself been pushed
+   around by another field. One line, and it is the difference between
+   "noise" and "land that water could have shaped". */
+function warp2(x, y, amt, s=0){
+  const wx = fbm2(x*0.7 + 11.3, y*0.7 - 4.1, 3, s+101)*2-1;
+  const wy = fbm2(x*0.7 - 7.9,  y*0.7 + 2.6, 3, s+211)*2-1;
+  return [x + wx*amt, y + wy*amt];
+}
+
+// GLSL twin. Cheap and pretty; never load-bearing for gameplay.
+const NOISE_GLSL = /* glsl */`
+float hash21(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
+vec2 hash22(vec2 p){
+  vec3 p3 = fract(vec3(p.xyx)*vec3(.1031,.1030,.0973));
+  p3 += dot(p3, p3.yzx+33.33);
+  return fract((p3.xx+p3.yz)*p3.zy);
+}
+float vnoise(vec2 p){
+  vec2 i=floor(p), f=fract(p);
+  vec2 u=f*f*(3.0-2.0*f);
+  return mix(mix(hash21(i),hash21(i+vec2(1,0)),u.x),
+             mix(hash21(i+vec2(0,1)),hash21(i+vec2(1,1)),u.x), u.y);
+}
+float fbmN(vec2 p){ float s=0.0,a=0.5; for(int i=0;i<5;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
+float worleyN(vec2 p){
+  vec2 i=floor(p), f=fract(p); float d=8.0;
+  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){
+    vec2 g=vec2(float(x),float(y));
+    d = min(d, length(g + hash22(i+g) - f));
+  }
+  return d;
+}
+`;
+
+/* =====================================================================
+   ===== SEED =====
+   A seed is a short string. It becomes a 32-bit number, and that number
+   becomes a PERSONALITY: a set of traits that every later system reads.
+   Two seeds should not feel like the same game with the furniture moved.
+
+   The personality is rolled from its OWN sub-stream, so it is stable no
+   matter what else has run, and it is rolled once, up front, so that the
+   dev panel can show you what kind of run you are about to have (and the
+   player never can).
+   ===================================================================== */
+const TERRAIN_STYLES = ['alpine','rolling','ravines','plateau','basin'];
+const HALL_FLAVOURS  = ['auditory','visual','structural','navigational'];
+const WEATHER_PATTERNS = ['clear','fog','rain','storm','turning'];
+
+function rollPersonality(){
+  const r = rngFor('personality');
+  const p = {};
+
+  // --- the land ---
+  p.terrain = r.weighted([[26,'alpine'],[30,'rolling'],[20,'ravines'],[12,'plateau'],[12,'basin']]);
+  p.relief  = r.range(0.60, 1.18);          // multiplies CFG.WORLD.RELIEF
+  p.cliffy  = r.range(0.25, 1.0);           // how sharp the steep ground is
+  p.wetness = r.range(0.45, 1.6);           // how much water the map carries
+  /* WHERE THE WATER LEAVES. The rim of the map is lifted so the world reads
+     as a bowl you turn back from rather than a square that stops, but a bowl
+     with an unbroken rim has no outlet, and a heightfield with no outlet
+     floods solid the moment the depression filler runs — which is exactly
+     what the first build of this did, to 82% of the map. So one notch is cut
+     in the rim, here, before any terrain exists, and the whole map is tilted
+     gently toward it. Everything downstream follows: the trunk river finds
+     the notch on its own, and the hospital lands beside it. */
+  p.outletAngle = r.range(0, TAU);
+  p.outletWidth = r.range(0.055, 0.115);    // fraction of the map width
+
+  // --- the wood ---
+  p.density = r.range(0.45, 1.5);           // trees per hectare multiplier
+  p.species = (()=>{                        // 2-3 conifer flavours per seed
+    const all = ['spruce','fir','pine','hemlock','larch'];
+    r.shuffle(all);
+    return all.slice(0, r.irange(2,3));
+  })();
+  p.scrub   = r.range(0.4, 1.5);
+  p.treeline= r.range(0.58, 0.88);          // fraction of RELIEF where trees stop
+
+  // --- how far, and which way ---
+  /* WHICH WAY, AND HOW FAR. The bearing is an offset from "straight inland
+     from the hospital", not an absolute compass direction, because the
+     hospital always stands at the map's outlet and therefore always on the
+     rim: an absolute bearing points out of the world for half of its range,
+     and the first build answered that by clamping the start back toward the
+     hospital — which quietly deleted the distance the seed had asked for.
+     The player is told neither number, so nothing is given away by making
+     this one always feasible. */
+  p.hospitalBearing = r.range(-1, 1);       // x 120 degrees off inland
+  p.hospitalDist= r.range(0.32, 0.92);      // fraction of the way across
+
+  // --- the mind ---
+  p.declineRate = r.range(0.55, 1.75);      // multiplies CFG.MIND.baseRate
+  p.waviness    = r.range(0.4, 1.5);        // intensity wave amplitude
+  p.spikiness   = r.range(0.4, 1.7);        // spike frequency and size
+  p.flavours    = (()=>{                    // which hallucinations this seed likes
+    const w = {};
+    const shuffled = HALL_FLAVOURS.slice();
+    r.shuffle(shuffled);
+    // one strong favourite, one secondary, the rest ordinary — a seed that
+    // is "mostly auditory" should be obviously that after twenty minutes
+    w[shuffled[0]] = r.range(1.8, 3.2);
+    w[shuffled[1]] = r.range(1.0, 1.6);
+    for(let i=2;i<shuffled.length;i++) w[shuffled[i]] = r.range(0.35, 0.85);
+    return w;
+  })();
+  p.leakBonus = r.range(0.7, 1.6);
+
+  // --- what there is to find ---
+  p.scarcity  = r.range(0.35, 1.5);         // >1 is generous, <1 is mean
+  p.foodScarcity = r.range(0.25, 1.4);      // food is meaner than water
+
+  // --- starting conditions ---
+  p.startHour = r.pick(CFG.TIME.startHours);
+  p.weather   = r.weighted([[26,'clear'],[22,'fog'],[24,'rain'],[14,'storm'],[14,'turning']]);
+  p.windBase  = r.range(0.15, 0.85);
+
+  // --- what is in the player's hands at the start ---
+  p.gear = {
+    compass: r.chance(0.58),
+    bottle:  r.chance(0.72),
+    bottleFull: r.range(0, 1),
+    food:    r.chance(0.55) ? 1 : 0,
+    battery: r.range(0.42, 1.0),            // fraction of a cell
+    mapFrag: r.chance(0.5),
+  };
+
+  // --- the sound of the place ---
+  p.soundSeed = (r() * 0xFFFFFFFF) >>> 0;
+  p.birdiness = r.range(0.4, 1.4);
+  p.roomTone  = r.range(0.6, 1.4);          // how reverberant this forest is
+
+  /* A hidden difficulty number, shown only after the run so seeds can be
+     compared and shared. It is a genuine composite of the things that
+     make a seed hard, not a hand-written label. */
+  p.difficulty = clamp(
+      (p.declineRate - 0.55) / 1.20 * 0.34
+    + (1.5 - p.scarcity) / 1.15 * 0.20
+    + (1.4 - p.foodScarcity) / 1.15 * 0.12
+    + (p.hospitalDist - 0.30) / 0.52 * 0.18
+    + ({clear:0, fog:0.35, rain:0.5, storm:0.85, turning:0.6}[p.weather]) * 0.10
+    + (p.startHour > 18 || p.startHour < 6.4 ? 0.06 : 0)
+    , 0, 1);
+  return p;
+}
+let P = null;   // the live personality, set by boot()
+
+/* =====================================================================
+   ===== WORLDGEN =====
+   The world is generated in layers and each layer may only read the ones
+   beneath it. That ordering is the whole reason a seed cannot produce
+   nonsense: the hospital cannot be somewhere the water disagrees with,
+   because the water was decided first; a trail cannot climb a cliff,
+   because the cliff is already in the heightfield when the router runs.
+
+   Everything here is data. Nothing in this section touches Three.js —
+   ===== VEGETATION ===== and buildTerrainMesh() turn it into geometry
+   afterwards. That separation is what lets the seed validator generate a
+   hundred worlds in a couple of seconds without a renderer.
+   ===================================================================== */
+
+/* A tiny binary heap. Needed by the depression filler, which is the one
+   algorithm in this file that genuinely needs a priority queue. */
+class MinHeap {
+  constructor(){ this.k = []; this.v = []; }
+  get size(){ return this.k.length; }
+  push(key, val){
+    const k=this.k, v=this.v;
+    k.push(key); v.push(val);
+    let i = k.length-1;
+    while(i > 0){
+      const p = (i-1) >> 1;
+      if(k[p] <= k[i]) break;
+      const tk=k[p]; k[p]=k[i]; k[i]=tk;
+      const tv=v[p]; v[p]=v[i]; v[i]=tv;
+      i = p;
+    }
+  }
+  pop(){
+    const k=this.k, v=this.v;
+    const top = v[0];
+    const lk = k.pop(), lv = v.pop();
+    if(k.length){
+      k[0]=lk; v[0]=lv;
+      let i=0;
+      for(;;){
+        const l=i*2+1, r=l+1;
+        let m=i;
+        if(l < k.length && k[l] < k[m]) m=l;
+        if(r < k.length && k[r] < k[m]) m=r;
+        if(m===i) break;
+        const tk=k[m]; k[m]=k[i]; k[i]=tk;
+        const tv=v[m]; v[m]=v[i]; v[i]=tv;
+        i=m;
+      }
+    }
+    return top;
+  }
+}
+
+/* The world, as plain arrays. Rebuilt wholesale by generate(). */
+const Wld = {
+  N: 0, size: 0, cell: 0,
+  H: null,        // terrain surface height, metres
+  ACC: null,      // flow accumulation, in cells drained
+  DIR: null,      // D8 receiver index, -1 at an outlet
+  WLEV: null,     // water surface height where there is water, else -9999
+  POND: null,     // Uint8: 1 where the water is standing rather than moving
+  SLOPE: null,    // |gradient|, precomputed because everything wants it
+  ROUTE: null,    // Uint8: 0 none, 1 trail, 2 road
+  WORN: null,     // Float32 0..1, how used a route cell looks
+  CLEAR: null,    // Float32 0..1, how open the canopy is here
+  ready: false,
+
+  hospital: null, start: null,
+  road: null, trails: [], structures: [], water: [], berries: [],
+  items: [], landmarks: [], clues: [], hazards: [],
+  routePath: null,       // the validated start -> hospital path, for the dev panel
+  stats: {},
+};
+
+/* ---- grid <-> world helpers. One place, because getting these subtly
+   wrong is the classic way to spend an evening. ---- */
+function gxOf(x){ return (x + Wld.size*0.5) / Wld.cell; }
+function gzOf(z){ return (z + Wld.size*0.5) / Wld.cell; }
+function wxOf(gx){ return gx*Wld.cell - Wld.size*0.5; }
+function wzOf(gz){ return gz*Wld.cell - Wld.size*0.5; }
+function idxOf(ix, iz){ return iz*Wld.N + ix; }
+function inGrid(ix, iz){ return ix>=0 && iz>=0 && ix<Wld.N && iz<Wld.N; }
+
+/* Bilinear height. This is THE ground: the mesh is built from the same
+   array, the player walks on this function, and the physics and the
+   picture therefore cannot disagree. */
+function heightAt(x, z){
+  const H = Wld.H; if(!H) return 0;
+  const N = Wld.N;
+  let gx = clamp(gxOf(x), 0, N-1.0001), gz = clamp(gzOf(z), 0, N-1.0001);
+  const ix = gx|0, iz = gz|0;
+  const fx = gx-ix, fz = gz-iz;
+  const h00 = H[iz*N+ix],     h10 = H[iz*N+ix+1];
+  const h01 = H[(iz+1)*N+ix], h11 = H[(iz+1)*N+ix+1];
+  return lerp(lerp(h00,h10,fx), lerp(h01,h11,fx), fz);
+}
+function waterLevelAt(x, z){
+  const W = Wld.WLEV; if(!W) return -9999;
+  const N = Wld.N;
+  let gx = clamp(gxOf(x), 0, N-1.0001), gz = clamp(gzOf(z), 0, N-1.0001);
+  const ix = gx|0, iz = gz|0;
+  const fx = gx-ix, fz = gz-iz;
+  // A missing neighbour must not drag the surface down into the riverbed,
+  // so absent water reads as the nearest present water rather than -9999.
+  const s = (i)=> W[i] < -9000 ? null : W[i];
+  const a=s(iz*N+ix), b=s(iz*N+ix+1), c=s((iz+1)*N+ix), d=s((iz+1)*N+ix+1);
+  if(a===null && b===null && c===null && d===null) return -9999;
+  const fill = (v)=> v===null ? null : v;
+  const vals=[a,b,c,d].filter(v=>v!==null);
+  const avg = vals.reduce((p,q)=>p+q,0)/vals.length;
+  const A = fill(a) ?? avg, B = fill(b) ?? avg, C = fill(c) ?? avg, D = fill(d) ?? avg;
+  return lerp(lerp(A,B,fx), lerp(C,D,fx), fz);
+}
+function waterDepthAt(x, z){
+  const w = waterLevelAt(x,z);
+  if(w < -9000) return 0;
+  return Math.max(0, w - heightAt(x,z));
+}
+function slopeAt(x, z){
+  const d = 1.6;
+  const hx = heightAt(x+d,z) - heightAt(x-d,z);
+  const hz = heightAt(x,z+d) - heightAt(x,z-d);
+  return Math.hypot(hx, hz) / (2*d);
+}
+function normalAt(x, z, out){
+  const d = 1.6;
+  const hx = heightAt(x+d,z) - heightAt(x-d,z);
+  const hz = heightAt(x,z+d) - heightAt(x,z-d);
+  const n = out || new THREE.Vector3();
+  n.set(-hx, 2*d, -hz).normalize();
+  return n;
+}
+function sampleGrid(arr, x, z, dflt=0){
+  if(!arr) return dflt;
+  const N = Wld.N;
+  const ix = Math.round(clamp(gxOf(x),0,N-1)), iz = Math.round(clamp(gzOf(z),0,N-1));
+  return arr[iz*N+ix];
+}
+
+/* ---------------------------------------------------------------------
+   LAYER 1 — TERRAIN
+   Ridged multifractal for the bones, warped fbm for the flesh, and a
+   per-style recipe on top. The five styles are not five noise settings
+   with different numbers; they are different SHAPES, because a seed that
+   only changes an amplitude reads as the same map every time.
+   ------------------------------------------------------------------- */
+function genTerrain(salt){
+  const N = CFG.WORLD.N, SZ = CFG.WORLD.SIZE;
+  Wld.N = N; Wld.size = SZ; Wld.cell = SZ/(N-1);
+  const H = new Float32Array(N*N);
+  const s = (hashString('terrain') ^ Math.imul(G.seed, 0x9E3779B1) ^ Math.imul(salt, 0x7feb352d)) >>> 0;
+  const st = P.terrain;
+  const relief = CFG.WORLD.RELIEF * P.relief;
+  const T = CFG.TERRAIN;
+  // the outlet, as a point on the unit square's rim in u/v space
+  const oa = P.outletAngle;
+  const oc = Math.cos(oa), os_ = Math.sin(oa);
+  const k = 0.5 / Math.max(Math.abs(oc), Math.abs(os_));
+  const ox = oc*k, oz = os_*k;
+  Wld.outlet = { u: ox, v: oz, x: ox*SZ, z: oz*SZ };
+
+  for(let iz=0; iz<N; iz++){
+    for(let ix=0; ix<N; ix++){
+      const u = ix/(N-1) - 0.5, v = iz/(N-1) - 0.5;   // -0.5..0.5
+      let nx = u*T.baseFreq, nz = v*T.baseFreq;
+      const [wx, wz] = warp2(nx, nz, T.warp, s);
+
+      const hills = fbm2(wx*3.1, wz*3.1, T.octaves, s, 2.03, T.gain);
+      const ridge = ridged2(u*T.ridgeFreq*3.4 + 5.2, v*T.ridgeFreq*3.4 - 1.7, T.ridgeOctaves, s+77, 2.0, T.gain);
+      const broad = fbm2(u*1.6 - 3.3, v*1.6 + 9.1, 3, s+303);
+      const fine  = fbm2(wx*T.fineFreq, wz*T.fineFreq, T.fineOctaves, s+505, 2.03, T.gain);
+
+      let h;
+      switch(st){
+        case 'alpine':
+          // ridges dominate; the valleys between them are where everything
+          // else in the game happens
+          h = ridge*0.66 + hills*0.20 + broad*0.22 + fine*0.05;
+          h = Math.pow(clamp(h,0,1.4), 1.10);
+          break;
+        case 'rolling':
+          h = hills*0.55 + broad*0.40 + ridge*0.10 + fine*0.07;
+          break;
+        case 'ravines': {
+          // an incision field: narrow, deep, branching cuts through
+          // otherwise ordinary hills. 1-ridge is a set of sharp CREASES.
+          const cut = ridged2(u*T.ridgeFreq*5.6 - 2.4, v*T.ridgeFreq*5.6 + 8.8, T.ridgeOctaves, s+911, 2.0, T.gain);
+          h = hills*0.50 + broad*0.34 + fine*0.06;
+          h -= Math.pow(clamp(cut,0,1), 0.7) * 0.30 * P.cliffy;
+          break;
+        }
+        case 'plateau': {
+          // terraces: quantise the broad field and smooth the risers, so
+          // the map is a set of flat shelves with steep steps between them
+          const raw = hills*0.42 + broad*0.48 + fine*0.05;
+          const steps = 5;
+          const q = Math.floor(raw*steps)/steps;
+          const frac = raw*steps - Math.floor(raw*steps);
+          h = q + smoothstep(0.34, 0.66, frac)/steps;
+          h += ridge*0.10;
+          break;
+        }
+        default: {
+          /* BASIN — a broad valley running to the outlet with high ground
+             either side of it, NOT a sealed bowl. A bowl was the first
+             version and it was wrong twice over: it has no outlet, so the
+             depression filler drowned it, and a map where every direction
+             is uphill gives the player no reason to choose one. The valley
+             floor is measured across the outlet axis, so the low ground
+             always points at the way out. */
+          const across = (u*(-oz) + v*ox) * 2;     // distance from the axis
+          const trough = Math.pow(clamp(Math.abs(across),0,1), 1.5);
+          h = hills*0.30 + broad*0.24 + ridge*0.18 + trough*0.60 + fine*0.05;
+          break;
+        }
+      }
+
+      /* THE RIM, AND THE ONE GAP IN IT. Without a rim the map is a square
+         of land with a cliff of nothing at the edge, and a player who walks
+         to it learns the world is a box. With an UNBROKEN rim the map is a
+         sealed bowl: the depression filler in genHydrology then has nowhere
+         to drain to and floods the interior solid. So the rim is lifted
+         everywhere except a notch at P.outletAngle, and the whole map is
+         tilted a little toward that notch. That is the single geometric
+         fact the rest of the world is built on — the trunk river finds the
+         notch by itself, the hospital is placed where it leaves, and
+         "downstream is toward civilisation" stops being a design note and
+         becomes a property of the terrain. */
+      const e = CFG.WORLD.EDGE_FADE;
+      const dEdge = Math.min(0.5 - Math.abs(u), 0.5 - Math.abs(v)) / e;
+      let rim = 1 - smoothstep(0, 1, clamp(dEdge, 0, 1));
+      const dOut = Math.hypot(u - ox, v - oz);
+      rim *= smoothstep(P.outletWidth*0.55, P.outletWidth*1.8, dOut);
+      h = h*(1 - rim*0.42) + rim*0.86;
+
+      /* THE TILT. A real fall toward the outlet, applied before any of the
+         noise gets a vote. 0.30 was not enough to beat the relief: at
+         210m of range a 0.30 tilt is a 63m fall across a kilometre, which
+         ridged noise walks straight over, and the map came out full of
+         closed bowls. 0.62 is a fall of about 130m from the far rim to the
+         notch, which is a valley the water can actually find. */
+      h -= (u*ox + v*oz) * 0.62 + 0.20;
+
+      H[iz*N+ix] = h*relief;
+    }
+  }
+
+  /* ---- a 3x3 blur first. Two passes, and it is not cosmetic: a single
+     cell that noise happened to put below all eight of its neighbours is a
+     pit the hydrology has to either fill or breach, and there are thousands
+     of them. Smoothing removes them before they become work. ---- */
+  for(let pass=0; pass<T.smoothPasses; pass++){
+    const src = new Float32Array(H);
+    for(let iz=1; iz<N-1; iz++) for(let ix=1; ix<N-1; ix++){
+      let sum = 0;
+      for(let dz=-1; dz<=1; dz++) for(let dx=-1; dx<=1; dx++)
+        sum += src[(iz+dz)*N+(ix+dx)] * ((dx&&dz) ? 0.7 : (dx||dz) ? 1.0 : 1.8);
+      H[iz*N+ix] = sum / (0.7*4 + 1.0*4 + 1.8);
+    }
+  }
+
+  /* ---- cheap thermal erosion. Not a simulation: three passes of "if
+     this cell is steeper than the talus angle, slide some material to the
+     lowest neighbour". It rounds off the impossible spikes noise makes
+     and leaves scree slopes under the cliffs, and it costs a millisecond. */
+  const talus = T.erodeTalus * Wld.cell * (2.0 - P.cliffy);
+  for(let pass=0; pass<T.erodePasses; pass++){
+    for(let iz=1; iz<N-1; iz++) for(let ix=1; ix<N-1; ix++){
+      const i = iz*N+ix, h0 = H[i];
+      let lowI = -1, lowD = talus;
+      for(let dz=-1; dz<=1; dz++) for(let dx=-1; dx<=1; dx++){
+        if(!dx && !dz) continue;
+        const j = (iz+dz)*N + (ix+dx);
+        const d = h0 - H[j];
+        if(d > lowD){ lowD = d; lowI = j; }
+      }
+      if(lowI >= 0){
+        const move = (lowD - talus)*0.42;
+        H[i] -= move; H[lowI] += move;
+      }
+    }
+  }
+  /* ---- THE STEEPNESS GUARD.
+     The octave limits above are a rule of thumb and the five styles stack
+     their terms differently, so this measures the result instead of
+     trusting it: while more of the map than maxCliffFrac is over the cliff
+     angle, smooth it again. It converges in one or two passes on an ordinary
+     seed and does nothing at all on most of them, and it is the reason
+     alpine stopped being a coin flip. ---- */
+  const SL = new Float32Array(N*N);
+  const measure = ()=>{
+    let over = 0;
+    for(let iz=1; iz<N-1; iz++) for(let ix=1; ix<N-1; ix++){
+      const dx = (H[iz*N+ix+1] - H[iz*N+ix-1]) / (2*Wld.cell);
+      const dz = (H[(iz+1)*N+ix] - H[(iz-1)*N+ix]) / (2*Wld.cell);
+      const g = Math.hypot(dx,dz);
+      SL[iz*N+ix] = g;
+      if(g > CFG.HAZARD.cliffSlope) over++;
+    }
+    return over/((N-2)*(N-2));
+  };
+  let frac = measure(), guards = 0;
+  while(frac > T.maxCliffFrac && guards < T.cliffGuardPasses){
+    const src = new Float32Array(H);
+    for(let iz=1; iz<N-1; iz++) for(let ix=1; ix<N-1; ix++){
+      let sum = 0;
+      for(let dz=-1; dz<=1; dz++) for(let dx=-1; dx<=1; dx++)
+        sum += src[(iz+dz)*N+(ix+dx)] * ((dx&&dz) ? 0.7 : (dx||dz) ? 1.0 : 1.8);
+      H[iz*N+ix] = sum / (0.7*4 + 1.0*4 + 1.8);
+    }
+    guards++; frac = measure();
+  }
+  Wld.stats.cliffFrac = +frac.toFixed(3);
+  Wld.stats.cliffGuards = guards;
+  Wld.H = H;
+}
+
+/* Priority-flood + epsilon (Barnes, Lehman & Mulla 2014). Returns a copy of
+   the surface raised just enough that every cell has a strictly descending
+   path to the map edge — no pits, no flats, no undefined flow direction.
+   Pulled out of genHydrology because breachBasins() needs to run it several
+   times over, and two copies of this would be two chances to get it wrong. */
+function priorityFlood(H, N){
+  const n2 = N*N;
+  const filled = new Float32Array(H);
+  const seen = new Uint8Array(n2);
+  const heap = new MinHeap();
+  const EPS = 1e-4;
+  for(let i=0;i<N;i++){
+    const edges = [ i, (N-1)*N+i, i*N, i*N+(N-1) ];
+    for(const e of edges){ if(!seen[e]){ seen[e]=1; heap.push(filled[e], e); } }
+  }
+  while(heap.size){
+    const c = heap.pop();
+    const cz = (c/N)|0, cx = c - cz*N;
+    for(let dz=-1; dz<=1; dz++) for(let dx=-1; dx<=1; dx++){
+      if(!dx && !dz) continue;
+      const nx = cx+dx, nz = cz+dz;
+      if(nx<0||nz<0||nx>=N||nz>=N) continue;
+      const j = nz*N+nx;
+      if(seen[j]) continue;
+      seen[j] = 1;
+      if(filled[j] <= filled[c]) filled[j] = filled[c] + EPS;
+      heap.push(filled[j], j);
+    }
+  }
+  return filled;
+}
+
+/* ---------------------------------------------------------------------
+   BREACHING
+   Filling a depression is the right way to get well-defined flow, but it
+   is the wrong way to get a landscape: a map with one big closed bowl
+   comes back as a map that is mostly lake. Real erosion does not fill a
+   basin, it cuts the basin's outlet down until the basin drains, and that
+   is what this does.
+
+   Each pass floods, finds the connected groups of raised cells, and for
+   any group bigger than maxLakeCells locates its SADDLE — the lowest
+   place on its rim — and cuts a trench through it, continuing downhill
+   outside. The lake level falls by breachDrop and the lake shrinks. Small
+   basins are left completely alone, so tarns and ponds survive, and the
+   trenches the pass leaves behind are outflow gorges, which is a feature.
+   ------------------------------------------------------------------- */
+function breachBasins(){
+  const N = Wld.N, n2 = N*N, H = Wld.H, HY = CFG.HYDRO;
+  const comp = new Int32Array(n2);
+  const stack = [];
+  let totalBreached = 0;
+  for(let pass=0; pass<HY.breachPasses; pass++){
+    const filled = priorityFlood(H, N);
+    comp.fill(-1);
+    let nc = 0, breached = 0;
+    for(let s0=0; s0<n2; s0++){
+      if(comp[s0] >= 0 || filled[s0]-H[s0] <= 0.05) continue;
+      const id = nc++;
+      const cells = [];
+      let maxDepth = 0;
+      comp[s0] = id; stack.length = 0; stack.push(s0);
+      while(stack.length){
+        const c = stack.pop(); cells.push(c);
+        if(filled[c]-H[c] > maxDepth) maxDepth = filled[c]-H[c];
+        const cz = (c/N)|0, cx = c-cz*N;
+        for(let dz=-1; dz<=1; dz++) for(let dx=-1; dx<=1; dx++){
+          if(!dx && !dz) continue;
+          const nx=cx+dx, nz=cz+dz;
+          if(nx<0||nz<0||nx>=N||nz>=N) continue;
+          const j = nz*N+nx;
+          // same lake if it is also raised and sits at the same surface
+          if(comp[j] < 0 && filled[j]-H[j] > 0.05 && Math.abs(filled[j]-filled[c]) < 0.30){
+            comp[j] = id; stack.push(j);
+          }
+        }
+      }
+      if(cells.length <= HY.maxLakeCells) continue;
+      // the saddle: the cheapest step from inside this group to outside it
+      let inCell=-1, outCell=-1, best=Infinity;
+      for(const c of cells){
+        const cz=(c/N)|0, cx=c-cz*N;
+        for(let dz=-1; dz<=1; dz++) for(let dx=-1; dx<=1; dx++){
+          if(!dx && !dz) continue;
+          const nx=cx+dx, nz=cz+dz;
+          if(nx<0||nz<0||nx>=N||nz>=N) continue;
+          const j = nz*N+nx;
+          if(comp[j] === id) continue;
+          const cost = Math.max(H[c], H[j]);
+          if(cost < best){ best = cost; inCell = c; outCell = j; }
+        }
+      }
+      if(inCell < 0) continue;
+      /* Cut from the saddle outward, following the steepest descent it can
+         find, for as long as the trench is still above where it started.
+         The floor descends steadily, so the trench always drains. */
+      /* HOW FAR THE SADDLE COMES DOWN. A fixed step does not converge: a
+         basin a hundred metres deep against a seven-metre step needs
+         fifteen floods to drain, and the pass budget ran out with a lake
+         still over a quarter of the map. Cutting most of the basin's OWN
+         depth drains it in one or two passes whatever its size, and the
+         small ones never enter this branch at all. */
+      const drop = Math.max(HY.breachDrop, maxDepth*HY.breachFrac);
+      let floor = best - drop;
+      H[inCell] = Math.min(H[inCell], floor);
+
+      /* AND THE TRENCH HAS TO GO SOMEWHERE. The first version walked
+         steepest descent from the saddle — which is exactly backwards,
+         because the whole point of a saddle is that the ground on the far
+         side of it goes UP before it goes down. After widening the first
+         cell every neighbour was higher than the trench floor, the search
+         for a lower one came back empty, and the channel stopped one cell
+         out: a notch in a rim two cells thick, draining nothing. Passes
+         then repeated forever without the lake ever shrinking.
+
+         So the trench is DIRECTED. It leaves the lake on the saddle's
+         bearing, steers toward the map's outlet (which is where this water
+         would actually go), and takes the lowest of the three cells in its
+         forward arc rather than the lowest of all eight. It forces its own
+         floor down as it goes and stops when it reaches ground that is
+         already below it, which is the definition of having drained. */
+      const inX = inCell%N, inZ = (inCell/N)|0;
+      let cur = outCell;
+      let dx = Math.sign((outCell%N) - inX), dz = Math.sign(((outCell/N)|0) - inZ);
+      if(!dx && !dz) dx = 1;
+      const toOutX = Math.sign(Wld.outlet.u), toOutZ = Math.sign(Wld.outlet.v);
+      const walked = new Set([inCell]);
+      for(let step=0; step<200; step++){
+        const cx = cur%N, cz = (cur/N)|0;
+        if(cx<1 || cz<1 || cx>=N-1 || cz>=N-1) break;      // ran off the map: done
+        if(H[cur] <= floor - 0.4) break;                   // genuinely lower ground
+        /* FLARE THE TRENCH WITH ITS OWN DEPTH.
+           Widening by exactly one cell was the first version, and on a
+           basin forty metres deep that leaves a forty-metre wall two cells
+           from the channel. Multiply that by every breach on an alpine
+           seed and it is most of why 39% of the map read as cliff even
+           after the terrain's own steepness guard had run six times — the
+           guard measures the terrain, and this damage is done to it
+           afterwards. The trench now opens out as a V whose width follows
+           its depth, which is what a meltwater gorge looks like anyway. */
+        const cut = Math.max(0, H[cur] - floor);
+        H[cur] = Math.min(H[cur], floor);
+        walked.add(cur);
+        /* The cap matters: a forty-metre cut flared over eight cells is
+           still a 1.25 gradient, i.e. still a cliff, and alpine seeds were
+           gaining twelve points of cliff fraction from their own breaches.
+           Fourteen cells puts the same cut at about 35 degrees. */
+        const WR = clamp(Math.ceil(cut/1.4), 1, 14);
+        for(let wz=-WR; wz<=WR; wz++) for(let wx=-WR; wx<=WR; wx++){
+          const nx=cx+wx, nz=cz+wz;
+          if(nx<0||nz<0||nx>=N||nz>=N) continue;
+          const d = Math.hypot(wx,wz);
+          if(d > WR) continue;
+          const j=nz*N+nx;
+          const lid = floor + smoothstep(0, WR, d)*cut*0.92;
+          if(H[j] > lid) H[j] = lid;
+        }
+        // steer a little toward the outlet, then take the lowest of the
+        // three cells in the forward arc
+        if(step % 5 === 4){
+          if(toOutX && Math.abs(dx - toOutX) > 0) dx = clamp(dx + Math.sign(toOutX-dx), -1, 1);
+          else if(toOutZ) dz = clamp(dz + Math.sign(toOutZ-dz), -1, 1);
+          if(!dx && !dz) dx = toOutX || 1;
+        }
+        const arc = [[dx,dz]];
+        if(dx && dz){ arc.push([dx,0],[0,dz]); }
+        else if(dx){ arc.push([dx,1],[dx,-1]); }
+        else { arc.push([1,dz],[-1,dz]); }
+        let next = -1, low = Infinity, ndx=dx, ndz=dz;
+        for(const [ax,az] of arc){
+          const nx=cx+ax, nz=cz+az;
+          if(nx<0||nz<0||nx>=N||nz>=N) continue;
+          const j=nz*N+nx;
+          if(walked.has(j) || comp[j] === id) continue;
+          if(H[j] < low){ low = H[j]; next = j; ndx=ax; ndz=az; }
+        }
+        if(next < 0) break;
+        dx = ndx; dz = ndz;
+        floor -= 0.10;
+        cur = next;
+      }
+      breached++; totalBreached++;
+    }
+    if(!breached) break;
+  }
+  Wld.stats.breached = totalBreached;
+}
+
+/* ---------------------------------------------------------------------
+   LAYER 2 — HYDROLOGY
+   This is the layer the whole navigation design rests on, so it is a real
+   algorithm rather than a drawing of rivers.
+
+   1. PRIORITY-FLOOD + EPSILON (Barnes, Lehman & Mulla). Push the map edge
+      onto a min-heap, repeatedly pop the lowest cell and raise each
+      unvisited neighbour to at least that height plus a hair. When it
+      finishes, every cell in the map has a strictly descending path to
+      the edge: no pits, no flats, no undefined flow direction.
+   2. D8 receivers on the filled surface.
+   3. Accumulation by processing cells in descending filled height, so a
+      cell is always resolved after everything that drains into it.
+   4. Carve the channels back into the REAL surface, deeper where more
+      water passes. Because accumulation only grows downstream, the carve
+      only grows downstream, so the bed stays monotonically descending —
+      which is what makes "rivers flow downhill" a fact a player can lean
+      on rather than a line in a design document.
+   5. Anywhere the fill raised the ground by more than pondMinDepth was a
+      real basin: that becomes standing water.
+   ------------------------------------------------------------------- */
+function genHydrology(){
+  const N = Wld.N;
+  const n2 = N*N;
+  // cut the outlets of anything too big to be a lake, THEN flood for real
+  breachBasins();
+  const H = Wld.H;
+  const filled = priorityFlood(H, N);
+
+  // D8 receivers on the filled surface
+  const DIR = new Int32Array(n2).fill(-1);
+  for(let iz=0; iz<N; iz++) for(let ix=0; ix<N; ix++){
+    const i = iz*N+ix;
+    if(ix===0||iz===0||ix===N-1||iz===N-1) continue;   // edges are outlets
+    let best = -1, bestSlope = 0;
+    for(let dz=-1; dz<=1; dz++) for(let dx=-1; dx<=1; dx++){
+      if(!dx && !dz) continue;
+      const j = (iz+dz)*N + (ix+dx);
+      const run = (dx && dz) ? 1.41421356 : 1;
+      const sl = (filled[i] - filled[j]) / run;
+      if(sl > bestSlope){ bestSlope = sl; best = j; }
+    }
+    DIR[i] = best;
+  }
+
+  // accumulation, resolved in descending order of the filled surface
+  const order = new Int32Array(n2);
+  for(let i=0;i<n2;i++) order[i]=i;
+  const fArr = filled;
+  Array.prototype.sort.call(order, (a,b)=> fArr[b]-fArr[a]);
+  const ACC = new Float32Array(n2).fill(1);
+  for(let k=0;k<n2;k++){
+    const i = order[k], j = DIR[i];
+    if(j >= 0) ACC[j] += ACC[i];
+  }
+
+  /* ---- WHAT WAS A BASIN, MEASURED BEFORE ANYTHING IS CUT.
+     This has to happen here, not after the carve. `filled - H` is the
+     amount the flood had to raise a cell, which is exactly its depth as a
+     basin — but only while H is still the surface the flood ran on. Carve
+     the channels first and the same subtraction reads a channel as a lake,
+     which is how the first build of this turned 82% of the map into pond. */
+  const HY = CFG.HYDRO;
+  const POND = new Uint8Array(n2);
+  const pondLevel = new Float32Array(n2).fill(-9999);
+  let pondCells = 0, pondRegions = 0, biggestPond = 0;
+  /* A POND IS A BASIN THAT IS BOTH DEEP AND BIG. Depth alone is not enough:
+     a four-metre hollow one cell across is a hole in the noise, not a pool,
+     and treating every one of them as water is what put standing water over
+     a third of the map. So the raised cells are grouped, and a group has to
+     clear pondMinDepth AND pondMinCells to become water.
+
+     Everything that does not qualify is ABSORBED: the terrain is raised to
+     the filled surface. That is the honest resolution — the pit was an
+     artifact of the noise, so it stops existing rather than being quietly
+     ignored while the flow field still routes around it. */
+  {
+    const comp = new Int32Array(n2).fill(-1);
+    const stack = [];
+    for(let s0=0; s0<n2; s0++){
+      if(comp[s0] >= 0 || filled[s0]-H[s0] <= 0.02) continue;
+      const cells = [];
+      let maxDepth = 0;
+      comp[s0] = 1; stack.length = 0; stack.push(s0);
+      while(stack.length){
+        const c = stack.pop(); cells.push(c);
+        maxDepth = Math.max(maxDepth, filled[c]-H[c]);
+        const cz=(c/N)|0, cx=c-cz*N;
+        for(let dz=-1; dz<=1; dz++) for(let dx=-1; dx<=1; dx++){
+          if(!dx && !dz) continue;
+          const nx=cx+dx, nz=cz+dz;
+          if(nx<0||nz<0||nx>=N||nz>=N) continue;
+          const j=nz*N+nx;
+          if(comp[j] < 0 && filled[j]-H[j] > 0.02 && Math.abs(filled[j]-filled[c]) < 0.30){
+            comp[j] = 1; stack.push(j);
+          }
+        }
+      }
+      if(maxDepth > HY.pondMinDepth && cells.length >= HY.pondMinCells){
+        for(const c of cells){ POND[c] = 1; pondLevel[c] = filled[c]; pondCells++; }
+        pondRegions++; biggestPond = Math.max(biggestPond, cells.length);
+      } else {
+        for(const c of cells) H[c] = filled[c];      // absorb it
+      }
+    }
+  }
+
+  /* ---- carve. Scaled by the seed's wetness so a dry map has creases
+     where a wet one has gorges. Because accumulation only ever grows
+     downstream, the cut only ever grows downstream, so the bed stays
+     monotonically descending. ---- */
+  const wet = P.wetness;
+  const carveOf = (acc)=>{
+    if(acc < HY.streamAcc) return 0;
+    if(acc < HY.riverAcc)  return HY.carveStream * wet * smoothstep(HY.streamAcc, HY.riverAcc, acc);
+    if(acc < HY.trunkAcc)  return lerp(HY.carveStream, HY.carveRiver, smoothstep(HY.riverAcc, HY.trunkAcc, acc)) * wet;
+    return HY.carveTrunk * wet * (1 + 0.25*Math.log10(Math.max(1, acc/HY.trunkAcc)));
+  };
+  const carve = new Float32Array(n2);
+  for(let i=0;i<n2;i++) carve[i] = carveOf(ACC[i]);
+
+  /* THE BANKS, AND WHY THEY ARE WIDE.
+     The first version spread the cut with two passes of a 3x3 max filter at
+     0.55 — which means the cell beside a channel keeps 55% of its depth, so
+     a trunk river cutting ten metres left a four-metre step across four
+     metres of ground. Every riverbank in the world was therefore over the
+     cliff angle, and since the map has a lot of riverbank that alone put
+     more than 40% of all cells past it. Alpine seeds then failed G1 not
+     because of their mountains but because of their streams.
+
+     A channel's banks now flare with its own depth: the cut is splatted
+     outward over a radius of roughly one cell per 1.5m of depth, with a
+     smooth falloff, so the bank gradient comes out near 0.37 whatever the
+     size of the river. Scattered from the channel cells rather than
+     gathered at every cell, because the channels are a small fraction of
+     the map. */
+  const bank = new Float32Array(n2);
+  for(let iz=0; iz<N; iz++) for(let ix=0; ix<N; ix++){
+    const i = iz*N+ix, c = carve[i];
+    if(c <= 0.001) continue;
+    const R = clamp(Math.ceil(c/1.5), 1, 7);
+    for(let dz=-R; dz<=R; dz++) for(let dx=-R; dx<=R; dx++){
+      const nx=ix+dx, nz=iz+dz;
+      if(nx<0||nz<0||nx>=N||nz>=N) continue;
+      const d = Math.hypot(dx,dz);
+      if(d > R) continue;
+      const v = c * (1 - smoothstep(0, R, d));
+      const j = nz*N+nx;
+      if(v > bank[j]) bank[j] = v;
+    }
+  }
+  for(let i=0;i<n2;i++) H[i] -= bank[i];
+
+  /* ---- the water surface.
+     Channels first: depth from flow, then ONE pass in DESCENDING order of
+     the filled surface — which is upstream to downstream — pushing each
+     receiver below its donor. Running it the other way (which the first
+     build did) visits a cell before the cell that constrains it, so the
+     guarantee the notes make about rivers silently did nothing.
+     Lakes are overlaid flat afterwards and are exempt from the rule, for
+     the good reason that a lake surface IS flat. ---- */
+  const WLEV = new Float32Array(n2).fill(-9999);
+  for(let k=0;k<n2;k++){
+    const i = order[k];
+    if(ACC[i] < HY.streamAcc || POND[i]) continue;
+    const depth = Math.min(0.10 + 0.55*Math.log10(1+ACC[i]/HY.streamAcc)*wet, 2.9);
+    WLEV[i] = H[i] + depth;
+  }
+  for(let k=0;k<n2;k++){
+    const i = order[k], j = DIR[i];
+    if(WLEV[i] < -9000 || j < 0 || POND[j] || WLEV[j] < -9000) continue;
+    if(WLEV[j] >= WLEV[i]) WLEV[j] = WLEV[i] - 0.012;
+  }
+  for(let i=0;i<n2;i++) if(POND[i]) WLEV[i] = pondLevel[i];
+
+  // slope, once, for everyone downstream of here
+  const SLOPE = new Float32Array(n2);
+  for(let iz=0; iz<N; iz++) for(let ix=0; ix<N; ix++){
+    const xm = Math.max(0,ix-1), xp = Math.min(N-1,ix+1);
+    const zm = Math.max(0,iz-1), zp = Math.min(N-1,iz+1);
+    const dx = (H[iz*N+xp] - H[iz*N+xm]) / ((xp-xm)*Wld.cell);
+    const dz = (H[zp*N+ix] - H[zm*N+ix]) / ((zp-zm)*Wld.cell);
+    SLOPE[iz*N+ix] = Math.hypot(dx, dz);
+  }
+
+  Wld.ACC = ACC; Wld.DIR = DIR; Wld.WLEV = WLEV; Wld.POND = POND;
+  Wld.SLOPE = SLOPE; Wld.filled = filled; Wld.order = order;
+  // the number that actually matters, measured on the finished ground
+  let over = 0;
+  for(let i=0;i<n2;i++) if(SLOPE[i] > CFG.HAZARD.cliffSlope) over++;
+  Wld.stats.cliffFracFinal = +(over/n2).toFixed(3);
+  Wld.stats.pondCells = pondCells;
+  Wld.stats.pondRegions = pondRegions;
+  Wld.stats.biggestPond = biggestPond;
+}
+
+/* ---------------------------------------------------------------------
+   WALKABILITY AND ROUTING
+   One cost function, read by the router, by the validator and by the
+   "can the player actually get there" check, so those three can never
+   disagree about what a passable cell is.
+   ------------------------------------------------------------------- */
+/* Is this cell something that can hurt the player badly, rather than just
+   slow them down? One predicate, used by the hazard list, by the start
+   clearance check and by the router, because the first build had three
+   slightly different opinions about it and the validator rejected starts
+   that placeStart had already declared legal. */
+function cellHazard(i){
+  const dep = Wld.WLEV[i] > -9000 ? Wld.WLEV[i] - Wld.H[i] : 0;
+  const sl = Wld.SLOPE[i];
+  if(sl > CFG.HAZARD.cliffSlope) return 'cliff';
+  if(dep > CFG.HYDRO.deepDepth && Wld.ACC[i] > CFG.HYDRO.fastAcc) return 'fast';
+  if(dep > CFG.HYDRO.deepDepth) return 'deep';
+  if(sl > CFG.HAZARD.slipSlope) return 'steep';
+  if(dep > 0.02 && dep < 0.5 && sl < 0.05 && Wld.ACC[i] < CFG.HYDRO.streamAcc*2) return 'bog';
+  return null;
+}
+function cellWalkCost(i){
+  const dep = Wld.WLEV[i] > -9000 ? Wld.WLEV[i] - Wld.H[i] : 0;
+  const sl = Wld.SLOPE[i];
+  if(sl > CFG.HAZARD.cliffSlope) return Infinity;      // that is a cliff
+  /* DEEP WATER IS EXPENSIVE, NOT IMPOSSIBLE — except where it is also
+     moving fast, which is the one combination that drowns people. Blocking
+     all deep water outright was cutting wet maps into pieces the router
+     could not join, and four of ten test seeds failed G1 for a river they
+     could in fact have swum. */
+  if(dep > CFG.PLAYER.swimDepth && Wld.ACC[i] > CFG.HYDRO.fastAcc) return Infinity;
+  let c = 1;
+  c += sl*sl*38;                                       // steep is slow
+  if(dep > 0.05) c += 2.5 + dep*6;                     // wading is slower still
+  if(dep > CFG.PLAYER.swimDepth) c += 26;              // and swimming is a last resort
+  return c;
+}
+/* A* over the heightfield grid. `cost(i, from)` returns the cost of
+   ENTERING cell i, or Infinity. The heuristic is straight-line distance
+   times the cheapest possible per-cell cost, which keeps it admissible so
+   the path it returns really is the cheapest one. */
+function astar(startI, goalI, cost, maxExpand=260000){
+  const N = Wld.N, n2 = N*N;
+  const gScore = new Float32Array(n2).fill(Infinity);
+  const came = new Int32Array(n2).fill(-1);
+  const closed = new Uint8Array(n2);
+  const gx = goalI % N, gz = (goalI/N)|0;
+  const h = (i)=>{ const x=i%N, z=(i/N)|0; return Math.hypot(x-gx, z-gz); };
+  const open = new MinHeap();
+  gScore[startI] = 0;
+  open.push(h(startI), startI);
+  let expanded = 0;
+  while(open.size){
+    const cur = open.pop();
+    if(closed[cur]) continue;
+    closed[cur] = 1;
+    if(cur === goalI) break;
+    if(++expanded > maxExpand) return null;
+    const cz = (cur/N)|0, cx = cur - cz*N;
+    for(let dz=-1; dz<=1; dz++) for(let dx=-1; dx<=1; dx++){
+      if(!dx && !dz) continue;
+      const nx = cx+dx, nz = cz+dz;
+      if(!inGrid(nx,nz)) continue;
+      const j = nz*N+nx;
+      if(closed[j]) continue;
+      const c = cost(j, cur);
+      if(!isFinite(c)) continue;
+      const step = (dx && dz) ? 1.41421356 : 1;
+      const g = gScore[cur] + c*step;
+      if(g < gScore[j]){
+        gScore[j] = g; came[j] = cur;
+        open.push(g + h(j), j);
+      }
+    }
+  }
+  if(came[goalI] < 0 && goalI !== startI) return null;
+  const path = [goalI];
+  let c = goalI;
+  while(came[c] >= 0){ c = came[c]; path.push(c); }
+  path.reverse();
+  path.cost = gScore[goalI];
+  return path;
+}
+/* Metres of ground a path covers — used for the time-budget guarantee,
+   where "cost" (which is penalised for slope) is the wrong number. */
+function pathMetres(path){
+  let m = 0;
+  for(let k=1;k<path.length;k++){
+    const a=path[k-1], b=path[k];
+    const ax=a%Wld.N, az=(a/Wld.N)|0, bx=b%Wld.N, bz=(b/Wld.N)|0;
+    m += Math.hypot(bx-ax, bz-az)*Wld.cell;
+  }
+  return m;
+}
+
+/* ---------------------------------------------------------------------
+   LAYER 3 — THE HOSPITAL
+   It goes where the biggest river leaves the map, because that is what
+   "at the edge of civilisation, on the downstream side" means once the
+   hydrology is real. Walk the trunk river down to its outlet, step back
+   inland until the ground is flat enough to build on, and that is the
+   site. Nothing about this is chosen by the designer; it falls out of
+   the water, which is why rule 3 in the notes is true on every seed.
+   ------------------------------------------------------------------- */
+function placeHospital(){
+  const N = Wld.N, n2 = N*N;
+  // the outlet with the most water coming through it
+  let bestOutlet = -1, bestAcc = -1;
+  for(let i=0;i<N;i++){
+    for(const e of [idxOf(i,1), idxOf(i,N-2), idxOf(1,i), idxOf(N-2,i)]){
+      if(Wld.ACC[e] > bestAcc){ bestAcc = Wld.ACC[e]; bestOutlet = e; }
+    }
+  }
+  // walk upstream a little, then find flat buildable ground near the bank
+  let cur = bestOutlet;
+  const upstream = (i)=>{
+    // the contributing neighbour with the most flow
+    const cz=(i/N)|0, cx=i-cz*N;
+    let best=-1, bacc=-1;
+    for(let dz=-1;dz<=1;dz++) for(let dx=-1;dx<=1;dx++){
+      if(!dx&&!dz) continue;
+      const nx=cx+dx, nz=cz+dz;
+      if(!inGrid(nx,nz)) continue;
+      const j=nz*N+nx;
+      if(Wld.DIR[j] === i && Wld.ACC[j] > bacc){ bacc=Wld.ACC[j]; best=j; }
+    }
+    return best;
+  };
+  for(let k=0;k<14 && cur>=0;k++){ const u = upstream(cur); if(u<0) break; cur = u; }
+  const anchor = cur >= 0 ? cur : bestOutlet;
+  const ax = anchor % N, az = (anchor/N)|0;
+
+  // search outward for a flat, dry, buildable pad
+  let best = null, bestScore = -Infinity;
+  for(let rad=3; rad<=26; rad++){
+    for(let a=0; a<Math.max(10, rad*6); a++){
+      const th = a/Math.max(10, rad*6) * TAU;
+      const ix = Math.round(ax + Math.cos(th)*rad), iz = Math.round(az + Math.sin(th)*rad);
+      if(!inGrid(ix,iz)) continue;
+      const i = iz*N+ix;
+      if(ix<6||iz<6||ix>N-7||iz>N-7) continue;
+      if(Wld.WLEV[i] > Wld.H[i]) continue;                 // not in the river
+      // flatness over the footprint
+      let maxS = 0, sum = 0, cnt = 0;
+      for(let dz=-4; dz<=4; dz++) for(let dx=-4; dx<=4; dx++){
+        if(!inGrid(ix+dx, iz+dz)) { maxS = 9; continue; }
+        const j = (iz+dz)*N + (ix+dx);
+        maxS = Math.max(maxS, Wld.SLOPE[j]);
+        sum += Wld.H[j]; cnt++;
+      }
+      if(maxS > 0.30) continue;
+      const score = -maxS*10 - rad*0.05 + (Wld.H[i] < Wld.H[anchor]+9 ? 1 : 0);
+      if(score > bestScore){ bestScore = score; best = { ix, iz, i, y: sum/cnt }; }
+    }
+    if(best) break;
+  }
+  if(!best){
+    // fall back to the flattest cell in the downstream quarter, which is
+    // rare enough that it has never been the reason a seed was rejected,
+    // and is still a legal site
+    let fb=null, fbs=Infinity;
+    for(let iz=8; iz<N-8; iz++) for(let ix=8; ix<N-8; ix++){
+      const i=iz*N+ix;
+      if(Wld.WLEV[i] > Wld.H[i]) continue;
+      const d = Math.hypot(ix-ax, iz-az);
+      const s = Wld.SLOPE[i]*10 + d*0.02;
+      if(s < fbs){ fbs=s; fb={ix,iz,i,y:Wld.H[i]}; }
+    }
+    best = fb;
+  }
+  Wld.hospital = {
+    ix: best.ix, iz: best.iz, i: best.i,
+    x: wxOf(best.ix), z: wzOf(best.iz),
+    y: heightAt(wxOf(best.ix), wzOf(best.iz)),
+    yaw: 0, real: true,
+  };
+  // face it along the river, which is also where the road will run
+  const d = Wld.DIR[best.i];
+  if(d >= 0) Wld.hospital.yaw = Math.atan2(wzOf((d/N)|0) - Wld.hospital.z, wxOf(d%N) - Wld.hospital.x);
+  Wld.stats.outletAcc = bestAcc;
+}
+
+/* ---------------------------------------------------------------------
+   LAYER 4 — ROUTES
+   The road comes out of the hospital and leaves the map: it is what makes
+   the hospital "near a road" rather than a building in a field. Trails
+   are A* runs from scattered trailheads back to the hospital, on a cost
+   function that likes valleys and riverbanks and hates slope — which is
+   how real paths are worn, and is why following one downhill works.
+
+   WORNNESS IS DERIVED, NOT DECORATED. A route cell's wornness is a
+   function of its network distance to the hospital. "More worn means
+   closer to civilisation" is therefore a property of how trails were
+   built, and the player can trust it on every seed.
+   ------------------------------------------------------------------- */
+function genRoutes(){
+  const N = Wld.N, n2 = N*N;
+  const ROUTE = new Uint8Array(n2), WORN = new Float32Array(n2);
+  const R = CFG.ROUTE;
+  const hos = Wld.hospital;
+  const rng = rngFor('routes');
+
+  // --- the road: hospital to the nearest map edge, hating slope ---
+  const roadCost = (i)=>{
+    const base = cellWalkCost(i);
+    if(!isFinite(base)) return Infinity;
+    const dep = Wld.WLEV[i] > -9000 ? Wld.WLEV[i]-Wld.H[i] : 0;
+    if(dep > 0.25) return Infinity;                   // roads do not ford rivers
+    return 1 + Wld.SLOPE[i]*Wld.SLOPE[i]*R.roadSlopeCost;
+  };
+  // pick the closest edge cell that is reachable and low
+  let roadGoal = -1, rgScore = Infinity;
+  for(let k=2;k<N-2;k++){
+    for(const e of [idxOf(k,2), idxOf(k,N-3), idxOf(2,k), idxOf(N-3,k)]){
+      if(!isFinite(roadCost(e))) continue;
+      const ex = e%N, ez=(e/N)|0;
+      const d = Math.hypot(ex-hos.ix, ez-hos.iz);
+      const s = d + Wld.H[e]*0.04;
+      if(s < rgScore){ rgScore = s; roadGoal = e; }
+    }
+  }
+  let road = roadGoal >= 0 ? astar(hos.i, roadGoal, roadCost) : null;
+  /* A ROAD THAT IS ONE CELL LONG IS NOT A ROAD. The strict cost refuses to
+     ford anything deeper than 25cm, and the hospital stands at the river's
+     mouth, so on a wet seed there is no dry line to the edge at all and the
+     first build quietly returned a "road" consisting of the hospital. The
+     retry lets it cross water once, at a stiff price — which is a bridge,
+     and a bridge is a perfectly good thing for a road to have. */
+  if(!road || road.length < 6){
+    const bridgeCost = (i)=>{
+      if(!isFinite(cellWalkCost(i))) return Infinity;
+      const dep = Wld.WLEV[i] > -9000 ? Wld.WLEV[i]-Wld.H[i] : 0;
+      return 1 + Wld.SLOPE[i]*Wld.SLOPE[i]*R.roadSlopeCost + (dep > 0.25 ? 220 : 0);
+    };
+    const alt = roadGoal >= 0 ? astar(hos.i, roadGoal, bridgeCost) : null;
+    if(alt && alt.length > (road ? road.length : 0)) road = alt;
+  }
+  if(!road) road = [hos.i];
+  for(const i of road){ ROUTE[i] = 2; WORN[i] = 1; }
+  Wld.road = road;
+
+  /* --- trails. Cost prefers being near water (people follow valleys) and
+     near existing routes (paths braid), and pays heavily for slope. --- */
+  const trailCost = (i)=>{
+    const base = cellWalkCost(i);
+    if(!isFinite(base)) return Infinity;
+    const dep = Wld.WLEV[i] > -9000 ? Wld.WLEV[i]-Wld.H[i] : 0;
+    let c = 1 + Wld.SLOPE[i]*Wld.SLOPE[i]*R.trailSlopeCost;
+    // valley/bank bonus: high flow accumulation nearby means a valley
+    const acc = Wld.ACC[i];
+    if(acc > 8 && dep < 0.1) c -= Math.min(R.trailValleyBonus, Math.log10(acc)*8);
+    if(dep > 0.1) c += R.trailWaterCost*(0.4 + dep);    // fords are expensive
+    if(ROUTE[i]) c *= 0.35;                             // braid onto what exists
+    return Math.max(0.35, c);
+  };
+
+  const nTrails = rng.irange(R.trailCount[0], R.trailCount[1]);
+  const trails = [];
+  for(let t=0; t<nTrails; t++){
+    let head = -1;
+    /* ONE TRAIL PASSES NEAR WHERE THE PLAYER WAKES UP — near, not at.
+
+       Guarantee G5 asks for honest navigation clues on the route, and a
+       seed whose trails all happen to run through the other half of the
+       map has none: one of sixty test seeds failed exactly this way, with
+       zero clues within 110m of a 175m route. Anchoring the FIRST trail a
+       few hundred metres from the start fixes it without handing anything
+       over — the player still has to walk far enough to cross the trail,
+       still has to notice it is a trail, and still has to work out which
+       way along it is downhill toward people. */
+    if(t === 0 && Wld.start){
+      const ang = rng()*TAU;
+      const d = rng.range(150, 340) / Wld.cell;
+      for(let tries=0; tries<40 && head<0; tries++){
+        const a2 = ang + tries*0.31;
+        const ix = Math.round(Wld.start.ix + Math.cos(a2)*d);
+        const iz = Math.round(Wld.start.iz + Math.sin(a2)*d);
+        if(ix<5||iz<5||ix>N-6||iz>N-6) continue;
+        const i = iz*N+ix;
+        if(!isFinite(cellWalkCost(i))) continue;
+        head = i;
+      }
+    }
+    // otherwise a trailhead somewhere out in the map
+    for(let tries=0; tries<80 && head<0; tries++){
+      const ang = rng()*TAU;
+      const dist = rng.range(0.28, 0.92) * (N*0.48);
+      const ix = Math.round(hos.ix + Math.cos(ang)*dist);
+      const iz = Math.round(hos.iz + Math.sin(ang)*dist);
+      if(ix<5||iz<5||ix>N-6||iz>N-6) continue;
+      const i = iz*N+ix;
+      if(!isFinite(cellWalkCost(i))) continue;
+      head = i;
+    }
+    if(head < 0) continue;
+    const path = astar(head, hos.i, trailCost, 160000);
+    if(!path || path.length < 8) continue;
+    // wornness from network distance to the hospital, walked from the end
+    let dist = 0;
+    for(let k=path.length-1; k>=0; k--){
+      const i = path[k];
+      if(k < path.length-1){
+        const a=path[k+1];
+        dist += Math.hypot((i%N)-(a%N), ((i/N)|0)-((a/N)|0)) * Wld.cell;
+      }
+      const w = 1 - smoothstep(R.wornNear, R.wornFar, dist);
+      if(ROUTE[i] < 1) ROUTE[i] = 1;
+      WORN[i] = Math.max(WORN[i], w);
+    }
+    path.worn = 1;
+    trails.push(path);
+  }
+  Wld.ROUTE = ROUTE; Wld.WORN = WORN; Wld.trails = trails;
+}
+
+/* ---------------------------------------------------------------------
+   CANOPY
+   How open the sky is at every cell. Trees read it, the fog reads it, the
+   clearings the berry bushes need read it, and the "is there room for a
+   cabin here" test reads it. Derived from the terrain rather than
+   scattered, so a clearing is somewhere the land explains.
+   ------------------------------------------------------------------- */
+function genCanopy(){
+  const N = Wld.N, n2 = N*N;
+  const CLEARF = new Float32Array(n2);
+  const s = (hashString('canopy') ^ G.seed) >>> 0;
+  const treeline = CFG.WORLD.RELIEF*P.relief*P.treeline;
+  for(let iz=0; iz<N; iz++) for(let ix=0; ix<N; ix++){
+    const i = iz*N+ix;
+    const u = ix/(N-1), v = iz/(N-1);
+    // patchy openness at two scales, so clearings have a size distribution
+    const big = fbm2(u*7.2, v*7.2, 3, s);
+    const small = fbm2(u*23.0, v*23.0, 3, s+91);
+    let open = smoothstep(0.58, 0.80, big*0.7 + small*0.3);
+    // above the treeline nothing grows
+    open = Math.max(open, smoothstep(treeline*0.92, treeline*1.06, Wld.H[i]));
+    // steep rock is bare
+    open = Math.max(open, smoothstep(0.62, 0.92, Wld.SLOPE[i]));
+    // water is open, and banks are half open
+    const dep = Wld.WLEV[i] > -9000 ? Wld.WLEV[i]-Wld.H[i] : 0;
+    if(dep > 0.02) open = 1;
+    else if(Wld.ACC[i] > CFG.HYDRO.streamAcc) open = Math.max(open, 0.55);
+    if(Wld.ROUTE[i]) open = Math.max(open, Wld.ROUTE[i]===2 ? 0.95 : 0.6);
+    CLEARF[i] = open;
+  }
+  Wld.CLEAR = CLEARF;
+}
+
+/* ---------------------------------------------------------------------
+   LAYER 5 — STRUCTURES
+   One STYLE per seed, and every structure on the map is built from it.
+   This is not tidiness: it is the rule that makes stage-4 fakes work.
+   A hallucinated cabin is the same builder, the same style and the same
+   materials as a real one, so "it looked wrong" is never available as a
+   tell. The only difference is which layer it is on, and the player
+   cannot see a layer.
+   ------------------------------------------------------------------- */
+function rollStyle(){
+  const r = rngFor('style');
+  return {
+    wallTone: [r.irange(58,104), r.irange(50,92), r.irange(40,74)],
+    roofTone: [r.irange(34,66), r.irange(32,60), r.irange(30,56)],
+    roofPitch: r.range(0.30, 0.58),
+    pitchedRoof: r.chance(0.72),
+    porch: r.chance(0.55),
+    chimney: r.chance(0.60),
+    windows: r.irange(1,3),
+    logBuilt: r.chance(0.45),        // logs vs planks
+    footprint: [r.range(4.6,7.4), r.range(4.0,6.2)],
+    tentTone: [r.irange(60,140), r.irange(58,120), r.irange(44,90)],
+    decay: r.range(0.15, 0.9),
+  };
+}
+
+const STRUCT_KINDS = ['cabin','campsite','ruin','car'];
+
+function structureFits(ix, iz, rad){
+  const N = Wld.N;
+  for(let dz=-rad; dz<=rad; dz++) for(let dx=-rad; dx<=rad; dx++){
+    if(!inGrid(ix+dx, iz+dz)) return false;
+    const j = (iz+dz)*N+(ix+dx);
+    if(Wld.SLOPE[j] > 0.30) return false;
+    if(Wld.WLEV[j] > Wld.H[j] - 0.15) return false;
+  }
+  return true;
+}
+function genStructures(){
+  const N = Wld.N;
+  const rng = rngFor('structs');
+  const S = CFG.STRUCT;
+  const style = rollStyle();
+  Wld.style = style;
+  const out = [];
+  const routeCells = [];
+  for(let i=0;i<N*N;i++) if(Wld.ROUTE[i]) routeCells.push(i);
+
+  const place = (kind, count)=>{
+    for(let k=0;k<count;k++){
+      let spot = null;
+      for(let tries=0; tries<120 && !spot; tries++){
+        let ix, iz;
+        if(routeCells.length && rng.chance(S.routeBias)){
+          const c = rng.pick(routeCells);
+          const off = rng.irange(1, 5);
+          const ang = rng()*TAU;
+          ix = Math.round((c%N) + Math.cos(ang)*off);
+          iz = Math.round(((c/N)|0) + Math.sin(ang)*off);
+        } else {
+          ix = rng.irange(8, N-9); iz = rng.irange(8, N-9);
+        }
+        if(!inGrid(ix,iz)) continue;
+        const i = iz*N+ix;
+        if(!structureFits(ix, iz, kind==='cabin'?3:2)) continue;
+        if(Wld.CLEAR[i] < 0.18) continue;                 // needs a gap in the trees
+        const x = wxOf(ix), z = wzOf(iz);
+        let tooClose = Math.hypot(x-Wld.hospital.x, z-Wld.hospital.z) < 60;
+        for(const o of out) if(Math.hypot(o.x-x, o.z-z) < S.minApart) tooClose = true;
+        if(tooClose) continue;
+        spot = { ix, iz, i, x, z };
+      }
+      if(!spot) continue;
+      // network distance to the hospital decides how "kept" a place looks
+      const dHos = Math.hypot(spot.x-Wld.hospital.x, spot.z-Wld.hospital.z);
+      out.push({
+        kind, id: kind+'-'+out.length,
+        x: spot.x, z: spot.z, y: heightAt(spot.x, spot.z),
+        ix: spot.ix, iz: spot.iz,
+        yaw: rng()*TAU,
+        style,
+        decay: clamp(style.decay + smoothstep(120, 700, dHos)*0.5 + rng.range(-0.12,0.12), 0, 1),
+        phantom: false, searched: false, items: [], mesh: null,
+        onRoute: !!Wld.ROUTE[spot.i],
+        dHos,
+      });
+    }
+  };
+  const sc = P.scarcity;
+  place('cabin',    Math.max(1, Math.round(rng.irange(S.cabins[0], S.cabins[1]) * clamp(sc,0.5,1.4))));
+  place('campsite', Math.max(1, Math.round(rng.irange(S.campsites[0], S.campsites[1]) * clamp(sc,0.5,1.4))));
+  place('ruin',     rng.irange(S.ruins[0], S.ruins[1]));
+  place('car',      rng.irange(S.car[0], S.car[1]));
+  Wld.structures = out;
+}
+
+/* ---------------------------------------------------------------------
+   LAYER 6 — RESOURCES
+   Water points sit on real water. Berries sit in real clearings. Items
+   sit in real structures. Nothing here is a hallucination; the fakes are
+   made later, by the director, out of these same definitions.
+
+   BERRY VARIETIES ARE SHUFFLED PER SEED. Three appearances, three
+   outcomes, and which is which is re-drawn every run — so a player learns
+   berries by eating them and watching, not by remembering a wiki.
+   ------------------------------------------------------------------- */
+const BERRY_LOOKS = ['red','dark','pale'];
+function genResources(){
+  const N = Wld.N, n2 = N*N;
+  const rng = rngFor('resources');
+  const R = CFG.RESOURCE;
+
+  // --- water access points ---
+  const water = [];
+  const candidates = [];
+  for(let iz=2; iz<N-2; iz++) for(let ix=2; ix<N-2; ix++){
+    const i = iz*N+ix;
+    if(Wld.WLEV[i] < -9000) continue;
+    const dep = Wld.WLEV[i] - Wld.H[i];
+    if(dep < 0.10 || dep > 1.4) continue;                 // reachable from a bank
+    candidates.push(i);
+  }
+  rng.shuffle(candidates);
+  const wantWater = Math.round(rng.irange(R.waterPoints[0], R.waterPoints[1]) * clamp(P.scarcity, 0.45, 1.5));
+  for(const i of candidates){
+    if(water.length >= wantWater) break;
+    const x = wxOf(i%N), z = wzOf((i/N)|0);
+    let ok = true;
+    for(const w of water) if(Math.hypot(w.x-x, w.z-z) < 34){ ok=false; break; }
+    if(!ok) continue;
+    const pond = !!Wld.POND[i];
+    const acc = Wld.ACC[i];
+    /* Flowing water is safe; standing water can make you ill. That is the
+       single most useful true rule in the survival layer, and it is
+       readable from the world (it moves, or it does not) rather than from
+       a label. */
+    const kind = (!pond && acc > CFG.HYDRO.riverAcc*0.35) ? 'flowing'
+               : (pond || acc < CFG.HYDRO.streamAcc*1.6) ? 'stagnant' : 'slow';
+    water.push({
+      id:'w'+water.length, x, z, y: Wld.WLEV[i], kind, acc,
+      depth: Wld.WLEV[i]-Wld.H[i], phantom:false, drained:false,
+    });
+  }
+  Wld.water = water;
+
+  // --- berries ---
+  const meaning = rng.shuffle(['safe','sick','intense']);
+  Wld.berryMeaning = {};
+  BERRY_LOOKS.forEach((look, k)=> Wld.berryMeaning[look] = meaning[k]);
+  const berries = [];
+  const wantBerries = Math.max(2, Math.round(
+    rng.irange(R.berryPatches[0], R.berryPatches[1]) * clamp(P.foodScarcity, 0.22, 1.4)));
+  for(let tries=0; tries<wantBerries*45 && berries.length<wantBerries; tries++){
+    const ix = rng.irange(4, N-5), iz = rng.irange(4, N-5);
+    const i = iz*N+ix;
+    if(Wld.CLEAR[i] < 0.30 || Wld.CLEAR[i] > 0.97) continue;
+    if(Wld.WLEV[i] > Wld.H[i]-0.3) continue;
+    if(Wld.SLOPE[i] > 0.42) continue;
+    const x = wxOf(ix), z = wzOf(iz);
+    let ok = true;
+    for(const b of berries) if(Math.hypot(b.x-x, b.z-z) < 30){ ok=false; break; }
+    if(!ok) continue;
+    const look = rng.pick(BERRY_LOOKS);
+    berries.push({
+      id:'b'+berries.length, x, z, y: heightAt(x,z), look,
+      effect: Wld.berryMeaning[look],
+      // some patches have already been stripped, by weather or by whoever
+      // else has been through here
+      left: rng.chance(rng.range(R.pickedClean[0], R.pickedClean[1])) ? 0 : rng.irange(1,3),
+      phantom:false,
+    });
+  }
+  Wld.berries = berries;
+
+  // --- items, mostly inside structures ---
+  const items = [];
+  const itemRoll = (host)=>{
+    const pool = [];
+    if(host.kind==='cabin'){
+      pool.push([3,'battery'],[3,'cannedFood'],[2,'tablets'],[2,'bottle'],[2,'matches'],[1,'radio'],[2,'mapFrag'],[1,'compass']);
+    } else if(host.kind==='campsite'){
+      pool.push([3,'trailBar'],[2,'battery'],[2,'matches'],[2,'bottle'],[1,'mapFrag'],[1,'compass']);
+    } else if(host.kind==='car'){
+      pool.push([3,'trailBar'],[2,'battery'],[1,'mapFrag'],[1,'radio'],[2,'bottle']);
+    } else {
+      pool.push([2,'battery'],[1,'tablets'],[1,'mapFrag'],[2,'matches']);
+    }
+    return rng.weighted(pool);
+  };
+  for(const s of Wld.structures){
+    const n = s.kind==='cabin' ? rng.irange(1,3) : rng.irange(0,2);
+    for(let k=0;k<n;k++){
+      if(!rng.chance(clamp(0.35 + P.scarcity*0.42, 0.2, 0.95))) continue;
+      const type = itemRoll(s);
+      items.push({
+        id:'i'+items.length, type, host: s.id,
+        x: s.x + rng.range(-1.6,1.6), z: s.z + rng.range(-1.6,1.6),
+        y: 0, taken:false, phantom:false,
+      });
+    }
+  }
+  for(const it of items) it.y = heightAt(it.x, it.z);
+  Wld.items = items;
+}
+
+/* ---------------------------------------------------------------------
+   LAYER 7 — HAZARDS, LANDMARKS AND HONEST CLUES
+   Hazards are READ OUT of the terrain rather than sprinkled on it, which
+   is why they can never block the route: the route was found by a cost
+   function that already refuses to enter them.
+   ------------------------------------------------------------------- */
+function genHazards(){
+  const N = Wld.N;
+  const haz = [];
+  const HZ = CFG.HAZARD, HY = CFG.HYDRO;
+  // sampled rather than per-cell: this list exists for the dev panel and
+  // for the start-clearance guarantee, not for gameplay, which reads the
+  // fields directly
+  for(let iz=2; iz<N-2; iz+=2) for(let ix=2; ix<N-2; ix+=2){
+    const i = iz*N+ix;
+    const kind = cellHazard(i);
+    if(kind) haz.push({ kind, x: wxOf(ix), z: wzOf(iz), i });
+  }
+  Wld.hazards = haz;
+
+  // --- landmarks: prominent peaks, visible from high ground ---
+  const peaks = [];
+  const RAD = 9;
+  for(let iz=RAD; iz<N-RAD; iz+=3) for(let ix=RAD; ix<N-RAD; ix+=3){
+    const i = iz*N+ix, h = Wld.H[i];
+    let isMax = true;
+    for(let dz=-RAD; dz<=RAD && isMax; dz+=2) for(let dx=-RAD; dx<=RAD; dx+=2){
+      if(Wld.H[(iz+dz)*N+(ix+dx)] > h){ isMax = false; break; }
+    }
+    if(isMax) peaks.push({ x: wxOf(ix), z: wzOf(iz), y: h, i });
+  }
+  peaks.sort((a,b)=> b.y-a.y);
+  const marks = [];
+  for(const pk of peaks){
+    if(marks.length >= 5) break;
+    let ok = true;
+    for(const m of marks) if(Math.hypot(m.x-pk.x, m.z-pk.z) < 190) ok = false;
+    if(ok) marks.push({ ...pk, id:'lm'+marks.length, kind:'peak', phantom:false });
+  }
+  Wld.landmarks = marks;
+
+  /* --- honest clues. Every one of these is placed by a rule the player
+     can reverse-engineer: they get denser and more man-made the closer to
+     the hospital you get, because they are placed on route cells weighted
+     by wornness. Later stages fake all of them; none of them is ever
+     faked in a way that contradicts a clue you already passed. --- */
+  const rng = rngFor('clues');
+  const clues = [];
+  const routeCells = [];
+  for(let i=0;i<N*N;i++) if(Wld.ROUTE[i]) routeCells.push(i);
+  rng.shuffle(routeCells);
+  for(const i of routeCells){
+    const worn = Wld.WORN[i];
+    if(clues.length > 210) break;
+    if(!rng.chance(0.03 + worn*0.10)) continue;
+    const x = wxOf(i%N), z = wzOf((i/N)|0);
+    let ok = true;
+    for(const c of clues) if(Math.hypot(c.x-x, c.z-z) < 16){ ok=false; break; }
+    if(!ok) continue;
+    const kind = rng.weighted([
+      [3 + worn*8, 'marker'],      // blaze / post
+      [1 + worn*5, 'sign'],
+      [2 + worn*4, 'fencePost'],
+      [3 + (1-worn)*3, 'stump'],
+      [1 + worn*6, 'litter'],
+    ]);
+    clues.push({ id:'c'+clues.length, kind, x, z, y: heightAt(x,z), worn, phantom:false,
+                 yaw: rng()*TAU });
+  }
+  // a radio tower on high ground, and a power line, near the hospital end
+  const hos = Wld.hospital;
+  let tower = null, tScore = -Infinity;
+  for(const pk of peaks){
+    const d = Math.hypot(pk.x-hos.x, pk.z-hos.z);
+    if(d < 90 || d > 560) continue;
+    const sc = pk.y - d*0.22;
+    if(sc > tScore){ tScore = sc; tower = pk; }
+  }
+  if(tower) clues.push({ id:'tower', kind:'tower', x:tower.x, z:tower.z, y:tower.y, worn:1, phantom:false, yaw:0 });
+  // power poles follow the road in from the edge
+  if(Wld.road && Wld.road.length > 12){
+    for(let k=6; k<Wld.road.length; k+=9){
+      const i = Wld.road[k];
+      clues.push({ id:'pole'+k, kind:'pole', x: wxOf(i%N), z: wzOf((i/N)|0),
+                   y: heightAt(wxOf(i%N), wzOf((i/N)|0)), worn:1, phantom:false, yaw:0 });
+    }
+  }
+  Wld.clues = clues;
+}
+
+/* Recompute the slope field. Anything that edits H after genHydrology has
+   to call this, because SLOPE is cached and half the world's rules read it. */
+function recomputeSlope(){
+  const N = Wld.N, H = Wld.H, SLOPE = Wld.SLOPE;
+  for(let iz=0; iz<N; iz++) for(let ix=0; ix<N; ix++){
+    const xm = Math.max(0,ix-1), xp = Math.min(N-1,ix+1);
+    const zm = Math.max(0,iz-1), zp = Math.min(N-1,iz+1);
+    const dx = (H[iz*N+xp] - H[iz*N+xm]) / ((xp-xm)*Wld.cell);
+    const dz = (H[zp*N+ix] - H[zm*N+ix]) / ((zp-zm)*Wld.cell);
+    SLOPE[iz*N+ix] = Math.hypot(dx, dz);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   THE PASS
+   A high-relief alpine roll can wall the map off: every cell between the
+   player and the hospital is over the cliff angle, no walkable route
+   exists, and G1 fails however many times the seed is nudged. Six of
+   sixty seeds failed this way, all of them alpine.
+
+   The wrong fix is to cap slope everywhere, because that deletes the
+   cliffs the hazard layer is made of. The right fix is the one real
+   mountain routes use: find the least-bad line across the barrier and cut
+   a PASS through it. The path's height profile is limited to a walkable
+   gradient by alternating forward and backward sweeps, the surrounding
+   ground is blended into the new profile, and everything off the corridor
+   is left exactly as steep as it was.
+
+   It runs only when the corridor is genuinely blocked, so most seeds
+   never touch it, and it edits nothing but height — it is called before
+   routes, canopy, structures and resources exist, so none of them can be
+   left sitting on ground that has since moved.
+   ------------------------------------------------------------------- */
+function ensureCorridor(){
+  if(astar(Wld.start.i, Wld.hospital.i, cellWalkCost)) return 0;
+  const N = Wld.N, H = Wld.H;
+  /* The least-bad line. Cliffs and deep fast water are both allowed here,
+     at prices that make the router cross a barrier once at its weakest
+     point rather than wander along it looking for a gap that is not there. */
+  const climbCost = (i)=>{
+    const dep = Wld.WLEV[i] > -9000 ? Wld.WLEV[i]-Wld.H[i] : 0;
+    let c = 1 + Wld.SLOPE[i]*Wld.SLOPE[i]*38;
+    if(Wld.SLOPE[i] > CFG.HAZARD.cliffSlope) c += 700;
+    if(dep > CFG.PLAYER.swimDepth) c += 400;
+    return c;
+  };
+  const path = astar(Wld.start.i, Wld.hospital.i, climbCost);
+  if(!path) return -1;
+
+  /* THE GUARANTEE HAS TO BE STRUCTURAL, NOT LIKELY. G1 says a walkable
+     path always exists, so this widens and re-cuts until one does rather
+     than cutting once and hoping. Each round takes a gentler gradient and
+     a wider corridor; three rounds is a 33-cell corridor at a third of the
+     cliff angle, which nothing in the heightfield can survive. */
+  let carved = 0;
+  for(let round=0; round<3; round++){
+    const RAD = 9 + round*8, CORE = 2.5 + round*3;
+    const GRAD = CFG.HAZARD.cliffSlope * (0.55 - round*0.13);
+
+    // limit the height profile along the path to a walkable gradient,
+    // sweeping from both ends until it stops changing
+    const maxStepFor = (p,q)=>{
+      const px=p%N, pz=(p/N)|0, qx=q%N, qz=(q/N)|0;
+      return Math.hypot(qx-px, qz-pz) * Wld.cell * GRAD;
+    };
+    const prof = new Float32Array(path.length);
+    for(let k=0;k<path.length;k++) prof[k] = H[path[k]];
+    for(let it=0; it<40; it++){
+      let moved = 0;
+      for(let k=1;k<path.length;k++){
+        const m = maxStepFor(path[k-1], path[k]);
+        const d = prof[k] - prof[k-1];
+        if(d >  m){ prof[k] = prof[k-1] + m; moved++; }
+        if(d < -m){ prof[k] = prof[k-1] - m; moved++; }
+      }
+      for(let k=path.length-2; k>=0; k--){
+        const m = maxStepFor(path[k], path[k+1]);
+        const d = prof[k] - prof[k+1];
+        if(d >  m){ prof[k] = prof[k+1] + m; moved++; }
+        if(d < -m){ prof[k] = prof[k+1] - m; moved++; }
+      }
+      if(!moved) break;
+    }
+
+    /* Pull the ground around each path cell onto the new profile.
+
+       RAD IS NOT SMALL, and that is the whole trick. cellWalkCost reads the
+       MAGNITUDE of the gradient, not the gradient along the path, so a
+       narrow cut is useless: the floor of a five-metre slot milled forty
+       metres into a ridge has near-vertical walls one cell away, the slope
+       field at the centre reads those walls, and every cell of the new pass
+       is still impassable. A wide flat core with a long falloff gives a
+       floor that is flat in both directions. The sides stay steep, which is
+       what the sides of a pass look like. */
+    for(let k=0;k<path.length;k++){
+      const c = path[k], cx = c%N, cz = (c/N)|0;
+      const target = prof[k];
+      if(Math.abs(target - H[c]) >= 0.05) carved++;
+      for(let dz=-RAD; dz<=RAD; dz++) for(let dx=-RAD; dx<=RAD; dx++){
+        const nx=cx+dx, nz=cz+dz;
+        if(nx<1||nz<1||nx>=N-1||nz>=N-1) continue;
+        const j = nz*N+nx;
+        if(Wld.WLEV[j] > Wld.H[j]) continue;    // never lower a riverbed
+        const w = 1 - smoothstep(CORE, RAD, Math.hypot(dx,dz));
+        if(w <= 0) continue;
+        H[j] = lerp(H[j], target, w);
+      }
+    }
+    // soften the edges so the cut reads as a saddle rather than a trench
+    for(let pass=0; pass<6; pass++){
+      const src = new Float32Array(H);
+      for(let k=0;k<path.length;k++){
+        const c = path[k], cx=c%N, cz=(c/N)|0;
+        for(let dz=-RAD-2; dz<=RAD+2; dz++) for(let dx=-RAD-2; dx<=RAD+2; dx++){
+          const nx=cx+dx, nz=cz+dz;
+          if(nx<1||nz<1||nx>=N-1||nz>=N-1) continue;
+          const j=nz*N+nx;
+          if(Wld.WLEV[j] > Wld.H[j]) continue;
+          let sum=0;
+          for(let bz=-1;bz<=1;bz++) for(let bx=-1;bx<=1;bx++) sum += src[(nz+bz)*N+(nx+bx)];
+          H[j] = sum/9;
+        }
+      }
+    }
+
+    /* A FORD WHERE THE ROUTE MEETS DEEP WATER. Raising the BED is the only
+       honest way to do this: the water surface is not touched, so the river
+       still falls downhill exactly as it did, it is simply shallow here —
+       which is what a riffle is. Lowering the surface instead would break
+       the one rule the navigation design leans on. */
+    for(const c of path){
+      if(Wld.WLEV[c] < -9000) continue;
+      const dep = Wld.WLEV[c] - H[c];
+      if(dep <= CFG.PLAYER.swimDepth) continue;
+      const cx=c%N, cz=(c/N)|0;
+      for(let dz=-2; dz<=2; dz++) for(let dx=-2; dx<=2; dx++){
+        const nx=cx+dx, nz=cz+dz;
+        if(nx<1||nz<1||nx>=N-1||nz>=N-1) continue;
+        const j=nz*N+nx;
+        if(Wld.WLEV[j] < -9000) continue;
+        const want = Wld.WLEV[j] - CFG.PLAYER.swimDepth*0.75;
+        if(H[j] < want) H[j] = want;
+      }
+      carved++;
+    }
+
+    recomputeSlope();
+    if(astar(Wld.start.i, Wld.hospital.i, cellWalkCost)){
+      Wld.stats.passCarved = carved;
+      Wld.stats.passRounds = round+1;
+      return carved;
+    }
+  }
+  Wld.stats.passCarved = carved;
+  Wld.stats.passRounds = 3;
+  return carved;
+}
+
+/* ---------------------------------------------------------------------
+   THE START, AND LAYER 9 — VALIDATION
+   ------------------------------------------------------------------- */
+/* The radius the start has to be clear of hazards in. Shared, so placeStart
+   and guarantee G6 are always asking the same question. */
+function startClearRadius(relax = 0){
+  return CFG.HAZARD.CLEAR * (1 - clamp(relax,0,1)*0.45);
+}
+function placeStart(relax = 0){
+  const N = Wld.N;
+  const hos = Wld.hospital;
+  const LIM = Wld.size*0.45;
+  // straight inland from the hospital, then the seed's bearing off that
+  const inland = Math.atan2(-hos.z, -hos.x);
+  const dir = inland + P.hospitalBearing * 120*DEG;
+  // how far the map actually extends in that direction, so `want` is always
+  // a distance that exists
+  let reach = 0;
+  for(let d=20; d<Wld.size; d+=8){
+    const x = hos.x + Math.cos(dir)*d, z = hos.z + Math.sin(dir)*d;
+    if(Math.abs(x) > LIM || Math.abs(z) > LIM) break;
+    reach = d;
+  }
+  const want = clamp(P.hospitalDist * reach, Math.min(130, reach*0.8), reach*0.96);
+  let best = null, bestScore = -Infinity;
+  for(let ring=0; ring<30; ring++){
+    const spread = 0.18 + ring*0.16;                 // widen the arc as we give up
+    const shrink = 1 - ring*0.022;
+    const n = Math.max(9, ring*8);
+    for(let a=0; a<n; a++){
+      const th = dir + ((a/n) - 0.5) * spread * 2;
+      const d = want * shrink;
+      const x = hos.x + Math.cos(th)*d, z = hos.z + Math.sin(th)*d;
+      if(Math.abs(x) > LIM || Math.abs(z) > LIM) continue;
+      const ix = Math.round(gxOf(x)), iz = Math.round(gzOf(z));
+      if(!inGrid(ix,iz)) continue;
+      const i = iz*N+ix;
+      if(!isFinite(cellWalkCost(i))) continue;
+      if(Wld.WLEV[i] > Wld.H[i]-0.15) continue;            // not standing in water
+      if(Wld.SLOPE[i] > 0.34 + relax*0.10) continue;
+      /* Nothing sharp within HAZARD.CLEAR metres, by the shared predicate.
+         `relax` pulls that radius in on later attempts: a start with a
+         steep bank 18m away is worse than a start, but it is much better
+         than no world at all, and G6 checks the same shrunken radius so the
+         two cannot disagree about whether the seed passed. */
+      let clearOK = true;
+      const cr = Math.ceil(startClearRadius(relax)/Wld.cell);
+      for(let dz=-cr; dz<=cr && clearOK; dz++) for(let dx=-cr; dx<=cr; dx++){
+        if(!inGrid(ix+dx, iz+dz)) continue;
+        const k = cellHazard((iz+dz)*N+(ix+dx));
+        if(k && k !== 'bog'){ clearOK=false; break; }
+      }
+      if(!clearOK) continue;
+      const score = -Math.abs(Math.hypot(x-hos.x, z-hos.z) - want)*0.1 - Wld.SLOPE[i]*20 - ring*0.6;
+      if(score > bestScore){ bestScore = score; best = { x, z, ix, iz, i }; }
+    }
+    if(best) break;
+  }
+  /* LAST RESORT: LOOK EVERYWHERE. The arc search can come up empty on a
+     very steep map — the ring of ground at the requested distance may
+     simply have no legal cell on it — and "no legal start" was the last
+     failure mode left standing after everything else was fixed. Scanning
+     the whole grid for the legal cell closest to the wanted distance costs
+     one pass over 66k cells and means the search can only fail if the map
+     contains no legal cell at all, which the guarantees above already rule
+     out. The bearing is kept as a preference, not a requirement. */
+  if(!best){
+    let fbScore = -Infinity;
+    for(let iz=4; iz<N-4; iz++) for(let ix=4; ix<N-4; ix++){
+      const i = iz*N+ix;
+      if(!isFinite(cellWalkCost(i))) continue;
+      if(Wld.WLEV[i] > Wld.H[i]-0.15) continue;
+      if(Wld.SLOPE[i] > 0.48) continue;
+      const x = wxOf(ix), z = wzOf(iz);
+      const d = Math.hypot(x-hos.x, z-hos.z);
+      if(d < Math.min(120, want*0.45)) continue;
+      const bearing = Math.abs(angDiff(dir, Math.atan2(z-hos.z, x-hos.x)));
+      const sc = -Math.abs(d-want)*0.05 - bearing*14 - Wld.SLOPE[i]*18;
+      if(sc > fbScore){ fbScore = sc; best = { x, z, ix, iz, i }; }
+    }
+    if(best) Wld.stats.startFallback = true;
+  }
+  if(!best) return false;
+  Wld.start = { x: best.x, z: best.z, y: heightAt(best.x, best.z), ix: best.ix, iz: best.iz, i: best.i };
+  Wld.stats.startWant = Math.round(want);
+  Wld.stats.startRelax = relax;
+  Wld.stats.startGot = Math.round(Math.hypot(best.x-hos.x, best.z-hos.z));
+  return true;
+}
+
+/* How many real minutes this seed's mind gives you, at an average blend
+   of day and night, before progress reaches 1 and the run ends. Used by
+   guarantee G2 and reported in the dev panel. */
+function mindMinutesBudget(){
+  const avgMul = 1.35;    // measured blend of day/dusk/night multipliers
+  const rate = CFG.MIND.baseRate * P.declineRate * avgMul;
+  return 1 / rate;
+}
+
+const GUARANTEES = ['G1 reachable','G2 in time','G3 water','G4 food','G5 clues','G6 hazards'];
+function validateWorld(){
+  const res = { pass:true, fail:[], detail:{} };
+  const fail = (g, why)=>{ res.pass=false; res.fail.push(g); res.detail[g]=why; };
+
+  // G1 — a walkable path exists
+  const path = astar(Wld.start.i, Wld.hospital.i, cellWalkCost);
+  if(!path){ fail('G1','no walkable path'); return res; }
+  Wld.routePath = path;
+  const metres = pathMetres(path);
+  res.detail.pathMetres = Math.round(metres);
+
+  // G2 — and it fits inside this seed's clock with room to wander
+  const walkMin = metres / CFG.PLAYER.walk / 60;
+  const budget = mindMinutesBudget();
+  res.detail.walkMinutes = +walkMin.toFixed(1);
+  res.detail.mindMinutes = +budget.toFixed(1);
+  /* x3 is the wander factor: the player does not know which way the
+     hospital is, so the direct path is a floor, not a forecast. Requiring
+     three times the direct walk to fit inside 80% of the mind's clock is
+     what "reachable with reasonable play" means here. */
+  if(walkMin*3 > budget*0.8) fail('G2', `${walkMin.toFixed(1)}min walk vs ${budget.toFixed(0)}min mind`);
+  /* And a route that is five times the straight line is not a route, it is
+     a maze the terrain happened to leave: the player will never find it by
+     dead reckoning, which is the only navigation they have. */
+  const direct = Math.hypot(Wld.start.x-Wld.hospital.x, Wld.start.z-Wld.hospital.z);
+  res.detail.detour = +(metres/Math.max(1,direct)).toFixed(2);
+  if(metres > direct*5) fail('G2', `${res.detail.detour}x detour`);
+
+  /* G3 — drinkable water along the corridor, without a fatal gap.
+
+     This walks the PATH and asks the world, cell by cell, whether there is
+     clean water within reach — it does not consult Wld.water. That list is
+     a set of notable, named sources for the map and the dev panel; the
+     player can drink anywhere they can reach real moving water, so the
+     guarantee has to be about the water, not about the markers. Checking
+     the markers instead is what failed four seeds that had a stream
+     running the length of the route. */
+  const CORRIDOR = 70;
+  const cr = Math.ceil(CORRIDOR/Wld.cell);
+  const drinkableNear = (i)=>{
+    const cx = i%Wld.N, cz = (i/Wld.N)|0;
+    for(let dz=-cr; dz<=cr; dz++) for(let dx=-cr; dx<=cr; dx++){
+      const nx=cx+dx, nz=cz+dz;
+      if(!inGrid(nx,nz)) continue;
+      const j = nz*Wld.N+nx;
+      if(Wld.WLEV[j] < -9000 || Wld.POND[j]) continue;          // standing water does not count
+      const dep = Wld.WLEV[j]-Wld.H[j];
+      if(dep < 0.08 || dep > 2.2) continue;                      // out of reach from a bank
+      if(Wld.ACC[j] < CFG.HYDRO.riverAcc*0.35) continue;         // too small to trust
+      return true;
+    }
+    return false;
+  };
+  let dryRun = 0, worstDry = 0, wetStops = 0, run = 0;
+  for(let k=0;k<path.length;k++){
+    if(k){
+      const a2=path[k-1], b2=path[k];
+      run = Math.hypot((b2%Wld.N)-(a2%Wld.N), ((b2/Wld.N)|0)-((a2/Wld.N)|0))*Wld.cell;
+    } else run = 0;
+    if(drinkableNear(path[k])){ wetStops++; dryRun = 0; }
+    else { dryRun += run; worstDry = Math.max(worstDry, dryRun); }
+  }
+  res.detail.wetStops = wetStops;
+  res.detail.dryLeg = Math.round(worstDry);
+  if(wetStops < 3) fail('G3', `clean water reachable at ${wetStops} points on the route`);
+  else {
+    const hoursOfThirst = 100/CFG.SURVIVE.thirstPerHour;
+    const metresPerHour = CFG.PLAYER.walk*3600*0.45;    // 45% of the hour actually moving
+    if(worstDry > hoursOfThirst*metresPerHour*0.75) fail('G3', `${Math.round(worstDry)}m dry leg`);
+  }
+  res.detail.waterOnRoute = Wld.water.filter(w=>{
+    if(w.kind === 'stagnant') return false;
+    for(let k=0;k<path.length;k+=3){
+      const i=path[k];
+      if(Math.hypot(wxOf(i%Wld.N)-w.x, wzOf((i/Wld.N)|0)-w.z) < CORRIDOR) return true;
+    }
+    return false;
+  }).length;
+
+  // G4 — at least a little real food
+  const food = Wld.berries.filter(b=>b.left>0).length
+             + Wld.items.filter(i=>i.type==='cannedFood'||i.type==='trailBar').length;
+  res.detail.food = food;
+  if(food < 2) fail('G4', `${food} food sources`);
+
+  // G5 — honest clues exist on the way in
+  const clueNear = Wld.clues.filter(c=>{
+    for(let k=0;k<path.length;k+=4){
+      const i = path[k];
+      if(Math.hypot(wxOf(i%Wld.N)-c.x, wzOf((i/Wld.N)|0)-c.z) < 110) return true;
+    }
+    return false;
+  }).length;
+  res.detail.cluesOnRoute = clueNear;
+  if(clueNear < 3) fail('G5', `${clueNear} clues near the route`);
+
+  // G6 — nothing sharp at the start (the corridor itself is guaranteed by
+  // G1, because cellWalkCost refuses to path through a hazard at all)
+  let nearHaz = null;
+  for(const h of Wld.hazards){
+    if(h.kind === 'bog') continue;
+    const d = Math.hypot(h.x-Wld.start.x, h.z-Wld.start.z);
+    if(d < startClearRadius(Wld.stats.startRelax||0)){ nearHaz = { ...h, d: Math.round(d) }; break; }
+  }
+  res.detail.startClear = nearHaz ? nearHaz.d : '>'+Math.round(startClearRadius(Wld.stats.startRelax||0));
+  if(nearHaz) fail('G6', `${nearHaz.kind} ${nearHaz.d}m from the start`);
+
+  return res;
+}
+
+/* ---------------------------------------------------------------------
+   THE GENERATOR
+   Runs the layers in order, validates, and on failure NUDGES: the salt
+   changes the terrain a little rather than throwing the seed away, so a
+   seed that fails once still produces a world recognisably its own. Only
+   after several nudges does it re-roll the personality, and even then it
+   says so in the dev panel rather than pretending it never happened.
+   ------------------------------------------------------------------- */
+function generateWorld(onProgress){
+  const t0 = performance.now();
+  let attempt = 0, result = null;
+  const log = [];
+  for(; attempt<8; attempt++){
+    if(onProgress) onProgress(attempt/8, attempt===0 ? 'shaping the land' : 'the land did not work, trying again');
+    genTerrain(attempt);
+    genHydrology();
+    placeHospital();
+    /* The start and the pass come BEFORE routes, canopy, structures and
+       resources. ensureCorridor() edits the heightfield, and everything
+       after it is placed on the ground: generating them first and cutting
+       the pass afterwards would leave cabins hanging over a saddle that
+       was not there when they were sited. */
+    /* A FAILED START STILL HAS TO RELAX. The first build `continue`d here,
+       which jumped over the nudge at the bottom of the loop — so a seed
+       whose terrain was too sheer to stand on re-ran the identical
+       personality eight times and failed eight times for the same reason.
+       Anything that gives up on an attempt now falls through to the nudge. */
+    let carved = 0;
+    if(placeStart(attempt/7)){
+      carved = ensureCorridor();
+      if(carved > 0) log.push(`attempt ${attempt}: carved a pass (${carved} cells)`);
+      /* THE GROUND MOVED UNDER THE START. ensureCorridor regrades the
+         corridor, and the start is its first cell — the profile sweeps
+         adjust prof[0] too, so the cell the player was going to wake up on
+         can come out steeper than it was when it was chosen. One seed in
+         sixty failed G1 for exactly this, with an impassable START rather
+         than an impassable route. Re-seat it on the nearest cell that is
+         still legal, or admit the attempt failed. */
+      if(!isFinite(cellWalkCost(Wld.start.i))){
+        let moved = false;
+        for(let rad=1; rad<=6 && !moved; rad++){
+          for(let dz=-rad; dz<=rad && !moved; dz++) for(let dx=-rad; dx<=rad; dx++){
+            const ix = Wld.start.ix+dx, iz = Wld.start.iz+dz;
+            if(!inGrid(ix,iz)) continue;
+            const i = iz*Wld.N+ix;
+            if(!isFinite(cellWalkCost(i))) continue;
+            if(Wld.WLEV[i] > Wld.H[i]-0.15) continue;
+            Wld.start = { x: wxOf(ix), z: wzOf(iz), y: heightAt(wxOf(ix), wzOf(iz)), ix, iz, i };
+            moved = true; log.push(`attempt ${attempt}: start re-seated ${rad} cells`);
+            break;
+          }
+        }
+        if(!moved){
+          result = { pass:false, fail:['G0'], detail:{ G0:'start became impassable' } };
+          log.push(`attempt ${attempt}: start became impassable`);
+          P.scarcity = lerp(P.scarcity, 1.15, 0.45);
+          P.relief = lerp(P.relief, 0.85, 0.30);
+          P.cliffy = lerp(P.cliffy, 0.50, 0.35);
+          continue;
+        }
+      }
+      genRoutes();
+      genCanopy();
+      genStructures();
+      genResources();
+      genHazards();
+      result = validateWorld();
+      log.push(`attempt ${attempt}: ${result.pass ? 'pass' : 'fail ['+result.fail.join(', ')+']'}`);
+      if(result.pass) break;
+    } else {
+      result = { pass:false, fail:['G0'], detail:{ G0:'no legal start' } };
+      log.push(`attempt ${attempt}: no legal start`);
+    }
+    /* NUDGE, THEN RELAX. The first few retries reshape the land. If the
+       land is not the problem — a mean scarcity roll can starve G3/G4 on
+       any terrain — then after four attempts the generosity dials are
+       walked back toward the middle, because a seed that cannot be made
+       winnable is a worse outcome than a seed that is slightly kinder
+       than it rolled. This is logged, and the dev panel shows it. */
+    if(attempt >= 2){
+      P.scarcity = lerp(P.scarcity, 1.15, 0.45);
+      P.foodScarcity = lerp(P.foodScarcity, 1.05, 0.45);
+      P.hospitalDist = lerp(P.hospitalDist, 0.45, 0.35);
+      P.declineRate = lerp(P.declineRate, 0.9, 0.3);
+      /* AND THE LAND ITSELF, if the land is what is failing. A high-relief
+         alpine roll can cut the map into pieces no walkable route joins:
+         every cell between the player and the hospital is over the cliff
+         angle, and no amount of extra berries fixes that. Easing the relief
+         and the cliffiness turns the same seed into a gentler version of
+         itself rather than a different seed, which is the whole point of
+         nudging instead of re-rolling. */
+      P.relief = lerp(P.relief, 0.85, 0.30);
+      P.cliffy = lerp(P.cliffy, 0.50, 0.35);
+      log.push('  relaxed scarcity / distance / decline / relief');
+    }
+  }
+  Wld.ready = true;
+  Wld.validation = result || { pass:false, fail:['G0'], detail:{} };
+  Wld.stats.attempts = attempt+1;
+  Wld.stats.genMs = Math.round(performance.now()-t0);
+  Wld.stats.log = log;
+  return Wld.validation;
+}
