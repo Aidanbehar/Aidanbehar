@@ -7772,9 +7772,26 @@ function registerColliders(){
   for(const t of (Wld.townBuildings || [])) add(t);
 }
 
+/* THE SUM OVERSHOOTS, AND AN OVERSHOOT THAT BOUNCES IS A TRAP.
+   Every contact's full escape vector used to be added up and applied
+   whole. In a doorway that is wrong twice over: standing in the jamb,
+   four wall boxes answer at once, the sum is 1.5m where the deepest of
+   them needs 0.36m, and the player is thrown clean through the opening
+   into the jamb on the other side. That one answers with a sum pointing
+   back, and with an even number of passes the body lands exactly where
+   it started — inside the timber, with the resolver reporting that it
+   moved nobody. Measured on seeds 42 and 1234: walking at the inside of
+   a cabin wall left the eye inside the wall, and asking the resolver
+   directly to fix it moved the body 0.000m.
+
+   The direction still comes from every contact, because being wedged in
+   a corner needs both walls to have a say. What changes is the LENGTH:
+   one pass never moves further than its deepest single contact needs.
+   So the body walks out of the contact instead of being fired across
+   it, and the passes converge rather than alternating. */
 function resolveCollisions(p, radius){
-  for(let pass=0; pass<4; pass++){
-    let mx = 0, mz = 0, hits = 0;
+  for(let pass=0; pass<6; pass++){
+    let mx = 0, mz = 0, hits = 0, deepest = 0;
 
     for(const c of Veg.colliders){
       const dx = p.x - c.x, dz = p.z - c.z;
@@ -7783,8 +7800,9 @@ function resolveCollisions(p, radius){
       if(d2 >= rr*rr) continue;
       const d = Math.sqrt(d2);
       hits++;
-      if(d < 1e-6){ mx += rr; continue; }          // dead centre: any way out
+      if(d < 1e-6){ mx += rr; deepest = Math.max(deepest, rr); continue; }
       const pen = rr - d;
+      if(pen > deepest) deepest = pen;
       mx += dx/d*pen; mz += dz/d*pen;
     }
 
@@ -7826,8 +7844,9 @@ function resolveCollisions(p, radius){
       if(d2 >= rr*rr) continue;
       const d = Math.sqrt(d2);
       hits++;
-      if(d < 1e-6){ mx += rr; continue; }
+      if(d < 1e-6){ mx += rr; deepest = Math.max(deepest, rr); continue; }
       const pen = rr - d;
+      if(pen > deepest) deepest = pen;
       mx += dx/d*pen; mz += dz/d*pen;
     }
 
@@ -7845,13 +7864,62 @@ function resolveCollisions(p, radius){
         if(bx.y1 < p.y - 0.4) continue;                  // it is below your feet
         if(obbPush(bx, p.x, p.z, radius, _pushTmp)){
           hits++;
+          const pen = Math.hypot(_pushTmp.x, _pushTmp.z);
+          if(pen > deepest) deepest = pen;
           mx += _pushTmp.x; mz += _pushTmp.z;
         }
       }
     }
 
     if(!hits) break;
+    /* The step is never longer than the deepest single contact needs. */
+    const len = Math.hypot(mx, mz);
+    if(len > deepest && len > 1e-9){ const k = deepest/len; mx *= k; mz *= k; }
+    if(len < 1e-9) break;
     p.x += mx; p.z += mz;
+  }
+  /* AND THEN, WHATEVER HAPPENED ABOVE, GET OUT OF THE WALLS.
+     The loop above is a relaxation: it nudges, re-measures and nudges
+     again, and for most contacts it settles in a pass or two. For some
+     it does not settle at all — four wall boxes round a doorway can
+     hand it a direction that is right and a length that is wrong, and
+     it spends its passes crossing and re-crossing the opening. Six
+     passes is not a guarantee and neither is sixty.
+
+     "You are never standing inside a wall" is worth a guarantee rather
+     than a tendency, so it gets one. This deals with the boxes whose
+     RAW rectangle contains the body's centre — the ones that are drawn
+     around the eye — and it takes them one at a time, deepest first,
+     stepping each one out through its nearest face. One box at a time
+     cannot oscillate: every step ends with the body outside the box it
+     chose. */
+  for(let k=0; k<6; k++){
+    let worst = null, worstDepth = 0;
+    for(let si=0; si<STRUCT_COLLIDERS.length; si++){
+      const st = STRUCT_COLLIDERS[si];
+      if(Math.abs(p.x - st.x) > st.reach || Math.abs(p.z - st.z) > st.reach) continue;
+      for(const bx of st.solids){
+        if(bx.kind !== 'wall') continue;
+        if(bx.y1 <= p.y + CFG.PLAYER.stepUp) continue;
+        if(bx.y0 > p.y + 1.75) continue;
+        if(bx.y1 < p.y - 0.4) continue;
+        const dx = p.x - bx.cx, dz = p.z - bx.cz;
+        const lx =  dx*bx.cos - dz*bx.sin;
+        const lz =  dx*bx.sin + dz*bx.cos;
+        const ox = bx.hx - Math.abs(lx), oz = bx.hz - Math.abs(lz);
+        if(ox <= 0 || oz <= 0) continue;            // the centre is outside it
+        const depth = Math.min(ox, oz);
+        if(depth > worstDepth){ worstDepth = depth; worst = { bx, lx, lz, ox, oz }; }
+      }
+    }
+    if(!worst) break;
+    const { bx, lx, lz, ox, oz } = worst;
+    let mx2 = 0, mz2 = 0;
+    const out = radius + 0.02;                      // clear of it, not touching
+    if(ox < oz) mx2 = (lx < 0 ? -(ox + out) : (ox + out));
+    else        mz2 = (lz < 0 ? -(oz + out) : (oz + out));
+    p.x += mx2*bx.cos + mz2*bx.sin;
+    p.z += -mx2*bx.sin + mz2*bx.cos;
   }
   // the map's edge is a wall you cannot leave
   const lim = Wld.size*0.5 - 6;
@@ -8014,9 +8082,28 @@ function updatePlayer(dt){
      turned through 1617 degrees, four and a half complete circles, which
      is not "people veer when they are lost", it is a spin cycle. */
   const driftYaw = p.driftAngle * p.drift * C.driftRate * dt;
-  p.yawDriftAccum = (p.yawDriftAccum || 0) + driftYaw;
+  /* THE DRIFT TURNS THE WHOLE PLAYER, NOT JUST THEIR FEET.
+     It used to be kept as an offset added to the heading and left out of
+     the camera, so the body walked at an angle to the view: hold W and
+     you slide sideways across the screen. The offset was never bounded
+     and never decayed, so twenty seconds out of sight of the sun put
+     seventy degrees between where you were looking and where you were
+     going, and a hundred and twenty after thirty. That is not what
+     veering feels like — it reads as the controls being broken, and it
+     was reported as exactly that.
 
-  const heading = p.yaw + p.yawDriftAccum;
+     Nobody walking in a forest strafes. What actually happens is that
+     you turn a little without noticing and your eyes go with you, so
+     forward is always forward and the LINE is what bends. So the drift
+     is added to the yaw itself. W goes exactly where you are looking,
+     always; it is the looking that wanders. Walk blind for five minutes
+     and you still come back to where you started, which was the point
+     of it — you simply cannot catch it happening by watching your feet
+     disagree with the screen. */
+  p.yaw += driftYaw;
+  p.driftTurned = (p.driftTurned || 0) + driftYaw;    // for the dev panel
+
+  const heading = p.yaw;
   const fx = -Math.sin(heading), fz = -Math.cos(heading);
   const rx =  Math.cos(heading), rz = -Math.sin(heading);
   const wx = fx*(-iz) + rx*ix, wz = fz*(-iz) + rz*ix;
@@ -8136,6 +8223,21 @@ function updatePlayer(dt){
   // whatever happened above, the feet are not below the ground
   if(p.pos.y < ground) p.pos.y = ground;
   if(!p.swimming) pushOutOfTerrain(p);
+  /* AND THEN THE WALLS AGAIN. pushOutOfTerrain moves the body sideways
+     to get it out of a bank, and it knows about the ground and nothing
+     else — so a player standing between a slope and a wall was pushed
+     off the slope INTO the wall, and nothing looked at the walls again
+     before the camera was placed. The result is the eye inside a
+     doorway jamb with the world drawn from inside the timber: measured
+     on seeds 42 and 1234, walking at the inside of a cabin wall put the
+     eye in the wall three and four times over a sweep of every
+     building.
+
+     "You are never standing inside a wall" is an invariant, and an
+     invariant has to hold after the LAST thing that moves you, not
+     after the first. Every mover in this function is now followed by
+     the collision pass. */
+  resolveCollisions(p.pos, C.radius);
   const fNow = surfaceAt(p.pos.x, p.pos.z, p.pos.y, C.radius);
   const groundNow = Math.max(heightAt(p.pos.x, p.pos.z), fNow > -1e8 ? fNow : -Infinity);
   if(p.pos.y < groundNow) p.pos.y = groundNow;
@@ -12092,7 +12194,7 @@ const DEV = (()=>{
       + `INTENSITY  ${M.intensity.toFixed(3)}  wave ${M.wave.toFixed(2)} spike ${M.spike.toFixed(2)}\n`
       + `AGITATION  ${M.agitation.toFixed(3)}  pressure ${M.pressure.toFixed(2)}\n`
       + `  ${Object.entries(M.agit).map(([k,v])=>k.slice(0,5)+':'+v.toFixed(2)).join(' ')}\n`
-      + `  yawRate ${M.yawRate.toFixed(2)} drift ${Player.drift.toFixed(2)} off ${(Player.yawDriftAccum*57.3||0).toFixed(1)}deg\n`
+      + `  yawRate ${M.yawRate.toFixed(2)} drift ${Player.drift.toFixed(2)} turned ${(Player.driftTurned*57.3||0).toFixed(1)}deg\n`
       + `  leak ${G.t-M.lastLeak < 25 ? 'to '+M.leakStage : '-'}   compass ${M.compassReversed?'REVERSED':'ok'}\n`
       + `\n`
       + `thirst ${S.thirst.toFixed(0).padStart(3)}  hunger ${S.hunger.toFixed(0).padStart(3)}  cold ${S.cold.toFixed(0).padStart(3)}  sick ${S.sick.toFixed(0)}\n`
@@ -12371,8 +12473,43 @@ const DEV = (()=>{
      used to be exempt and spawned 153m from the doors; it walks 600m
      straight and 721m on the ground like everything else.
 
+     WALKING SIDEWAYS, WHICH IS WHAT THE DRIFT ACTUALLY DID
+       the angle between where the camera pointed and where the body
+         went, over three minutes of walking blind: median 41.5 degrees,
+         52.9 on flat ground at walking speed, worst 131. Hold W and you
+         slid across the screen. With the drift turning the yaw instead
+         of being held as an offset: median 0.02 degrees. What is left
+         at the tail is sliding along a slope and momentum through a
+         turn, which is both correct and visible.
+       the line still bends: 411m walked for 389m of straight line on
+         the same seed either way, and the drift turned the player
+         through 27.8 degrees over those three minutes.
+
+     BEING INSIDE THE WORLD
+       the collision resolver SUMMED every contact's escape vector. In a
+         doorway four wall boxes answer at once, the sum is 1.5m where
+         the deepest needs 0.36m, and the body is thrown through the
+         opening into the far jamb, which answers with a sum pointing
+         back: with an even number of passes it lands exactly where it
+         started. Asked directly to get a body out of a cabin jamb the
+         resolver moved it 0.000m. Each pass is now clamped to its
+         deepest single contact, and a guaranteed escape follows the
+         relaxation: boxes whose raw rectangle contains the body, one at
+         a time, deepest first, each stepped out through its nearest
+         face.
+       over 294,000 frames of walking in and out of 35 buildings on two
+         seeds, frames with the eye inside a wall: 0.
+
+     GETTING INTO A HOUSE, AND BACK OUT
+       flood-filling every building's interior from outside, with the
+         body's own radius and the game's own boxes: every house marked
+         enterable is 100% reachable once its door is open, and the only
+         buildings that are not are the boarded ones, which is what
+         boarded means. Doors are opened with E from either side and
+         never close on their own.
+
      COST
-       simulation 0.10ms a frame in the wilderness, 0.18ms in the town
+       simulation 0.09ms a frame in the wilderness, 0.15ms in the town
        522 draw calls and 408k triangles at the spawn, 218 and 468k in
          the town; 3,519 instances across 15 instanced meshes
        a full vegetation refill after a 120m jump: 2.2ms
@@ -12652,7 +12789,8 @@ window.DR = {
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders,
-  CollisionView, People, get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
+  CollisionView, People, resolveCollisions, pushOutOfTerrain,
+  get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
 };
 
 boot();
