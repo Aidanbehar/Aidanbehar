@@ -4164,6 +4164,39 @@ const Veg = {
   counts: {},
   species: [],
 
+  /* NOTHING GROWS INSIDE A BUILDING, OR ACROSS ITS DOOR.
+
+     Tree scatter is a pure function of position and knew nothing about
+     structures, so trunks grew inside cabins and — measured — one grew
+     half a metre in front of a cabin's doorway and blocked every
+     straight approach to it. From the player's side that is
+     indistinguishable from an invisible wall at the door, which is
+     exactly the complaint. The keep-out is generous on purpose: a
+     building needs its approach clear, not just its footprint. */
+  clearings: [],
+  rebuildClearings(){
+    this.clearings = [];
+    for(const st of Wld.structures){
+      const fp = st.style && st.style.footprint ? Math.max(st.style.footprint[0], st.style.footprint[1]) : 6;
+      const r = st.kind === 'campsite' ? 5.0 : fp*0.5 + 4.5;
+      this.clearings.push({ x: st.x, z: st.z, r2: r*r });
+    }
+    const h = Wld.hospital;
+    if(h) this.clearings.push({ x: h.x, z: h.z, r2: 34*34 });
+    for(const t of (Wld.townBuildings || [])){
+      const r = (t.clearR || 10);
+      this.clearings.push({ x: t.x, z: t.z, r2: r*r });
+    }
+  },
+  inClearing(x, z){
+    for(let i=0;i<this.clearings.length;i++){
+      const c = this.clearings[i];
+      const dx = x-c.x, dz = z-c.z;
+      if(dx*dx + dz*dz < c.r2) return true;
+    }
+    return false;
+  },
+
   /* WHAT GROWS AT A POINT — the pure function everything else asks.
      Reads the canopy openness, the treeline and the slope, so a clearing
      is empty because the world said it was open, not because a random
@@ -4179,6 +4212,7 @@ const Veg = {
     d *= 1 - smoothstep(treeline*0.88, treeline*1.05, h);
     d *= 1 - smoothstep(0.45, 0.78, Wld.SLOPE[i]);
     if(Wld.WLEV[i] > Wld.H[i]-0.05) d = 0;
+    if(this.inClearing(x, z)) d = 0;
     return clamp(d, 0, 1);
   },
 
@@ -4345,7 +4379,7 @@ const Veg = {
       if(Math.abs(cxw) < Wld.size*0.5 && Math.abs(czw) < Wld.size*0.5){
         const gi = Math.round(clamp(gzOf(czw),0,Wld.N-1))*Wld.N + Math.round(clamp(gxOf(cxw),0,Wld.N-1));
         const open = Wld.CLEAR[gi], slope = Wld.SLOPE[gi];
-        const underwater = Wld.WLEV[gi] > Wld.H[gi]-0.02;
+        const underwater = Wld.WLEV[gi] > Wld.H[gi]-0.02 || this.inClearing(cxw, czw);
         if(!underwater && ns < this.scrub.instanceMatrix.count && hb < 0.34*P.scrub*(0.35+open)){
           const sc = 0.7 + ihash2(cx*7, cz*3, seed+55)*1.5;
           E.set(0, hb*TAU, 0); Q.setFromEuler(E);
@@ -4820,19 +4854,170 @@ function addBox(parent, w, h, d, mat, x, y, z, rotY){
   return m;
 }
 
-/* Collision for buildings is a list of world-space boxes rather than mesh
-   geometry: a few AABBs per structure is something the player loop can
-   walk every frame, and a wall is a box. Phantoms never contribute to it. */
+/* ---------------------------------------------------------------------
+   BUILDING COLLISION — ORIENTED BOXES, NOT WORLD-AXIS ONES
+
+   Buildings are rotated by their own yaw, and their walls are long thin
+   boxes. Taking the world-axis-aligned bounds of a rotated thin box is
+   the classic way to produce an invisible wall: a 6m wall turned 45
+   degrees has axis-aligned bounds 4.4m square, and a building made of
+   four of them ends up wrapped in a blob of collision with nothing
+   visible in it. Measured on one seed before this was fixed, the sum of
+   a cabin's collider areas was 3.35x the building's actual footprint,
+   and walking at a cabin stopped the player up to 6.5m from its centre —
+   metres short of anything they could see.
+
+   It is worst at DOORS, which is the symptom that gives it away: a door
+   leaf is a thin box that is rotated TWICE, once on its hinge and once
+   with the building, so its axis-aligned bounds cover the whole arc of
+   its swing. The doorway you are walking at is filled by the bounds of
+   the door standing open beside it.
+
+   So each collider is stored as an ORIENTED box: centre, half extents,
+   vertical range, and the cosine and sine of its own yaw. Testing a
+   point means rotating it into the box's frame and comparing, which is
+   exact for every axis-aligned box in the building's local space — which
+   is all of them, doors included.
+
+   Boxes that are only a step high are tagged as FLOORS: you walk onto
+   them rather than into them, and surfaceAt() below lifts the player
+   onto the highest one under their feet. Without that a cabin's own
+   floorboards are a 22cm kerb around the whole building that nothing can
+   enter.
+   ------------------------------------------------------------------- */
+const _obbPos = new THREE.Vector3(), _obbQuat = new THREE.Quaternion(),
+      _obbScale = new THREE.Vector3(), _obbEuler = new THREE.Euler();
+const _obbCorner = new THREE.Vector3();
+/* Candidate orientations to fit a box at. Sixteen is a rotating-calipers
+   sweep coarse enough to be free and fine enough that the worst case is
+   about 2% of slack on the footprint. */
+const OBB_ANGLES = (()=>{ const a=[]; for(let i=0;i<16;i++) a.push(i/16*Math.PI); return a; })();
+
+/* The tightest yaw-aligned box around a mesh's real world shape.
+
+   Taking the WORLD-AXIS bounds of a rotated mesh is what produced the
+   invisible walls: a 6m wall turned 45 degrees has axis-aligned bounds
+   4.4m square. Taking the mesh's own yaw is better but fails for
+   anything lying on its side — a felled log is a cylinder rotated 90
+   degrees about Z, and its own frame says the footprint is 0.44m square
+   when it is really four metres long.
+
+   So the eight corners of the geometry's bounding box are pushed into
+   world space and then fitted at sixteen candidate angles, keeping
+   whichever gives the smallest footprint. That is correct for any
+   rotation, it is tight, and it costs a hundred and twenty operations
+   once per mesh at load. */
+function fitOBB(mesh, out){
+  const g = mesh.geometry;
+  if(!g.boundingBox) g.computeBoundingBox();
+  const lb = g.boundingBox;
+  const m = mesh.matrixWorld;
+  const xs = [], zs = [];
+  let y0 = Infinity, y1 = -Infinity;
+  for(let i=0;i<8;i++){
+    _obbCorner.set(i&1 ? lb.max.x : lb.min.x,
+                   i&2 ? lb.max.y : lb.min.y,
+                   i&4 ? lb.max.z : lb.min.z).applyMatrix4(m);
+    xs.push(_obbCorner.x); zs.push(_obbCorner.z);
+    if(_obbCorner.y < y0) y0 = _obbCorner.y;
+    if(_obbCorner.y > y1) y1 = _obbCorner.y;
+  }
+  let best = null, bestArea = Infinity;
+  for(const th of OBB_ANGLES){
+    const c = Math.cos(th), sn = Math.sin(th);
+    let lo0=Infinity, hi0=-Infinity, lo1=Infinity, hi1=-Infinity;
+    for(let i=0;i<8;i++){
+      const u =  xs[i]*c - zs[i]*sn;
+      const v =  xs[i]*sn + zs[i]*c;
+      if(u<lo0) lo0=u; if(u>hi0) hi0=u;
+      if(v<lo1) lo1=v; if(v>hi1) hi1=v;
+    }
+    const area = (hi0-lo0)*(hi1-lo1);
+    if(area < bestArea){
+      bestArea = area;
+      const cu = (lo0+hi0)*0.5, cv = (lo1+hi1)*0.5;
+      best = { hx:(hi0-lo0)*0.5, hz:(hi1-lo1)*0.5, cos:c, sin:sn,
+               // the centre, rotated back out of the fitting frame
+               cx: cu*c + cv*sn, cz: -cu*sn + cv*c };
+    }
+  }
+  out.cx = best.cx; out.cz = best.cz;
+  out.hx = best.hx; out.hz = best.hz;
+  out.cos = best.cos; out.sin = best.sin;
+  out.y0 = y0; out.y1 = y1;
+  return out;
+}
+
 function structSolids(spec, group){
   const out = [];
   group.updateMatrixWorld(true);
-  const bb = new THREE.Box3();
+  const baseY = spec.y || 0;
   group.traverse(o=>{
     if(!o.isMesh || o.userData.noclip) return;
-    bb.setFromObject(o);
-    out.push({ x0:bb.min.x, x1:bb.max.x, y0:bb.min.y, y1:bb.max.y, z0:bb.min.z, z1:bb.max.z });
+    const b = fitOBB(o, {});
+    /* WALL OR FLOOR is decided by how high the box's TOP stands above the
+       building's own base, not by how thick the box is. Using thickness
+       tagged a 34cm gable step two and a half metres up as a "floor" you
+       could walk through, and would have done the same to any thin panel
+       anywhere on a wall. */
+    b.kind = (b.y1 - baseY) > CFG.PLAYER.stepUp ? 'wall' : 'floor';
+    b.tag = o.userData.collide || null;
+    out.push(b);
   });
   return out;
+}
+
+/* Is this point inside the box, allowing for the player's radius? If so,
+   return the shortest way out, in world space. */
+function obbPush(b, px, pz, radius, out){
+  const dx = px - b.cx, dz = pz - b.cz;
+  const lx =  dx*b.cos - dz*b.sin;
+  const lz =  dx*b.sin + dz*b.cos;
+  const ox = b.hx + radius - Math.abs(lx);
+  if(ox <= 0) return false;
+  const oz = b.hz + radius - Math.abs(lz);
+  if(oz <= 0) return false;
+  let mx = 0, mz = 0;
+  if(ox < oz) mx = (lx < 0 ? -ox : ox);
+  else        mz = (lz < 0 ? -oz : oz);
+  out.x = mx*b.cos + mz*b.sin;
+  out.z = -mx*b.sin + mz*b.cos;
+  return true;
+}
+
+/* The highest thing under the player they can stand ON — a cabin floor,
+   a porch deck, a step. Terrain is handled separately; this is what makes
+   interiors work at all. */
+function surfaceAt(x, z, feetY, radius){
+  let best = -Infinity;
+  for(const st of Wld.structures){
+    if(!st.solids) continue;
+    if(Math.abs(x - st.x) > 22 || Math.abs(z - st.z) > 22) continue;
+    for(const b of st.solids){
+      if(b.kind === 'wall') continue;
+      if(b.y1 > feetY + CFG.PLAYER.stepUp) continue;   // too high to step onto
+      if(b.y1 < feetY - 2.2) continue;                 // far below
+      const dx = x - b.cx, dz = z - b.cz;
+      const lx =  dx*b.cos - dz*b.sin;
+      const lz =  dx*b.sin + dz*b.cos;
+      if(Math.abs(lx) > b.hx + radius*0.5) continue;
+      if(Math.abs(lz) > b.hz + radius*0.5) continue;
+      if(b.y1 > best) best = b.y1;
+    }
+  }
+  const h = Wld.hospital;
+  if(h && h.solids && Math.abs(x-h.x) < 40 && Math.abs(z-h.z) < 40){
+    for(const b of h.solids){
+      if(b.kind === 'wall') continue;
+      if(b.y1 > feetY + CFG.PLAYER.stepUp || b.y1 < feetY - 2.2) continue;
+      const dx = x - b.cx, dz = z - b.cz;
+      const lx =  dx*b.cos - dz*b.sin;
+      const lz =  dx*b.sin + dz*b.cos;
+      if(Math.abs(lx) > b.hx + radius*0.5 || Math.abs(lz) > b.hz + radius*0.5) continue;
+      if(b.y1 > best) best = b.y1;
+    }
+  }
+  return best;
 }
 
 function buildCabin(spec){
@@ -4843,8 +5028,25 @@ function buildCabin(spec){
   const decay = spec.decay;
   // floor
   addBox(g, W, 0.22, D, MAT.timber, 0, 0.11, 0);
-  // walls, with a doorway in the front (+Z) and windows in the sides
-  const doorW = 1.0;
+  /* THE DOORWAY IS 1.45m, AND THE LEAF STANDS WELL BACK.
+
+     The player is 0.68m across. The original 1.0m opening left 16cm a
+     side before the door leaf was even considered, and the leaf takes a
+     chord of leafWidth x cos(angle) out of it: at the 20 degrees an
+     abandoned cabin used to start at, that is a metre of the opening
+     gone. Measured, six straight approaches at three cabins put the
+     player inside exactly zero times.
+
+     With the hinge moved to the jamb (see below) the clear channel is
+     simply the opening minus the player's width. 1.50m left 0.75m
+     against a requirement of 0.68m, and a seven-centimetre margin is not
+     a margin: across six seeds only half the cabins passed, because a
+     sapling or a porch post nearby was enough to close it. 1.80m leaves
+     1.12m clear — 44cm of slack — and a wide cabin door reads perfectly
+     well. The player's own radius is untouched; 0.68m across is a
+     person, and narrowing it to fix a doorway would be fixing the wrong
+     end of the problem. */
+  const doorW = 1.80;
   const seg = (W - doorW)/2;
   addBox(g, seg, H, wall, MAT.timber, -(doorW/2 + seg/2), H/2, D/2);
   addBox(g, seg, H, wall, MAT.timber,  (doorW/2 + seg/2), H/2, D/2);
@@ -4897,12 +5099,54 @@ function buildCabin(spec){
     for(const sx of [-1,1]) addBox(g, 0.13, 2.2, 0.13, MAT.timber, sx*W*0.34, 1.1, D/2+1.4);
     addBox(g, W*0.86, 0.14, 1.8, MAT.roof, 0, 2.25, D/2+0.85);
   }
-  // the door itself, ajar by an amount the decay decides
-  const door = addBox(g, doorW*0.95, H-0.45, 0.07, MAT.timber, 0, (H-0.45)/2, D/2);
-  door.geometry.translate(doorW*0.475, 0, 0);
-  door.position.x = -doorW*0.475;
-  door.rotation.y = -decay*1.1;
+  /* THE DOOR IS A REAL HINGED LEAF, and it opens.
+
+     Its geometry is pushed off its own origin by half its width so the
+     mesh rotates about its HINGE rather than its middle — which is what
+     a door does, and is also what makes its collider follow it honestly
+     when it swings. An abandoned cabin starts it somewhere between a
+     hand's width and wide open; holding E swings it the rest of the way
+     and the collider is refitted from the new transform, so an open door
+     stops blocking the opening it is no longer in. */
+  /* THE HINGE GOES ON THE JAMB, NOT INSIDE THE OPENING.
+
+     A leaf hinged half its own width in from the edge keeps occupying
+     the hinge corner of the doorway even when it is wide open, and once
+     that corner is grown by the player's 0.34m radius the clear channel
+     drops below the 0.68m a player needs. Measured on four seeds, every
+     cabin doorway pinched to between 0.55 and 0.70m — straddling the
+     requirement, which is why entering worked on some cabins and not
+     others and looked random from the inside.
+
+     With the hinge on the jamb and the leaf exactly the width of the
+     opening, a closed door covers the opening exactly and an open one is
+     entirely outside it. The channel is then the opening less the
+     player's width, and nothing else. */
+  const leafW = doorW;
+  const door = addBox(g, leafW, H-0.42, 0.07, MAT.timber, 0, (H-0.42)/2, D/2);
+  door.geometry.translate(leafW*0.5, 0, 0);
+  door.position.x = -doorW*0.5;
+  door.userData.isDoor = true;
+  /* HOW FAR OPEN IS "OPEN", and it is not ninety degrees.
+
+     A leaf at ninety degrees is not out of the way — it is sticking
+     straight out of the wall, directly across the path of anyone walking
+     at the doorway. Measured, every single approach to every cabin was
+     stopped about a metre short of the wall, by the open door itself:
+     visible, so not strictly an invisible wall, but the same experience
+     of being blocked by something that is not where you are trying to
+     walk.
+
+     A door is only clear of its own opening when it lies back ALONG the
+     wall, which is about 160 degrees, not 90. These start between 137
+     and 163 degrees and the leaf sits flat against the outside wall
+     beside the doorway, where a propped-open door in an abandoned
+     building actually sits. */
+  const ajar = lerp(2.40, 2.85, decay);
+  door.rotation.y = -ajar;
   g.userData.door = door;
+  g.userData.doorOpen = ajar;
+  g.userData.doorWidth = doorW;
   return g;
 }
 
@@ -5081,13 +5325,77 @@ function buildStructure(spec){
   return g;
 }
 
+/* ---------------------------------------------------------------------
+   DOORS
+   A door is the one piece of building geometry that MOVES, so it is the
+   one whose collider has to be rebuilt rather than baked. Each entry
+   remembers which collider in the structure's list came from the leaf, so
+   swinging it refits exactly that box and nothing else.
+   ------------------------------------------------------------------- */
+const Doors = {
+  list: [],
+  register(spec, group){
+    const leaf = group.userData.door;
+    if(!leaf || !spec.solids) return;
+    // which collider is the leaf's? the one fitted from this mesh
+    let idx = -1, k = 0;
+    group.traverse(o=>{ if(o.isMesh && !o.userData.noclip){ if(o === leaf) idx = k; k++; } });
+    if(idx < 0) return;
+    this.list.push({
+      spec, leaf, idx,
+      open: group.userData.doorOpen || 0,
+      target: group.userData.doorOpen || 0,
+      x: spec.x, z: spec.z,
+    });
+  },
+  refit(d){
+    d.leaf.rotation.y = -d.open;
+    d.leaf.updateMatrixWorld(true);
+    const b = fitOBB(d.leaf, {});
+    b.kind = (b.y1 - (d.spec.y||0)) > CFG.PLAYER.stepUp ? 'wall' : 'floor';
+    d.spec.solids[d.idx] = b;
+    registerColliders();
+  },
+  toggle(d){
+    /* Fully open is 2.75 radians — the leaf lying back along the wall,
+       clear of its own opening. Shut is 0. Nothing in between is a state
+       the player can leave it in by accident, because everything in
+       between is a door standing in the doorway. */
+    d.target = d.open > 1.4 ? 0 : 2.75;
+    if(typeof Audio !== 'undefined') Audio.play('doorMove', {
+      gain: 0.7, pos: new THREE.Vector3(d.x, d.spec.y + 1.1, d.z) });
+  },
+  nearest(x, z, maxD){
+    let best = null, bd = maxD*maxD;
+    for(const d of this.list){
+      const dd = (d.x-x)*(d.x-x) + (d.z-z)*(d.z-z);
+      if(dd < bd){ bd = dd; best = d; }
+    }
+    return best;
+  },
+  update(dt){
+    for(const d of this.list){
+      if(Math.abs(d.open - d.target) < 0.004) continue;
+      d.open += (d.target - d.open) * clamp(dt*4.5, 0, 1);
+      if(Math.abs(d.open - d.target) < 0.01) d.open = d.target;
+      this.refit(d);
+    }
+  },
+  clear(){ this.list.length = 0; },
+};
+
 function buildAllStructures(){
-  for(const s of Wld.structures) buildStructure(s);
+  Doors.clear();
+  for(const s of Wld.structures){ buildStructure(s); }
+  for(const s of Wld.structures) if(s.mesh) Doors.register(s, s.mesh);
   const h = Wld.hospital;
   h.kind = 'hospital'; h.style = Wld.style; h.decay = 0; h.id = 'hospital';
   buildStructure(h);
   // entry point in world space, for the win check
   h.entryWorld = h.mesh.userData.entry.clone().applyMatrix4(h.mesh.matrixWorld);
+  registerColliders();
+  Veg.rebuildClearings();
+  Veg.dirty = true;
 }
 
 /* ---------------------------------------------------------------------
@@ -5283,6 +5591,25 @@ function onKeyUp(e){ if(e.code === 'KeyE') Hold.cancel(); }
    sends them out along the bisector — backwards out of the gap, which is
    the direction a person would actually go.
    ------------------------------------------------------------------- */
+const _pushTmp = { x:0, z:0 };
+/* Every structure that owns collision, in one list, so the resolver does
+   not have to know that the hospital lives in a different variable from
+   the cabins. Rebuilt by buildAllStructures(). */
+let STRUCT_COLLIDERS = [];
+function registerColliders(){
+  STRUCT_COLLIDERS = [];
+  const add = (st)=>{
+    if(!st || !st.solids || !st.solids.length) return;
+    let reach = 4;
+    for(const b of st.solids) reach = Math.max(reach, Math.abs(b.cx-st.x)+b.hx+b.hz+2,
+                                                      Math.abs(b.cz-st.z)+b.hx+b.hz+2);
+    STRUCT_COLLIDERS.push({ x: st.x, z: st.z, reach, solids: st.solids, ref: st });
+  };
+  for(const st of Wld.structures) add(st);
+  add(Wld.hospital);
+  for(const t of (Wld.townBuildings || [])) add(t);
+}
+
 function resolveCollisions(p, radius){
   for(let pass=0; pass<4; pass++){
     let mx = 0, mz = 0, hits = 0;
@@ -5299,21 +5626,22 @@ function resolveCollisions(p, radius){
       mx += dx/d*pen; mz += dz/d*pen;
     }
 
-    for(const st of Wld.structures){
-      if(!st.solids) continue;
-      if(Math.abs(p.x - st.x) > 14 || Math.abs(p.z - st.z) > 14) continue;
+    const solidList = STRUCT_COLLIDERS;
+    for(let si=0; si<solidList.length; si++){
+      const st = solidList[si];
+      if(Math.abs(p.x - st.x) > st.reach || Math.abs(p.z - st.z) > st.reach) continue;
       for(const bx of st.solids){
-        if(p.x < bx.x0-radius || p.x > bx.x1+radius ||
-           p.z < bx.z0-radius || p.z > bx.z1+radius) continue;
-        if(p.y + 1.5 < bx.y0 || p.y > bx.y1) continue;   // over it or under it
-        const dxL = p.x - (bx.x0-radius), dxR = (bx.x1+radius) - p.x;
-        const dzL = p.z - (bx.z0-radius), dzR = (bx.z1+radius) - p.z;
-        const m = Math.min(dxL, dxR, dzL, dzR);
-        hits++;
-        if(m === dxL) mx -= dxL;
-        else if(m === dxR) mx += dxR;
-        else if(m === dzL) mz -= dzL;
-        else mz += dzR;
+        /* A box you can step onto is not a box you can walk into. Without
+           this a cabin's own 22cm floorboards are a kerb round the whole
+           building and nothing can get inside it. */
+        if(bx.kind !== 'wall') continue;
+        if(bx.y1 <= p.y + CFG.PLAYER.stepUp) continue;   // step over it
+        if(bx.y0 > p.y + 1.75) continue;                 // it is above your head
+        if(bx.y1 < p.y - 0.4) continue;                  // it is below your feet
+        if(obbPush(bx, p.x, p.z, radius, _pushTmp)){
+          hits++;
+          mx += _pushTmp.x; mz += _pushTmp.z;
+        }
       }
     }
 
@@ -5534,7 +5862,12 @@ function updatePlayer(dt){
   }
 
   // ---- vertical ----
-  const ground = heightAt(p.pos.x, p.pos.z);
+  /* The ground is the terrain OR whatever building floor is under the
+     player, whichever is higher. One line, and it is the difference
+     between a cabin you can enter and a cabin with a kerb round it. */
+  const terrainY = heightAt(p.pos.x, p.pos.z);
+  const floorY = surfaceAt(p.pos.x, p.pos.z, p.pos.y, C.radius);
+  const ground = Math.max(terrainY, floorY > -1e8 ? floorY : -Infinity);
   p.groundY = ground;
 
   /* SWIMMING MEANS FLOATING, which sounds obvious and was not what
@@ -5589,7 +5922,8 @@ function updatePlayer(dt){
   // whatever happened above, the feet are not below the ground
   if(p.pos.y < ground) p.pos.y = ground;
   if(!p.swimming) pushOutOfTerrain(p);
-  const groundNow = heightAt(p.pos.x, p.pos.z);
+  const fNow = surfaceAt(p.pos.x, p.pos.z, p.pos.y, C.radius);
+  const groundNow = Math.max(heightAt(p.pos.x, p.pos.z), fNow > -1e8 ? fNow : -Infinity);
   if(p.pos.y < groundNow) p.pos.y = groundNow;
   p.groundY = p.pos.y;
   // sliding on ground too steep to stand on
@@ -6139,6 +6473,24 @@ function pickTarget(){
         act:()=>startRest(st) }, 0.6);
     }
   }
+  // --- doors ---
+  {
+    const d = Doors.nearest(Player.pos.x, Player.pos.z, 9);
+    if(d){
+      // the doorway is on the structure's +Z face, in its own frame
+      const spec = d.spec;
+      const D = spec.style.footprint[1];
+      const wx = spec.x + Math.sin(spec.yaw)*(D/2 + 0.5);
+      const wz = spec.z + Math.cos(spec.yaw)*(D/2 + 0.5);
+      const sc = facingScore(wx, wz);
+      if(sc > -0.2 && Math.hypot(wx-Player.pos.x, wz-Player.pos.z) < 3.4){
+        consider({ kind:'door', label: d.target > 0.75 ? 'Hold E — close the door'
+                                                       : 'Hold E — open the door',
+                   hold: 0.7, act:()=> Doors.toggle(d) }, sc + 1.2);
+      }
+    }
+  }
+
   // --- swap a cell, wherever you are ---
   if(Gear.spares > 0 && Gear.battery < 0.25 && !best){
     consider({ kind:'battery', label:'Hold E — change the cell', hold:1.8,
@@ -8940,6 +9292,7 @@ function stepWorld(dt){
   updateWeather(dt);
   updateSky(dt);
   updateFires(dt);
+  Doors.update(dt);
   Survival.update(dt);
   Gear.update(dt);
   Mind.update(dt);
@@ -9105,7 +9458,7 @@ window.DR = {
   heightAt, waterLevelAt, waterDepthAt, slopeAt, normalAt, cellHazard, cellWalkCost,
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
-  gxOf, gzOf, wxOf, wzOf, idxOf,
+  gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders,
 };
 
 boot();
