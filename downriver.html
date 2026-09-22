@@ -6202,20 +6202,151 @@ function buildRuin(spec){
   return g;
 }
 
+/* ---------------------------------------------------------------------
+   THE CAR
+
+   Two boxes and four cylinders, which reads as a crate on wheels rather
+   than as a car. What makes a silhouette read as an automobile is not
+   detail, it is the shape of the greenhouse against the body: a bonnet
+   and a boot lower than the cabin, a windscreen that leans, a roof
+   shorter than the body, and wheels that sit INSIDE arches rather than
+   under a slab.
+
+   So it is built as a real one is described: a floor pan, a bonnet, a
+   boot, four fenders with arches cut around the wheels, a cabin with
+   raked pillars, glass all round, a roof, lamps, bumpers and a grille.
+   It is still boxes — everything in this file is boxes — but they are
+   the boxes a car is made of.
+
+   The player can sit in it. The seated camera is inside the cabin at the
+   height of a seat, and getting out puts them back beside the door they
+   came in by, on the ground.
+   ------------------------------------------------------------------- */
 function buildCar(spec){
   const g = new THREE.Group();
-  const body = addBox(g, 1.85, 0.72, 4.3, MAT.metal, 0, 0.78, 0);
-  addBox(g, 1.72, 0.62, 2.0, MAT.metal, 0, 1.42, -0.25);
-  for(const [wx, wz] of [[-0.9,1.45],[0.9,1.45],[-0.9,-1.4],[0.9,-1.4]]){
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.33,0.33,0.22,12), MAT.dark);
-    w.rotation.z = Math.PI/2;
-    w.position.set(wx, spec.decay > 0.6 ? 0.18 : 0.33, wz);
-    w.castShadow = true;
-    g.add(w);
+  const r = makeRNG(hashString(spec.id || 'car') ^ G.seed);
+  const decay = spec.decay || 0;
+
+  /* One body colour per car, faded by however long it has been here. */
+  const paint = new THREE.MeshStandardMaterial({
+    color: new THREE.Color().setHSL(r.range(0, 1), r.range(0.18, 0.46),
+                                    lerp(r.range(0.16, 0.40), 0.20, decay)),
+    roughness: lerp(0.45, 0.92, decay), metalness: lerp(0.55, 0.12, decay),
+  });
+  const trim = new THREE.MeshStandardMaterial({ color: 0x2a2d31, roughness: 0.85 });
+  const chrome = new THREE.MeshStandardMaterial({ color: 0x9aa1a8, roughness: 0.35, metalness: 0.75 });
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0xd8d2bc, roughness: 0.3,
+    emissive: 0x141210 });
+  const tyre = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.95 });
+
+  const L = 4.42, W = 1.82, sillY = 0.52;      // length, width, floor height
+  const box = (w,h,d, mat, x,y,z, ry)=>{
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+    m.position.set(x,y,z); if(ry) m.rotation.y = ry;
+    m.castShadow = true; m.receiveShadow = true; g.add(m); return m;
+  };
+
+  // ---- floor pan and sills ----
+  box(W, 0.16, L, trim, 0, sillY - 0.06, 0);
+  for(const sx of [-1, 1]) box(0.14, 0.30, L*0.62, paint, sx*(W/2 - 0.05), sillY + 0.12, 0);
+
+  /* ---- bonnet and boot: lower than the cabin, which is the whole
+     silhouette. The bonnet slopes; the boot is short and flat. ---- */
+  const bonnet = box(W - 0.10, 0.34, 1.52, paint, 0, sillY + 0.40, L/2 - 0.95);
+  bonnet.rotation.x = -0.045;
+  box(W - 0.16, 0.10, 1.40, paint, 0, sillY + 0.58, L/2 - 0.98);     // its lid
+  box(W - 0.10, 0.40, 1.02, paint, 0, sillY + 0.42, -L/2 + 0.70);    // boot
+  box(W - 0.20, 0.09, 0.94, paint, 0, sillY + 0.63, -L/2 + 0.72);
+
+  // ---- doors and the body sides between the arches ----
+  for(const sx of [-1, 1]){
+    box(0.10, 0.66, 2.10, paint, sx*(W/2 - 0.02), sillY + 0.43, 0.02);
+    // the crease along the door, which is what catches the light
+    box(0.05, 0.06, 2.00, trim, sx*(W/2 + 0.02), sillY + 0.52, 0.02);
+    const handle = box(0.06, 0.07, 0.26, chrome, sx*(W/2 + 0.04), sillY + 0.62, -0.28);
+    handle.userData.noclip = true;
   }
-  const glass = addBox(g, 1.5, 0.5, 0.06, MAT.glass, 0, 1.45, 0.72);
-  glass.userData.noclip = true;
-  if(spec.decay > 0.5) body.rotation.z = 0.05;
+
+  /* ---- the arches. Four short blocks with a gap under each for the
+     wheel, so the wheel is IN the body rather than beside it. ---- */
+  const axleZ = [L/2 - 1.18, -L/2 + 1.10];
+  const wheelR = 0.345;
+  for(const wz of axleZ) for(const sx of [-1, 1]){
+    box(0.24, 0.30, 1.06, paint, sx*(W/2 - 0.06), sillY + 0.30, wz);   // over the arch
+    for(const dz of [-0.53, 0.53])
+      box(0.22, 0.42, 0.22, paint, sx*(W/2 - 0.06), sillY + 0.02, wz + dz);
+  }
+
+  // ---- the cabin: raked pillars, a roof shorter than the body ----
+  const roofY = sillY + 1.02, cabZ = -0.15, cabLen = 1.96;
+  const windscreen = box(W - 0.22, 0.62, 0.07, MAT.glass, 0, sillY + 0.78, cabZ + cabLen/2);
+  windscreen.rotation.x = -0.42;
+  windscreen.userData.noclip = true;
+  const rear = box(W - 0.26, 0.54, 0.07, MAT.glass, 0, sillY + 0.76, cabZ - cabLen/2);
+  rear.rotation.x = 0.36;
+  rear.userData.noclip = true;
+  for(const sx of [-1, 1]){
+    const side = box(0.06, 0.46, 1.62, MAT.glass, sx*(W/2 - 0.06), sillY + 0.76, cabZ);
+    side.userData.noclip = true;
+    // A and B pillars, leaning with the glass
+    const a = box(0.10, 0.70, 0.12, paint, sx*(W/2 - 0.08), sillY + 0.76, cabZ + cabLen/2 - 0.06);
+    a.rotation.x = -0.42;
+    const b = box(0.10, 0.62, 0.12, paint, sx*(W/2 - 0.08), sillY + 0.76, cabZ - cabLen/2 + 0.06);
+    b.rotation.x = 0.36;
+  }
+  box(W - 0.18, 0.09, cabLen - 0.18, paint, 0, roofY, cabZ);         // roof
+
+  // ---- inside: two seats, a wheel, a dash ----
+  for(const sx of [-1, 1]){
+    box(0.46, 0.12, 0.46, trim, sx*0.42, sillY + 0.14, cabZ - 0.10);
+    box(0.46, 0.52, 0.10, trim, sx*0.42, sillY + 0.40, cabZ - 0.34);
+  }
+  box(W - 0.24, 0.16, 0.34, trim, 0, sillY + 0.44, cabZ + cabLen/2 - 0.22);
+  const wheelRim = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 6, 14), trim);
+  wheelRim.position.set(0.42, sillY + 0.56, cabZ + cabLen/2 - 0.40);
+  wheelRim.rotation.x = 1.15;
+  wheelRim.userData.noclip = true;
+  g.add(wheelRim);
+
+  // ---- wheels, with rims ----
+  for(const wz of axleZ) for(const sx of [-1, 1]){
+    const flat = decay > 0.55 && sx < 0 && wz < 0;      // one is always down
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(wheelR, wheelR,
+      0.26, 16), tyre);
+    w.rotation.z = Math.PI/2;
+    w.position.set(sx*(W/2 - 0.10), flat ? wheelR*0.62 : wheelR, wz);
+    if(flat) w.scale.y = 0.62;
+    w.castShadow = true; g.add(w);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(wheelR*0.55, wheelR*0.55, 0.28, 10), chrome);
+    rim.rotation.z = Math.PI/2;
+    rim.position.copy(w.position);
+    rim.userData.noclip = true;
+    g.add(rim);
+  }
+
+  // ---- lamps, grille, bumpers ----
+  for(const sx of [-1, 1]){
+    const lamp = box(0.30, 0.20, 0.10, lampMat, sx*0.58, sillY + 0.40, L/2 - 0.16);
+    lamp.userData.noclip = true;
+    const tail = box(0.24, 0.13, 0.08, new THREE.MeshStandardMaterial({
+      color: 0x6e2222, roughness: 0.5 }), sx*0.62, sillY + 0.44, -L/2 + 0.16);
+    tail.userData.noclip = true;
+  }
+  box(W - 0.52, 0.22, 0.12, trim, 0, sillY + 0.36, L/2 - 0.14);       // grille
+  box(W - 0.06, 0.13, 0.18, chrome, 0, sillY + 0.14, L/2 - 0.06);     // bumpers
+  box(W - 0.06, 0.13, 0.18, chrome, 0, sillY + 0.14, -L/2 + 0.06);
+
+  if(decay > 0.5){
+    g.rotation.z = r.range(-0.05, 0.05);
+    const w2 = box(0.9, 0.05, 1.2, trim, r.range(-0.4,0.4), sillY + 0.95, cabZ);
+    w2.userData.noclip = true;                                        // a fallen branch
+  }
+
+  /* Where the player sits, and where they get out. Both in the car's own
+     frame; the interaction converts them. */
+  g.userData.seat = new THREE.Vector3(0.42, sillY + 0.62, cabZ - 0.05);
+  g.userData.exit = new THREE.Vector3(W/2 + 0.95, 0, cabZ);
+  g.userData.isCar = true;
   return g;
 }
 
@@ -7221,6 +7352,52 @@ const Player = {
   stuckT: 0, unstuck: 0,
   sinceLook: 0,             // seconds since the player last had a reference
   resting: false,
+  seated: null,             // the car they are sitting in, if any
+
+  /* SITTING IS A STATE, NOT A SECOND CAMERA. The eye is moved to the
+     seat and movement is refused; everything else — the mind, survival,
+     the director, the audio listener — carries on reading Player.pos as
+     it always does, so there is no second code path that can disagree
+     with the first about where the player is. */
+  sitInCar(st){
+    if(this.seated) return;
+    const seat = st.mesh.userData.seat.clone().applyMatrix4(st.mesh.matrixWorld);
+    this.seated = st;
+    this.seatReturn = this.pos.clone();
+    this.pos.copy(seat);
+    this.pos.y -= CFG.PLAYER.eye;          // pos is the feet; the eye is added later
+    this.vel.set(0,0,0);
+    this.falling = false; this.vy = 0;
+    UI.say('You sit in the driver\u2019s seat. It smells of cold plastic.', 4);
+    if(typeof Audio !== 'undefined') Audio.play('doorMove', { gain:0.5 });
+  },
+  leaveCar(){
+    if(!this.seated) return;
+    const st = this.seated;
+    const out = st.mesh.userData.exit.clone().applyMatrix4(st.mesh.matrixWorld);
+    this.seated = null;
+    /* Put down on the ground beside the door, and only somewhere the
+       collision system agrees is standable — otherwise getting out of a
+       car parked against a bank puts the player inside the bank. */
+    let best = null;
+    for(let a=0; a<12 && !best; a++){
+      for(const rad of [0, 0.9, 1.8]){
+        const th = a/12*TAU;
+        const x = out.x + Math.cos(th)*rad, z = out.z + Math.sin(th)*rad;
+        const gy = heightAt(x, z);
+        const p = { x, y: gy, z };
+        resolveCollisions(p, CFG.PLAYER.radius);
+        if(Math.hypot(p.x-x, p.z-z) < 0.05 && waterDepthAt(x,z) < CFG.PLAYER.swimDepth){
+          best = { x, y: gy, z }; break;
+        }
+      }
+    }
+    if(!best) best = { x: this.seatReturn.x, y: heightAt(this.seatReturn.x, this.seatReturn.z),
+                       z: this.seatReturn.z };
+    this.pos.set(best.x, best.y, best.z);
+    this.vel.set(0,0,0);
+    if(typeof Audio !== 'undefined') Audio.play('doorMove', { gain:0.5 });
+  },
   dead: false,
 };
 
@@ -7491,6 +7668,15 @@ function updatePlayer(dt){
   const C = CFG.PLAYER;
   const p = Player;
   if(p.dead) return;
+  /* Sitting in the car: the world goes on, the player does not move, and
+     any movement key is taken as wanting to get out. */
+  if(p.seated){
+    p.moving = false; p.speed = 0; p.sprinting = false;
+    p.vel.set(0,0,0);
+    p.stamina = Math.min(C.staminaMax, p.stamina + 20*dt);
+    if(Keys.KeyW || Keys.KeyA || Keys.KeyS || Keys.KeyD || Keys.Space) p.leaveCar();
+    return;
+  }
 
   // ---- what the keys are asking for, in world space ----
   let ix = 0, iz = 0;
@@ -8359,6 +8545,32 @@ function pickTarget(){
                    hold: 0.7, act:()=> Doors.toggle(d) }, sc + 1.2);
       }
     }
+  }
+
+  /* --- the car: get in, and get out again ---
+     Sitting is a state on the player rather than a separate camera: the
+     eye is moved to the seat and movement is refused, which means every
+     other system (the mind, survival, the director) carries on exactly
+     as it does when standing, and there is no second code path that can
+     disagree with the first about where the player is. */
+  for(const st of Wld.structures){
+    if(st.kind !== 'car' || !st.mesh || !st.mesh.userData.seat) continue;
+    if(Player.seated) break;
+    const door = st.mesh.userData.exit.clone().applyMatrix4(st.mesh.matrixWorld);
+    const d = Math.hypot(door.x-Player.pos.x, door.z-Player.pos.z);
+    if(d > 2.6) continue;
+    /* No facing requirement worth the name: the door is a metre away and
+       standing ON it makes facingScore meaningless (the direction to a
+       point you are already at is undefined, and it returns -1). Being
+       beside the car is enough. */
+    const sc = facingScore(door.x, door.z);
+    if(d > 1.2 && sc < -0.6) continue;
+    consider({ kind:'car', label:'Hold E \u2014 get in', hold:1.1,
+               act:()=> Player.sitInCar(st) }, 1.4);
+  }
+  if(Player.seated){
+    consider({ kind:'car', label:'Hold E \u2014 get out', hold:0.8,
+               act:()=> Player.leaveCar() }, 5 );
   }
 
   // --- swap a cell, wherever you are ---
