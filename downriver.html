@@ -800,6 +800,7 @@ const CFG = {
   /* ---- rendering ------------------------------------------------------ */
   QUALITY: {
     texSize: 512,
+    macroSize: 2048,     // the baked whole-world ground map, texels per side
     shadowMap: 2048,
     volumetrics: true,
     treeRadius: 150,         // metres of trees kept instanced around you
@@ -1100,6 +1101,713 @@ function rollPersonality(){
   return p;
 }
 let P = null;   // the live personality, set by boot()
+
+/* =====================================================================
+   ===== PROCEDURAL TEXTURES =====
+   Canvas 2D is the entire art pipeline. Each factory returns a colour
+   canvas and a HEIGHT canvas; the height canvas is run through a sobel
+   filter to produce a normal map, and through a curve to produce a
+   roughness map. Nothing is fetched and nothing is authored.
+
+   The one structural decision worth explaining is how the GROUND is
+   textured. Two obvious approaches both fail here:
+
+     * One tiled material for the whole map. A thousand metres of
+       identical needle litter, with no way to show a trail, a riverbank
+       or bare rock where the world says there is one.
+     * A four-way splat blended per pixel in a custom shader. Correct,
+       and it means the terrain can no longer be a plain
+       MeshStandardMaterial, so every lighting feature has to be
+       reimplemented by hand.
+
+   So the ground gets BOTH, cheaply: one baked MACRO map covering the
+   whole world at half a metre per texel, painted directly from the
+   worldgen arrays — so the trail really is where ROUTE says it is, the
+   rock really is where SLOPE says it is — multiplied by a small DETAIL
+   texture tiled a couple of hundred times for the close-up. The detail
+   layer carries the normal map, so bumps are the right size under the
+   player's feet, and the macro layer carries every decision the world
+   made. It stays a stock material, and it is one draw call.
+   ===================================================================== */
+const TexLib = (()=>{
+  const S = CFG.QUALITY.texSize;
+
+  function cvs(w, h){
+    const c = document.createElement('canvas');
+    c.width = w || S; c.height = h || w || S;
+    return c;
+  }
+  function tex(canvas, { srgb=false, repeat=[1,1], aniso=8 }={}){
+    const t = new THREE.CanvasTexture(canvas);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(repeat[0], repeat[1]);
+    t.anisotropy = aniso;
+    if(srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.needsUpdate = true;
+    return t;
+  }
+  /* Sobel over the height canvas. `strength` is in the same units as the
+     height range, so a value of 2 means a full black-to-white step across
+     one texel tilts the normal about 63 degrees. */
+  function heightToNormal(hc, strength=2.0){
+    const w = hc.width, h = hc.height;
+    const src = hc.getContext('2d', {willReadFrequently:true}).getImageData(0,0,w,h).data;
+    const out = cvs(w,h);
+    const ox = out.getContext('2d');
+    const img = ox.createImageData(w,h), d = img.data;
+    const at = (x,y)=> src[(((y+h)%h)*w + ((x+w)%w))*4] / 255;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const gx = (at(x-1,y-1) + 2*at(x-1,y) + at(x-1,y+1))
+               - (at(x+1,y-1) + 2*at(x+1,y) + at(x+1,y+1));
+      const gy = (at(x-1,y-1) + 2*at(x,y-1) + at(x+1,y-1))
+               - (at(x-1,y+1) + 2*at(x,y+1) + at(x+1,y+1));
+      let nx = gx*strength, ny = gy*strength, nz = 1;
+      const len = Math.hypot(nx,ny,nz);
+      nx/=len; ny/=len; nz/=len;
+      const i = (y*w+x)*4;
+      d[i]   = (nx*0.5+0.5)*255;
+      d[i+1] = (ny*0.5+0.5)*255;
+      d[i+2] = (nz*0.5+0.5)*255;
+      d[i+3] = 255;
+    }
+    ox.putImageData(img,0,0);
+    return out;
+  }
+  function roughFromHeight(hc, base=0.85, range=0.22, invert=false){
+    const w=hc.width, h=hc.height;
+    const src = hc.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data;
+    const out = cvs(w,h), ox = out.getContext('2d');
+    const img = ox.createImageData(w,h), d = img.data;
+    for(let i=0;i<w*h;i++){
+      let v = src[i*4]/255;
+      if(invert) v = 1-v;
+      const r = clamp(base + (v-0.5)*range*2, 0, 1)*255;
+      d[i*4]=d[i*4+1]=d[i*4+2]=r; d[i*4+3]=255;
+    }
+    ox.putImageData(img,0,0);
+    return out;
+  }
+  function grain(ctx, w, h, amount=8){
+    const img = ctx.getImageData(0,0,w,h), d = img.data;
+    for(let i=0;i<d.length;i+=4){
+      const n = (Math.random()-0.5)*amount;
+      d[i]=clamp(d[i]+n,0,255); d[i+1]=clamp(d[i+1]+n,0,255); d[i+2]=clamp(d[i+2]+n,0,255);
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  /* ---------- the close-up ground detail ------------------------------
+     Forest floor at about two metres across: needles lying every which
+     way, small stones, and the lumpiness of leaf litter over roots. This
+     is what the player actually sees at their feet, and it is what
+     carries the normal map. */
+  function groundDetail(seed=7){
+    const c = cvs(S), ctx = c.getContext('2d',{willReadFrequently:true});
+    const hgt = cvs(S), hx = hgt.getContext('2d',{willReadFrequently:true});
+    const img = ctx.createImageData(S,S), d = img.data;
+    const him = hx.createImageData(S,S), hd = him.data;
+    for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+      const i=(y*S+x)*4;
+      const u=x/S, v=y/S;
+      const lump = fbm2(u*7.0+seed, v*7.0, 4, seed);
+      const fine = fbm2(u*29.0, v*29.0, 3, seed+31);
+      const stone = worley2(u*11.0, v*11.0, seed+77).f1;
+      const stoneM = 1 - smoothstep(0.06, 0.20, stone);
+      let k = 0.72 + lump*0.46 + fine*0.22;
+      k = k*(1-stoneM*0.4) + stoneM*0.92;
+      d[i] = d[i+1] = d[i+2] = clamp(200*k, 0, 255);
+      d[i+3] = 255;
+      const hv = clamp((lump*0.55 + fine*0.30 + stoneM*0.5)*255, 0, 255);
+      hd[i]=hd[i+1]=hd[i+2]=hv; hd[i+3]=255;
+    }
+    ctx.putImageData(img,0,0); hx.putImageData(him,0,0);
+    // needles: short dark strokes, all directions, a lot of them
+    const r = makeRNG(seed*7919+13);
+    for(let n=0;n<2600;n++){
+      const x=r()*S, y=r()*S, a=r()*TAU, len=3+r()*11;
+      const lum = 40+r()*70;
+      ctx.strokeStyle = `rgba(${lum|0},${(lum*0.94)|0},${(lum*0.78)|0},${0.35+r()*0.4})`;
+      ctx.lineWidth = 0.8+r()*1.1;
+      ctx.beginPath(); ctx.moveTo(x,y);
+      ctx.lineTo(x+Math.cos(a)*len, y+Math.sin(a)*len); ctx.stroke();
+      hx.strokeStyle = `rgba(255,255,255,${0.10+r()*0.16})`;
+      hx.lineWidth = ctx.lineWidth;
+      hx.beginPath(); hx.moveTo(x,y);
+      hx.lineTo(x+Math.cos(a)*len, y+Math.sin(a)*len); hx.stroke();
+    }
+    grain(ctx, S, S, 11);
+    return { c, h: hgt };
+  }
+
+  /* ---------- bark ---------- */
+  function bark({ tint=[86,76,62], seed=311, fissure=1.0 }={}){
+    const c=cvs(S), ctx=c.getContext('2d',{willReadFrequently:true});
+    const hgt=cvs(S), hx=hgt.getContext('2d',{willReadFrequently:true});
+    const img=ctx.createImageData(S,S), d=img.data;
+    const him=hx.createImageData(S,S), hd=him.data;
+    for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+      const i=(y*S+x)*4, u=x/S, v=y/S;
+      // noise stretched hard along the trunk, then folded so the troughs
+      // become sharp crevices rather than soft valleys
+      const wob = (fbm2(u*3.1+seed, v*0.5, 3, seed)-0.5)*0.10;
+      const f = fbm2((u+wob)*13.0+seed, v*1.7, 4, seed+9);
+      const crev = Math.pow(Math.abs(f*2-1), 0.5/fissure);
+      const brk = smoothstep(0.60, 0.82, fbm2(u*2.4-seed, v*19.0, 2, seed+45));
+      const moss = smoothstep(0.56, 0.88, fbm2(u*5.1+seed*2, v*3.2, 3, seed+63));
+      const k = 0.50 + clamp(crev*(1-brk*0.5),0,1)*0.66;
+      d[i]  = clamp(tint[0]*k + moss*8, 0,255);
+      d[i+1]= clamp(tint[1]*k + moss*15,0,255);
+      d[i+2]= clamp(tint[2]*k + moss*7, 0,255);
+      d[i+3]= 255;
+      const hv = clamp(crev*(1-brk*0.5)*255,0,255);
+      hd[i]=hd[i+1]=hd[i+2]=hv; hd[i+3]=255;
+    }
+    ctx.putImageData(img,0,0); hx.putImageData(him,0,0);
+    grain(ctx,S,S,7);
+    return { c, h: hgt };
+  }
+
+  /* ---------- NEEDLE MASK ----------------------------------------------
+     An alpha sheet of individual needle strokes, alpha-tested onto every
+     foliage tier. Without it a conifer is a cone: a hard geometric edge
+     that reads as a traffic bollard the moment there is any sky behind
+     it. Three passes, and the third is the one that matters — long sprays
+     give the ragged silhouette, short sprays the body, and a dense short
+     fill the MASS, because a mask that is more hole than needle turns a
+     close tree into a wire screen you can see the whole forest through.
+     -------------------------------------------------------------------- */
+  function needles({ seed=5, density=1.0 }={}){
+    const c=cvs(S), ctx=c.getContext('2d',{willReadFrequently:true});
+    ctx.clearRect(0,0,S,S);
+    const r = makeRNG(seed*104729+7);
+    const draw = (shoots, lenMin, lenVar, wMin, wVar, nMin, nVar)=>{
+      for(let i=0;i<shoots*density;i++){
+        const sx=r()*S, sy=r()*S;
+        const len = lenMin + r()*lenVar;
+        const spread = 0.5 + r()*0.55;
+        const n = nMin + (r()*nVar|0);
+        /* BRIGHT STROKES, NOT DARK ONES. This canvas is used as the
+           crown's albedo map AND its alpha map, so its luminance
+           MULTIPLIES the material colour. Dark strokes times a dark green
+           gave foliage at 0.017 linear reflectance — black leaves. The
+           mask now carries near-white variation and the material colour
+           carries the green, which is the only arrangement where both can
+           be set to a sensible value independently. */
+        const lum = 186 + (r()*52|0);
+        ctx.strokeStyle = `rgb(${lum},${lum},${lum})`;
+        for(let k=0;k<n;k++){
+          const a = Math.PI*0.5 + (k/Math.max(1,n-1) - 0.5)*spread*2;
+          ctx.lineWidth = wMin + r()*wVar;
+          ctx.beginPath(); ctx.moveTo(sx,sy);
+          ctx.lineTo(sx + Math.cos(a)*len*(0.6+r()*0.7),
+                     sy + Math.sin(a)*len*(0.6+r()*0.7));
+          ctx.stroke();
+        }
+      }
+    };
+    const k = S/512;
+    draw(520,  9*k, 26*k, 2.4*k, 2.6*k, 5, 6);    // the silhouette
+    draw(900,  5*k, 11*k, 2.8*k, 2.4*k, 4, 5);    // the body
+    draw(3000, 3*k,  6*k, 3.4*k, 2.2*k, 3, 4);    // the mass
+    return c;
+  }
+
+  /* ---------- broadleaf mask, for the scrub ---------- */
+  function leaves({ seed=13 }={}){
+    const c=cvs(S), ctx=c.getContext('2d',{willReadFrequently:true});
+    ctx.clearRect(0,0,S,S);
+    const r = makeRNG(seed*15485863+3);
+    for(let i=0;i<2400;i++){
+      const x=r()*S, y=r()*S, a=r()*TAU;
+      const rx = (4+r()*13)*(S/512), ry = rx*(0.42+r()*0.5);
+      const lum = 150+(r()*95|0);
+      ctx.save(); ctx.translate(x,y); ctx.rotate(a);
+      ctx.fillStyle = `rgb(${lum},${(lum*1.05)|0},${(lum*0.8)|0})`;
+      ctx.beginPath(); ctx.ellipse(0,0,rx,ry,0,0,TAU); ctx.fill();
+      ctx.restore();
+    }
+    return c;
+  }
+
+  /* ---------- timber: planks and logs ---------- */
+  function timber({ tint=[96,74,52], seed=11, logs=false, decay=0.4 }={}){
+    const c=cvs(S), ctx=c.getContext('2d',{willReadFrequently:true});
+    const hgt=cvs(S), hx=hgt.getContext('2d',{willReadFrequently:true});
+    const img=ctx.createImageData(S,S), d=img.data;
+    const him=hx.createImageData(S,S), hd=him.data;
+    const courses = logs ? 5 : 7;
+    for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+      const i=(y*S+x)*4, u=x/S, v=y/S;
+      const band = v*courses;
+      const bi = Math.floor(band), bf = band-bi;
+      const joint = logs
+        ? (1 - smoothstep(0.0, 0.12, Math.min(bf, 1-bf)))
+        : (Math.min(bf, 1-bf) < 0.035 ? 1 : 0);
+      // grain runs along the board
+      const grainF = fbm2(u*24.0 + bi*7.3 + seed, v*160.0, 3, seed+bi*13);
+      const knot = worley2(u*5.0+bi*3.1, v*courses*1.2, seed+bi).f1;
+      const knotM = 1 - smoothstep(0.03, 0.12, knot);
+      const round = logs ? (1 - Math.pow(Math.abs(bf*2-1), 1.8))*0.5 + 0.5 : 1;
+      const rot = smoothstep(0.55, 0.95, fbm2(u*4.0-seed, v*4.0+seed, 3, seed+77)) * decay;
+      let k = (0.62 + grainF*0.45) * round * (1-joint*0.55) * (1-knotM*0.35) * (1-rot*0.42);
+      d[i]  = clamp(tint[0]*k, 0,255);
+      d[i+1]= clamp(tint[1]*k, 0,255);
+      d[i+2]= clamp(tint[2]*k, 0,255);
+      d[i+3]= 255;
+      const hv = clamp((round*0.6 + grainF*0.22 - joint*0.5 - knotM*0.2 - rot*0.2)*255, 0,255);
+      hd[i]=hd[i+1]=hd[i+2]=hv; hd[i+3]=255;
+    }
+    ctx.putImageData(img,0,0); hx.putImageData(him,0,0);
+    grain(ctx,S,S,9);
+    return { c, h: hgt };
+  }
+
+  /* ---------- roofing: shakes or corrugated metal ---------- */
+  function roofing({ tint=[54,50,46], seed=17, metal=false, decay=0.4 }={}){
+    const c=cvs(S), ctx=c.getContext('2d',{willReadFrequently:true});
+    const hgt=cvs(S), hx=hgt.getContext('2d',{willReadFrequently:true});
+    const img=ctx.createImageData(S,S), d=img.data;
+    const him=hx.createImageData(S,S), hd=him.data;
+    for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+      const i=(y*S+x)*4, u=x/S, v=y/S;
+      let k, hv;
+      if(metal){
+        const rib = Math.abs(Math.sin(u*Math.PI*14));
+        const rust = smoothstep(0.5, 0.92, fbm2(u*6.0+seed, v*6.0, 4, seed+5))*decay;
+        k = 0.55 + rib*0.42 - rust*0.25;
+        hv = rib*0.8;
+        d[i]  = clamp(tint[0]*k + rust*70, 0,255);
+        d[i+1]= clamp(tint[1]*k + rust*28, 0,255);
+        d[i+2]= clamp(tint[2]*k + rust*8,  0,255);
+      } else {
+        const rows = 11;
+        const band = v*rows, bi=Math.floor(band), bf=band-bi;
+        const off = ihash2(bi, 0, seed)*0.5;
+        const cols = 7;
+        const cb = (u+off)*cols, ci=Math.floor(cb), cf=cb-ci;
+        const shake = 0.62 + ihash2(ci, bi, seed+3)*0.42;
+        const lip = 1 - smoothstep(0.0, 0.10, bf);
+        const gapv = (Math.min(cf,1-cf) < 0.03) ? 1 : 0;
+        const moss = smoothstep(0.58, 0.92, fbm2(u*7.0-seed, v*7.0, 3, seed+21))*decay;
+        k = shake*(1 - lip*0.34)*(1-gapv*0.5);
+        hv = shake*0.7 - lip*0.3 - gapv*0.3;
+        d[i]  = clamp(tint[0]*k + moss*10, 0,255);
+        d[i+1]= clamp(tint[1]*k + moss*22, 0,255);
+        d[i+2]= clamp(tint[2]*k + moss*12, 0,255);
+      }
+      d[i+3]=255;
+      const H255 = clamp(hv*255, 0, 255);
+      hd[i]=hd[i+1]=hd[i+2]=H255; hd[i+3]=255;
+    }
+    ctx.putImageData(img,0,0); hx.putImageData(him,0,0);
+    grain(ctx,S,S,8);
+    return { c, h: hgt };
+  }
+
+  /* ---------- fabric (tents, packs) ---------- */
+  function fabric({ tint=[86,76,58], seed=41, weave=3 }={}){
+    const c=cvs(S), ctx=c.getContext('2d',{willReadFrequently:true});
+    const hgt=cvs(S), hx=hgt.getContext('2d',{willReadFrequently:true});
+    const img=ctx.createImageData(S,S), d=img.data;
+    const him=hx.createImageData(S,S), hd=him.data;
+    for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+      const i=(y*S+x)*4;
+      const wv = (Math.sin(x/weave*Math.PI)*0.5+0.5)*(Math.sin(y/weave*Math.PI)*0.5+0.5);
+      const dirt = fbm2(x/S*6+seed, y/S*6, 3, seed);
+      const k = 0.72 + wv*0.28 - dirt*0.22;
+      d[i]=clamp(tint[0]*k,0,255); d[i+1]=clamp(tint[1]*k,0,255); d[i+2]=clamp(tint[2]*k,0,255);
+      d[i+3]=255;
+      const hv = clamp((wv*0.7 + dirt*0.2)*255,0,255);
+      hd[i]=hd[i+1]=hd[i+2]=hv; hd[i+3]=255;
+    }
+    ctx.putImageData(img,0,0); hx.putImageData(him,0,0);
+    grain(ctx,S,S,6);
+    return { c, h: hgt };
+  }
+
+  /* ---------- painted metal (the car), concrete (the hospital) ---------- */
+  function paintedMetal({ tint=[92,96,100], seed=53, rust=0.5 }={}){
+    const c=cvs(S), ctx=c.getContext('2d',{willReadFrequently:true});
+    const hgt=cvs(S), hx=hgt.getContext('2d',{willReadFrequently:true});
+    const img=ctx.createImageData(S,S), d=img.data;
+    const him=hx.createImageData(S,S), hd=him.data;
+    for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+      const i=(y*S+x)*4, u=x/S, v=y/S;
+      const r0 = smoothstep(0.48, 0.86, fbm2(u*9+seed, v*9, 4, seed))*rust;
+      const pit = worley2(u*26, v*26, seed+11).f1;
+      const pitM = (1 - smoothstep(0.02, 0.10, pit))*rust;
+      const k = 0.85 - r0*0.35 - pitM*0.2;
+      d[i]  = clamp(tint[0]*k + r0*96 + pitM*40, 0,255);
+      d[i+1]= clamp(tint[1]*k + r0*44 + pitM*16, 0,255);
+      d[i+2]= clamp(tint[2]*k + r0*16, 0,255);
+      d[i+3]=255;
+      const hv = clamp((0.5 - r0*0.25 - pitM*0.3)*255, 0, 255);
+      hd[i]=hd[i+1]=hd[i+2]=hv; hd[i+3]=255;
+    }
+    ctx.putImageData(img,0,0); hx.putImageData(him,0,0);
+    grain(ctx,S,S,6);
+    return { c, h: hgt };
+  }
+  function concrete({ tint=[118,116,112], seed=23, stain=0.5 }={}){
+    const c=cvs(S), ctx=c.getContext('2d',{willReadFrequently:true});
+    const hgt=cvs(S), hx=hgt.getContext('2d',{willReadFrequently:true});
+    const img=ctx.createImageData(S,S), d=img.data;
+    const him=hx.createImageData(S,S), hd=him.data;
+    for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+      const i=(y*S+x)*4, u=x/S, v=y/S;
+      const agg = worley2(u*34, v*34, seed).f1;
+      const aggM = 1 - smoothstep(0.02, 0.09, agg);
+      const blotch = fbm2(u*5+seed, v*5, 4, seed+7);
+      const streak = smoothstep(0.4,0.95, fbm2(u*3.0-seed, v*0.5, 3, seed+19))*stain;
+      const k = 0.82 + blotch*0.2 - aggM*0.12 - streak*0.24;
+      d[i]=clamp(tint[0]*k,0,255); d[i+1]=clamp(tint[1]*k,0,255); d[i+2]=clamp(tint[2]*k,0,255);
+      d[i+3]=255;
+      const hv = clamp((0.5 + aggM*0.3 + blotch*0.15)*255,0,255);
+      hd[i]=hd[i+1]=hd[i+2]=hv; hd[i+3]=255;
+    }
+    ctx.putImageData(img,0,0); hx.putImageData(him,0,0);
+    grain(ctx,S,S,7);
+    return { c, h: hgt };
+  }
+
+  /* ---------- water surface normals ---------- */
+  function ripples({ seed=91 }={}){
+    const hgt=cvs(S), hx=hgt.getContext('2d',{willReadFrequently:true});
+    const him=hx.createImageData(S,S), hd=him.data;
+    for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+      const i=(y*S+x)*4, u=x/S, v=y/S;
+      const a = fbm2(u*9+seed, v*9, 4, seed);
+      const b = fbm2(u*21-seed, v*19, 3, seed+5);
+      const hv = clamp((a*0.65 + b*0.35)*255, 0, 255);
+      hd[i]=hd[i+1]=hd[i+2]=hv; hd[i+3]=255;
+    }
+    hx.putImageData(him,0,0);
+    return hgt;
+  }
+
+  /* ---------- build a material from a {c,h} pair ---------- */
+  function mat(parts, { repeat=[1,1], normalScale=1, bump=2.2, rough=0.94,
+                        roughRange=0.22, metalness=0, color=0xffffff, ...rest }={}){
+    const m = new THREE.MeshStandardMaterial({
+      color, roughness: rough, metalness,
+      map: tex(parts.c, { srgb:true, repeat }),
+      normalMap: tex(heightToNormal(parts.h, bump), { repeat }),
+      roughnessMap: tex(roughFromHeight(parts.h, rough, roughRange), { repeat }),
+      ...rest,
+    });
+    m.normalScale.set(normalScale, normalScale);
+    return m;
+  }
+
+  return { cvs, tex, heightToNormal, roughFromHeight, grain, mat,
+           groundDetail, bark, needles, leaves, timber, roofing, fabric,
+           paintedMetal, concrete, ripples, get S(){ return S; } };
+})();
+
+/* =====================================================================
+   ===== SHADERS =====
+   Three custom programs and one post stack. Everything else in the game
+   is a stock MeshStandardMaterial, sometimes with a few lines patched in
+   through onBeforeCompile — which is deliberate, because a hand-written
+   lighting model would have to be re-taught shadows, fog and tone mapping
+   every time one of them changed.
+   ===================================================================== */
+
+/* The flashlight's cone, as an additive volume. Not a real march: a cone
+   mesh with a soft edge, a falloff along its length, and scrolling noise
+   for dust. It sells wet air better than anything physically correct
+   would at this frame budget, and it is the single biggest reason a beam
+   in fog reads as a beam. */
+const ConeShader = {
+  uniforms: {
+    uTime:{value:0}, uPower:{value:1.0}, uColor:{value:new THREE.Color(0xfff0d2)},
+    uDust:{value:0.55}, uJitter:{value:0.0},
+  },
+  vertexShader: /* glsl */`
+    varying vec3 vPos; varying vec2 vUv;
+    void main(){ vPos = position; vUv = uv;
+      gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader: NOISE_GLSL + /* glsl */`
+    uniform float uTime, uPower, uDust, uJitter;
+    uniform vec3 uColor;
+    varying vec3 vPos; varying vec2 vUv;
+    void main(){
+      // along the cone: 0 at the lens, 1 at the far cap
+      float t = clamp(vUv.y, 0.0, 1.0);
+      // radial softness, so the cone has no hard rim
+      float r = length(vPos.xz) / max(0.0001, 0.35 + t*2.4);
+      float edge = 1.0 - smoothstep(0.55, 1.0, r);
+      float fall = (1.0 - t) * (1.0 - t);
+      float dust = fbmN(vec2(vPos.x*0.7 + uTime*0.13, vPos.z*0.7 - uTime*0.09) + t*3.1);
+      float a = edge * fall * uPower * (0.55 + dust*uDust);
+      a *= 1.0 - uJitter*0.6*hash21(vec2(floor(uTime*24.0), t*17.0));
+      gl_FragColor = vec4(uColor*a, a);
+    }`,
+};
+
+/* Water. A flat surface with two scrolling normal layers, a depth-faded
+   edge so the shoreline is not a hard line, and a fresnel that makes it
+   read as water rather than a blue floor. Rivers scroll DOWNSTREAM: the
+   flow direction comes in per-vertex from the hydrology, so the surface
+   moving is the same fact as the water flowing downhill. */
+const WaterShader = {
+  uniforms: {
+    uTime:{value:0}, uNormal:{value:null},
+    uShallow:{value:new THREE.Color(0x46564c)}, uDeep:{value:new THREE.Color(0x16201f)},
+    uSky:{value:new THREE.Color(0x2a3440)}, uOpacity:{value:0.90},
+    uFogColor:{value:new THREE.Color(0x0a0d12)}, uFogDensity:{value:0.01},
+    uSun:{value:new THREE.Vector3(0,1,0)}, uSunColor:{value:new THREE.Color(0xffffff)},
+    uLight:{value:0.6},
+  },
+  vertexShader: /* glsl */`
+    attribute float aFlow;      // 0 still, 1 fast
+    attribute vec2  aDir;       // downstream direction, world space
+    attribute float aDepth;
+    varying vec2 vUvW; varying float vFlow; varying vec2 vDir;
+    varying float vDepth; varying vec3 vWorld; varying float vFogDepth;
+    void main(){
+      vec4 wp = modelMatrix*vec4(position,1.0);
+      vWorld = wp.xyz;
+      vUvW = wp.xz;
+      vFlow = aFlow; vDir = aDir; vDepth = aDepth;
+      vec4 mv = viewMatrix*wp;
+      vFogDepth = -mv.z;
+      gl_Position = projectionMatrix*mv;
+    }`,
+  fragmentShader: /* glsl */`
+    uniform float uTime, uOpacity, uFogDensity, uLight;
+    uniform sampler2D uNormal;
+    uniform vec3 uShallow, uDeep, uSky, uFogColor, uSun, uSunColor;
+    varying vec2 vUvW; varying float vFlow; varying vec2 vDir;
+    varying float vDepth; varying vec3 vWorld; varying float vFogDepth;
+    vec3 nrm(vec2 uv){ return texture2D(uNormal, uv).xyz*2.0-1.0; }
+    void main(){
+      vec2 drift = vDir * uTime * (0.12 + vFlow*0.95);
+      vec3 n1 = nrm(vUvW*0.09 - drift*0.09);
+      vec3 n2 = nrm(vUvW*0.031 + drift*0.041 + 0.37);
+      vec3 n = normalize(vec3(n1.x+n2.x, 3.2/(1.0+vFlow*1.4), n1.y+n2.y));
+      vec3 V = normalize(cameraPosition - vWorld);
+      float fres = pow(1.0 - clamp(dot(n, V), 0.0, 1.0), 3.0);
+      vec3 base = mix(uShallow, uDeep, clamp(vDepth/2.2, 0.0, 1.0));
+      vec3 col = mix(base, uSky, clamp(fres*0.55, 0.0, 1.0)) * uLight;
+      // a hard little specular, which is most of what "wet" means
+      vec3 H = normalize(uSun + V);
+      col += uSunColor * pow(max(dot(n,H), 0.0), 64.0) * 0.5 * uLight;
+      // white water where it is moving fast
+      float foam = smoothstep(0.55, 1.0, vFlow) * smoothstep(0.35, 0.8, n1.x*n2.y+0.5);
+      col = mix(col, vec3(0.62,0.66,0.66)*uLight, foam*0.5);
+      float a = mix(0.55, uOpacity, clamp(vDepth/0.7, 0.0, 1.0));
+      a = mix(a, 1.0, fres*0.4);
+      float f = 1.0 - exp(-uFogDensity*uFogDensity*vFogDepth*vFogDepth);
+      col = mix(col, uFogColor, clamp(f,0.0,1.0));
+      gl_FragColor = vec4(col, a);
+    }`,
+};
+
+/* ---------------------------------------------------------------------
+   THE POST STACK
+   Grain, vignette, chromatic aberration, and the pieces that belong to
+   the mind: a slow screen warp, a colour shift, and a breathing scale.
+
+   The rule these obey is the same rule as everything else — none of them
+   is a TELL. They are driven by intensity, which also drives events, so
+   they rise and fall with how hard the run is going, and they are always
+   present to some degree. A player cannot use "the screen went strange"
+   to decide that the cabin they are looking at is fake, because the
+   screen goes strange on its own schedule and the cabin was placed on
+   its own.
+   ------------------------------------------------------------------- */
+const PostShader = {
+  uniforms: {
+    tDiffuse:{value:null}, uTime:{value:0}, uRes:{value:new THREE.Vector2(1,1)},
+    uExposure:{value:1.0}, uGrain:{value:0.050}, uVignette:{value:0.60},
+    uAberr:{value:0.0}, uStress:{value:0.0}, uFade:{value:0.0},
+    uWarp:{value:0.0}, uTint:{value:new THREE.Vector3(1,1,1)},
+    uDesat:{value:0.0}, uFlash:{value:0.0}, uPulse:{value:0.0}, uBlack:{value:0.0},
+  },
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
+  fragmentShader: NOISE_GLSL + /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform float uTime,uExposure,uGrain,uVignette,uAberr,uStress,uFade;
+    uniform float uWarp,uDesat,uFlash,uPulse,uBlack;
+    uniform vec3 uTint;
+    uniform vec2 uRes;
+    varying vec2 vUv;
+    vec3 aces(vec3 x){
+      const float a=2.51,b=0.03,c=2.43,d=0.59,e=0.14;
+      return clamp((x*(a*x+b))/(x*(c*x+d)+e),0.0,1.0);
+    }
+    void main(){
+      vec2 uv = vUv;
+      /* THE WARP. A very slow, very large wobble: at low intensity it is
+         under a pixel and you will never see it, at high intensity the
+         treeline breathes and distances stop feeling reliable. It is a
+         screen-space lie about a world that has not changed, which is the
+         honest way to do it — nothing in the simulation moves. */
+      if(uWarp > 0.0005){
+        vec2 c0 = uv - 0.5;
+        float ang = atan(c0.y, c0.x), rad = length(c0);
+        float w = fbmN(vec2(ang*1.7, uTime*0.11)) - 0.5;
+        uv += normalize(c0 + 1e-5) * w * uWarp * 0.055 * smoothstep(0.0,0.6,rad);
+        uv += vec2(sin(uTime*0.23 + uv.y*5.1), cos(uTime*0.19 + uv.x*4.3)) * uWarp * 0.004;
+      }
+      // the breath: a scale pulse tied to the player's own breathing
+      if(uPulse > 0.0005) uv = (uv-0.5)*(1.0 - uPulse*0.012) + 0.5;
+      uv = clamp(uv, 0.0, 1.0);
+
+      vec2 c = uv-0.5;
+      float r2 = dot(c,c);
+      float ab = (0.00025 + uAberr*0.0085) * (0.35 + r2*2.2);
+      vec3 col;
+      col.r = texture2D(tDiffuse, uv + c*ab).r;
+      col.g = texture2D(tDiffuse, uv).g;
+      col.b = texture2D(tDiffuse, uv - c*ab).b;
+
+      col *= uExposure * (1.0 + uFlash*0.6);
+      col *= uTint;
+      col = aces(col);
+
+      float vig = 1.0 - uVignette*(0.50+uStress*0.95)*smoothstep(0.10,0.80,r2);
+      col *= vig;
+
+      float lum0 = dot(col, vec3(0.299,0.587,0.114));
+      col = mix(col, vec3(lum0), uDesat);
+
+      col = pow(max(col,0.0), vec3(1.0/2.2));   // linear -> display
+
+      /* Grain AFTER the transfer curve. In linear space it looks right on
+         a bright frame and turns a night forest into pure static, because
+         the gamma encode multiplies small values enormously — and this
+         game is mostly night forest. */
+      float g = hash21(uv*uRes + fract(uTime)*137.0)-0.5;
+      float lum = dot(col, vec3(0.299,0.587,0.114));
+      col += g*(uGrain+uStress*0.055)*(1.35-lum);
+      // one-bit dither, so flat dark sky never bands
+      col += (hash21(uv*uRes*0.5 + 7.7)-0.5)*0.004;
+
+      col *= (1.0-uFade);
+      col = mix(col, vec3(0.0), uBlack);
+      gl_FragColor = vec4(col,1.0);
+    }`
+};
+
+/* =====================================================================
+   ===== RENDERING =====
+   ===================================================================== */
+const LAYER_WORLD   = 0;
+const LAYER_FX      = 1;   // first-person only: the cone, the held items
+/* THE PHANTOM LAYER. Every hallucinated object in the game lives here and
+   nowhere else. It is not a visual distinction — the layer renders
+   exactly like LAYER_WORLD and the player cannot tell them apart — it is
+   a STRUCTURAL one: collision, damage, interaction and the survival
+   systems all iterate the real lists, and none of them has any reason to
+   look at this layer. That is how guarantee G7 is enforced. A phantom
+   cannot trap the player or hurt them because the code that could do
+   either never sees it. */
+const LAYER_PHANTOM = 2;
+
+const app = document.getElementById('app');
+
+/* antialias:false is not a quality cut: every frame the player sees goes
+   through EffectComposer, whose own target already carries samples:4. The
+   default framebuffer is only ever the destination of the final
+   full-screen blit, and multisampling a blit nobody reads costs a second
+   full-size colour+depth allocation for nothing. */
+const renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance', stencil:false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, CFG.QUALITY.maxPixelRatio));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.NoToneMapping;        // done in PostShader
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0e12);
+scene.fog = new THREE.FogExp2(0x0a0e12, CFG.WEATHER.fogBase);
+
+const camera = new THREE.PerspectiveCamera(CFG.QUALITY.fovDefault, innerWidth/innerHeight, 0.08, 1400);
+camera.rotation.order = 'YXZ';
+camera.layers.enable(LAYER_WORLD);
+camera.layers.enable(LAYER_FX);
+camera.layers.enable(LAYER_PHANTOM);
+
+const rtOpts = { type: THREE.HalfFloatType, colorSpace: THREE.LinearSRGBColorSpace, samples: 4 };
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth, innerHeight, rtOpts));
+composer.setPixelRatio(Math.min(devicePixelRatio, CFG.QUALITY.maxPixelRatio));
+composer.addPass(new RenderPass(scene, camera));
+const postPass = new ShaderPass(PostShader);
+postPass.renderToScreen = true;
+composer.addPass(postPass);
+
+function onResize(){
+  const w = innerWidth, h = innerHeight;
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w,h); composer.setSize(w,h);
+  postPass.uniforms.uRes.value.set(w*renderer.getPixelRatio(), h*renderer.getPixelRatio());
+}
+addEventListener('resize', onResize);
+onResize();
+
+/* ---------------------------------------------------------------------
+   ADAPTIVE QUALITY
+   Resolution goes first and goes all the way down, because it is the
+   cheapest thing to give up and the least visible in a dark wood. Only
+   when there is no resolution left do the feature rungs start to go, and
+   each rung has its own threshold so a machine that is merely a bit
+   short never loses its flashlight cone. Eight unbroken seconds of
+   headroom buys one rung back.
+   ------------------------------------------------------------------- */
+const RES = {
+  steps: [0.55, 0.68, 0.80, 0.92, 1.0],
+  i: 4, rung: 0, hold: 0, good: 0,
+  maxRungs: 3,
+};
+function setPixelStep(i){
+  RES.i = clamp(i, 0, RES.steps.length-1);
+  const pr = Math.min(devicePixelRatio, CFG.QUALITY.maxPixelRatio) * RES.steps[RES.i];
+  renderer.setPixelRatio(pr); composer.setPixelRatio(pr);
+  onResize();
+}
+function ladderDown(){
+  if(RES.rung >= RES.maxRungs) return false;
+  RES.rung++;
+  applyRungs();
+  return true;
+}
+function ladderUp(){ if(RES.rung <= 0) return false; RES.rung--; applyRungs(); return true; }
+function applyRungs(){
+  // 1: shorter tree streaming radius. 2: no volumetric cone. 3: no shadows.
+  Veg.radius = CFG.QUALITY.treeRadius * (RES.rung >= 1 ? 0.66 : 1.0);
+  if(World.cone) World.cone.visible = CFG.QUALITY.volumetrics && RES.rung < 2;
+  renderer.shadowMap.enabled = RES.rung < 3;
+  Veg.dirty = true;
+}
+function adaptResolution(dt, fps){
+  RES.hold -= dt;
+  if(fps > 55){
+    RES.good += dt;
+    if(RES.good > 8 && RES.hold <= 0){
+      RES.good = 0;
+      if(RES.rung > 0){ ladderUp(); RES.hold = 6; return; }
+      if(RES.i < RES.steps.length-1){ setPixelStep(RES.i+1); RES.hold = 6; return; }
+    }
+  } else RES.good = 0;
+  if(RES.hold > 0) return;
+  if(fps < 48 && RES.i > 0){ setPixelStep(RES.i-1); RES.hold = 4; return; }
+  if(RES.i > 0) return;
+  const want = fps < 24 ? 3 : fps < 30 ? 2 : fps < 38 ? 1 : 0;
+  if(want > RES.rung && ladderDown()) RES.hold = 4;
+}
+
+/* Everything the renderer owns that the rest of the file needs a handle
+   on. Populated by buildWorldMeshes(). */
+const World = {
+  terrain:null, water:null, cone:null, torch:null, sun:null, moon:null,
+  hemi:null, rain:null, wind:{ uTime:{value:0}, uGust:{value:0} },
+  groups:{}, phantoms:[], compass:null,
+};
+const MAT = {};
 
 /* =====================================================================
    ===== WORLDGEN =====
@@ -2915,4 +3623,1094 @@ function generateWorld(onProgress){
   Wld.stats.genMs = Math.round(performance.now()-t0);
   Wld.stats.log = log;
   return Wld.validation;
+}
+
+/* =====================================================================
+   ===== WORLD MESHES =====
+   Turning the arrays from ===== WORLDGEN ===== into geometry. Nothing
+   here makes a decision about the world; it only draws what was decided.
+   ===================================================================== */
+
+function buildMaterials(onStep){
+  const st = Wld.style;
+  const step = onStep || (()=>{});
+
+  step('ground');
+  const gd = TexLib.groundDetail(11 + (G.seed & 255));
+  MAT.groundDetailMap = TexLib.tex(gd.c, { srgb:true, repeat:[220,220] });
+  MAT.groundDetailNormal = TexLib.tex(TexLib.heightToNormal(gd.h, 2.4), { repeat:[220,220] });
+  MAT.groundDetailRough = TexLib.tex(TexLib.roughFromHeight(gd.h, 0.95, 0.16), { repeat:[220,220] });
+
+  step('bark');
+  const bk = TexLib.bark({ tint:[88,77,62], seed: 311 + (G.seed % 977) });
+  MAT.bark = TexLib.mat(bk, { repeat:[1.6,3.2], bump:2.6, normalScale:0.9, rough:0.97 });
+
+  step('needles');
+  MAT.needleAlpha = TexLib.tex(TexLib.needles({ seed: 5 + (G.seed % 313) }), { repeat:[1,1] });
+  MAT.leafAlpha   = TexLib.tex(TexLib.leaves({ seed: 13 + (G.seed % 211) }), { repeat:[1,1] });
+
+  step('timber');
+  const tb = TexLib.timber({ tint: st.wallTone, seed: 11 + (G.seed % 599), logs: st.logBuilt, decay: st.decay });
+  MAT.timber = TexLib.mat(tb, { repeat:[2.0,2.0], bump:2.2, rough:0.93 });
+  const rf = TexLib.roofing({ tint: st.roofTone, seed: 17 + (G.seed % 401), metal: !st.pitchedRoof, decay: st.decay });
+  MAT.roof = TexLib.mat(rf, { repeat:[2.4,2.4], bump:2.0, rough: st.pitchedRoof ? 0.92 : 0.55,
+                              metalness: st.pitchedRoof ? 0 : 0.35 });
+  const fb = TexLib.fabric({ tint: st.tentTone, seed: 41 + (G.seed % 307) });
+  MAT.fabric = TexLib.mat(fb, { repeat:[2,2], bump:1.4, rough:0.95, side: THREE.DoubleSide });
+  const pm = TexLib.paintedMetal({ tint:[84,88,92], seed: 53 + (G.seed % 199), rust: 0.35 + st.decay*0.5 });
+  MAT.metal = TexLib.mat(pm, { repeat:[1.6,1.6], bump:1.6, rough:0.62, metalness:0.45 });
+  const cc = TexLib.concrete({ tint:[112,112,108], seed: 23 + (G.seed % 503), stain: 0.4 + st.decay*0.4 });
+  MAT.concrete = TexLib.mat(cc, { repeat:[3.2,3.2], bump:1.8, rough:0.94 });
+
+  MAT.glass = new THREE.MeshStandardMaterial({
+    color:0x141a1c, roughness:0.12, metalness:0.05, transparent:true, opacity:0.55 });
+  MAT.dark = new THREE.MeshStandardMaterial({ color:0x07090a, roughness:1 });
+  MAT.rock = new THREE.MeshStandardMaterial({ color:0x8a8b85, roughness:0.96 });
+  MAT.ripples = TexLib.tex(TexLib.heightToNormal(TexLib.ripples({ seed: 91 + (G.seed % 887) }), 1.6), { repeat:[1,1] });
+  step('done');
+}
+
+/* ---------------------------------------------------------------------
+   THE MACRO GROUND MAP
+   One baked texture over the whole world, painted straight out of the
+   worldgen arrays. Half a metre per texel at 2048, which is fine enough
+   that a trail reads as a trail and coarse enough to bake in under a
+   second.
+
+   It carries the DECISIONS — where the rock is, where the bank mud is,
+   where the trail is and how worn — and the tiled detail material carries
+   the close-up. Doing it this way means the picture cannot disagree with
+   the simulation: there is no second opinion about where the trail runs,
+   because this is painted from the same ROUTE array the router wrote.
+   ------------------------------------------------------------------- */
+function bakeGroundMacro(size){
+  const SZ = size || 2048;
+  const c = TexLib.cvs(SZ, SZ);
+  const ctx = c.getContext('2d', { willReadFrequently:true });
+  const img = ctx.createImageData(SZ, SZ), d = img.data;
+  const N = Wld.N;
+  const seedN = (G.seed ^ 0x51ed) >>> 0;
+
+  // palettes, nudged per seed so two worlds are not the same green
+  /* THESE ARE sRGB BYTES, AND THEY ARE NOT ARBITRARY.
+     The first version used a forest floor of (44,40,30), which looked
+     about right as a swatch and is 0.02 in LINEAR reflectance — darker
+     than asphalt at night. Rendered at noon under a sun of intensity 1.2
+     the whole world came out nearly black, and the only bright thing in
+     frame was the water's sky reflection, which read as snow. Real
+     surfaces: forest litter reflects 6-10% of the light that hits it,
+     rock 15-25%, bare packed earth 10-15%. Those are the numbers these
+     are set from, converted back through the sRGB curve. */
+  const r = rngFor('palette');
+  const litter = [ 64 + r.irange(-8,10), 60 + r.irange(-6,12), 44 + r.irange(-6,8) ];
+  const rock   = [124 + r.irange(-12,14),124 + r.irange(-12,12),118 + r.irange(-10,12) ];
+  const mud    = [ 86 + r.irange(-10,12), 72 + r.irange(-8,10), 54 + r.irange(-8,8) ];
+  const trail  = [116 + r.irange(-10,14),102 + r.irange(-8,12), 80 + r.irange(-8,10) ];
+  const road   = [110, 108, 102 ];
+  const moss   = [ 62,  82,  50 ];
+
+  const bil = (arr, gx, gz)=>{
+    const ix = clamp(gx|0, 0, N-2), iz = clamp(gz|0, 0, N-2);
+    const fx = clamp(gx-ix,0,1), fz = clamp(gz-iz,0,1);
+    return lerp(lerp(arr[iz*N+ix], arr[iz*N+ix+1], fx),
+                lerp(arr[(iz+1)*N+ix], arr[(iz+1)*N+ix+1], fx), fz);
+  };
+  const treeline = CFG.WORLD.RELIEF*P.relief*P.treeline;
+
+  for(let y=0; y<SZ; y++){
+    const gz = y/(SZ-1)*(N-1);
+    for(let x=0; x<SZ; x++){
+      const gx = x/(SZ-1)*(N-1);
+      const i4 = (y*SZ+x)*4;
+      const h  = bil(Wld.H, gx, gz);
+      const sl = bil(Wld.SLOPE, gx, gz);
+      const rt = bil(Wld.ROUTE, gx, gz);
+      const wn = bil(Wld.WORN, gx, gz);
+      const acc= bil(Wld.ACC, gx, gz);
+      const wl = Wld.WLEV[Math.round(clamp(gz,0,N-1))*N + Math.round(clamp(gx,0,N-1))];
+      const dep = wl > -9000 ? wl - h : -1;
+
+      const u = x/SZ, v = y/SZ;
+      const n1 = vnoise2(u*140, v*140, seedN);
+      const n2 = vnoise2(u*31, v*31, seedN+17);
+      const n3 = vnoise2(u*8.5, v*8.5, seedN+41);
+
+      let col = [ litter[0], litter[1], litter[2] ];
+      const blend = (c2, k)=>{ col[0]=lerp(col[0],c2[0],k); col[1]=lerp(col[1],c2[1],k); col[2]=lerp(col[2],c2[2],k); };
+
+      // mossy patches in the damp, shaded places
+      blend(moss, smoothstep(0.52,0.85,n3)*0.45*(1-smoothstep(0.3,0.6,sl)));
+      // rock comes through on steep ground and above the treeline
+      const rockK = Math.max(smoothstep(0.34, 0.72, sl),
+                             smoothstep(treeline*0.94, treeline*1.10, h));
+      blend(rock, rockK*(0.72 + n2*0.4));
+      // bank mud near moving water, and the wet strip at the edge
+      const bankK = smoothstep(CFG.HYDRO.streamAcc*0.6, CFG.HYDRO.riverAcc, acc)
+                  * (1 - smoothstep(0.25, 0.55, sl));
+      blend(mud, bankK*0.8);
+      if(dep > -0.35 && dep < 0.06) blend([52,48,40], 0.55);       // the waterline
+      // the routes. Width and contrast both follow wornness, which is the
+      // clue the navigation design promises: a path near people is a
+      // cleared, packed, obvious thing; the same path out in the wood is a
+      // suggestion in the needles.
+      if(rt > 0.02){
+        const isRoad = rt > 1.2;
+        const w = clamp(rt, 0, 2);
+        const k = clamp((isRoad ? 0.95 : 0.24 + wn*0.66) * smoothstep(0.02, 0.9, w), 0, 1);
+        blend(isRoad ? road : trail, k*(0.78 + n2*0.34));
+      }
+      // under the water, darken with depth
+      if(dep > 0.02) blend([34,38,36], clamp(dep*0.5, 0, 0.7));
+
+      /* BAKED CANOPY SHADE. A real forest floor is dark because there are
+         thirty metres of tree between it and the sky, and no amount of
+         hemisphere light will produce that on its own — without this the
+         ground under closed canopy renders as brightly as a clearing, and
+         the whole wood reads like a beach with trees on it. CLEAR is the
+         openness the canopy layer already computed, so this costs a
+         lookup that was happening anyway and it puts the light exactly
+         where the trees are not. */
+      const shade = lerp(0.44, 1.0, Math.pow(bil(Wld.CLEAR, gx, gz), 0.7));
+      col[0]*=shade; col[1]*=shade; col[2]*=shade;
+
+      const speck = 0.86 + n1*0.28;
+      d[i4]   = clamp(col[0]*speck, 0, 255);
+      d[i4+1] = clamp(col[1]*speck, 0, 255);
+      d[i4+2] = clamp(col[2]*speck, 0, 255);
+      d[i4+3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/* ---------------------------------------------------------------------
+   THE TERRAIN MESH
+   One plane, one draw call, displaced from the same heightfield the
+   player walks on. Normals are computed from the array rather than from
+   the triangles, so lighting matches the surface the physics uses even
+   where the mesh is coarser than the data.
+   ------------------------------------------------------------------- */
+function buildTerrainMesh(){
+  const SEG = CFG.WORLD.MESH, SZ = Wld.size;
+  const geo = new THREE.PlaneGeometry(SZ, SZ, SEG, SEG);
+  geo.rotateX(-Math.PI/2);
+  const pos = geo.attributes.position;
+  const nrm = new Float32Array(pos.count*3);
+  const n = new THREE.Vector3();
+  for(let i=0;i<pos.count;i++){
+    const x = pos.getX(i), z = pos.getZ(i);
+    pos.setY(i, heightAt(x, z));
+    normalAt(x, z, n);
+    nrm[i*3] = n.x; nrm[i*3+1] = n.y; nrm[i*3+2] = n.z;
+  }
+  pos.needsUpdate = true;
+  geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  geo.computeBoundingSphere();
+
+  const macro = TexLib.tex(bakeGroundMacro(CFG.QUALITY.macroSize), { srgb:true, repeat:[1,1], aniso:16 });
+  macro.wrapS = macro.wrapT = THREE.ClampToEdgeWrapping;
+  const m = new THREE.MeshStandardMaterial({
+    map: macro,
+    normalMap: MAT.groundDetailNormal,
+    roughnessMap: MAT.groundDetailRough,
+    roughness: 0.97, metalness: 0,
+  });
+  m.normalScale.set(0.85, 0.85);
+  /* The detail albedo is multiplied in by hand rather than being a second
+     map, because MeshStandardMaterial has one albedo slot and the macro
+     bake has to own it. Six lines of patch, and the alternative is
+     reimplementing the standard lighting model. */
+  m.onBeforeCompile = (sh)=>{
+    sh.uniforms.uDetail = { value: MAT.groundDetailMap };
+    sh.uniforms.uDetailAmt = { value: 0.50 };
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform sampler2D uDetail; uniform float uDetailAmt;`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          vec3 det = texture2D(uDetail, vMapUv * 220.0).rgb;
+          float l = dot(det, vec3(0.333));
+          diffuseColor.rgb *= mix(1.0, l*1.45, uDetailAmt);
+        }`);
+  };
+  m.customProgramCacheKey = ()=> 'terrain-detail';
+  MAT.terrain = m;
+
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.receiveShadow = true;
+  mesh.castShadow = false;
+  mesh.name = 'terrain';
+  scene.add(mesh);
+  World.terrain = mesh;
+  return mesh;
+}
+
+/* ---------------------------------------------------------------------
+   THE WATER MESH
+   Built only over cells that actually carry water. Each vertex is handed
+   its depth and its DOWNSTREAM DIRECTION, taken from the D8 receiver the
+   hydrology computed — so the surface scrolls the way the water runs, and
+   a player working out which way is downhill by watching the current is
+   reading the real flow field rather than an animation someone chose.
+   ------------------------------------------------------------------- */
+function buildWaterMesh(){
+  const N = Wld.N;
+  const verts = [], idx = [], flow = [], dirs = [], deps = [];
+  const map = new Int32Array(N*N).fill(-1);
+  const wet = (i)=> Wld.WLEV[i] > -9000 && (Wld.WLEV[i] - Wld.H[i]) > 0.015;
+
+  for(let iz=0; iz<N; iz++) for(let ix=0; ix<N; ix++){
+    const i = iz*N+ix;
+    if(!wet(i)) continue;
+    map[i] = verts.length/3;
+    const x = wxOf(ix), z = wzOf(iz);
+    verts.push(x, Wld.WLEV[i], z);
+    deps.push(Wld.WLEV[i] - Wld.H[i]);
+    const acc = Wld.ACC[i];
+    flow.push(Wld.POND[i] ? 0 : clamp(Math.log10(1+acc/CFG.HYDRO.streamAcc)*0.55, 0, 1));
+    const j = Wld.DIR[i];
+    if(j >= 0 && !Wld.POND[i]){
+      const dx = (j%N) - ix, dz = ((j/N)|0) - iz;
+      const l = Math.hypot(dx,dz) || 1;
+      dirs.push(dx/l, dz/l);
+    } else dirs.push(0, 0);
+  }
+  for(let iz=0; iz<N-1; iz++) for(let ix=0; ix<N-1; ix++){
+    const a = map[iz*N+ix], b = map[iz*N+ix+1];
+    const c2 = map[(iz+1)*N+ix], d2 = map[(iz+1)*N+ix+1];
+    if(a<0||b<0||c2<0||d2<0) continue;
+    idx.push(a,c2,b, b,c2,d2);
+  }
+  if(!idx.length){ World.water = null; return null; }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.setAttribute('aFlow', new THREE.Float32BufferAttribute(flow, 1));
+  geo.setAttribute('aDir',  new THREE.Float32BufferAttribute(dirs, 2));
+  geo.setAttribute('aDepth',new THREE.Float32BufferAttribute(deps, 1));
+  geo.setIndex(idx);
+  geo.computeBoundingSphere();
+
+  const uni = THREE.UniformsUtils.clone(WaterShader.uniforms);
+  uni.uNormal.value = MAT.ripples;
+  const m = new THREE.ShaderMaterial({
+    uniforms: uni,
+    vertexShader: WaterShader.vertexShader,
+    fragmentShader: WaterShader.fragmentShader,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  });
+  MAT.water = m;
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.name = 'water';
+  mesh.renderOrder = 2;
+  scene.add(mesh);
+  World.water = mesh;
+  Wld.stats.waterTris = idx.length/3;
+  return mesh;
+}
+
+/* =====================================================================
+   ===== VEGETATION =====
+   A thousand-metre wood cannot be a list of trees held in memory and it
+   cannot be rebuilt when the player takes a step. So it is neither:
+
+     WHERE THE TREES ARE is a pure function of position. The world is
+     divided into 8m cells, and a cell's contents come from hashing its
+     coordinates against the seed. Nothing is stored, nothing is
+     allocated, and asking "what is at (412, -77)" a thousand metres away
+     is as cheap as asking about the cell underfoot — which the director
+     needs, because it has to know whether there is room for a cabin
+     somewhere the player has not been yet.
+
+     WHAT IS DRAWN is a ring of instances around the player, refilled
+     only when they have moved far enough to matter. Two draw calls per
+     species, and the refill is a loop over a few hundred cells.
+
+   Only trees inside colliderRadius get collision, because a collider on
+   every trunk in a kilometre of forest is a list nothing can afford to
+   walk every frame — and a tree you cannot reach cannot be walked into.
+   ===================================================================== */
+
+/* A minimal geometry merge. Three ships one in an addon; this is twelve
+   lines and saves a second CDN dependency in a file whose whole point is
+   that it is one file. */
+function mergeGeos(list){
+  let vc=0, ic=0;
+  for(const g of list){ vc += g.attributes.position.count; ic += g.index ? g.index.count : 0; }
+  const pos = new Float32Array(vc*3), nrm = new Float32Array(vc*3), uv = new Float32Array(vc*2);
+  const idx = new Uint32Array(ic);
+  let vo=0, io=0;
+  for(const g of list){
+    const p=g.attributes.position.array, n=g.attributes.normal.array, u=g.attributes.uv.array;
+    pos.set(p, vo*3); nrm.set(n, vo*3); uv.set(u, vo*2);
+    const gi = g.index.array;
+    for(let k=0;k<gi.length;k++) idx[io+k] = gi[k] + vo;
+    vo += g.attributes.position.count; io += gi.length;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  out.setAttribute('normal',   new THREE.BufferAttribute(nrm,3));
+  out.setAttribute('uv',       new THREE.BufferAttribute(uv,2));
+  out.setIndex(new THREE.BufferAttribute(idx,1));
+  return out;
+}
+
+/* ---------------------------------------------------------------------
+   ONE FOLIAGE TIER
+   A cone whose rim is pulled DOWN and jittered per vertex. This is what
+   separates a conifer from a party hat before any texture is involved:
+   the outline is already broken by the geometry, so the needle mask is
+   feathering an edge that is ragged rather than inventing one.
+   ------------------------------------------------------------------- */
+/* A NOMINAL TREE HEIGHT, used only to size the needle texture. The
+   geometry is built in unit-tree space and scaled per instance, so the
+   generator cannot know the final metres — but every stroke in the mask
+   still has to come out roughly needle-sized, and a texture that covers
+   an entire tier in one tile gives you metre-long needles. Fourteen
+   metres is the middle of the scale range, so trees at the ends of it are
+   off by less than a factor of two, which is invisible. */
+const TREE_NOMINAL_M = 14;
+const NEEDLE_TILE_M = 0.55;
+
+function makeTier(radius, height, droop, jitter, seed, seg=13, spin=0){
+  /* Non-indexed, with its own apex vertex per segment. A single shared
+     apex has to carry a single u, so every triangle's texture smears into
+     the same point and the crown reads as a starburst instead of foliage.
+     Three vertices per triangle costs nothing at this size. */
+  const pos=[], nrm=[], uv=[];
+  const circ = TAU*radius*TREE_NOMINAL_M;
+  const slant = Math.hypot(height + droop*radius, radius)*TREE_NOMINAL_M;
+  const uRep = Math.max(2, circ/NEEDLE_TILE_M);
+  const vRep = Math.max(1.5, slant/NEEDLE_TILE_M);
+  /* THE RIM IS WHERE THE SILHOUETTE COMES FROM, AND IT HAS TO BE
+     GEOMETRY. At any distance the needle mask mips down until its average
+     alpha clears the alpha test and the crown goes solid — which is
+     correct, a distant conifer IS a dark mass — but if the edge is a
+     clean cone the mass reads as a triangle someone drew. Two frequencies
+     of radius jitter plus a droop that varies per vertex means the
+     outline is already broken before the texture has any say in it. */
+  const rimAt = (i)=>{
+    const k = i%seg;
+    const a = k/seg*TAU + spin;
+    const j = 1 + (ihash2(k, seed, 991)-0.5)*jitter*2
+                + (ihash2(k*3, seed+5, 617)-0.5)*jitter*0.9;
+    const r = radius*Math.max(0.35, j);
+    const y = -droop*radius*(0.35 + ihash2(k, seed+7, 733)*1.15);
+    return [Math.cos(a)*r, y, Math.sin(a)*r, a];
+  };
+  for(let i=0;i<seg;i++){
+    const A = rimAt(i), B = rimAt(i+1);
+    const um = ((i+0.5)/seg)*uRep;
+    pos.push(0, height, 0);          nrm.push(0,1,0); uv.push(um, 0);
+    pos.push(A[0], A[1], A[2]);      uv.push((i/seg)*uRep, vRep);
+    pos.push(B[0], B[1], B[2]);      uv.push(((i+1)/seg)*uRep, vRep);
+    /* Foliage normals lean hard UPWARD rather than outward. Physically a
+       tier is a cone and its normal points out of the slope, but shading
+       a mass of needles as if it were a smooth cone gives one blazing lit
+       face and one black one, and a tree made of stacked triangles reads
+       as exactly that. Biasing toward vertical is the standard vegetation
+       cheat and it is the difference between foliage and origami. */
+    for(const V of [A,B]){
+      const n = new THREE.Vector3(Math.cos(V[3])*0.45, 1.0, Math.sin(V[3])*0.45).normalize();
+      nrm.push(n.x, n.y, n.z);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('normal',   new THREE.Float32BufferAttribute(nrm,3));
+  g.setAttribute('uv',       new THREE.Float32BufferAttribute(uv,2));
+  g.setIndex(Array.from({length: pos.length/3}, (_,k)=>k));
+  return g;
+}
+
+/* Species differ in shape, not just in scale: a spruce is narrow with
+   many close tiers, a pine is bare-trunked with a crown near the top, a
+   larch is sparse and open. A player who learns the wood can tell them
+   apart from a distance, which is worth having when landmarks lie. */
+/* Species differ in shape, not just in scale: a spruce is narrow with many
+   close tiers, a pine is bare-trunked with its crown near the top, a
+   hemlock droops. A player who learns the wood can tell them apart at a
+   distance, which is worth having when the landmarks start lying.
+
+   EVERY NUMBER HERE IS A FRACTION OF THE TREE'S OWN HEIGHT, and they are
+   measured off real trees rather than chosen by eye. A twenty-metre
+   conifer has a crown about five metres across — a radius of 0.12 of its
+   height — and a trunk about 0.4m thick, a radius of 0.01 of its height.
+   The first version used 0.62 and 0.052, which is a crown twenty-five
+   metres wide on a two-metre trunk: at forest density every crown
+   overlapped every other one, and the camera spent the whole game inside
+   foliage looking at a flat green wall it could not see past. */
+const SPECIES_SHAPE = {
+  //          tiers spread taper  drop  trunk   top   lean
+  spruce:  { tiers:7, spread:0.135, taper:0.86, drop:0.32, trunk:0.011, top:0.84, lean:0.03 },
+  fir:     { tiers:6, spread:0.155, taper:0.87, drop:0.28, trunk:0.012, top:0.82, lean:0.03 },
+  pine:    { tiers:4, spread:0.190, taper:0.89, drop:0.18, trunk:0.015, top:0.46, lean:0.05 },
+  hemlock: { tiers:8, spread:0.125, taper:0.85, drop:0.42, trunk:0.010, top:0.88, lean:0.06 },
+  larch:   { tiers:5, spread:0.150, taper:0.88, drop:0.24, trunk:0.011, top:0.78, lean:0.04 },
+};
+
+function makeCrown(species, seed){
+  const sh = SPECIES_SHAPE[species] || SPECIES_SHAPE.spruce;
+  const tiers = [];
+  // the crown occupies the top `top` fraction of a unit-tall tree
+  const base = 1 - sh.top;
+  for(let i=0;i<sh.tiers;i++){
+    const t = i/(sh.tiers-1);
+    const y = base + t*sh.top*0.92;
+    const r = sh.spread * Math.pow(sh.taper, i*1.25) * (1 - t*0.18);
+    const h = sh.top/sh.tiers * 2.4;
+    // each tier is turned a different way, so the jitters do not line
+    // up into vertical creases running the height of the tree
+    const g = makeTier(r, h, sh.drop, 0.45, seed+i*97, 13, ihash2(i, seed, 401)*TAU);
+    g.translate(0, y, 0);
+    tiers.push(g);
+  }
+  return mergeGeos(tiers);
+}
+function makeTrunk(species){
+  const sh = SPECIES_SHAPE[species] || SPECIES_SHAPE.spruce;
+  const g = new THREE.CylinderGeometry(sh.trunk*0.45, sh.trunk, 1.0, 6, 1, false);
+  g.translate(0, 0.5, 0);
+  return g;
+}
+
+/* One shared wind uniform sways every foliage and trunk material. The
+   phase comes from each instance's own world position, so neighbouring
+   trees are out of step instead of the whole wood moving as one sheet,
+   and the amplitude scales with height so trunks stay planted. */
+function windify(mat, amp){
+  mat.onBeforeCompile = (sh)=>{
+    sh.uniforms.uWTime = World.wind.uTime;
+    sh.uniforms.uGust  = World.wind.uGust;
+    sh.uniforms.uAmp   = { value: amp };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+        uniform float uWTime; uniform float uGust; uniform float uAmp;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        {
+          #ifdef USE_INSTANCING
+            vec3 io = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+            float sc = length(instanceMatrix[1].xyz);
+          #else
+            vec3 io = vec3(0.0); float sc = 1.0;
+          #endif
+          float ph = io.x*0.37 + io.z*0.29;
+          float hh = max(transformed.y, 0.0);
+          float k = uAmp * (0.22 + uGust) * hh * 0.075;
+          transformed.x += sin(uWTime*1.4 + ph) * k + sin(uWTime*3.9 + ph*2.3) * k * 0.32;
+          transformed.z += cos(uWTime*1.15 + ph*1.7) * k * 0.8 + cos(uWTime*5.1 + ph*3.1) * k * 0.26;
+        }`);
+  };
+  mat.customProgramCacheKey = ()=> 'wind'+amp;
+  return mat;
+}
+
+const Veg = {
+  CELL: 8,                 // metres per scatter cell
+  radius: CFG.QUALITY.treeRadius,
+  trunks: {}, crowns: {}, scrub: null, rocks: null, deadfall: null,
+  colliders: [],           // { x, z, r } for trees close enough to matter
+  lastX: 1e9, lastZ: 1e9, dirty: true,
+  counts: {},
+  species: [],
+
+  /* WHAT GROWS AT A POINT — the pure function everything else asks.
+     Reads the canopy openness, the treeline and the slope, so a clearing
+     is empty because the world said it was open, not because a random
+     number came up. */
+  densityAt(x, z){
+    const N = Wld.N;
+    const ix = Math.round(clamp(gxOf(x),0,N-1)), iz = Math.round(clamp(gzOf(z),0,N-1));
+    const i = iz*N+ix;
+    const open = Wld.CLEAR[i];
+    const h = Wld.H[i];
+    const treeline = CFG.WORLD.RELIEF*P.relief*P.treeline;
+    let d = (1-open) * P.density;
+    d *= 1 - smoothstep(treeline*0.88, treeline*1.05, h);
+    d *= 1 - smoothstep(0.45, 0.78, Wld.SLOPE[i]);
+    if(Wld.WLEV[i] > Wld.H[i]-0.05) d = 0;
+    return clamp(d, 0, 1);
+  },
+
+  /* Everything in a scatter cell, from the cell's coordinates alone. */
+  cellItems(cx, cz, out){
+    out.length = 0;
+    const seed = (G.seed ^ 0x9e37) >>> 0;
+    const base = ihash2(cx, cz, seed);
+    const x0 = cx*this.CELL, z0 = cz*this.CELL;
+    if(Math.abs(x0) > Wld.size*0.5 || Math.abs(z0) > Wld.size*0.5) return out;
+    const d = this.densityAt(x0 + this.CELL*0.5, z0 + this.CELL*0.5);
+    if(d <= 0.001) return out;
+    const n = Math.floor(d*3.2 + base*0.9);
+    for(let k=0;k<n;k++){
+      const hx = ihash2(cx*3+k, cz*7+k, seed+k*131);
+      const hz = ihash2(cx*11+k, cz*5+k, seed+k*317);
+      const x = x0 + hx*this.CELL, z = z0 + hz*this.CELL;
+      if(this.densityAt(x,z) <= 0.02) continue;
+      const hs = ihash2(cx*13+k, cz*17+k, seed+k*577);
+      const sp = this.species[Math.floor(ihash2(cx+k, cz-k, seed+991)*this.species.length)] || this.species[0];
+      // height from the species' own range, shrunk near the treeline
+      const h = Wld.H[Math.round(clamp(gzOf(z),0,Wld.N-1))*Wld.N + Math.round(clamp(gxOf(x),0,Wld.N-1))];
+      const treeline = CFG.WORLD.RELIEF*P.relief*P.treeline;
+      const stunt = 1 - smoothstep(treeline*0.72, treeline*1.02, h)*0.55;
+      const scale = (7.5 + hs*12.5) * stunt;
+      out.push({ x, z, y: heightAt(x,z), sp, scale,
+                 rot: ihash2(cx-k, cz+k, seed+37)*TAU,
+                 lean: (ihash2(cx*5+k, cz*3-k, seed+53)-0.5)*(SPECIES_SHAPE[sp]?.lean||0.03) });
+    }
+    return out;
+  },
+
+  build(){
+    this.species = P.species.slice();
+    const cap = 2600;
+    for(const sp of this.species){
+      const crown = windify(new THREE.MeshStandardMaterial({
+        // the hue lives here; the mask supplies variation and the cutout
+        color: 0x7c8a5e, roughness: 1, metalness: 0,
+        map: MAT.needleAlpha, alphaMap: MAT.needleAlpha,
+        /* A LOW ALPHA CUT, DELIBERATELY. A high cut plus mipmapping
+           dissolves distant crowns and leaves the trunks standing as bare
+           poles in the fog — the far treeline stops being a mass and
+           becomes a picket fence. Low enough that the dense fill in the
+           mask survives instead of being thresholded back into holes. */
+        alphaTest: 0.09, side: THREE.DoubleSide,
+      }), 1.0);
+      const trunkMat = windify(MAT.bark.clone(), 0.42);
+      const cm = new THREE.InstancedMesh(makeCrown(sp, hashString(sp) & 1023), crown, cap);
+      const tm = new THREE.InstancedMesh(makeTrunk(sp), trunkMat, cap);
+      cm.frustumCulled = false; tm.frustumCulled = false;
+      cm.castShadow = true; cm.receiveShadow = true;
+      tm.castShadow = true; tm.receiveShadow = true;
+      cm.count = 0; tm.count = 0;
+      cm.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      tm.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      scene.add(cm); scene.add(tm);
+      this.crowns[sp] = cm; this.trunks[sp] = tm;
+    }
+
+    // scrub: three crossed quads carrying the broadleaf mask
+    const quads = [];
+    for(let i=0;i<3;i++){
+      const g = new THREE.PlaneGeometry(1, 1);
+      g.translate(0, 0.5, 0);
+      g.rotateY(i/3*Math.PI);
+      quads.push(g);
+    }
+    const scrubGeo = mergeGeos(quads);
+    const scrubMat = windify(new THREE.MeshStandardMaterial({
+      color: 0x6f7d52, roughness:1, map: MAT.leafAlpha, alphaMap: MAT.leafAlpha,
+      alphaTest: 0.30, side: THREE.DoubleSide,
+    }), 1.5);
+    this.scrub = new THREE.InstancedMesh(scrubGeo, scrubMat, 3000);
+    this.scrub.frustumCulled = false; this.scrub.count = 0;
+    this.scrub.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.scrub.receiveShadow = true;
+    scene.add(this.scrub);
+
+    // rocks
+    const rockGeo = new THREE.IcosahedronGeometry(1, 1);
+    {
+      const p = rockGeo.attributes.position;
+      for(let i=0;i<p.count;i++){
+        const k = 0.62 + ihash3(Math.round(p.getX(i)*40), Math.round(p.getY(i)*40), Math.round(p.getZ(i)*40), 17)*0.7;
+        p.setXYZ(i, p.getX(i)*k, p.getY(i)*k*0.68, p.getZ(i)*k);
+      }
+      rockGeo.computeVertexNormals();
+    }
+    this.rocks = new THREE.InstancedMesh(rockGeo, MAT.rock, 900);
+    this.rocks.frustumCulled = false; this.rocks.count = 0;
+    this.rocks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.rocks.castShadow = true; this.rocks.receiveShadow = true;
+    scene.add(this.rocks);
+
+    // deadfall: fallen trunks. Real obstacles, and a real hazard to cross.
+    const logGeo = new THREE.CylinderGeometry(0.22, 0.30, 1, 7);
+    logGeo.rotateZ(Math.PI/2);
+    this.deadfall = new THREE.InstancedMesh(logGeo, MAT.bark, 500);
+    this.deadfall.frustumCulled = false; this.deadfall.count = 0;
+    this.deadfall.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.deadfall.castShadow = true; this.deadfall.receiveShadow = true;
+    scene.add(this.deadfall);
+
+    this.dirty = true;
+  },
+
+  refill(px, pz){
+    const M = new THREE.Matrix4(), Q = new THREE.Quaternion(),
+          V = new THREE.Vector3(), Sv = new THREE.Vector3(), E = new THREE.Euler();
+    const R = this.radius, C = this.CELL;
+    const cx0 = Math.floor((px-R)/C), cx1 = Math.floor((px+R)/C);
+    const cz0 = Math.floor((pz-R)/C), cz1 = Math.floor((pz+R)/C);
+    const n = {}; for(const sp of this.species) n[sp] = 0;
+    let ns=0, nr=0, nd=0;
+    this.colliders.length = 0;
+    const CR = CFG.QUALITY.colliderRadius, CR2 = CR*CR;
+    const items = [];
+    const seed = (G.seed ^ 0x9e37) >>> 0;
+
+    for(let cz=cz0; cz<=cz1; cz++) for(let cx=cx0; cx<=cx1; cx++){
+      const dxc = (cx*C+C*0.5)-px, dzc = (cz*C+C*0.5)-pz;
+      if(dxc*dxc + dzc*dzc > (R+C)*(R+C)) continue;
+      this.cellItems(cx, cz, items);
+      for(const it of items){
+        const cm = this.crowns[it.sp], tm = this.trunks[it.sp];
+        if(!cm || n[it.sp] >= cm.instanceMatrix.count) continue;
+        E.set(it.lean, it.rot, it.lean*0.7);
+        Q.setFromEuler(E);
+        V.set(it.x, it.y, it.z);
+        Sv.set(it.scale, it.scale, it.scale);
+        M.compose(V, Q, Sv);
+        cm.setMatrixAt(n[it.sp], M);
+        tm.setMatrixAt(n[it.sp], M);
+        n[it.sp]++;
+        const dd = (it.x-px)*(it.x-px) + (it.z-pz)*(it.z-pz);
+        if(dd < CR2){
+          const shp = SPECIES_SHAPE[it.sp] || SPECIES_SHAPE.spruce;
+          this.colliders.push({ x: it.x, z: it.z, r: shp.trunk*it.scale + 0.12 });
+        }
+      }
+      // undergrowth, rocks and deadfall share the cell's hash space
+      const hb = ihash2(cx, cz, seed+4441);
+      const cxw = cx*C + hb*C, czw = cz*C + ihash2(cz, cx, seed+911)*C;
+      if(Math.abs(cxw) < Wld.size*0.5 && Math.abs(czw) < Wld.size*0.5){
+        const gi = Math.round(clamp(gzOf(czw),0,Wld.N-1))*Wld.N + Math.round(clamp(gxOf(cxw),0,Wld.N-1));
+        const open = Wld.CLEAR[gi], slope = Wld.SLOPE[gi];
+        const underwater = Wld.WLEV[gi] > Wld.H[gi]-0.02;
+        if(!underwater && ns < this.scrub.instanceMatrix.count && hb < 0.34*P.scrub*(0.35+open)){
+          const sc = 0.7 + ihash2(cx*7, cz*3, seed+55)*1.5;
+          E.set(0, hb*TAU, 0); Q.setFromEuler(E);
+          M.compose(V.set(cxw, heightAt(cxw,czw)-0.05, czw), Q, Sv.set(sc, sc*0.8, sc));
+          this.scrub.setMatrixAt(ns++, M);
+        }
+        if(!underwater && nr < this.rocks.instanceMatrix.count &&
+           ihash2(cx+31, cz-17, seed+77) < 0.10 + smoothstep(0.3,0.8,slope)*0.35){
+          const sc = 0.35 + ihash2(cx*3, cz*9, seed+23)*1.9;
+          E.set(ihash2(cx,cz,seed+5)*0.7, ihash2(cz,cx,seed+6)*TAU, ihash2(cx,cz,seed+7)*0.6);
+          Q.setFromEuler(E);
+          M.compose(V.set(cxw, heightAt(cxw,czw)-sc*0.28, czw), Q, Sv.set(sc,sc,sc));
+          this.rocks.setMatrixAt(nr++, M);
+          const dd = (cxw-px)*(cxw-px) + (czw-pz)*(czw-pz);
+          if(dd < CR2 && sc > 0.9) this.colliders.push({ x: cxw, z: czw, r: sc*0.75 });
+        }
+        if(!underwater && nd < this.deadfall.instanceMatrix.count &&
+           ihash2(cx-13, cz+29, seed+303) < 0.07*(1-open)*2){
+          const len = 4 + ihash2(cx,cz,seed+8)*9;
+          E.set(0, ihash2(cx,cz,seed+9)*TAU, 0.06);
+          Q.setFromEuler(E);
+          M.compose(V.set(cxw, heightAt(cxw,czw)+0.24, czw), Q, Sv.set(len,1,1));
+          this.deadfall.setMatrixAt(nd++, M);
+        }
+      }
+    }
+    for(const sp of this.species){
+      this.crowns[sp].count = n[sp]; this.trunks[sp].count = n[sp];
+      this.crowns[sp].instanceMatrix.needsUpdate = true;
+      this.trunks[sp].instanceMatrix.needsUpdate = true;
+    }
+    this.scrub.count = ns; this.scrub.instanceMatrix.needsUpdate = true;
+    this.rocks.count = nr; this.rocks.instanceMatrix.needsUpdate = true;
+    this.deadfall.count = nd; this.deadfall.instanceMatrix.needsUpdate = true;
+    this.counts = { trees: Object.values(n).reduce((a,b)=>a+b,0), scrub:ns, rocks:nr,
+                    deadfall:nd, colliders:this.colliders.length };
+    this.lastX = px; this.lastZ = pz; this.dirty = false;
+  },
+
+  update(px, pz){
+    if(this.dirty || Math.hypot(px-this.lastX, pz-this.lastZ) > 14) this.refill(px, pz);
+  },
+};
+
+/* =====================================================================
+   ===== SKY & WEATHER =====
+   One clock, one weather state machine, and every light and colour in the
+   game derived from them. Two rules hold on every seed, and a player can
+   use both:
+
+     * THE SUN RISES IN THE EAST AND SETS IN THE WEST. No stage and no
+       intensity touches it. It is the one direction reference that never
+       lies, which is what makes it worth looking for.
+     * OUTSIDE AT NIGHT IS BLACK. Not dim — black. Ambient at night runs
+       at a couple of per cent of its daytime value, and the sky and fog
+       colours are crushed WITH it, because a treeline against a sky that
+       is lighter than it is reads as a clean silhouette and the wood
+       stops being frightening. Without the flashlight you can see the
+       rain and nothing else.
+   ===================================================================== */
+const Sky = {
+  hours: 8, phase: 'day', day: 0, sunUp: 0,
+  sunDir: new THREE.Vector3(0,1,0),
+  fogTarget: CFG.WEATHER.fogBase, fogNow: CFG.WEATHER.fogBase,
+  tintTarget: new THREE.Color(0x0a0e12), tintNow: new THREE.Color(0x0a0e12),
+};
+const Weather = {
+  kind: 'clear', next: 0, wind: 0.3, windGust: 0, rain: 0, rainTarget: 0,
+  fogBoost: 0, fogBoostTarget: 0, thunder: 0, nextStrike: 1e9, lastFlash: 0,
+  flash: 0,
+};
+
+/* The palette of the day, in one table. Each entry is
+   [ sunColour, skyColour, ambient, sunIntensity ] and everything else
+   interpolates between them, so retuning the look of dusk is one line. */
+const SKY_KEYS = [
+  { h: 0.0,  sun:0x1a2233, sky:0x03050a, amb:0x0a0f18, si:0.00, ai:0.020 },
+  { h: 5.4,  sun:0x2a2a3c, sky:0x080c16, amb:0x11161f, si:0.02, ai:0.050 },
+  { h: 6.4,  sun:0xc08a62, sky:0x2e3644, amb:0x2a3040, si:0.35, ai:0.30 },
+  { h: 8.0,  sun:0xffe9c8, sky:0x6d8aa8, amb:0x93a6b8, si:1.05, ai:0.72 },
+  { h: 13.0, sun:0xfff6e2, sky:0x8fb0cc, amb:0xa8bcd0, si:1.30, ai:0.95 },
+  { h: 17.5, sun:0xffdca8, sky:0x7d9ab6, amb:0x98abbe, si:1.00, ai:0.75 },
+  { h: 19.4, sun:0xd07a4a, sky:0x4a4a56, amb:0x3e4450, si:0.40, ai:0.34 },
+  { h: 20.6, sun:0x3a3244, sky:0x121722, amb:0x161c26, si:0.05, ai:0.085 },
+  { h: 22.0, sun:0x1a2233, sky:0x04070c, amb:0x0b1018, si:0.00, ai:0.026 },
+  { h: 24.0, sun:0x1a2233, sky:0x03050a, amb:0x0a0f18, si:0.00, ai:0.020 },
+];
+
+function buildSky(){
+  const hemi = new THREE.HemisphereLight(0x9fb4c8, 0x2a2a22, 0.5);
+  scene.add(hemi); World.hemi = hemi;
+
+  const sun = new THREE.DirectionalLight(0xffe9c8, 1.0);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(CFG.QUALITY.shadowMap, CFG.QUALITY.shadowMap);
+  sun.shadow.camera.near = 1; sun.shadow.camera.far = 260;
+  const S2 = 70;
+  sun.shadow.camera.left = -S2; sun.shadow.camera.right = S2;
+  sun.shadow.camera.top = S2; sun.shadow.camera.bottom = -S2;
+  sun.shadow.bias = -0.0009;
+  sun.shadow.normalBias = 0.6;
+  scene.add(sun); scene.add(sun.target);
+  World.sun = sun;
+
+  // the moon: a second, much weaker directional so a clear night has a
+  // direction to it rather than being flat black
+  const moon = new THREE.DirectionalLight(0x8296b4, 0.0);
+  scene.add(moon); scene.add(moon.target);
+  World.moon = moon;
+
+  buildSkyDome();
+  buildRain();
+}
+
+function skyKeyAt(h){
+  h = mod(h, 24);
+  let a = SKY_KEYS[0], b = SKY_KEYS[SKY_KEYS.length-1];
+  for(let i=0;i<SKY_KEYS.length-1;i++){
+    if(h >= SKY_KEYS[i].h && h <= SKY_KEYS[i+1].h){ a = SKY_KEYS[i]; b = SKY_KEYS[i+1]; break; }
+  }
+  const t = clamp((h - a.h)/Math.max(0.0001, b.h - a.h), 0, 1);
+  const lerpC = (x,y)=> new THREE.Color(x).lerp(new THREE.Color(y), t);
+  return {
+    sun: lerpC(a.sun, b.sun), sky: lerpC(a.sky, b.sky), amb: lerpC(a.amb, b.amb),
+    si: lerp(a.si, b.si, t), ai: lerp(a.ai, b.ai, t),
+  };
+}
+
+function updateSky(dt){
+  if(!CFG.DEBUG.freezeClock){
+    G.hours = mod(G.hours + dt * (24 / (CFG.TIME.dayRealMinutes*60)), 24);
+  }
+  Sky.hours = G.hours;
+  const T = CFG.TIME;
+  Sky.phase = G.hours < T.dawn ? 'night'
+            : G.hours < T.sunrise ? 'dawn'
+            : G.hours < T.sunset ? 'day'
+            : G.hours < T.dusk ? 'dusk' : 'night';
+  Sky.day = (Sky.phase === 'day') ? 1
+          : Sky.phase === 'dawn' ? smoothstep(T.dawn, T.sunrise, G.hours)
+          : Sky.phase === 'dusk' ? 1-smoothstep(T.sunset, T.dusk, G.hours) : 0;
+
+  /* THE SUN'S ACTUAL PATH. Azimuth runs east at sunrise, south at noon,
+     west at sunset — the real thing, because the player is entitled to
+     navigate by it. -Z is north in this world, +X is east. */
+  const dayT = clamp((G.hours - T.dawn) / (T.dusk - T.dawn), -0.2, 1.2);
+  const az = lerp(-Math.PI*0.5, Math.PI*0.5, clamp(dayT,0,1));   // east -> west
+  const alt = Math.sin(clamp(dayT,0,1)*Math.PI) * 1.02 - 0.06;
+  Sky.sunUp = Math.max(0, alt);
+  Sky.sunDir.set(Math.sin(az)*Math.cos(alt), Math.sin(alt), -Math.cos(az)*Math.cos(alt)).normalize();
+
+  const k = skyKeyAt(G.hours);
+  // weather crushes the light further
+  const wetK = 1 - Weather.rain*0.45 - Weather.fogBoost*0.30;
+  const si = k.si * wetK, ai = k.ai * wetK;
+
+  const sun = World.sun;
+  sun.color.copy(k.sun);
+  sun.intensity = si;
+  sun.visible = si > 0.005;
+  const cam = camera.position;
+  sun.position.set(cam.x + Sky.sunDir.x*120, cam.y + Sky.sunDir.y*120 + 20, cam.z + Sky.sunDir.z*120);
+  sun.target.position.set(cam.x, cam.y, cam.z);
+  sun.target.updateMatrixWorld();
+
+  // the moon runs the other way across the sky, and only at night
+  const night = 1 - Sky.day;
+  const mAz = az + Math.PI;
+  World.moon.position.set(cam.x + Math.sin(mAz)*120, cam.y + 90, cam.z - Math.cos(mAz)*120);
+  World.moon.target.position.copy(cam);
+  World.moon.target.updateMatrixWorld();
+  World.moon.intensity = night * 0.085 * (1 - Weather.rain*0.8) * (1 - Weather.fogBoost*0.6);
+  World.moon.visible = World.moon.intensity > 0.002;
+
+  World.hemi.color.copy(k.sky);
+  World.hemi.groundColor.setHex(0x1a1a14);
+  World.hemi.intensity = ai;
+
+  /* THE SKY AND THE FOG GO DOWN WITH THE AMBIENT. This is the half that
+     matters: dropping the ambient alone leaves the wood as clean black
+     cutouts against a sky that is still readable, which is the opposite
+     of frightening. Both colours are crushed together so at midnight
+     there is genuinely nothing to see. */
+  const crush = lerp(0.035, 1.0, Math.pow(Sky.day, 0.75));
+  Sky.tintTarget.copy(k.sky).multiplyScalar(crush);
+  // the flash is exempt, so the storm is the only thing that shows you
+  // the treeline at night
+  if(Weather.flash > 0.001) Sky.tintTarget.lerp(new THREE.Color(0xbcc6d6), Weather.flash*0.75);
+  Sky.tintNow.lerp(Sky.tintTarget, clamp(dt*2.2, 0, 1));
+  scene.fog.color.copy(Sky.tintNow);
+  updateSkyDome();
+
+  const W = CFG.WEATHER;
+  let fog = W.fogBase + Weather.fogBoost*(W.fogThick - W.fogBase);
+  if(Weather.rain > 0.01) fog *= lerp(1, W.rainFogMult, Weather.rain);
+  fog *= lerp(1, W.nightFogMult, night);
+  Sky.fogTarget = fog;
+  Sky.fogNow = lerp(Sky.fogNow, Sky.fogTarget, clamp(dt*0.35, 0, 1));
+  scene.fog.density = Sky.fogNow * Mind.fogWobble();
+
+  if(MAT.water){
+    MAT.water.uniforms.uFogColor.value.copy(Sky.tintNow);
+    MAT.water.uniforms.uFogDensity.value = scene.fog.density;
+    MAT.water.uniforms.uSky.value.copy(k.sky).multiplyScalar(crush*1.4 + 0.04);
+    MAT.water.uniforms.uSun.value.copy(Sky.sunDir);
+    MAT.water.uniforms.uSunColor.value.copy(k.sun);
+    MAT.water.uniforms.uLight.value = clamp(ai*0.8 + si*0.5 + 0.03, 0.03, 1.4);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   WEATHER
+   A state machine that decides every few minutes, weighted by the seed's
+   pattern. 'turning' is the interesting one: it walks toward worse over
+   the course of a run, so a seed can start under a clear sky and end in a
+   storm without anything scripting it.
+   ------------------------------------------------------------------- */
+function rollWeather(){
+  const r = rngFor('weather', Math.floor(G.t));
+  const pat = P.weather;
+  const table = {
+    clear:   [[60,'clear'],[22,'fog'],[14,'rain'],[4,'storm']],
+    fog:     [[18,'clear'],[54,'fog'],[20,'rain'],[8,'storm']],
+    rain:    [[16,'clear'],[20,'fog'],[46,'rain'],[18,'storm']],
+    storm:   [[8,'clear'],[16,'fog'],[34,'rain'],[42,'storm']],
+    turning: null,
+  };
+  if(pat === 'turning'){
+    // the longer the run goes, the worse it is allowed to get
+    const t = clamp(G.t/(38*60), 0, 1);
+    return rngFor('weather', Math.floor(G.t)).weighted([
+      [Math.max(2, 55 - t*52), 'clear'],
+      [18 + t*10, 'fog'],
+      [12 + t*26, 'rain'],
+      [2 + t*34, 'storm'],
+    ]);
+  }
+  return r.weighted(table[pat] || table.clear);
+}
+function updateWeather(dt){
+  Weather.next -= dt;
+  if(Weather.next <= 0){
+    const r = rngFor('weatherClock', Math.floor(G.t*7));
+    Weather.next = r.range(CFG.WEATHER.changeMinutes[0], CFG.WEATHER.changeMinutes[1])*60;
+    Weather.kind = rollWeather();
+  }
+  const K = Weather.kind;
+  Weather.rainTarget = K==='rain' ? 0.62 : K==='storm' ? 1.0 : 0;
+  Weather.fogBoostTarget = K==='fog' ? 0.92 : K==='rain' ? 0.34 : K==='storm' ? 0.5 : 0.06;
+  const windTarget = (K==='storm' ? 1.0 : K==='rain' ? 0.55 : K==='fog' ? 0.12 : P.windBase);
+  Weather.rain = lerp(Weather.rain, Weather.rainTarget, clamp(dt*0.12,0,1));
+  Weather.fogBoost = lerp(Weather.fogBoost, Weather.fogBoostTarget, clamp(dt*0.10,0,1));
+  Weather.wind = lerp(Weather.wind, windTarget, clamp(dt*0.20,0,1));
+  Weather.windGust = Weather.wind * (0.6 + 0.4*Math.sin(G.t*0.31) * Math.sin(G.t*0.13+1.7));
+
+  World.wind.uTime.value += dt * (0.6 + Weather.wind*2.2);
+  World.wind.uGust.value = Weather.windGust;
+
+  // lightning
+  Weather.flash = Math.max(0, Weather.flash - dt*5.5);
+  if(K === 'storm'){
+    Weather.nextStrike -= dt;
+    if(Weather.nextStrike <= 0){
+      const r = rngFor('storm', Math.floor(G.t*3));
+      Weather.nextStrike = r.range(7, 34);
+      Weather.flash = r.range(0.5, 1.0);
+      const near = r.range(0.05, 1.0);
+      Weather.lastFlash = G.t;
+      if(typeof Audio !== 'undefined' && Audio.thunder) Audio.thunder(near);
+    }
+  } else Weather.nextStrike = 4;
+
+  updateRain(dt);
+}
+
+/* Rain as a block of falling streaks that follows the camera. Cheap, and
+   the only thing that reads correctly when the beam catches it. */
+function buildRain(){
+  const N = 5200;
+  const pos = new Float32Array(N*3), spd = new Float32Array(N);
+  for(let i=0;i<N;i++){
+    pos[i*3]   = (Math.random()-0.5)*44;
+    pos[i*3+1] = Math.random()*24;
+    pos[i*3+2] = (Math.random()-0.5)*44;
+    spd[i] = 0.75 + Math.random()*0.5;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  g.setAttribute('aSpd', new THREE.BufferAttribute(spd,1));
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uOpacity:{value:0}, uSize:{value:2.0}, uColor:{value:new THREE.Color(0x9fb0c0)} },
+    vertexShader:`
+      attribute float aSpd; varying float vA;
+      uniform float uSize;
+      void main(){
+        vec4 mv = modelViewMatrix*vec4(position,1.0);
+        gl_Position = projectionMatrix*mv;
+        gl_PointSize = uSize * (14.0/max(1.0,-mv.z));
+        vA = aSpd;
+      }`,
+    fragmentShader:`
+      uniform float uOpacity; uniform vec3 uColor; varying float vA;
+      void main(){
+        vec2 c = gl_PointCoord - 0.5;
+        float a = smoothstep(0.5, 0.0, length(vec2(c.x*3.0, c.y)));
+        gl_FragColor = vec4(uColor, a*uOpacity*vA);
+      }`,
+    transparent:true, depthWrite:false, blending:THREE.NormalBlending,
+  });
+  const p = new THREE.Points(g, m);
+  p.frustumCulled = false;
+  p.layers.set(LAYER_FX);
+  scene.add(p);
+  World.rain = p;
+}
+function updateRain(dt){
+  const p = World.rain; if(!p) return;
+  p.material.uniforms.uOpacity.value = Weather.rain*0.5;
+  p.visible = Weather.rain > 0.02;
+  if(!p.visible) return;
+  const pos = p.geometry.attributes.position, spd = p.geometry.attributes.aSpd;
+  const fall = (13 + Weather.wind*10) * dt;
+  const drift = Weather.wind*3.2*dt;
+  for(let i=0;i<pos.count;i++){
+    let y = pos.getY(i) - fall*spd.getX(i);
+    let x = pos.getX(i) + drift;
+    if(y < -4){ y += 26; x = (Math.random()-0.5)*44; }
+    if(x > 22) x -= 44;
+    pos.setY(i, y); pos.setX(i, x);
+  }
+  pos.needsUpdate = true;
+  p.position.set(camera.position.x, camera.position.y, camera.position.z);
+}
+
+/* ---------------------------------------------------------------------
+   THE SKY DOME
+   A flat background colour is cheap and it is also the reason the player
+   cannot navigate: the single most reliable direction reference in the
+   game is the sun, and a sun you cannot see is not a reference. So there
+   is a dome with a real gradient, a sun disc that sits where the sun
+   actually is, and a moon on the opposite arc.
+
+   It is drawn first, with depth writing off, so it costs one full-screen
+   pass of very cheap fragments and never fights the world for depth.
+   ------------------------------------------------------------------- */
+const SkyDomeShader = {
+  uniforms: {
+    uTop:{value:new THREE.Color(0x36506e)}, uHorizon:{value:new THREE.Color(0x8ca4bc)},
+    uGround:{value:new THREE.Color(0x0b0e10)},
+    uSunDir:{value:new THREE.Vector3(0,1,0)}, uSunCol:{value:new THREE.Color(0xffe9c8)},
+    uSunSize:{value:0.006}, uSunGlow:{value:1.0},
+    uMoonDir:{value:new THREE.Vector3(0,-1,0)}, uMoonAmt:{value:0.0},
+    uStars:{value:0.0}, uHaze:{value:0.25}, uTime:{value:0},
+  },
+  vertexShader:`
+    varying vec3 vDir;
+    void main(){ vDir = normalize(position);
+      gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader: NOISE_GLSL + `
+    uniform vec3 uTop,uHorizon,uGround,uSunDir,uSunCol,uMoonDir;
+    uniform float uSunSize,uSunGlow,uMoonAmt,uStars,uHaze,uTime;
+    varying vec3 vDir;
+    void main(){
+      vec3 d = normalize(vDir);
+      float up = d.y;
+      vec3 col = mix(uHorizon, uTop, pow(clamp(up,0.0,1.0), 0.55));
+      col = mix(col, uGround, smoothstep(0.0, -0.22, up));
+      // the sun's own glow, and then its disc
+      float sd = dot(d, normalize(uSunDir));
+      col += uSunCol * pow(max(sd,0.0), 90.0) * 0.55 * uSunGlow;
+      col += uSunCol * pow(max(sd,0.0), 8.0) * 0.14 * uSunGlow;
+      float disc = smoothstep(1.0-uSunSize, 1.0-uSunSize*0.35, sd);
+      col = mix(col, uSunCol*1.9, disc*uSunGlow);
+      // the moon
+      float md = dot(d, normalize(uMoonDir));
+      float mdisc = smoothstep(0.9993, 0.99975, md);
+      col = mix(col, vec3(0.80,0.84,0.92), mdisc*uMoonAmt);
+      col += vec3(0.30,0.36,0.46) * pow(max(md,0.0), 260.0) * 0.5 * uMoonAmt;
+      // stars, only once it is genuinely dark
+      if(uStars > 0.002 && up > -0.03){
+        vec2 sp = d.xz / max(0.06, abs(d.y) + 0.12);
+        float st = hash21(floor(sp*160.0));
+        float tw = 0.65 + 0.35*sin(uTime*1.7 + st*40.0);
+        col += vec3(0.85,0.88,1.0) * smoothstep(0.9975, 1.0, st) * uStars * tw;
+      }
+      // a haze band that keeps the horizon from being a hard line
+      col = mix(col, uHorizon, smoothstep(0.16, -0.02, up)*uHaze);
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+};
+function buildSkyDome(){
+  const geo = new THREE.SphereGeometry(1, 28, 18);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.clone(SkyDomeShader.uniforms),
+    vertexShader: SkyDomeShader.vertexShader,
+    fragmentShader: SkyDomeShader.fragmentShader,
+    side: THREE.BackSide, depthWrite:false, depthTest:false, fog:false,
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.frustumCulled = false;
+  m.renderOrder = -1000;
+  m.scale.setScalar(1);
+  scene.add(m);
+  World.skyDome = m;
+  MAT.skyDome = mat;
+  scene.background = null;       // the dome is the background now
+  return m;
+}
+function updateSkyDome(){
+  const m = World.skyDome; if(!m) return;
+  m.position.copy(camera.position);
+  m.scale.setScalar(camera.far*0.55);
+  const u = MAT.skyDome.uniforms;
+  const k = skyKeyAt(G.hours);
+  const night = 1 - Sky.day;
+  const crush = lerp(0.035, 1.0, Math.pow(Sky.day, 0.75));
+  const wet = 1 - Weather.rain*0.5 - Weather.fogBoost*0.45;
+  u.uTop.value.copy(k.sky).multiplyScalar(crush*0.72*wet);
+  u.uHorizon.value.copy(k.sky).lerp(new THREE.Color(k.sun), 0.35).multiplyScalar(crush*1.05*wet);
+  u.uGround.value.copy(Sky.tintNow).multiplyScalar(0.55);
+  u.uSunDir.value.copy(Sky.sunDir);
+  u.uSunCol.value.copy(k.sun);
+  /* The sun stays visible through thin weather and is gone in thick, but
+     it is NEVER moved and never faked. Stage 3 can make a landmark appear
+     to shift; it cannot touch this. */
+  u.uSunGlow.value = clamp(Sky.sunUp*1.4, 0, 1) * (1 - Weather.fogBoost*0.85) * (1 - Weather.rain*0.7);
+  u.uMoonDir.value.set(-Sky.sunDir.x, Math.abs(Sky.sunDir.y)*0.7 + 0.25, -Sky.sunDir.z).normalize();
+  u.uMoonAmt.value = night * (1 - Weather.fogBoost*0.9) * (1 - Weather.rain*0.85);
+  u.uStars.value = Math.pow(night, 1.6) * (1 - Weather.fogBoost) * (1 - Weather.rain) * 0.9;
+  u.uHaze.value = 0.18 + Weather.fogBoost*0.55 + Weather.rain*0.25;
+  u.uTime.value = G.t;
+  if(Weather.flash > 0.001){
+    u.uTop.value.lerp(new THREE.Color(0x9fb0c6), Weather.flash*0.8);
+    u.uHorizon.value.lerp(new THREE.Color(0xb6c4d6), Weather.flash*0.8);
+  }
 }
