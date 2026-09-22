@@ -628,7 +628,9 @@ const CFG = {
 
        These are hard floors now, checked by guarantee G7 on every seed,
        and a seed that cannot meet them is rejected and generated again.
-       Only the two documented Easter-egg seeds are allowed past them. */
+       EVERY seed, including the two documented Easter eggs: the gentle
+       one used to be exempt and spawned 153m from the doors, and a rule
+       with an exception in it is a preference. */
     rimStep: 5.0,        // the biggest step allowed between cells in the
                          // outer band, which is the map's frame
     hospitalInset: 70,   // metres the hospital keeps from the playable edge
@@ -1239,11 +1241,12 @@ function seedLabel(n){ return String(n); }
    =====================================================================
    ===== EASTER EGG SEED: 8008 =====
    Description: THE CLEAR DAY. Noon, clear sky, a full battery, a
-   compass, a map fragment and a full bottle, water everywhere and the
-   hospital much closer than usual. The mind still declines and the
-   forest still lies to you, but this is the seed to hand someone who
-   has never played it, and the only one where the walk is short enough
-   to see the ending in one sitting.
+   compass, a map fragment and a full bottle, water everywhere, and a
+   mind that declines at two thirds the usual rate. The walk is the
+   shortest the wilderness rule allows and no shorter — measured, 600m
+   straight and 721m on the ground, against a 600/720 minimum. The mind
+   still declines and the forest still lies to you; this is the seed to
+   hand someone who has never played it.
    =====================================================================
    These are the only two. Every other number in range is a normal seed
    and gets no special treatment anywhere in this file: the table below
@@ -1268,7 +1271,17 @@ const EASTER_EGGS = {
     for(const k in p.flavours) p.flavours[k] = 0.35;
     p.flavours.auditory = 3.4;
   },
-  8008: Object.assign((p)=>{
+  /* THE CLEAR DAY IS AN EASY SEED, NOT A SHORT ONE.
+     This one used to carry shortWalk, which took it out of the
+     wilderness rule altogether: it spawned 153m from the hospital and
+     the run was over in two and a half minutes. But "the player must
+     never spawn near the hospital or town" was written as a rule with
+     no exceptions, and a rule with one exception is a preference. So
+     the seed keeps everything that makes it the gentle one — noon, clear
+     sky, a compass, a full bottle, food, a fresh battery, a map fragment
+     and a mind that declines slowly — and walks the same distance as
+     every other seed. */
+  8008: (p)=>{
     p.egg = 'the clear day';
     p.startHour = 12;
     p.weather = 'clear';
@@ -1277,14 +1290,14 @@ const EASTER_EGGS = {
     p.wetness = 1.35;
     p.scarcity = 1.3;
     p.foodScarcity = 1.2;
-    p.hospitalDist = 0.34;
+    p.hospitalDist = 0.42;
     p.gear.compass = true;
     p.gear.bottle = true;
     p.gear.bottleFull = 1;
     p.gear.food = 1;
     p.gear.battery = 1;
     p.gear.mapFrag = true;
-  }, { shortWalk: true }),   // the one seed allowed inside the wilderness rule
+  },
 };
 
 /* HOW MUCH A SEED IS ALLOWED TO CHANGE.
@@ -3116,7 +3129,15 @@ function cellWalkCost(i){
   if(Wld.BLOCK && Wld.BLOCK[i]) return Infinity;
   const dep = Wld.WLEV[i] > -9000 ? Wld.WLEV[i] - Wld.H[i] : 0;
   const sl = Wld.SLOPE[i];
-  if(sl > CFG.HAZARD.cliffSlope) return Infinity;      // that is a cliff
+  /* THE ROUTER REFUSES WHAT THE LEGS REFUSE. This used to stop at
+     cliffSlope (0.86) while the player starts SLIDING at slipSlope
+     (0.70) — so the route was free to run up ground the player cannot
+     stand on, and did: on seed 500 it climbed a 0.73 slope 30m short of
+     the hospital and a walker following it slid back down for half an
+     hour. Two systems disagreeing about what "walkable" means is worse
+     than either answer, so there is one number now, and it is the one
+     the body obeys. */
+  if(sl > CFG.HAZARD.slipSlope) return Infinity;       // you would slide
   /* DEEP WATER IS EXPENSIVE, NOT IMPOSSIBLE — except where it is also
      moving fast, which is the one combination that drowns people. Blocking
      all deep water outright was cutting wet maps into pieces the router
@@ -3609,6 +3630,15 @@ const PAD = {
 /* The rectangle a building actually occupies, plus standing room. The
    ruin and the car build themselves from their own seeded RNG, so these
    are their widest cases rather than their exact ones. */
+/* THE HOSPITAL'S SIZE, IN ONE PLACE.
+   It was written down three times — 26x17 in the builder, 12.6x9.2 as a
+   pad half-extent, and whatever the built mesh happened to report to the
+   router — and the three did not agree: the pad was 40cm narrower than
+   the building on each side and 70cm deeper than it needed to be, and
+   the router read the mesh, which does not exist while the world is
+   being generated. One constant, read by all three. */
+const HOSPITAL = { W: 26, D: 17, H: 3.4 };
+
 function padExtent(kind, style){
   switch(kind){
     case 'cabin':    return [style.footprint[0]*0.5 + PAD.margin,
@@ -3616,7 +3646,7 @@ function padExtent(kind, style){
     case 'ruin':     return [3.75 + PAD.margin, 3.10 + PAD.margin];
     case 'campsite': return [2.60 + PAD.margin, 2.60 + PAD.margin];
     case 'car':      return [1.25 + PAD.margin, 2.40 + PAD.margin];
-    case 'hospital': return [12.6 + PAD.margin, 9.2 + PAD.margin];
+    case 'hospital': return [HOSPITAL.W*0.5 + PAD.margin, HOSPITAL.D*0.5 + PAD.margin];
     case 'house':
     case 'shed':     return [style.footprint[0]*0.5 + PAD.margin,
                              style.footprint[1]*0.5 + PAD.margin];
@@ -3625,27 +3655,35 @@ function padExtent(kind, style){
 }
 
 /* What the ground under that rectangle is doing: its range, its mean,
-   and whether any of it is under water. */
+   and whether any of it is under water.
+
+   THIS ASKS THE SURFACE, NOT THE GRID. It used to walk the heightfield
+   cells whose centres fall inside the footprint, and a building smaller
+   than a cell contains one centre, or none — so it reported relief 0
+   and wet 0 whatever it was standing on, and the function had a branch
+   admitting as much ("smaller than one cell: sample it") that returned
+   the same two zeroes. Measured on seed 1533014: a 3.6x3.0m shed came
+   back with relief 0.00 and no water, sitting on a single four-metre
+   post of dry ground with the river 2.5m below it on three sides. Its
+   floor ended up 0.71m in the air.
+
+   The rectangle is sampled instead, at a step fine enough for the
+   smallest building in the game and never coarser than half a cell, so
+   the answer is about the ground the building covers rather than about
+   where its corners happen to fall between grid lines. */
 function padGround(cx, cz, hx, hz, yaw){
-  const N = Wld.N, H = Wld.H, cell = Wld.cell;
   const c = Math.cos(yaw), s = Math.sin(yaw);
-  const reach = Math.hypot(hx, hz) + cell;
-  const ix0 = Math.max(0, Math.floor(gxOf(cx-reach))), ix1 = Math.min(N-1, Math.ceil(gxOf(cx+reach)));
-  const iz0 = Math.max(0, Math.floor(gzOf(cz-reach))), iz1 = Math.min(N-1, Math.ceil(gzOf(cz+reach)));
+  const step = Math.min(Wld.cell*0.5, hx*0.5, hz*0.5);
+  const nx = Math.max(2, Math.ceil(hx/step)), nz = Math.max(2, Math.ceil(hz/step));
   let lo = Infinity, hi = -Infinity, sum = 0, n = 0, wet = 0;
-  for(let iz=iz0; iz<=iz1; iz++) for(let ix=ix0; ix<=ix1; ix++){
-    const dx = wxOf(ix)-cx, dz = wzOf(iz)-cz;
-    const lx = dx*c - dz*s, lz = dx*s + dz*c;
-    if(Math.abs(lx) > hx || Math.abs(lz) > hz) continue;
-    const i = iz*N+ix;
-    const h = H[i];
+  for(let jz=-nz; jz<=nz; jz++) for(let jx=-nx; jx<=nx; jx++){
+    const lx = hx*jx/nx, lz = hz*jz/nz;          // corners included
+    const x = cx + lx*c + lz*s, z = cz - lx*s + lz*c;
+    const h = heightAt(x, z);
     if(h < lo) lo = h; if(h > hi) hi = h;
     sum += h; n++;
-    if(Wld.WLEV[i] > h - 0.05) wet++;
-  }
-  if(!n){                                   // smaller than one cell: sample it
-    const h = heightAt(cx, cz);
-    return { lo:h, hi:h, mean:h, relief:0, wet:0, n:0 };
+    const wl = waterLevelAt(x, z);
+    if(wl > -9000 && wl > h - 0.05) wet++;
   }
   return { lo, hi, mean:sum/n, relief:hi-lo, wet, n };
 }
@@ -3668,7 +3706,17 @@ function carvePad(cx, cz, hx, hz, yaw, floorY, relief){
     if(Wld.WLEV[i] > H[i] - 0.05) continue;
     const dx = wxOf(ix)-cx, dz = wzOf(iz)-cz;
     const lx = dx*c - dz*s, lz = dx*s + dz*c;
-    const ox = Math.max(0, Math.abs(lx)-hx), oz = Math.max(0, Math.abs(lz)-hz);
+    /* THE FLAT CORE IS AT LEAST A CELL WIDE. Only cells whose centres
+       fall strictly inside the rectangle are set exactly to the floor,
+       and a shed is narrower than a cell — so a small building could
+       have NO cell fully levelled under it, leaving the interpolated
+       surface it actually stands on sloping across the pad. The core is
+       widened to three quarters of a cell either way, which is the
+       smallest that guarantees the cells the building overlaps are the
+       ones that get the floor. */
+    const core = Wld.cell*0.75;
+    const ox = Math.max(0, Math.abs(lx)-Math.max(hx, core));
+    const oz = Math.max(0, Math.abs(lz)-Math.max(hz, core));
     const d = Math.hypot(ox, oz);
     if(d > skirt) continue;
     const w = 1 - smoothstep(0, skirt, d);
@@ -3691,15 +3739,24 @@ function markBuildings(){
     if(!spec) return;
     const [hx, hz] = padExtent(kind, style);
     const c = Math.cos(spec.yaw||0), s2 = Math.sin(spec.yaw||0);
-    const reach = Math.hypot(hx, hz) + Wld.cell;
+    const reach = Math.hypot(hx, hz) + Wld.cell*2;
     const ix0 = Math.max(0, Math.floor(gxOf(spec.x-reach))), ix1 = Math.min(N-1, Math.ceil(gxOf(spec.x+reach)));
     const iz0 = Math.max(0, Math.floor(gzOf(spec.z-reach))), iz1 = Math.min(N-1, Math.ceil(gzOf(spec.z+reach)));
+    /* A CELL COUNTS IF THE BUILDING TOUCHES IT, not if the building
+       happens to contain its centre. Cells are four metres apart and a
+       cabin is under seven across, so a cabin whose middle falls between
+       two cell centres blocked NOTHING and the router threaded the route
+       straight through it: measured on seed 1234, the guaranteed route
+       ran through a cabin's wall 285m from the hospital and a walker
+       following it stopped there. Half a cell of slack makes the test
+       "does this building overlap this cell" instead. */
+    const slack = Wld.cell*0.5;
     for(let iz=iz0; iz<=iz1; iz++) for(let ix=ix0; ix<=ix1; ix++){
       const dx = wxOf(ix)-spec.x, dz = wzOf(iz)-spec.z;
       const lx = dx*c - dz*s2, lz = dx*s2 + dz*c;
       /* The footprint less a margin: the router should go round a house,
          not treat its garden as a wall. */
-      if(Math.abs(lx) < hx-0.6 && Math.abs(lz) < hz-0.6) B[iz*N+ix] = 1;
+      if(Math.abs(lx) < hx-0.6+slack && Math.abs(lz) < hz-0.6+slack) B[iz*N+ix] = 1;
     }
   };
   for(const st of Wld.structures) stamp(st, st.kind, st.style);
@@ -3713,9 +3770,17 @@ function markBuildings(){
      corridor is cleared from the doors down the middle of the lobby to
      the desk, which is the way in that the interior's own flood test
      says is open. */
+  /* THE MESH DOES NOT EXIST YET. This block used to be guarded on
+     h.mesh.userData.footprint, and markBuildings runs during world
+     GENERATION — the building is not constructed until the scene is
+     built, minutes of code later. So the guard was never true, not once,
+     and the hospital's footprint was never blocked at all: the router
+     was free to cross it corner to corner and did, on two of the seven
+     named seeds walking in through the back wall. The size comes from
+     the constant instead, which exists before anything is built. */
   const h = Wld.hospital;
-  if(h && h.mesh && h.mesh.userData.footprint){
-    const [HW, HD] = h.mesh.userData.footprint;
+  if(h){
+    const HW = HOSPITAL.W, HD = HOSPITAL.D;
     const c = Math.cos(h.yaw), s2 = Math.sin(h.yaw);
     const reach = Math.hypot(HW, HD)*0.5 + Wld.cell*2;
     const ix0 = Math.max(0, Math.floor(gxOf(h.x-reach))), ix1 = Math.min(N-1, Math.ceil(gxOf(h.x+reach)));
@@ -3726,8 +3791,15 @@ function markBuildings(){
       const inside = Math.abs(lx) < HW/2 && Math.abs(lz) < HD/2;
       if(!inside) continue;
       const i = iz*N+ix;
-      // the way in: a strip on the entrance axis, from the doors inward
-      B[i] = Math.abs(lx) < 2.4 ? 0 : 1;
+      /* THE WAY IN, AND ONLY THE WAY IN. The strip was cleared down the
+         whole depth of the building, which opens it at BOTH ends: the
+         router was free to come in through the back wall and go out
+         through the front, and on the seeds where that was the shorter
+         line it did. The route then ran through solid concrete, and a
+         walker following it pressed itself against the back of the
+         hospital nine metres from the middle and stayed there.
+         The doors are on the +z face. The corridor starts at them. */
+      B[i] = (Math.abs(lx) < 2.4 && lz > -0.5) ? 0 : 1;
     }
   }
   Wld.BLOCK = B;
@@ -3825,6 +3897,13 @@ function genStructures(){
         const x = wxOf(ix), z = wzOf(iz);
         let tooClose = Math.hypot(x-Wld.hospital.x, z-Wld.hospital.z) < 60;
         for(const o of out) if(Math.hypot(o.x-x, o.z-z) < S.minApart) tooClose = true;
+        /* AND THE TOWN, WHICH IS ALREADY STANDING. The spacing test only
+           looked at the wilderness structures this pass had placed, and
+           the town is built before them — so a campsite could be set
+           down 4.3m from somebody's front door, which is neither a town
+           nor a wilderness. Measured on seed 1533014. */
+        for(const t of (Wld.townBuildings || []))
+          if(Math.hypot(t.x-x, t.z-z) < S.minApart) tooClose = true;
         if(tooClose){ rej.close++; continue; }
         /* AND THE GROUND UNDER THE BUILDING ITSELF. The slope test above
            asks about a disc of terrain; this asks the only question that
@@ -4248,7 +4327,7 @@ function placeStart(relax = 0){
   const LIM = Wld.size*0.45;
   // straight inland from the hospital, then the seed's bearing off that
   const inland = Math.atan2(-hos.z, -hos.x);
-  const MIN = eggDistance() ? 0 : CFG.WORLD.minCivDist;
+  const MIN = CFG.WORLD.minCivDist;
   /* HOW FAR THE MAP EXTENDS THIS WAY. The hospital is on the rim, so half
      of the possible bearings run straight off the map and have almost no
      room in them at all. */
@@ -4366,13 +4445,6 @@ function mindMinutesBudget(){
   return 1 / rate;
 }
 
-/* Whether this seed is one of the two documented ones, which are the
-   only seeds allowed past the wilderness rule. */
-function eggDistance(){
-  const e = EASTER_EGGS[G.seedNum];
-  return !!(e && e.shortWalk);
-}
-
 const GUARANTEES = ['G1 reachable','G2 in time','G3 water','G4 food','G5 clues','G6 hazards',
                     'G7 wilderness'];
 function validateWorld(){
@@ -4400,7 +4472,9 @@ function validateWorld(){
      finger pointing at the town. */
   const straight = Math.hypot(Wld.start.x-Wld.hospital.x, Wld.start.z-Wld.hospital.z);
   res.detail.civDistance = Math.round(straight);
-  if(!eggDistance()){
+  /* NO EXCEPTIONS, INCLUDING THE TWO SPECIAL SEEDS. There used to be an
+     exemption here, and an exempted rule is not a rule. */
+  {
     const W = CFG.WORLD;
     if(straight < W.minCivDist)
       fail('G7', `start ${Math.round(straight)}m from the hospital, minimum ${W.minCivDist}m`);
@@ -6564,7 +6638,7 @@ function buildCar(spec){
    ------------------------------------------------------------------- */
 function buildHospital(spec){
   const g = new THREE.Group();
-  const W = 26, D = 17, H = 3.4;      // one honest storey, not a bunker
+  const W = HOSPITAL.W, D = HOSPITAL.D, H = HOSPITAL.H;   // one honest storey, not a bunker
   const wall = 0.34;
   const lit = [];
 
@@ -8105,6 +8179,33 @@ function updatePlayer(dt){
       const dx = p.pos.x-c.x, dz = p.pos.z-c.z;
       const rr = c.r + C.radius + 0.35;
       const d = Math.hypot(dx,dz);
+      if(d >= rr) continue;
+      const w = (rr - d)/rr;
+      ex += (d > 1e-6 ? dx/d : 1) * w;
+      ez += (d > 1e-6 ? dz/d : 0) * w;
+    }
+    /* AND THE LOGS, WHICH THIS DID NOT KNOW ABOUT. The escape vector
+       was the sum of the TREES holding the player plus downhill, and
+       fallen trunks became solid long after it was written — so a
+       player wedged between a trunk and a log was pushed away from the
+       trunk and downhill, which on a bank is straight back into the
+       log. Measured on seed 246810, four metres of the guaranteed route
+       at a log propped 0.79m clear of the ground: the net fired over
+       and over for fourteen minutes and moved the player four metres in
+       total. The same segment rule the collision uses decides which
+       logs count, so the net pushes away from exactly what is in the
+       way and not from logs the player is standing on top of. */
+    for(let li=0; li<Veg.logs.length; li++){
+      const L = Veg.logs[li];
+      if(L.y1 - p.pos.y <= C.climbLog) continue;    // it is climbed, not a wall
+      if(p.pos.y + 1.6 < L.y0) continue;            // it is above them
+      const vx = L.x1-L.x0, vz = L.z1-L.z0;
+      const len2 = vx*vx + vz*vz || 1;
+      let t = ((p.pos.x-L.x0)*vx + (p.pos.z-L.z0)*vz) / len2;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = p.pos.x - (L.x0 + vx*t), dz = p.pos.z - (L.z0 + vz*t);
+      const rr = L.r + C.radius + 0.35;
+      const d = Math.hypot(dx, dz);
       if(d >= rr) continue;
       const w = (rr - d)/rr;
       ex += (d > 1e-6 ? dx/d : 1) * w;
@@ -12223,18 +12324,58 @@ const DEV = (()=>{
        observable state; none throw. The four that navigate or take
        seconds tested separately.
 
-     THE JOURNEY, from the spawn, no teleporting, on the seven named
-     seeds: four arrive, in 5.3 to 14.2 minutes, walking 775-1198m.
-     Of the three that do not, two are the scripted walker circling a
-     building 15-68m from the doors after crossing 700m of wilderness,
-     and one dies of thirst 15m short. Stepped through cell by cell the
-     guaranteed route is traversable at 231 of 234 steps.
+     THE JOURNEY, from the spawn, no teleporting, under the game's own
+     movement, collision and survival. FOURTEEN seeds of fourteen now
+     arrive — the seven named ones, five unseen ones and both Easter
+     eggs — in 5.3 to 13.7 minutes, walking 736 to 1336m, with zero
+     frames spent stuck on any of them. The first run of this said four
+     of seven, and every one of the ten failures was one of the five
+     faults below rather than a world that could not be crossed.
+
+     WHAT THE JOURNEY FOUND, and what it cost to find
+       the route went in through the hospital's BACK WALL on two of the
+         seven named seeds, because markBuildings() guarded the whole
+         hospital on h.mesh — which does not exist during generation, so
+         that branch had never once run. 32 of the 35 cells under the
+         building are blocked now, the three open ones being the way in
+         from the doors. Over 25 seeds and 5,885 route cells: hospital
+         cells off the door axis 40 -> 0.
+       a building could stand ON the route without blocking a single
+         cell, because the stamp asked whether a cell CENTRE fell inside
+         the footprint and a cabin is under seven metres across on a
+         four-metre grid. Route cells inside a building, same 25 seeds:
+         1 -> 0.
+       the route climbed ground the player slides down: the router
+         refused at cliffSlope 0.86 and the legs give way at slipSlope
+         0.70. One number now. All fifteen multi-seed worlds still pass
+         every guarantee with the stricter rule.
+       the last-resort unstuck push knew about trees and not about logs,
+         which became solid long after it was written — so a player
+         wedged between a trunk and a log was pushed downhill into the
+         log. Fourteen minutes and four metres, measured, on seed
+         246810.
+       padGround() measured the heightfield cells whose centres fall
+         inside a footprint, so a shed — smaller than one cell — always
+         reported relief 0.00 and no water whatever it stood on. It
+         samples the surface now. Over 552 buildings on 30 seeds:
+         floating 1 -> 0, footprints with water on them 12 -> 1, worst
+         floor-above-ground 3.52m -> 0.12m, worst relief under a
+         building 17.12m -> 1.69m, 95th percentile 2.49m -> 0.94m.
+
+     WALKING THE CORRIDOR WITH NO SIDESTEP AT ALL — the route followed
+     cell by cell, nothing else allowed — reaches the last cell on all
+     fourteen seeds, 2,819 cells in total, with 12 places where a trunk,
+     a boulder or a log stands in the way and has to be walked round.
+
+     THE WILDERNESS RULE NOW HAS NO EXCEPTIONS. The gentle Easter egg
+     used to be exempt and spawned 153m from the doors; it walks 600m
+     straight and 721m on the ground like everything else.
 
      COST
-       simulation 0.08ms a frame in the wilderness, 0.10ms in the town
-       522 draw calls and 408k triangles at the spawn, 217 and 468k in
+       simulation 0.10ms a frame in the wilderness, 0.18ms in the town
+       522 draw calls and 408k triangles at the spawn, 218 and 468k in
          the town; 3,519 instances across 15 instanced meshes
-       a full vegetation refill after a 120m jump: 3.8ms
+       a full vegetation refill after a 120m jump: 2.2ms
      ================================================================= */
   D.frame = frame;
   D.runAudit = runAudit;
