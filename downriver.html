@@ -351,6 +351,7 @@ button:active{ transform:translateY(1px); }
      ===== DIRECTOR =====        the probabilistic event scheduler
      ===== EVENTS =====          every hallucination and atmospheric beat
      ===== UI =====              HUD binding, prompts, map drawing
+     ===== COLLISION VIEW ===== drawing what the collision system believes
      ===== DEV =====             the developer panel and seed validator
      ===== GAME LOOP =====       fixed-step update + render
      ===== BOOT =====            start screen, loading, launch
@@ -3578,6 +3579,9 @@ function validateWorld(){
    says so in the dev panel rather than pretending it never happened.
    ------------------------------------------------------------------- */
 function generateWorld(onProgress){
+  /* Anything holding a reference into the world being replaced has to
+     let go of it here, before the arrays underneath it change. */
+  if(typeof CollisionView !== 'undefined') CollisionView.reset();
   const t0 = performance.now();
   let attempt = 0, result = null;
   const log = [];
@@ -4888,6 +4892,9 @@ function addBox(parent, w, h, d, mat, x, y, z, rotY){
 const _obbPos = new THREE.Vector3(), _obbQuat = new THREE.Quaternion(),
       _obbScale = new THREE.Vector3(), _obbEuler = new THREE.Euler();
 const _obbCorner = new THREE.Vector3();
+/* The mesh's eight transformed corners, kept after the fit so the
+   slicer below can cut the same solid the box was fitted to. */
+const _obbPts = (()=>{ const a=[]; for(let i=0;i<8;i++) a.push({x:0,y:0,z:0,u:0,v:0}); return a; })();
 /* Candidate orientations to fit a box at. Sixteen is a rotating-calipers
    sweep coarse enough to be free and fine enough that the worst case is
    about 2% of slack on the footprint. */
@@ -4918,6 +4925,8 @@ function fitOBB(mesh, out){
     _obbCorner.set(i&1 ? lb.max.x : lb.min.x,
                    i&2 ? lb.max.y : lb.min.y,
                    i&4 ? lb.max.z : lb.min.z).applyMatrix4(m);
+    const pt = _obbPts[i];
+    pt.x = _obbCorner.x; pt.y = _obbCorner.y; pt.z = _obbCorner.z;
     xs.push(_obbCorner.x); zs.push(_obbCorner.z);
     if(_obbCorner.y < y0) y0 = _obbCorner.y;
     if(_obbCorner.y > y1) y1 = _obbCorner.y;
@@ -4948,21 +4957,147 @@ function fitOBB(mesh, out){
   return out;
 }
 
+/* ---------------------------------------------------------------------
+   A SLOPED SLAB IS NOT A BOX
+
+   One oriented box per mesh is right for a wall and wrong for a roof.
+   A roof is a slab lying at an angle, and the box around it runs from
+   the bottom of the eave to the top of the ridge — so the whole wedge
+   of air under the slope, including everything under the overhang, is
+   solid. It does not show up when you stand on the building's own floor,
+   because the box is then over your head and the height filter in
+   resolveCollisions() skips it. It shows up the moment the ground
+   outside is higher than the floor, which on sloping terrain it usually
+   is: measured on one seed, the ground six metres from a cabin's door
+   stood 1.89m above its floorboards, which put the roof box straight
+   through the player's chest.
+
+   So a mesh whose box is tall and whose top MOVES across that box is cut
+   into slices along the direction it moves in, each slice keeping its own
+   vertical range. Six slices turn a roof into a staircase that follows
+   the underside of the slope: solid where the roof is, open where the
+   air is.
+
+   The cut is exact rather than sampled. The mesh's eight transformed
+   corners bound a convex solid, so the highest and lowest points within
+   any slab of it lie on one of its twelve edges — clipping those edges
+   to the slab gives the true range, with no vertices invented and none
+   missed.
+
+   A wall is not sliced: its top does not move, the test says so, and it
+   stays one box. Slicing everything would multiply the collider count
+   for nothing.
+   ------------------------------------------------------------------- */
+const SLICE_MIN_HEIGHT = 0.70;   // shorter than this and there is no wedge to open
+const SLICE_MIN_DROP   = 0.35;   // the top has to move this far to be worth cutting
+const SLICE_MAX        = 6;
+/* the twelve edges of a box, as pairs of corner indices */
+const BOX_EDGES = (()=>{
+  const e = [];
+  for(let i=0;i<8;i++) for(const bit of [1,2,4]) if(!(i & bit)) e.push([i, i|bit]);
+  return e;
+})();
+
+/* Cut the fitted box into slices along one of its own axes, and return
+   them only if the top actually moves. `axis` is 0 for the box's u axis
+   and 1 for its v. */
+function sliceAlong(b, axis){
+  const lo = axis ? b.vLo : b.uLo, hi = axis ? b.vHi : b.uHi;
+  const span = hi - lo;
+  if(span < 0.8) return null;
+  const n = Math.max(2, Math.min(SLICE_MAX, Math.round(span / 0.9)));
+  const out = [];
+  let topLo = Infinity, topHi = -Infinity, botLo = Infinity, botHi = -Infinity;
+  for(let s=0; s<n; s++){
+    const a0 = lo + span*s/n, a1 = lo + span*(s+1)/n;
+    let y0 = Infinity, y1 = -Infinity, o0 = Infinity, o1 = -Infinity,
+        p0 = Infinity, p1 = -Infinity;          // the slice's own extent on both axes
+    const take = (aVal, oVal, yVal)=>{
+      if(yVal < y0) y0 = yVal; if(yVal > y1) y1 = yVal;
+      if(oVal < o0) o0 = oVal; if(oVal > o1) o1 = oVal;
+      if(aVal < p0) p0 = aVal; if(aVal > p1) p1 = aVal;
+    };
+    for(const [i, j] of BOX_EDGES){
+      const A = _obbPts[i], B = _obbPts[j];
+      const aA = axis ? A.v : A.u, aB = axis ? B.v : B.u;
+      const oA = axis ? A.u : A.v, oB = axis ? B.u : B.v;
+      // the part of this edge that lies inside the slab
+      let t0 = 0, t1 = 1;
+      const d = aB - aA;
+      if(Math.abs(d) < 1e-9){
+        if(aA < a0 - 1e-9 || aA > a1 + 1e-9) continue;
+      } else {
+        let lo2 = (a0 - aA)/d, hi2 = (a1 - aA)/d;
+        if(lo2 > hi2){ const t = lo2; lo2 = hi2; hi2 = t; }
+        t0 = Math.max(t0, lo2); t1 = Math.min(t1, hi2);
+        if(t0 > t1) continue;
+      }
+      for(const t of [t0, t1])
+        take(aA + (aB-aA)*t, oA + (oB-oA)*t, A.y + (B.y-A.y)*t);
+    }
+    if(y0 === Infinity) continue;
+    if(y0 < botLo) botLo = y0; if(y0 > botHi) botHi = y0;
+    if(y1 < topLo) topLo = y1; if(y1 > topHi) topHi = y1;
+    const cu = axis ? (o0+o1)*0.5 : (p0+p1)*0.5;
+    const cv = axis ? (p0+p1)*0.5 : (o0+o1)*0.5;
+    const hu = axis ? (o1-o0)*0.5 : (p1-p0)*0.5;
+    const hv = axis ? (p1-p0)*0.5 : (o1-o0)*0.5;
+    out.push({ cx: cu*b.cos + cv*b.sin, cz: -cu*b.sin + cv*b.cos,
+               hx: hu, hz: hv, cos: b.cos, sin: b.sin, y0, y1 });
+  }
+  if(out.length < 2) return null;
+  const moved = Math.max(topHi - topLo, botHi - botLo);
+  return moved > SLICE_MIN_DROP ? out : null;
+}
+
+/* Every collider a single mesh contributes: one box, or the slices of a
+   sloped one. */
+function fitSolids(mesh){
+  const b = fitOBB(mesh, {});
+  if(b.y1 - b.y0 < SLICE_MIN_HEIGHT || Math.max(b.hx, b.hz) < 0.6) return [b];
+  // the corners, in the fitted box's own frame
+  for(let i=0;i<8;i++){
+    const c = _obbPts[i];
+    c.u =  c.x*b.cos - c.z*b.sin;
+    c.v =  c.x*b.sin + c.z*b.cos;
+  }
+  let uLo=Infinity, uHi=-Infinity, vLo=Infinity, vHi=-Infinity;
+  for(const c of _obbPts){
+    if(c.u<uLo) uLo=c.u; if(c.u>uHi) uHi=c.u;
+    if(c.v<vLo) vLo=c.v; if(c.v>vHi) vHi=c.v;
+  }
+  b.uLo=uLo; b.uHi=uHi; b.vLo=vLo; b.vHi=vHi;
+  const a = sliceAlong(b, 0), c2 = sliceAlong(b, 1);
+  // whichever direction the slab actually falls in
+  const drop = (list)=>{ if(!list) return 0;
+    let lo=Infinity, hi=-Infinity;
+    for(const s of list){ if(s.y1<lo) lo=s.y1; if(s.y1>hi) hi=s.y1; }
+    return hi-lo; };
+  const pick = drop(a) >= drop(c2) ? a : c2;
+  return pick || [b];
+}
+
 function structSolids(spec, group){
   const out = [];
   group.updateMatrixWorld(true);
   const baseY = spec.y || 0;
   group.traverse(o=>{
     if(!o.isMesh || o.userData.noclip) return;
-    const b = fitOBB(o, {});
-    /* WALL OR FLOOR is decided by how high the box's TOP stands above the
-       building's own base, not by how thick the box is. Using thickness
-       tagged a 34cm gable step two and a half metres up as a "floor" you
-       could walk through, and would have done the same to any thin panel
-       anywhere on a wall. */
-    b.kind = (b.y1 - baseY) > CFG.PLAYER.stepUp ? 'wall' : 'floor';
-    b.tag = o.userData.collide || null;
-    out.push(b);
+    for(const b of fitSolids(o)){
+      /* WALL OR FLOOR is decided by how high the box's TOP stands above
+         the building's own base, not by how thick the box is. Using
+         thickness tagged a 34cm gable step two and a half metres up as a
+         "floor" you could walk through, and would have done the same to
+         any thin panel anywhere on a wall. */
+      b.kind = (b.y1 - baseY) > CFG.PLAYER.stepUp ? 'wall' : 'floor';
+      b.tag = o.userData.collide || null;
+      /* Which mesh a box came from, because a mesh no longer owns
+         exactly one box and a swinging door has to be able to find and
+         replace its own. */
+      b.src = o;
+      b.isDoor = (o === group.userData.door);
+      out.push(b);
+    }
   });
   return out;
 }
@@ -5337,23 +5472,30 @@ const Doors = {
   register(spec, group){
     const leaf = group.userData.door;
     if(!leaf || !spec.solids) return;
-    // which collider is the leaf's? the one fitted from this mesh
-    let idx = -1, k = 0;
-    group.traverse(o=>{ if(o.isMesh && !o.userData.noclip){ if(o === leaf) idx = k; k++; } });
-    if(idx < 0) return;
+    if(!spec.solids.some(b=>b.src === leaf)) return;
     this.list.push({
-      spec, leaf, idx,
+      spec, leaf,
       open: group.userData.doorOpen || 0,
       target: group.userData.doorOpen || 0,
       x: spec.x, z: spec.z,
     });
   },
+  /* The leaf's colliders are thrown away and refitted from the mesh in
+     its new position, rather than edited in place, because a door is the
+     one collider in the building that moves and the only correct source
+     for where it is now is the mesh itself. */
   refit(d){
     d.leaf.rotation.y = -d.open;
     d.leaf.updateMatrixWorld(true);
-    const b = fitOBB(d.leaf, {});
-    b.kind = (b.y1 - (d.spec.y||0)) > CFG.PLAYER.stepUp ? 'wall' : 'floor';
-    d.spec.solids[d.idx] = b;
+    const baseY = d.spec.y || 0;
+    const fresh = fitSolids(d.leaf);
+    for(const b of fresh){
+      b.kind = (b.y1 - baseY) > CFG.PLAYER.stepUp ? 'wall' : 'floor';
+      b.tag = d.leaf.userData.collide || null;
+      b.src = d.leaf;
+      b.isDoor = true;
+    }
+    d.spec.solids = d.spec.solids.filter(b=>b.src !== d.leaf).concat(fresh);
     registerColliders();
   },
   toggle(d){
@@ -5385,6 +5527,9 @@ const Doors = {
 };
 
 function buildAllStructures(){
+  /* Every collider the view is holding belongs to the world being
+     replaced, so it goes off before they are thrown away. */
+  if(typeof CollisionView !== 'undefined') CollisionView.reset();
   Doors.clear();
   for(const s of Wld.structures){ buildStructure(s); }
   for(const s of Wld.structures) if(s.mesh) Doors.register(s, s.mesh);
@@ -8783,6 +8928,340 @@ const DEATH_LINES = {
 };
 
 /* =====================================================================
+   ===== COLLISION VIEW =====
+   What the collision system actually believes is there, drawn on top of
+   what the renderer drew. The two disagreeing is the entire class of bug
+   the player experiences as an invisible wall, so the only way to argue
+   about one is to be able to see both at once.
+
+   Every shape here is read from the live collision data — the same
+   STRUCT_COLLIDERS the resolver iterates, the same Veg.colliders, the
+   same heightAt() the terrain probe calls. Nothing is recomputed for
+   display, because a display that recomputes is a second implementation
+   that can be right while the first one is wrong.
+
+   THE GRAMMAR, and it is deliberate:
+     SOLID LINES  are physical. If a line is there, the resolver will
+                  push you out of it.
+     DASHED LINES are triggers. They never move you; they only decide
+                  whether a prompt appears. They are drawn without depth
+                  testing, so they show through walls the way a trigger
+                  volume does.
+
+   It is OFF by default, it can only be switched on from the dev panel,
+   it turns itself off whenever a new world is generated, and while it is
+   on there is a badge in the corner of the screen saying so — so it can
+   never be mistaken for the game.
+   ===================================================================== */
+const CollisionView = (()=>{
+  const V = {
+    on: false,
+    show: { player:true, terrain:true, structures:true, objects:true, triggers:true },
+    counts: { walls:0, floors:0, doors:0, idle:0, objects:0, cells:0, triggers:0 },
+    range: 26,        // metres of structures and objects drawn around you
+    grid: 13,         // metres of terrain sampled around you
+    cell: 0.8,        // terrain sample spacing
+  };
+  const C = {
+    body:    [1.00, 1.00, 1.00],
+    stepUp:  [0.40, 1.00, 0.50],
+    head:    [0.35, 0.55, 1.00],
+    probe:   [1.00, 0.95, 0.30],
+    wall:    [1.00, 0.28, 0.20],
+    floor:   [0.28, 0.62, 1.00],
+    door:    [1.00, 0.80, 0.18],
+    /* A box the resolver is not currently testing, because it is over
+       your head or under your feet. It is still there, and it will act
+       the moment you stand somewhere else, so it is drawn — dimly. A
+       roof you can walk under has to look different from a wall you
+       cannot walk through, or the view teaches you the wrong thing. */
+    idle:    [0.34, 0.16, 0.14],
+    idleF:   [0.13, 0.22, 0.34],
+    idleD:   [0.34, 0.28, 0.10],
+    object:  [0.32, 0.95, 0.42],
+    blocked: [1.00, 0.22, 0.62],
+    steep:   [1.00, 0.60, 0.12],
+    wade:    [0.18, 0.85, 0.85],
+    swim:    [0.16, 0.40, 1.00],
+    trig:    [0.20, 1.00, 0.80],
+    active:  [1.00, 1.00, 0.40],
+  };
+
+  let root = null, solidObj = null, trigObj = null, badge = null;
+  let refreshT = 0;
+
+  /* ---- the two buckets. Solid lines and dashed lines are different
+     objects because they need different materials, and the material is
+     the thing that carries the meaning. ---- */
+  const SP = [], SC = [], TP = [], TC = [];
+
+  function seg(P, K, x0,y0,z0, x1,y1,z1, col){
+    P.push(x0,y0,z0, x1,y1,z1);
+    K.push(col[0],col[1],col[2], col[0],col[1],col[2]);
+  }
+  /* A dashed segment, built out of gaps rather than out of a dashed
+     material, so it needs no line distances and no second shader. */
+  function dseg(x0,y0,z0, x1,y1,z1, col, dashLen){
+    const dx = x1-x0, dy = y1-y0, dz = z1-z0;
+    const len = Math.hypot(dx,dy,dz);
+    if(len < 1e-5) return;
+    const dl = dashLen || 0.22;
+    const n = Math.max(1, Math.round(len/(dl*2)));
+    for(let i=0;i<n;i++){
+      const a = i/n, b = (i+0.5)/n;
+      seg(TP, TC, x0+dx*a, y0+dy*a, z0+dz*a, x0+dx*b, y0+dy*b, z0+dz*b, col);
+    }
+  }
+  function circle(cx, cy, cz, r, col, n, dashed){
+    n = n || 20;
+    for(let i=0;i<n;i++){
+      const a0 = i/n*TAU, a1 = (i+1)/n*TAU;
+      const x0 = cx+Math.cos(a0)*r, z0 = cz+Math.sin(a0)*r;
+      const x1 = cx+Math.cos(a1)*r, z1 = cz+Math.sin(a1)*r;
+      if(dashed){ if(i%2===0) seg(TP, TC, x0,cy,z0, x1,cy,z1, col); }
+      else seg(SP, SC, x0,cy,z0, x1,cy,z1, col);
+    }
+  }
+  /* An oriented box, drawn from the very fields the resolver reads:
+     centre, half extents, the box's own cos/sin, and its y span. */
+  function obb(b, col){
+    const c = b.cos, s = b.sin;
+    // local -> world for this box's frame (the inverse of the resolver's)
+    const X = (lx,lz)=> b.cx + lx*c + lz*s;
+    const Z = (lx,lz)=> b.cz - lx*s + lz*c;
+    const cor = [[-b.hx,-b.hz],[b.hx,-b.hz],[b.hx,b.hz],[-b.hx,b.hz]];
+    for(let i=0;i<4;i++){
+      const [ax,az] = cor[i], [bx,bz] = cor[(i+1)%4];
+      const x0 = X(ax,az), z0 = Z(ax,az), x1 = X(bx,bz), z1 = Z(bx,bz);
+      seg(SP, SC, x0,b.y0,z0, x1,b.y0,z1, col);
+      seg(SP, SC, x0,b.y1,z0, x1,b.y1,z1, col);
+      seg(SP, SC, x0,b.y0,z0, x0,b.y1,z0, col);
+    }
+  }
+
+  /* ---- what the resolver would do at the player's own position ---- */
+  function drawPlayer(){
+    const p = Player.pos, R = CFG.PLAYER.radius;
+    /* Three heights, because three heights are what the wall filter in
+       resolveCollisions() actually tests: your feet, the step you get
+       for free, and the height above which a box is over your head. */
+    circle(p.x, p.y + 0.02, p.z, R, C.body, 24, false);
+    circle(p.x, p.y + CFG.PLAYER.stepUp, p.z, R, C.stepUp, 24, false);
+    circle(p.x, p.y + 1.75, p.z, R, C.head, 24, false);
+    /* No ring at eye height: it sits on the camera, so it projects as a
+       line straight across the middle of the screen and says nothing the
+       other three do not. */
+    for(let i=0;i<4;i++){
+      const a = i/4*TAU + Math.PI/4;
+      const x = p.x+Math.cos(a)*R, z = p.z+Math.sin(a)*R;
+      seg(SP, SC, x, p.y+0.02, z, x, p.y+CFG.PLAYER.eye, z, C.body);
+    }
+    // the point terrainBlocks() samples: a body radius plus 20cm ahead
+    const fx = -Math.sin(Player.yaw), fz = -Math.cos(Player.yaw);
+    const pr = R + 0.20;
+    const px = p.x+fx*pr, pz = p.z+fz*pr;
+    const ph = heightAt(px, pz);
+    const refused = ph - p.y > CFG.PLAYER.stepUp;
+    const col = refused ? C.blocked : C.probe;
+    seg(SP, SC, p.x, p.y+0.05, p.z, px, ph+0.05, pz, col);
+    seg(SP, SC, px, ph, pz, px, ph+0.7, pz, col);
+  }
+
+  /* ---- the ground, classified by the rules movement uses ---- */
+  function drawTerrain(){
+    const p = Player.pos, g = V.grid, st = V.cell;
+    const su = CFG.PLAYER.stepUp;
+    let n = 0;
+    for(let dz=-g; dz<=g; dz+=st) for(let dx=-g; dx<=g; dx+=st){
+      const x = p.x+dx, z = p.z+dz;
+      if(dx*dx+dz*dz > g*g) continue;
+      const h = heightAt(x, z);
+      const dep = waterDepthAt(x, z);
+      let col = null;
+      if(dep > CFG.PLAYER.swimDepth)      col = C.swim;
+      else if(dep > 0.12)                 col = C.wade;
+      else if(h - p.y > su)               col = C.blocked;
+      else if(slopeAt(x, z) > 0.62)       col = C.steep;
+      if(!col) continue;                  // plain walkable ground is left alone
+      n++;
+      const y = (col === C.swim || col === C.wade) ? h + dep + 0.02 : h + 0.04;
+      const r = st*0.42;
+      seg(SP, SC, x-r, y, z-r, x+r, y, z-r, col);
+      seg(SP, SC, x+r, y, z-r, x+r, y, z+r, col);
+      seg(SP, SC, x+r, y, z+r, x-r, y, z+r, col);
+      seg(SP, SC, x-r, y, z+r, x-r, y, z-r, col);
+    }
+    V.counts.cells = n;
+  }
+
+  /* ---- buildings, and the doors inside them ---- */
+  function drawStructures(){
+    const p = Player.pos, far = V.range;
+    let walls = 0, floors = 0, doors = 0, idle = 0;
+    for(const st of STRUCT_COLLIDERS){
+      if(Math.abs(st.x-p.x) > far+st.reach || Math.abs(st.z-p.z) > far+st.reach) continue;
+      for(const b of st.solids){
+        if(Math.abs(b.cx-p.x) > far || Math.abs(b.cz-p.z) > far) continue;
+        /* The exact height filter from resolveCollisions(). A box that
+           fails it cannot push you where you are standing now. */
+        const live = b.y1 > p.y + CFG.PLAYER.stepUp
+                  && b.y0 <= p.y + 1.75
+                  && b.y1 >= p.y - 0.4;
+        if(b.isDoor){ obb(b, live ? C.door : C.idleD); doors++; continue; }
+        if(b.kind === 'wall'){ obb(b, live ? C.wall : C.idle); if(live) walls++; else idle++; }
+        else { obb(b, C.floor); floors++; }
+      }
+    }
+    V.counts.walls = walls; V.counts.floors = floors;
+    V.counts.doors = doors; V.counts.idle = idle;
+  }
+
+  /* ---- trunks and rocks: circles, because that is what they are ---- */
+  function drawObjects(){
+    const p = Player.pos, far = V.range;
+    let n = 0;
+    for(const c of Veg.colliders){
+      if(Math.abs(c.x-p.x) > far || Math.abs(c.z-p.z) > far) continue;
+      n++;
+      const base = heightAt(c.x, c.z);
+      circle(c.x, base+0.05, c.z, c.r, C.object, 12, false);
+      circle(c.x, base+1.90, c.z, c.r, C.object, 12, false);
+      for(let i=0;i<4;i++){
+        const a = i/4*TAU;
+        const x = c.x+Math.cos(a)*c.r, z = c.z+Math.sin(a)*c.r;
+        seg(SP, SC, x, base+0.05, z, x, base+1.90, z, C.object);
+      }
+    }
+    V.counts.objects = n;
+  }
+
+  /* ---- and the things that only watch ---- */
+  function drawTriggers(){
+    const p = Player.pos, far = 34;
+    let n = 0;
+    const act = hoverTarget;
+    const mark = (x, y, z, r, kind, label)=>{
+      n++;
+      const col = (act && act.kind === kind) ? C.active : C.trig;
+      circle(x, y+0.06, z, r, col, 22, true);
+    };
+    // your own reach, and the arc you have to be facing inside it
+    circle(p.x, p.y+0.06, p.z, REACH, C.trig, 28, true);
+    const fa = Math.acos(0.35);                     // the facing test in pickTarget()
+    for(const s of [-1, 1]){
+      const a = Player.yaw + Math.PI + s*fa;        // yaw 0 looks down -Z
+      dseg(p.x, p.y+0.06, p.z,
+           p.x - Math.sin(a)*REACH, p.y+0.06, p.z - Math.cos(a)*REACH, C.trig, 0.3);
+    }
+    // the four forward samples the drink test takes
+    const fx = -Math.sin(Player.yaw), fz = -Math.cos(Player.yaw);
+    for(let step=0.6; step<=2.4; step+=0.6){
+      const wx = p.x+fx*step, wz = p.z+fz*step;
+      const dep = waterDepthAt(wx, wz);
+      const col = (dep >= 0.08 && dep <= 2.4) ? C.active : C.trig;
+      const h = heightAt(wx, wz) + Math.max(dep, 0) + 0.05;
+      dseg(wx-0.18, h, wz, wx+0.18, h, wz, col, 0.09);
+      dseg(wx, h, wz-0.18, wx, h, wz+0.18, col, 0.09);
+      n++;
+    }
+    for(const b of Wld.berries){
+      if(b.left <= 0 || Math.abs(b.x-p.x) > far || Math.abs(b.z-p.z) > far) continue;
+      mark(b.x, heightAt(b.x,b.z), b.z, REACH, 'berry');
+    }
+    for(const it of Wld.items){
+      if(it.taken || Math.abs(it.x-p.x) > far || Math.abs(it.z-p.z) > far) continue;
+      mark(it.x, heightAt(it.x,it.z), it.z, REACH, 'item');
+    }
+    for(const st of Wld.structures){
+      if(Math.abs(st.x-p.x) > far || Math.abs(st.z-p.z) > far) continue;
+      mark(st.x, st.y, st.z, 6.5, 'search');        // look around
+      mark(st.x, st.y, st.z, 4.5, 'rest');          // sit down
+    }
+    for(const d of Doors.list){
+      if(Math.abs(d.x-p.x) > far || Math.abs(d.z-p.z) > far) continue;
+      const D = d.spec.style.footprint[1];
+      const wx = d.spec.x + Math.sin(d.spec.yaw)*(D/2 + 0.5);
+      const wz = d.spec.z + Math.cos(d.spec.yaw)*(D/2 + 0.5);
+      mark(wx, d.spec.y, wz, 3.4, 'door');
+    }
+    const h = Wld.hospital;
+    if(h && h.entryWorld && Math.abs(h.entryWorld.x-p.x) < far*2 && Math.abs(h.entryWorld.z-p.z) < far*2)
+      mark(h.entryWorld.x, h.entryWorld.y, h.entryWorld.z, REACH, 'hospital');
+    V.counts.triggers = n;
+  }
+
+  function ensure(){
+    if(root) return;
+    root = new THREE.Group();
+    root.frustumCulled = false;
+    const solidMat = new THREE.LineBasicMaterial({ vertexColors:true, fog:false,
+      transparent:true, opacity:0.95, depthTest:true, depthWrite:false });
+    /* Triggers ignore depth on purpose: a trigger volume does not stop
+       light and it does not stop you, so hiding it behind a wall would
+       misrepresent it. */
+    const trigMat = new THREE.LineBasicMaterial({ vertexColors:true, fog:false,
+      transparent:true, opacity:0.75, depthTest:false, depthWrite:false });
+    solidObj = new THREE.LineSegments(new THREE.BufferGeometry(), solidMat);
+    trigObj  = new THREE.LineSegments(new THREE.BufferGeometry(), trigMat);
+    solidObj.frustumCulled = false; trigObj.frustumCulled = false;
+    trigObj.renderOrder = 9001;
+    solidObj.renderOrder = 9000;
+    root.add(solidObj); root.add(trigObj);
+    badge = document.createElement('div');
+    badge.id = 'colbadge';
+    badge.textContent = 'COLLISION DEBUG VIEW';
+    badge.style.cssText = 'position:fixed;left:50%;top:8px;transform:translateX(-50%);'
+      + 'z-index:60;font:11px/1.4 ui-monospace,monospace;letter-spacing:.14em;'
+      + 'color:#0ff;background:rgba(0,0,0,.55);border:1px solid rgba(0,255,255,.45);'
+      + 'padding:3px 10px;pointer-events:none;display:none;';
+    document.body.appendChild(badge);
+  }
+
+  function rebuild(){
+    SP.length = 0; SC.length = 0; TP.length = 0; TC.length = 0;
+    if(V.show.player)     drawPlayer();
+    if(V.show.terrain)    drawTerrain();
+    if(V.show.structures) drawStructures();
+    if(V.show.objects)    drawObjects();
+    if(V.show.triggers)   drawTriggers();
+    const put = (obj, P, K)=>{
+      const g = obj.geometry;
+      g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+      g.setAttribute('color',    new THREE.Float32BufferAttribute(K, 3));
+      g.computeBoundingSphere();
+    };
+    put(solidObj, SP, SC);
+    put(trigObj,  TP, TC);
+  }
+
+  V.set = (on)=>{
+    ensure();
+    V.on = !!on;
+    if(V.on){ if(!root.parent) scene.add(root); rebuild(); }
+    else if(root.parent) scene.remove(root);
+    badge.style.display = V.on ? 'block' : 'none';
+    return V.on;
+  };
+  V.toggle = ()=> V.set(!V.on);
+  /* A new world means every collider in here is a dangling reference to
+     the old one, so the view goes off with it rather than drawing a
+     world that no longer exists. */
+  V.reset = ()=>{ if(V.on) V.set(false); };
+  V.frame = (dt)=>{
+    if(!V.on) return;
+    refreshT += dt;
+    if(refreshT < 0.1) return;
+    refreshT = 0;
+    rebuild();
+  };
+  V.summary = ()=> V.on
+    ? `walls ${V.counts.walls} (+${V.counts.idle} out of band) floors ${V.counts.floors} doors ${V.counts.doors} `
+      + `objects ${V.counts.objects} cells ${V.counts.cells} triggers ${V.counts.triggers}`
+    : 'off';
+  return V;
+})();
+
+/* =====================================================================
    ===== DEV =====
    The panel exists so that none of the claims in this file have to be
    taken on trust. Every number the design notes quote can be reproduced
@@ -8970,6 +9449,40 @@ const DEV = (()=>{
         + cats.map(c=>`  ${c.padEnd(13)} ${Audio.bankFor(c).length}`).join('\n'));
     });
 
+    /* ---- collision view ----
+       The panel is the only way in, and the toggle names what it draws
+       rather than what it is called, because "debug draw" tells you
+       nothing about whether the red box round the door is supposed to
+       be there. */
+    const s6b = section('collision view  (solid = solid, dashed = trigger)');
+    const g6b = el('div','grid'); s6b.appendChild(g6b);
+    const cvBtn = el('button', null, 'COLLISION VIEW: off');
+    cvBtn.onclick = (e)=>{ e.preventDefault();
+      cvBtn.textContent = 'COLLISION VIEW: ' + (CollisionView.toggle() ? 'ON' : 'off'); };
+    g6b.appendChild(cvBtn);
+    D._syncCV = ()=>{ cvBtn.textContent = 'COLLISION VIEW: ' + (CollisionView.on ? 'ON' : 'off'); };
+    const g6c = el('div','grid three'); s6b.appendChild(g6c);
+    for(const k of ['player','terrain','structures','objects','triggers']){
+      const b = el('button', null, k);
+      const paintBtn = ()=> b.style.opacity = CollisionView.show[k] ? '1' : '0.4';
+      b.onclick = (e)=>{ e.preventDefault();
+        CollisionView.show[k] = !CollisionView.show[k]; paintBtn(); };
+      paintBtn();
+      g6c.appendChild(b);
+    }
+    s6b.appendChild(el('div', null,
+      'white: the body, and the two heights the wall test uses — the '
+      + 'step you get free, and the height a box has to reach to be over '
+      + 'your head.   red: building walls.   blue: surfaces you can stand '
+      + 'on.   dark red: a box that is there but cannot touch you at the '
+      + 'height you are standing — a roof you walk under.   yellow: '
+      + 'door leaves, refitted as they swing.   green: '
+      + 'trunks and rocks.   pink: ground more than stepUp above your '
+      + 'feet.   orange: steep.   teal/blue squares: wade/swim depth.   '
+      + 'Dashed cyan volumes are interaction triggers: they never push '
+      + 'you, so they draw through walls. The one you are actually '
+      + 'looking at turns yellow.'));
+
     const s7 = section('notes');
     s7.appendChild(el('div', null,
       'Phantoms are on their own render layer. Collision, interaction and '
@@ -9091,13 +9604,18 @@ const DEV = (()=>{
       + `world      guarantees ${Wld.validation.pass ? 'ALL PASS' : 'FAIL ' + Wld.validation.fail.join(',')}\n`
       + `           attempts ${Wld.stats.attempts} cliff ${(Wld.stats.cliffFracFinal*100||0).toFixed(0)}% pond ${((Wld.stats.pondCells/(Wld.N*Wld.N))*100).toFixed(0)}%\n`
       + `veg        ${JSON.stringify(Veg.counts)}\n`
-      + `audio      ${Audio.recipeCount} recipes  ${Audio.ready?'ready':'off'}`;
+      + `audio      ${Audio.recipeCount} recipes  ${Audio.ready?'ready':'off'}\n`
+      + `collision  boxes ${STRUCT_COLLIDERS.reduce((n,s)=>n+s.solids.length,0)} in `
+      + `${STRUCT_COLLIDERS.length} structures  circles ${Veg.colliders.length}  doors ${Doors.list.length}\n`
+      + `           view ${CollisionView.summary()}`;
     paintLog();
     if(D._sync) D._sync();
+    if(D._syncCV) D._syncCV();
     if(D._syncHour) D._syncHour();
   }
 
   function frame(dt){
+    CollisionView.frame(dt);
     frames++; ftime += dt;
     if(ftime > 0.4){ fps = frames/ftime; frames = 0; ftime = 0; }
     const f = UI.el && UI.el.fps;
@@ -9459,6 +9977,7 @@ window.DR = {
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders,
+  CollisionView, get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
 };
 
 boot();
