@@ -4331,7 +4331,12 @@ const Veg = {
         const dd = (it.x-px)*(it.x-px) + (it.z-pz)*(it.z-pz);
         if(dd < CR2){
           const shp = SPECIES_SHAPE[it.sp] || SPECIES_SHAPE.spruce;
-          this.colliders.push({ x: it.x, z: it.z, r: shp.trunk*it.scale + 0.12 });
+          /* 0.04 of padding, not 0.12. The player already carries a 0.34m
+             body radius, so padding the trunk on top of that made every
+             trunk block half a metre more than it looked like it did, and
+             two trees that plainly have a gap between them did not. The
+             gap between two big trunks is 0.16m wider for this line. */
+          this.colliders.push({ x: it.x, z: it.z, r: shp.trunk*it.scale + 0.04 });
         }
       }
       // undergrowth, rocks and deadfall share the cell's hash space
@@ -5185,6 +5190,7 @@ const Player = {
   driftAngle: 0, drift: 0, driftPhase: 0,
   lastSafe: new THREE.Vector3(),
   fallFrom: 0, falling: false,
+  stuckT: 0, unstuck: 0,
   sinceLook: 0,             // seconds since the player last had a reference
   resting: false,
   dead: false,
@@ -5264,33 +5270,55 @@ function onKeyUp(e){ if(e.code === 'KeyE') Hold.cancel(); }
    for everything else. Two resolve passes, because one pass squeezed
    between two trunks pushes you into the second one.
    ------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   PUSHING OUT OF THINGS
+   Every overlap is measured first and the SUM of the escapes is applied
+   once per pass, rather than each obstacle snapping the player in turn.
+
+   That difference is the whole fix for getting wedged. Resolving one
+   obstacle at a time means two trunks a fraction too close together
+   bounce the player between them forever: trunk A snaps them into trunk
+   B, trunk B snaps them back into trunk A, and the frame ends exactly
+   where it started no matter which way they walk. Summing the escapes
+   sends them out along the bisector — backwards out of the gap, which is
+   the direction a person would actually go.
+   ------------------------------------------------------------------- */
 function resolveCollisions(p, radius){
-  for(let pass=0; pass<2; pass++){
+  for(let pass=0; pass<4; pass++){
+    let mx = 0, mz = 0, hits = 0;
+
     for(const c of Veg.colliders){
       const dx = p.x - c.x, dz = p.z - c.z;
       const rr = c.r + radius;
       const d2 = dx*dx + dz*dz;
-      if(d2 >= rr*rr || d2 < 1e-9) continue;
+      if(d2 >= rr*rr) continue;
       const d = Math.sqrt(d2);
-      p.x = c.x + dx/d*rr;
-      p.z = c.z + dz/d*rr;
+      hits++;
+      if(d < 1e-6){ mx += rr; continue; }          // dead centre: any way out
+      const pen = rr - d;
+      mx += dx/d*pen; mz += dz/d*pen;
     }
-    for(const s of Wld.structures){
-      if(!s.solids) continue;
-      if(Math.abs(p.x - s.x) > 14 || Math.abs(p.z - s.z) > 14) continue;
-      for(const b of s.solids){
-        if(p.x < b.x0-radius || p.x > b.x1+radius || p.z < b.z0-radius || p.z > b.z1+radius) continue;
-        if(p.y + 1.5 < b.y0 || p.y > b.y1) continue;         // over it or under it
-        // push out along the shallowest axis
-        const dxL = p.x - (b.x0-radius), dxR = (b.x1+radius) - p.x;
-        const dzL = p.z - (b.z0-radius), dzR = (b.z1+radius) - p.z;
+
+    for(const st of Wld.structures){
+      if(!st.solids) continue;
+      if(Math.abs(p.x - st.x) > 14 || Math.abs(p.z - st.z) > 14) continue;
+      for(const bx of st.solids){
+        if(p.x < bx.x0-radius || p.x > bx.x1+radius ||
+           p.z < bx.z0-radius || p.z > bx.z1+radius) continue;
+        if(p.y + 1.5 < bx.y0 || p.y > bx.y1) continue;   // over it or under it
+        const dxL = p.x - (bx.x0-radius), dxR = (bx.x1+radius) - p.x;
+        const dzL = p.z - (bx.z0-radius), dzR = (bx.z1+radius) - p.z;
         const m = Math.min(dxL, dxR, dzL, dzR);
-        if(m === dxL) p.x = b.x0-radius;
-        else if(m === dxR) p.x = b.x1+radius;
-        else if(m === dzL) p.z = b.z0-radius;
-        else p.z = b.z1+radius;
+        hits++;
+        if(m === dxL) mx -= dxL;
+        else if(m === dxR) mx += dxR;
+        else if(m === dzL) mz -= dzL;
+        else mz += dzR;
       }
     }
+
+    if(!hits) break;
+    p.x += mx; p.z += mz;
   }
   // the map's edge is a wall you cannot leave
   const lim = Wld.size*0.5 - 6;
@@ -5328,6 +5356,19 @@ const MOVE_SUBSTEP = 0.18;
 function terrainBlocks(feetY, x, z, ux, uz){
   const probe = CFG.PLAYER.radius + 0.20;
   return heightAt(x + ux*probe, z + uz*probe) - feetY > CFG.PLAYER.stepUp;
+}
+
+/* The horizontal unit vector pointing straight uphill, and how steep it
+   is. Shared by the contour slide and by the anti-pinning projection. */
+function upslopeAt(x, z, out){
+  const d = 1.2;
+  const gx = heightAt(x+d,z) - heightAt(x-d,z);
+  const gz = heightAt(x,z+d) - heightAt(x,z-d);
+  const gl = Math.hypot(gx,gz);
+  const o = out || {};
+  if(gl < 1e-6){ o.x = 0; o.z = 0; o.mag = 0; return o; }
+  o.x = gx/gl; o.z = gz/gl; o.mag = gl/(2*d);
+  return o;
 }
 
 /* The horizontal direction that stays level on this slope, chosen to be
@@ -5477,13 +5518,52 @@ function updatePlayer(dt){
   /* Swept, body-aware, and it slides along a slope rather than stopping
      dead against it. Uphill is refused and downhill is not, so a player
      who slides into a ravine can still walk out along the bottom of it. */
+  const prevX = p.pos.x, prevZ = p.pos.z;
   const hitWall = moveAgainstTerrain(p, p.vel.x*dt, p.vel.z*dt);
-  if(hitWall){ p.vel.x *= 0.35; p.vel.z *= 0.35; }
+  if(hitWall){
+    /* Take out the component going INTO the hill and leave the rest.
+       Scaling the whole velocity down instead means that on a slope the
+       player is pinned: the input keeps pushing them at the wall, the
+       slide below keeps pushing them off it, the two cancel, and they
+       hang there at a tenth of a metre a second going nowhere. Removing
+       only the uphill component lets the slide actually win. */
+    const up = upslopeAt(p.pos.x, p.pos.z);
+    const into = p.vel.x*up.x + p.vel.z*up.z;
+    if(into > 0){ p.vel.x -= up.x*into; p.vel.z -= up.z*into; }
+    p.vel.x *= 0.8; p.vel.z *= 0.8;
+  }
 
   // ---- vertical ----
   const ground = heightAt(p.pos.x, p.pos.z);
   p.groundY = ground;
-  if(p.falling){
+
+  /* SWIMMING MEANS FLOATING, which sounds obvious and was not what
+     happened. The player's feet were clamped to the terrain whatever the
+     water was doing, so walking into a lake meant walking down the bank
+     and along the BED: ten metres under, unable to climb the far side,
+     drowning on a timer with nothing to do about it. A wandering agent
+     found exactly that twice in half an hour of walking, and both times
+     it read as being stuck rather than as being in danger.
+
+     The body now rides at the surface. Fast water is the exception and
+     deliberately so — a current takes you under, `submerged` goes true
+     and the drown timer runs, which is what makes deep fast water the
+     hazard the world generator treats it as. Still water is something
+     you swim across. */
+  const swimWL = waterLevelAt(p.pos.x, p.pos.z);
+  if(p.swimming && swimWL > -9000){
+    const fast = sampleGrid(Wld.ACC, p.pos.x, p.pos.z) > CFG.HYDRO.fastAcc;
+    /* In fast water the head goes UNDER — eye level ends up a quarter of
+       a metre below the surface, which is what makes `submerged` true and
+       starts the drown timer. The first version floated the player at
+       eye*0.92, which leaves the head just clear of the water: measured,
+       a minute in a deep fast channel did not drown anyone, so the one
+       hazard the world generator treats as lethal was not. The player can
+       still swim out sideways; they have the drown timer to do it in. */
+    const floatY = fast ? swimWL - C.eye*1.15 : swimWL - C.swimDepth*0.70;
+    p.pos.y = lerp(p.pos.y, Math.max(ground, floatY), clamp(dt*4.5, 0, 1));
+    p.falling = false; p.vy = 0;
+  } else if(p.falling){
     p.vy -= 22*dt;
     p.pos.y += p.vy*dt;
     if(p.pos.y <= ground){
@@ -5491,9 +5571,9 @@ function updatePlayer(dt){
       p.pos.y = ground; p.vy = 0; p.falling = false;
       Survival.landed(drop);
     }
-  } else {
+  } else if(!p.swimming){
     const drop = p.pos.y - ground;
-    if(drop > 0.75 && !p.swimming){
+    if(drop > 0.75){
       p.falling = true; p.fallFrom = p.pos.y; p.vy = 0;
     } else {
       /* Small steps are smoothed rather than teleported — but ONLY
@@ -5508,7 +5588,7 @@ function updatePlayer(dt){
   }
   // whatever happened above, the feet are not below the ground
   if(p.pos.y < ground) p.pos.y = ground;
-  pushOutOfTerrain(p);
+  if(!p.swimming) pushOutOfTerrain(p);
   const groundNow = heightAt(p.pos.x, p.pos.z);
   if(p.pos.y < groundNow) p.pos.y = groundNow;
   p.groundY = p.pos.y;
@@ -5527,6 +5607,48 @@ function updatePlayer(dt){
     p.breathHeld += dt;
     if(p.breathHeld > CFG.SURVIVE.drownSeconds) Survival.die('drowned');
   } else p.breathHeld = Math.max(0, p.breathHeld - dt*2.5);
+
+  /* ---- THE LAST RESORT ----------------------------------------------
+     Everything above is meant to make being stuck impossible, and a
+     measured sweep of 140,000 frames of walking says it very nearly is.
+     "Very nearly" is not good enough for the one thing that ends a run
+     without the game having anything to say about it, so: if the player
+     has been asking to move for most of a second and has covered less
+     than a hand's width, they are pushed out along the sum of whatever
+     is holding them plus the downhill direction, and given a shove.
+
+     This is a safety net and it is written down as one. It fires on a
+     condition the player can always see the truth of — they are holding
+     a key and not moving — and it never fires while they are resting,
+     falling, swimming or dead. */
+  const wentNowhere = Math.hypot(p.pos.x - prevX, p.pos.z - prevZ) < 0.004;
+  if(wants && wentNowhere && !p.resting && !p.falling && !p.swimming) p.stuckT += dt;
+  else p.stuckT = 0;
+  if(p.stuckT > 0.9){
+    p.stuckT = 0;
+    let ex = 0, ez = 0;
+    for(const c of Veg.colliders){
+      const dx = p.pos.x-c.x, dz = p.pos.z-c.z;
+      const rr = c.r + C.radius + 0.35;
+      const d = Math.hypot(dx,dz);
+      if(d >= rr) continue;
+      const w = (rr - d)/rr;
+      ex += (d > 1e-6 ? dx/d : 1) * w;
+      ez += (d > 1e-6 ? dz/d : 0) * w;
+    }
+    const up = upslopeAt(p.pos.x, p.pos.z);
+    ex -= up.x*0.8; ez -= up.z*0.8;                 // and downhill
+    const el = Math.hypot(ex, ez);
+    if(el > 1e-4){
+      ex /= el; ez /= el;
+      const npx = { x: p.pos.x + ex*0.40, y: p.pos.y, z: p.pos.z + ez*0.40 };
+      resolveCollisions(npx, C.radius);
+      p.pos.x = npx.x; p.pos.z = npx.z;
+      p.pos.y = Math.max(p.pos.y, heightAt(p.pos.x, p.pos.z));
+      p.vel.x += ex*1.6; p.vel.z += ez*1.6;
+      p.unstuck = (p.unstuck || 0) + 1;
+    }
+  }
 
   // remember the last place it was safe to be, for the fake-hospital reset
   if(!p.falling && !p.swimming && sl < 0.4 && depth < 0.3) p.lastSafe.copy(p.pos);
@@ -8717,6 +8839,21 @@ const DEV = (()=>{
          Against the previous build: 672 frames, 0.536m at worst.
        Both tests were run against the broken version first, because a
        test that passes on the bug it is meant to catch is not evidence.
+
+     GETTING STUCK  (a wandering agent that turns when blocked, as a
+                     person does, over 30 simulated minutes on 3 seeds)
+       0 positions it could not escape after trying every heading.
+       Before the fixes below, the same agent found 2 — both of them in
+       deep water, not on a mountain: the player's feet were clamped to
+       the terrain whatever the water was doing, so walking into a lake
+       meant walking along the BED, ten metres under, drowning with
+       nothing to do about it.
+       Swimming now floats: head 0.92m clear in still water, and a swim
+       of 104m across a lake reaches the far shore.
+       Deep FAST water still takes you under and still drowns you, at
+       22.0s, which is the drown timer doing exactly what it says.
+       213 marginal gaps between tree and rock colliders, entered and
+       escaped: 0 traps.
 
      RESUMING AFTER ESCAPE
        Escape leaves the game unlocked, paused, overlay up. One click at
