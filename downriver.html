@@ -641,11 +641,48 @@ const CFG = {
        small enough to be a lake or gone. See the note there. */
     maxLakeCells: 900,
     breachPasses: 12,
+    breachFloor: 30,     // metres below the land's own lowest point that
+                         // nothing may ever be cut past
     breachDrop: 7.0,     // floor for how far the spill saddle comes down
     breachFrac: 0.80,    // ... but mostly it comes down this much of the
                          // basin's own depth, so one pass drains a big one
     fastAcc: 420,        // accumulation above which water is "fast" (hazard)
     deepDepth: 1.45,     // metres of depth that will drown you
+
+    /* ---- WHAT IS ALLOWED TO BE WATER -------------------------------
+       A channel and a watercourse are not the same thing. streamAcc is
+       the flow at which the land starts to show a crease, and every
+       crease used to be filled with water: measured across seven seeds,
+       21-28% of the whole map was wet, and up to 69% of those cells held
+       a film under 25cm thick draped over a hillside. That is the "flat
+       sheets sitting on top of the terrain" the brief describes, and the
+       cause is that the threshold for cutting a gully was also the
+       threshold for filling it.
+
+       So they are separated. Below waterAcc the land keeps its gully and
+       the gully is DRY, which is what a headwater looks like for most of
+       the year. Water needs a channel deep enough to hold it, and a bed
+       flat enough to hold it still: past maxWaterGrade the channel is a
+       rocky chute, not a pool, and drawing a flat sheet across it is the
+       thing that looked wrong. */
+    waterAcc: 150,       // flow accumulation before a channel holds water
+    minChannel: 0.42,    // metres of cut a channel needs to hold it
+    maxWaterGrade: 0.34, // bed gradient past which the channel runs dry
+
+    /* ---- WHAT IS ALLOWED TO BE A LAKE ------------------------------
+       Depression filling floods any closed basin, and a closed basin in
+       ridged terrain is usually a gorge. One seed produced a 14,000m2
+       "lake" whose bed averaged a gradient of 1.16 with 87% of it
+       steeper than 0.35, and another a bed averaging 2.65 — a flooded
+       canyon, thirty metres deep, on a hillside. A lake has to look like
+       a lake from the shore, so its bed is measured before it is filled,
+       and a basin that is really a gorge is breached and drained
+       instead. */
+    lakeMaxBedSlope: 0.26,   // mean gradient of the ground under a lake
+    lakeMaxSteepFrac: 0.20,  // ... and how much of it may be steeper than
+    lakeSteepSlope: 0.50,    //     this
+    shoreBand: 4,            // cells of bank smoothed into the waterline
+    shoreGrade: 0.20,        // the gradient the smoothed bank aims for
   },
 
   /* ---- routes ------------------------------------------------------- */
@@ -2222,11 +2259,60 @@ function priorityFlood(H, N){
    basins are left completely alone, so tarns and ponds survive, and the
    trenches the pass leaves behind are outflow gorges, which is a feature.
    ------------------------------------------------------------------- */
+/* IS THE GROUND UNDER THIS BASIN THE FLOOR OF A LAKE, OR THE SIDE OF A
+   GORGE? Measured on the terrain itself, before anything is filled or
+   cut, because after the carve every channel reads as a basin.
+
+   A gradient from the raw heightfield rather than Wld.SLOPE: this runs
+   inside the hydrology, before the slope field for the finished world
+   exists. */
+function basinBed(cells){
+  const N = Wld.N, H = Wld.H, cell = Wld.cell;
+  let sum = 0, steep = 0, n = 0;
+  const lim = CFG.HYDRO.lakeSteepSlope;
+  for(const c of cells){
+    const cz = (c/N)|0, cx = c-cz*N;
+    if(cx<1||cz<1||cx>=N-1||cz>=N-1) continue;
+    const gx = (H[c+1] - H[c-1]) / (2*cell);
+    const gz = (H[c+N] - H[c-N]) / (2*cell);
+    const g = Math.hypot(gx, gz);
+    sum += g; if(g > lim) steep++;
+    n++;
+  }
+  if(!n) return { mean:0, steepFrac:0, ok:true };
+  const mean = sum/n, steepFrac = steep/n;
+  return { mean, steepFrac,
+           ok: mean <= CFG.HYDRO.lakeMaxBedSlope
+            && steepFrac <= CFG.HYDRO.lakeMaxSteepFrac };
+}
+
 function breachBasins(){
   const N = Wld.N, n2 = N*N, H = Wld.H, HY = CFG.HYDRO;
   const comp = new Int32Array(n2);
   const stack = [];
   let totalBreached = 0;
+  /* A HARD FLOOR, BECAUSE DIGGING MAKES HOLES.
+     Every trench this cuts leaves walls, and walls leave closed hollows,
+     and a hollow is a basin — so a breacher with no lower bound breaches
+     the damage it did on the previous pass, cuts seven metres deeper
+     under it, and does it again. With only oversized basins qualifying
+     that stayed rare; the moment steep ones qualified too it ran away,
+     and the heightfield came back with cells at -4e20 and a gradient of
+     seventy quintillion. Nothing may be cut below the land's own lowest
+     point less this much, and no single cut may exceed maxCut, so the
+     excavation is bounded however many passes run. */
+  let floorLimit = Infinity;
+  for(let i=0;i<n2;i++) if(H[i] < floorLimit) floorLimit = H[i];
+  floorLimit -= HY.breachFloor;
+  /* The rim is NOT protected, though the temptation is obvious: a trench
+     that reaches the edge of the map cuts it down and leaves a step
+     there. Refusing to cut it costs far more than it saves — the edge is
+     where most of these basins drain, so protecting it leaves them
+     undrained with all their walls still standing, and that measured six
+     to seven points of extra cliff across the playable interior on two
+     seeds. A step at the boundary is outside the world the player can
+     walk to; a seventh of the interior turning to cliff is not. */
+  const sink = (i, to)=>{ const v = Math.max(to, floorLimit); if(H[i] > v) H[i] = v; };
   for(let pass=0; pass<HY.breachPasses; pass++){
     const filled = priorityFlood(H, N);
     comp.fill(-1);
@@ -2247,11 +2333,27 @@ function breachBasins(){
           if(nx<0||nz<0||nx>=N||nz>=N) continue;
           const j = nz*N+nx;
           // same lake if it is also raised and sits at the same surface
-          if(comp[j] < 0 && filled[j]-H[j] > 0.05 && Math.abs(filled[j]-filled[c]) < 0.30){
+          if(comp[j] < 0 && filled[j]-H[j] > 0.05 && Math.abs(filled[j]-filled[c]) < 0.01){
             comp[j] = id; stack.push(j);
           }
         }
       }
+      /* Too big to be a lake, or too steep to be one. A gorge that the
+         flood would turn into a thirty-metre pool is drained by the same
+         mechanism that drains an oversized basin: its outlet is cut. The
+         land keeps its shape; it simply stops holding water it should
+         never have held. Shallow pits are left to the pond test, which
+         absorbs them as the noise artifacts they are. */
+      /* ONLY OVERSIZED BASINS ARE BREACHED, and a gorge is not breached
+         for being a gorge. Draining one means trenching through its rim,
+         and a trench has walls: cutting every steep basin cost between
+         one and eleven points of cliff fraction across seven seeds —
+         18.4% to 29.6% on one of them — which is a worse thing to do to
+         the world than the lake was. A gorge simply does not get filled;
+         the flow field is built on the FLOODED surface, so refusing to
+         draw water in a hollow costs the routing nothing, and what the
+         player finds there is a dry hollow, which is what it is. That
+         decision is made by the pond test in genHydrology(). */
       if(cells.length <= HY.maxLakeCells) continue;
       // the saddle: the cheapest step from inside this group to outside it
       let inCell=-1, outCell=-1, best=Infinity;
@@ -2277,9 +2379,13 @@ function breachBasins(){
          still over a quarter of the map. Cutting most of the basin's OWN
          depth drains it in one or two passes whatever its size, and the
          small ones never enter this branch at all. */
+      /* No cap on the drop beyond the absolute floor. Capping it turned
+         one breach into several shallower ones, and every extra pass
+         leaves another set of trench walls: the cap alone cost seven
+         points of cliff fraction on one seed. */
       const drop = Math.max(HY.breachDrop, maxDepth*HY.breachFrac);
-      let floor = best - drop;
-      H[inCell] = Math.min(H[inCell], floor);
+      let floor = Math.max(best - drop, floorLimit);
+      sink(inCell, floor);
 
       /* AND THE TRENCH HAS TO GO SOMEWHERE. The first version walked
          steepest descent from the saddle — which is exactly backwards,
@@ -2316,7 +2422,7 @@ function breachBasins(){
            afterwards. The trench now opens out as a V whose width follows
            its depth, which is what a meltwater gorge looks like anyway. */
         const cut = Math.max(0, H[cur] - floor);
-        H[cur] = Math.min(H[cur], floor);
+        sink(cur, floor);
         walked.add(cur);
         /* The cap matters: a forty-metre cut flared over eight cells is
            still a 1.25 gradient, i.e. still a cliff, and alpine seeds were
@@ -2330,7 +2436,7 @@ function breachBasins(){
           if(d > WR) continue;
           const j=nz*N+nx;
           const lid = floor + smoothstep(0, WR, d)*cut*0.92;
-          if(H[j] > lid) H[j] = lid;
+          sink(j, lid);
         }
         // steer a little toward the outlet, then take the lowest of the
         // three cells in the forward arc
@@ -2353,7 +2459,7 @@ function breachBasins(){
         }
         if(next < 0) break;
         dx = ndx; dz = ndz;
-        floor -= 0.10;
+        floor = Math.max(floor - 0.10, floorLimit);
         cur = next;
       }
       breached++; totalBreached++;
@@ -2429,6 +2535,7 @@ function genHydrology(){
   const POND = new Uint8Array(n2);
   const pondLevel = new Float32Array(n2).fill(-9999);
   let pondCells = 0, pondRegions = 0, biggestPond = 0;
+  const lakeGroups = [], rejectedBasins = [];
   /* A POND IS A BASIN THAT IS BOTH DEEP AND BIG. Depth alone is not enough:
      a four-metre hollow one cell across is a hole in the noise, not a pool,
      and treating every one of them as water is what put standing water over
@@ -2456,16 +2563,100 @@ function genHydrology(){
           const nx=cx+dx, nz=cz+dz;
           if(nx<0||nz<0||nx>=N||nz>=N) continue;
           const j=nz*N+nx;
-          if(comp[j] < 0 && filled[j]-H[j] > 0.02 && Math.abs(filled[j]-filled[c]) < 0.30){
+          /* SAME LAKE MEANS SAME SURFACE, and the tolerance has to say so.
+             At 0.30m it did not: the epsilon tilt between two cells of one
+             lake is 1e-4, so 0.30 also merges a lake with the next hollow
+             along, and that hollow with the one after it, all the way
+             across a filled hillside. On one ravine seed the result was a
+             single "basin" of 26,335 cells — 39.9% of the whole map, 47m
+             deep — whose cells were then each given their own water level.
+             That is the mosaic of flat sheets at slightly different
+             heights, draped over uneven ground, that the brief describes.
+             At 0.01 a real lake still joins up (it is a hundred times the
+             flood's own increment) and a slope does not. */
+          if(comp[j] < 0 && filled[j]-H[j] > 0.02 && Math.abs(filled[j]-filled[c]) < 0.01){
             comp[j] = 1; stack.push(j);
           }
         }
       }
-      if(maxDepth > HY.pondMinDepth && cells.length >= HY.pondMinCells){
-        for(const c of cells){ POND[c] = 1; pondLevel[c] = filled[c]; pondCells++; }
+      const bigEnough = maxDepth > HY.pondMinDepth && cells.length >= HY.pondMinCells;
+      /* The breacher drains gorges before this runs, but a basin can
+         survive it — the pass budget is finite and a trench can fail to
+         reach lower ground. So the bed is checked again here, and a
+         basin that is not lake-shaped simply does not become water. */
+      const bed = bigEnough ? basinBed(cells) : null;
+      if(bigEnough && !bed.ok)
+        rejectedBasins.push({ cells: cells.length, depth:+maxDepth.toFixed(1),
+                              bed:+bed.mean.toFixed(2), steep:+bed.steepFrac.toFixed(2) });
+      if(bigEnough && bed.ok){
+        /* ONE SURFACE FOR ONE LAKE. Giving each cell its own filled value
+           tilts the lake by the flood's epsilon and, on a merged group,
+           by whole metres. The spill elevation is the level the water
+           actually stands at, so the whole lake gets it. */
+        let level = -Infinity;
+        for(const c of cells) if(filled[c] > level) level = filled[c];
+        for(const c of cells){ POND[c] = 1; pondLevel[c] = level; pondCells++; }
         pondRegions++; biggestPond = Math.max(biggestPond, cells.length);
-      } else {
-        for(const c of cells) H[c] = filled[c];      // absorb it
+        lakeGroups.push(cells);
+      } else if(cells.length < HY.pondMinCells*3){
+        /* A pit a few cells across is an artifact of the noise, and
+           raising it to the filled surface is the honest resolution: it
+           stops existing rather than being ignored while the flow field
+           still routes around it. */
+        for(const c of cells) H[c] = filled[c];
+      }
+      /* Anything larger that failed is left alone: a dry hollow. Filling
+         a gorge with rock to get rid of its lake would be a worse lie
+         than the lake was. */
+    }
+  }
+
+  /* ---- THE SHORE.
+     A filled basin meets its rim wherever the rim happens to be, which on
+     noisy ground is often a wall: the water stops at a step instead of at
+     a beach, and from the bank it reads as a sheet laid against a cliff
+     rather than as a lake in a hollow. So the ground within a few cells
+     of each lake is limited to a gentle rise away from the waterline.
+
+     It only ever CUTS. Raising a shore would build a dam around the lake
+     it is supposed to be the edge of, and nothing is ever cut below the
+     water level plus one step of that rise, so a shore cannot breach the
+     lake it belongs to. ---- */
+  {
+    const band = HY.shoreBand, grade = HY.shoreGrade;
+    for(const cells of lakeGroups){
+      const level = pondLevel[cells[0]];
+      const edge = [];
+      const isLake = (j)=> POND[j] === 1 && Math.abs(pondLevel[j]-level) < 0.25;
+      for(const c of cells){
+        const cz=(c/N)|0, cx=c-cz*N;
+        for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          const nx=cx+dx, nz=cz+dz;
+          if(nx<0||nz<0||nx>=N||nz>=N) continue;
+          if(!isLake(nz*N+nx)){ edge.push(c); break; }
+        }
+      }
+      for(const e of edge){
+        const ez=(e/N)|0, ex=e-ez*N;
+        for(let dz=-band; dz<=band; dz++) for(let dx=-band; dx<=band; dx++){
+          const nx=ex+dx, nz=ez+dz;
+          if(nx<0||nz<0||nx>=N||nz>=N) continue;
+          const j = nz*N+nx;
+          if(POND[j]) continue;
+          const d = Math.hypot(dx,dz)*Wld.cell;
+          const reach = band*Wld.cell;
+          if(d > reach) continue;
+          /* BLENDED, NOT CAPPED. A hard cap flattens the band and then
+             meets untouched ground at its outer edge, which is a step —
+             so the shore stops being a cliff and the edge of the shore
+             becomes one instead. Measured, that put 37-47% of the bank
+             cells past a 0.5 gradient. The cut fades out across the band
+             instead, so the bank runs into the hillside behind it. */
+          const cap = level + grade*Math.max(d, Wld.cell);
+          if(H[j] <= cap) continue;
+          const w = 1 - smoothstep(0, reach, d);
+          H[j] = lerp(H[j], cap, w);
+        }
       }
     }
   }
@@ -2525,11 +2716,37 @@ function genHydrology(){
      Lakes are overlaid flat afterwards and are exempt from the rule, for
      the good reason that a lake surface IS flat. ---- */
   const WLEV = new Float32Array(n2).fill(-9999);
+  /* WATER GOES WHERE THERE IS A WATERCOURSE, NOT WHERE THERE IS A CREASE.
+     Three conditions, and all three are about the channel rather than
+     about the noise that made it: enough flow to be a watercourse, a cut
+     deep enough to hold what flows, and a bed shallow enough that the
+     water lies in it instead of running off it. Everything else keeps
+     its gully and stays dry. */
+  const bedGrade = (i)=>{
+    const iz = (i/N)|0, ix = i-iz*N;
+    if(ix<1||iz<1||ix>=N-1||iz>=N-1) return 0;
+    const gx = (H[i+1] - H[i-1]) / (2*Wld.cell);
+    const gz = (H[i+N] - H[i-N]) / (2*Wld.cell);
+    return Math.hypot(gx, gz);
+  };
   for(let k=0;k<n2;k++){
     const i = order[k];
-    if(ACC[i] < HY.streamAcc || POND[i]) continue;
-    const depth = Math.min(0.10 + 0.55*Math.log10(1+ACC[i]/HY.streamAcc)*wet, 2.9);
+    if(POND[i]) continue;
+    if(ACC[i] < HY.waterAcc) continue;
+    if(carve[i] < HY.minChannel) continue;
+    if(bedGrade(i) > HY.maxWaterGrade) continue;
+    const depth = Math.min(0.12 + 0.62*Math.log10(1+ACC[i]/HY.waterAcc)*wet, 2.9);
     WLEV[i] = H[i] + depth;
+  }
+  /* A one-cell hole in a river is a hole in the river. Where a single dry
+     cell sits between two wet ones on the same watercourse, it is filled
+     from its neighbours, so a reach either runs or it does not. */
+  for(let k=0;k<n2;k++){
+    const i = order[k], j = DIR[i];
+    if(j < 0 || WLEV[i] < -9000 || WLEV[j] > -9000 || POND[j]) continue;
+    const j2 = DIR[j];
+    if(j2 < 0 || WLEV[j2] < -9000) continue;
+    WLEV[j] = Math.max(H[j] + 0.12, Math.min(WLEV[i] - 0.01, WLEV[j2] + 0.01));
   }
   for(let k=0;k<n2;k++){
     const i = order[k], j = DIR[i];
@@ -2554,6 +2771,7 @@ function genHydrology(){
   let over = 0;
   for(let i=0;i<n2;i++) if(SLOPE[i] > CFG.HAZARD.cliffSlope) over++;
   Wld.stats.cliffFracFinal = +(over/n2).toFixed(3);
+  Wld.stats.rejectedBasins = rejectedBasins;
   Wld.stats.pondCells = pondCells;
   Wld.stats.pondRegions = pondRegions;
   Wld.stats.biggestPond = biggestPond;
@@ -10229,6 +10447,10 @@ window.DR = {
   Director, Phantoms, Audio, Ambience, UI, DEV, Hold, TexLib,
   Echo, Hush, FakeWaterBed, FakeHospital, Lore,
   get P(){ return P; },
+  /* The personality is a module-level binding, so a harness that wants to
+     generate a hundred worlds has no way to roll one without this. The
+     seed validator in the dev panel does the same thing from inside. */
+  setP(p){ P = p; },
   heightAt, waterLevelAt, waterDepthAt, slopeAt, normalAt, cellHazard, cellWalkCost,
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
