@@ -277,7 +277,7 @@ button:active{ transform:translateY(1px); }
   </div>
   <div id="seedrow">
     <label for="seedin">seed</label>
-    <input id="seedin" class="mono" maxlength="14" spellcheck="false" autocomplete="off" />
+    <input id="seedin" class="mono" maxlength="7" inputmode="numeric" pattern="[0-9]*" spellcheck="false" autocomplete="off" />
     <button id="randseed">random</button>
   </div>
   <div id="bar"><i></i></div>
@@ -582,6 +582,23 @@ const CFG = {
        ridges gives mountainsides in the high twenties, which is what a
        mountain actually is, and leaves the genuine cliffs to the places
        the noise happens to stack. */
+    /* ---- HOW FAR CIVILISATION HAS TO BE -----------------------------
+       The player wakes in the wilderness, and the whole game is the walk
+       out of it. That is not allowed to depend on the seed being kind.
+
+       It used to. The start was placed at a distance derived from how far
+       the map extended along the seed's own bearing, and when that
+       bearing pointed off the map — which it can, because the hospital
+       stands at the outlet and therefore on the rim — the distance
+       collapsed to whatever was left. Measured across 40 seeds, the
+       shortest walk to the hospital came out at FOURTEEN METRES.
+
+       These are hard floors now, checked by guarantee G7 on every seed,
+       and a seed that cannot meet them is rejected and generated again.
+       Only the two documented Easter-egg seeds are allowed past them. */
+    minCivDist: 600,     // metres, straight line from the start to the hospital
+    minCivPath: 720,     // ... and along ground you can actually walk
+    civExclusion: 420,   // no road may come nearer the start than this
     RELIEF: 150,         // metres from the lowest point to the highest
     SEA: 6,              // ponds/lakes fill to this above local basin floor
     EDGE_FADE: 0.13,     // fraction of the map used to lift the rim, so the
@@ -590,6 +607,9 @@ const CFG = {
 
   /* ---- terrain shape ----------------------------------------------- */
   TERRAIN: {
+    /* How much of every seed is the Downriver valley, and how much is
+       the style flavoured on top of it. See genTerrain(). */
+    valleyWeight: 0.62,
     baseFreq: 1.55,      // fbm frequency in world-widths
     ridgeFreq: 0.85,     // mountain ridge frequency (broader = gentler)
     warp: 0.42,          // domain warp amount — what stops noise looking
@@ -902,7 +922,9 @@ const CFG = {
 /* The single mutable game state object. Everything reads the clock and the
    run state from here so there is one source of truth for both. */
 const G = {
-  seed: 0, seedText: '',
+  seed: 0,          // the 32-bit state every rngFor() is mixed with
+  seedNum: 0,       // the number the player typed, 0..9,999,999
+  seedText: '',     // ... as they see it
   t: 0,                // real seconds since the run started
   hours: 8,            // in-fiction hour of day, 0..24, wraps
   day: 1,
@@ -1090,15 +1112,134 @@ const TERRAIN_STYLES = ['alpine','rolling','ravines','plateau','basin'];
 const HALL_FLAVOURS  = ['auditory','visual','structural','navigational'];
 const WEATHER_PATTERNS = ['clear','fog','rain','storm','turning'];
 
+/* ---------------------------------------------------------------------
+   THE SEED IS A NUMBER
+
+   Seven digits, 0 to 9,999,999, and nothing else. A number is what a
+   person can read off a screen, say out loud, and type back in, which is
+   the entire job: seeds exist to be shared and to be returned to.
+
+   The digits are NOT used as the random state directly. Consecutive
+   integers differ in one low bit, and every hash downstream mixes the
+   seed with a name and a salt, so seeds 1 and 2 would produce worlds
+   that agree in their high-order structure and differ only in fine
+   detail. seedState() runs the number through a 32-bit avalanche first
+   (the finalizer from MurmurHash3), so 1 and 2 are as unrelated as any
+   other pair while the world remains an exact function of the number.
+   ------------------------------------------------------------------- */
+const SEED_MAX = 9999999;
+
+/* The player's text, as a seed, or null if it is not one. Nothing is
+   silently corrected: "12a" is a typing mistake, not the number 12, and
+   accepting it would hand back a world they cannot ask for again. */
+function parseSeed(text){
+  const t = String(text == null ? '' : text).trim();
+  if(!/^[0-9]{1,7}$/.test(t)) return null;
+  const n = parseInt(t, 10);
+  if(!isFinite(n) || n < 0 || n > SEED_MAX) return null;
+  return n;
+}
+function seedState(n){
+  let h = (n >>> 0) ^ 0x9E3779B9;
+  h = Math.imul(h ^ (h >>> 16), 0x85EBCA6B);
+  h = Math.imul(h ^ (h >>> 13), 0xC2B2AE35);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+function randomSeed(){ return Math.floor(Math.random()*(SEED_MAX+1)); }
+/* What the player sees, everywhere the seed is shown. */
+function seedLabel(n){ return String(n); }
+
+/* =====================================================================
+   ===== EASTER EGG SEED: 1979 =====
+   Description: THE LONG NIGHT. The run begins at 02:40 in thick fog with
+   a dead torch and no compass, the mind declines at nearly twice the
+   normal rate, and the seed's hallucination flavour is forced to
+   auditory — the forest talks. The land itself is the ordinary Downriver
+   valley; what is different is the state you arrive in and how fast it
+   gets away from you. Reachable, but it is the hardest thing this file
+   will generate.
+   =====================================================================
+   ===== EASTER EGG SEED: 8008 =====
+   Description: THE CLEAR DAY. Noon, clear sky, a full battery, a
+   compass, a map fragment and a full bottle, water everywhere and the
+   hospital much closer than usual. The mind still declines and the
+   forest still lies to you, but this is the seed to hand someone who
+   has never played it, and the only one where the walk is short enough
+   to see the ending in one sitting.
+   =====================================================================
+   These are the only two. Every other number in range is a normal seed
+   and gets no special treatment anywhere in this file: the table below
+   is the complete list, it is consulted once, and nothing else branches
+   on the seed's value. */
+const EASTER_EGGS = {
+  1979: (p)=>{
+    p.egg = 'the long night';
+    p.startHour = 2.66;
+    p.weather = 'fog';
+    p.declineRate = 1.85;
+    p.leakBonus = 1.7;
+    p.spikiness = 1.6;
+    p.waviness = 1.4;
+    p.gear.compass = false;
+    p.gear.battery = 0.06;
+    p.gear.spares = 0;
+    p.gear.mapFrag = false;
+    p.scarcity = 0.55;
+    p.foodScarcity = 0.5;
+    p.hospitalDist = 0.95;
+    for(const k in p.flavours) p.flavours[k] = 0.35;
+    p.flavours.auditory = 3.4;
+  },
+  8008: Object.assign((p)=>{
+    p.egg = 'the clear day';
+    p.startHour = 12;
+    p.weather = 'clear';
+    p.windBase = 0.2;
+    p.declineRate = 0.7;
+    p.wetness = 1.35;
+    p.scarcity = 1.3;
+    p.foodScarcity = 1.2;
+    p.hospitalDist = 0.34;
+    p.gear.compass = true;
+    p.gear.bottle = true;
+    p.gear.bottleFull = 1;
+    p.gear.food = 1;
+    p.gear.battery = 1;
+    p.gear.mapFrag = true;
+  }, { shortWalk: true }),   // the one seed allowed inside the wilderness rule
+};
+
+/* HOW MUCH A SEED IS ALLOWED TO CHANGE.
+
+   The dials below used to swing by factors of three and four: relief
+   0.60-1.18, water 0.45-1.60, supplies 0.35-1.50, the mind's decline
+   0.55-1.75. Two seeds could therefore differ by more than two players
+   of the same seed ever would — one a generous rolling wood with a
+   stream every hundred metres, the next a barren alpine wall with a
+   clock half as long. That is not a variation on a game, it is a
+   different game each time, and it is what the brief rules out.
+
+   So a seed now varies the world the way weather varies a place: the
+   valley, the scale of the land, the length of the walk, the rate of
+   the decline and the number of things to find are near enough the same
+   on every seed that the game is recognisably one game. What moves is
+   where the ridges run, where the water gathers, where the buildings
+   stand, which trees grow and what the forest chooses to show you.
+
+   The old ranges are kept in the comments so the narrowing is visible
+   rather than merely asserted. */
 function rollPersonality(){
   const r = rngFor('personality');
   const p = {};
 
   // --- the land ---
+  /* The style is a FLAVOUR now, not a landform: every seed is the same
+     valley running to the outlet, and this decides what the high ground
+     on either side of it looks like. See genTerrain(). */
   p.terrain = r.weighted([[26,'alpine'],[30,'rolling'],[20,'ravines'],[12,'plateau'],[12,'basin']]);
-  p.relief  = r.range(0.60, 1.18);          // multiplies CFG.WORLD.RELIEF
-  p.cliffy  = r.range(0.25, 1.0);           // how sharp the steep ground is
-  p.wetness = r.range(0.45, 1.6);           // how much water the map carries
+  p.relief  = r.range(0.90, 1.08);          // was 0.60-1.18
+  p.cliffy  = r.range(0.40, 0.72);          // was 0.25-1.00
+  p.wetness = r.range(0.85, 1.20);          // was 0.45-1.60
   /* WHERE THE WATER LEAVES. The rim of the map is lifted so the world reads
      as a bowl you turn back from rather than a square that stops, but a bowl
      with an unbroken rim has no outlet, and a heightfield with no outlet
@@ -1111,14 +1252,14 @@ function rollPersonality(){
   p.outletWidth = r.range(0.055, 0.115);    // fraction of the map width
 
   // --- the wood ---
-  p.density = r.range(0.45, 1.5);           // trees per hectare multiplier
+  p.density = r.range(0.85, 1.15);          // was 0.45-1.50
   p.species = (()=>{                        // 2-3 conifer flavours per seed
     const all = ['spruce','fir','pine','hemlock','larch'];
     r.shuffle(all);
     return all.slice(0, r.irange(2,3));
   })();
-  p.scrub   = r.range(0.4, 1.5);
-  p.treeline= r.range(0.58, 0.88);          // fraction of RELIEF where trees stop
+  p.scrub   = r.range(0.75, 1.25);          // was 0.40-1.50
+  p.treeline= r.range(0.70, 0.84);          // was 0.58-0.88
 
   // --- how far, and which way ---
   /* WHICH WAY, AND HOW FAR. The bearing is an offset from "straight inland
@@ -1130,12 +1271,12 @@ function rollPersonality(){
      The player is told neither number, so nothing is given away by making
      this one always feasible. */
   p.hospitalBearing = r.range(-1, 1);       // x 120 degrees off inland
-  p.hospitalDist= r.range(0.32, 0.92);      // fraction of the way across
+  p.hospitalDist= r.range(0.74, 0.88);      // was 0.32-0.92
 
   // --- the mind ---
-  p.declineRate = r.range(0.55, 1.75);      // multiplies CFG.MIND.baseRate
-  p.waviness    = r.range(0.4, 1.5);        // intensity wave amplitude
-  p.spikiness   = r.range(0.4, 1.7);        // spike frequency and size
+  p.declineRate = r.range(0.88, 1.12);      // was 0.55-1.75
+  p.waviness    = r.range(0.80, 1.25);      // was 0.40-1.50
+  p.spikiness   = r.range(0.80, 1.30);      // was 0.40-1.70
   p.flavours    = (()=>{                    // which hallucinations this seed likes
     const w = {};
     const shuffled = HALL_FLAVOURS.slice();
@@ -1147,11 +1288,11 @@ function rollPersonality(){
     for(let i=2;i<shuffled.length;i++) w[shuffled[i]] = r.range(0.35, 0.85);
     return w;
   })();
-  p.leakBonus = r.range(0.7, 1.6);
+  p.leakBonus = r.range(0.85, 1.25);        // was 0.70-1.60
 
   // --- what there is to find ---
-  p.scarcity  = r.range(0.35, 1.5);         // >1 is generous, <1 is mean
-  p.foodScarcity = r.range(0.25, 1.4);      // food is meaner than water
+  p.scarcity  = r.range(0.85, 1.15);        // was 0.35-1.50
+  p.foodScarcity = r.range(0.72, 1.02);     // was 0.25-1.40
 
   // --- starting conditions ---
   p.startHour = r.pick(CFG.TIME.startHours);
@@ -1170,12 +1311,19 @@ function rollPersonality(){
 
   // --- the sound of the place ---
   p.soundSeed = (r() * 0xFFFFFFFF) >>> 0;
-  p.birdiness = r.range(0.4, 1.4);
-  p.roomTone  = r.range(0.6, 1.4);          // how reverberant this forest is
+  p.birdiness = r.range(0.75, 1.25);        // was 0.40-1.40
+  p.roomTone  = r.range(0.80, 1.20);        // was 0.60-1.40
 
   /* A hidden difficulty number, shown only after the run so seeds can be
      compared and shared. It is a genuine composite of the things that
      make a seed hard, not a hand-written label. */
+  /* THE RATING IS ABSOLUTE, and it is meant to come out similar on every
+     normal seed, because they now ARE similar. Rescaling it to the
+     narrowed ranges would spread the same nearly-identical seeds back
+     across the full 0-100 and tell the player they had drawn something
+     unusual when they had not. Measured on the narrowed dials, normal
+     seeds land in a band; the two documented seeds sit outside it, which
+     is the only time this number should surprise anyone. */
   p.difficulty = clamp(
       (p.declineRate - 0.55) / 1.20 * 0.34
     + (1.5 - p.scarcity) / 1.15 * 0.20
@@ -1184,6 +1332,21 @@ function rollPersonality(){
     + ({clear:0, fog:0.35, rain:0.5, storm:0.85, turning:0.6}[p.weather]) * 0.10
     + (p.startHour > 18 || p.startHour < 6.4 ? 0.06 : 0)
     , 0, 1);
+
+  /* The two documented seeds, and nothing else, are allowed past the
+     ranges above. The table is consulted exactly once, here. */
+  const egg = EASTER_EGGS[G.seedNum];
+  if(egg){
+    egg(p);
+    p.difficulty = clamp(
+        (p.declineRate - 0.55) / 1.20 * 0.34
+      + (1.5 - p.scarcity) / 1.15 * 0.20
+      + (1.4 - p.foodScarcity) / 1.15 * 0.12
+      + (p.hospitalDist - 0.30) / 0.52 * 0.18
+      + ({clear:0, fog:0.35, rain:0.5, storm:0.85, turning:0.6}[p.weather]) * 0.10
+      + (p.startHour > 18 || p.startHour < 6.4 ? 0.06 : 0)
+      , 0, 1);
+  }
   return p;
 }
 let P = null;   // the live personality, set by boot()
@@ -2068,22 +2231,36 @@ function genTerrain(salt){
       const fine  = fbm2(wx*T.fineFreq, wz*T.fineFreq, T.fineOctaves, s+505, 2.03, T.gain);
 
       let h;
+      /* ONE LANDFORM FOR EVERY SEED.
+         Downriver is a valley running to the outlet with high ground on
+         either side of it: that is the premise of the game — you are
+         somewhere upstream of the place you are trying to reach — and it
+         used to be one of five landforms a seed could roll, so four
+         seeds in five were a different game with the same name. The
+         valley is now the base of every world, and the style decides
+         only what the high ground beside it does: ridges, folds,
+         incisions or terraces. The player is in the same country on
+         every seed, walking through different parts of it. */
+      const across = (u*(-oz) + v*ox) * 2;     // distance from the outlet axis
+      const trough = Math.pow(clamp(Math.abs(across),0,1), 1.5);
+      const valley = hills*0.30 + broad*0.24 + ridge*0.18 + trough*0.60 + fine*0.05;
+      let flavour;
       switch(st){
         case 'alpine':
           // ridges dominate; the valleys between them are where everything
           // else in the game happens
-          h = ridge*0.66 + hills*0.20 + broad*0.22 + fine*0.05;
-          h = Math.pow(clamp(h,0,1.4), 1.10);
+          flavour = ridge*0.66 + hills*0.20 + broad*0.22 + fine*0.05;
+          flavour = Math.pow(clamp(flavour,0,1.4), 1.10);
           break;
         case 'rolling':
-          h = hills*0.55 + broad*0.40 + ridge*0.10 + fine*0.07;
+          flavour = hills*0.55 + broad*0.40 + ridge*0.10 + fine*0.07;
           break;
         case 'ravines': {
           // an incision field: narrow, deep, branching cuts through
           // otherwise ordinary hills. 1-ridge is a set of sharp CREASES.
           const cut = ridged2(u*T.ridgeFreq*5.6 - 2.4, v*T.ridgeFreq*5.6 + 8.8, T.ridgeOctaves, s+911, 2.0, T.gain);
-          h = hills*0.50 + broad*0.34 + fine*0.06;
-          h -= Math.pow(clamp(cut,0,1), 0.7) * 0.30 * P.cliffy;
+          flavour = hills*0.50 + broad*0.34 + fine*0.06
+                  - Math.pow(clamp(cut,0,1), 0.7) * 0.30 * P.cliffy;
           break;
         }
         case 'plateau': {
@@ -2093,24 +2270,23 @@ function genTerrain(salt){
           const steps = 5;
           const q = Math.floor(raw*steps)/steps;
           const frac = raw*steps - Math.floor(raw*steps);
-          h = q + smoothstep(0.34, 0.66, frac)/steps;
-          h += ridge*0.10;
+          flavour = q + smoothstep(0.34, 0.66, frac)/steps + ridge*0.10;
           break;
         }
-        default: {
-          /* BASIN — a broad valley running to the outlet with high ground
-             either side of it, NOT a sealed bowl. A bowl was the first
-             version and it was wrong twice over: it has no outlet, so the
+        default:
+          /* BASIN — the valley, undisguised. A bowl was the first version
+             of this and it was wrong twice over: it has no outlet, so the
              depression filler drowned it, and a map where every direction
-             is uphill gives the player no reason to choose one. The valley
-             floor is measured across the outlet axis, so the low ground
-             always points at the way out. */
-          const across = (u*(-oz) + v*ox) * 2;     // distance from the axis
-          const trough = Math.pow(clamp(Math.abs(across),0,1), 1.5);
-          h = hills*0.30 + broad*0.24 + ridge*0.18 + trough*0.60 + fine*0.05;
+             is uphill gives the player no reason to choose one. The floor
+             is measured across the outlet axis, so the low ground always
+             points at the way out. */
+          flavour = valley;
           break;
-        }
       }
+      /* The valley always dominates. At this weight a seed reads as
+         "the valley, with alpine shoulders" rather than as an alpine
+         map, which is the whole point of the separation. */
+      h = valley*T.valleyWeight + flavour*(1 - T.valleyWeight);
 
       /* THE RIM, AND THE ONE GAP IN IT. Without a rim the map is a square
          of land with a cliff of nothing at the edge, and a player who walks
@@ -3839,16 +4015,48 @@ function placeStart(relax = 0){
   const LIM = Wld.size*0.45;
   // straight inland from the hospital, then the seed's bearing off that
   const inland = Math.atan2(-hos.z, -hos.x);
-  const dir = inland + P.hospitalBearing * 120*DEG;
-  // how far the map actually extends in that direction, so `want` is always
-  // a distance that exists
-  let reach = 0;
-  for(let d=20; d<Wld.size; d+=8){
-    const x = hos.x + Math.cos(dir)*d, z = hos.z + Math.sin(dir)*d;
-    if(Math.abs(x) > LIM || Math.abs(z) > LIM) break;
-    reach = d;
+  const MIN = eggDistance() ? 0 : CFG.WORLD.minCivDist;
+  /* HOW FAR THE MAP EXTENDS THIS WAY. The hospital is on the rim, so half
+     of the possible bearings run straight off the map and have almost no
+     room in them at all. */
+  const reachAlong = (th)=>{
+    let d0 = 0;
+    for(let d=20; d<Wld.size; d+=8){
+      const x = hos.x + Math.cos(th)*d, z = hos.z + Math.sin(th)*d;
+      if(Math.abs(x) > LIM || Math.abs(z) > LIM) break;
+      d0 = d;
+    }
+    return d0;
+  };
+  /* THE BEARING IS A PREFERENCE; THE DISTANCE IS NOT. The seed's own
+     bearing is tried first, then the search walks away from it in both
+     directions until it finds one with room for the minimum. This is the
+     reject-and-try-again the distance rule needs: no bearing is accepted
+     for being the seed's if it cannot hold the wilderness. */
+  let dir = null, reach = 0, bearingScore = -Infinity;
+  const wanted = inland + P.hospitalBearing * 120*DEG;
+  for(let step=0; step<=24; step++){
+    for(const sgn of (step ? [-1, 1] : [1])){
+      const th = wanted + sgn * step * 7.5*DEG;
+      const rr = reachAlong(th);
+      if(rr < MIN*1.04) continue;
+      /* Room first, the seed's own bearing second. Taking the first
+         bearing that merely scraped past the minimum put half the seeds
+         within a few metres of the floor, which meets the rule and
+         misses the point of it: the wilderness should be wide, not
+         exactly as wide as it is required to be. */
+      const sc = Math.min(rr, MIN*2.2) - step*7.5*DEG*90;
+      if(sc > bearingScore){ bearingScore = sc; dir = th; reach = rr; }
+    }
   }
-  const want = clamp(P.hospitalDist * reach, Math.min(130, reach*0.8), reach*0.96);
+  if(dir === null){
+    /* No bearing from this hospital has the room. The hospital is in the
+       wrong place for this terrain, so the attempt fails and the world is
+       generated again — which is the point of the retry loop. */
+    Wld.stats.startNoRoom = true;
+    return false;
+  }
+  const want = clamp(P.hospitalDist * reach, Math.max(MIN, Math.min(130, reach*0.8)), reach*0.96);
   let best = null, bestScore = -Infinity;
   for(let ring=0; ring<30; ring++){
     const spread = 0.18 + ring*0.16;                 // widen the arc as we give up
@@ -3863,6 +4071,7 @@ function placeStart(relax = 0){
       if(!inGrid(ix,iz)) continue;
       const i = iz*N+ix;
       if(!isFinite(cellWalkCost(i))) continue;
+      if(Math.hypot(x-hos.x, z-hos.z) < MIN) continue;     // never near the hospital
       if(Wld.WLEV[i] > Wld.H[i]-0.15) continue;            // not standing in water
       if(Wld.SLOPE[i] > 0.34 + relax*0.10) continue;
       /* Nothing sharp within HAZARD.CLEAR metres, by the shared predicate.
@@ -3900,7 +4109,7 @@ function placeStart(relax = 0){
       if(Wld.SLOPE[i] > 0.48) continue;
       const x = wxOf(ix), z = wzOf(iz);
       const d = Math.hypot(x-hos.x, z-hos.z);
-      if(d < Math.min(120, want*0.45)) continue;
+      if(d < Math.max(MIN, Math.min(120, want*0.45))) continue;
       const bearing = Math.abs(angDiff(dir, Math.atan2(z-hos.z, x-hos.x)));
       const sc = -Math.abs(d-want)*0.05 - bearing*14 - Wld.SLOPE[i]*18;
       if(sc > fbScore){ fbScore = sc; best = { x, z, ix, iz, i }; }
@@ -3924,7 +4133,15 @@ function mindMinutesBudget(){
   return 1 / rate;
 }
 
-const GUARANTEES = ['G1 reachable','G2 in time','G3 water','G4 food','G5 clues','G6 hazards'];
+/* Whether this seed is one of the two documented ones, which are the
+   only seeds allowed past the wilderness rule. */
+function eggDistance(){
+  const e = EASTER_EGGS[G.seedNum];
+  return !!(e && e.shortWalk);
+}
+
+const GUARANTEES = ['G1 reachable','G2 in time','G3 water','G4 food','G5 clues','G6 hazards',
+                    'G7 wilderness'];
 function validateWorld(){
   const res = { pass:true, fail:[], detail:{} };
   const fail = (g, why)=>{ res.pass=false; res.fail.push(g); res.detail[g]=why; };
@@ -3935,6 +4152,38 @@ function validateWorld(){
   Wld.routePath = path;
   const metres = pathMetres(path);
   res.detail.pathMetres = Math.round(metres);
+
+  /* G7 — THE PLAYER WOKE UP IN THE WILDERNESS.
+     Checked here as well as enforced in placeStart, because a rule that
+     is only applied where it is convenient is not a rule: this is the
+     test that decides whether the seed is used at all, and a world that
+     fails it is thrown away and generated again. Straight-line distance
+     AND the distance actually walked, because a hospital 600m away
+     across a gorge you can step over is not far away.
+
+     The exclusion zone is the same requirement seen from the other side:
+     no road may reach into it. Trails may — a trail in the woods is a
+     thing to find and follow, which is the game — but a road is a
+     finger pointing at the town. */
+  const straight = Math.hypot(Wld.start.x-Wld.hospital.x, Wld.start.z-Wld.hospital.z);
+  res.detail.civDistance = Math.round(straight);
+  if(!eggDistance()){
+    const W = CFG.WORLD;
+    if(straight < W.minCivDist)
+      fail('G7', `start ${Math.round(straight)}m from the hospital, minimum ${W.minCivDist}m`);
+    if(metres < W.minCivPath)
+      fail('G7', `${Math.round(metres)}m walk, minimum ${W.minCivPath}m`);
+    let roadIn = 0;
+    const er = Math.ceil(W.civExclusion/Wld.cell);
+    for(let dz=-er; dz<=er; dz++) for(let dx=-er; dx<=er; dx++){
+      const ix = Wld.start.ix+dx, iz = Wld.start.iz+dz;
+      if(!inGrid(ix,iz)) continue;
+      if(dx*dx+dz*dz > er*er) continue;
+      if(Wld.ROUTE[iz*Wld.N+ix] === 2) roadIn++;
+    }
+    res.detail.roadCellsNearStart = roadIn;
+    if(roadIn > 0) fail('G7', `${roadIn} road cells inside the ${W.civExclusion}m exclusion zone`);
+  }
 
   // G2 — and it fits inside this seed's clock with room to wander
   const walkMin = metres / CFG.PLAYER.walk / 60;
@@ -4050,8 +4299,8 @@ function generateWorld(onProgress){
   const t0 = performance.now();
   let attempt = 0, result = null;
   const log = [];
-  for(; attempt<8; attempt++){
-    if(onProgress) onProgress(attempt/8, attempt===0 ? 'shaping the land' : 'the land did not work, trying again');
+  for(; attempt<14; attempt++){
+    if(onProgress) onProgress(attempt/14, attempt===0 ? 'shaping the land' : 'the land did not work, trying again');
     genTerrain(attempt);
     genHydrology();
     placeHospital();
@@ -9900,11 +10149,18 @@ const DEV = (()=>{
     row.appendChild(el('label', null, 'seed'));
     const seedIn = document.createElement('input');
     seedIn.type = 'text'; seedIn.value = G.seedText;
+    seedIn.setAttribute('maxlength', '7');
+    seedIn.setAttribute('inputmode', 'numeric');
+    seedIn.addEventListener('input', ()=>{
+      seedIn.value = seedIn.value.replace(/[^0-9]/g, '').slice(0, 7);
+    });
     row.appendChild(seedIn);
     const go = el('button', null, 'regenerate');
     go.onclick = ()=>{
+      const n = parseSeed(seedIn.value);
+      if(n == null){ flash('seed must be 0 to ' + SEED_MAX); return; }
       const u = new URL(location.href);
-      u.searchParams.set('seed', seedIn.value || 'x');
+      u.searchParams.set('seed', String(n));
       location.href = u.toString();
     };
     row.appendChild(go);
@@ -9912,7 +10168,7 @@ const DEV = (()=>{
     const g6 = el('div','grid'); s6.appendChild(g6);
     button(g6, 'random seed', ()=>{
       const u = new URL(location.href);
-      u.searchParams.set('seed', Math.random().toString(36).slice(2,9));
+      u.searchParams.set('seed', String(randomSeed()));
       location.href = u.toString();
     });
     button(g6, 'VALIDATE 40 SEEDS', ()=> runValidator(40));
@@ -10007,10 +10263,12 @@ const DEV = (()=>{
     setTimeout(()=>{
       const t0 = performance.now();
       const savedSeed = G.seed, savedText = G.seedText, savedP = P;
+      const savedNum = G.seedNum;
       const fails = {}; let pass = 0; let attempts = 0;
       const byStyle = {};
       for(let i=0;i<n;i++){
-        G.seed = hashString('validate-' + i + '-' + savedSeed);
+        G.seedNum = (seedState(savedNum + i*2654435761) % (SEED_MAX+1));
+        G.seed = seedState(G.seedNum);
         P = rollPersonality();
         const st = P.terrain;
         byStyle[st] = byStyle[st] || { n:0, pass:0 };
@@ -10021,7 +10279,7 @@ const DEV = (()=>{
         else for(const f of v.fail) fails[f] = (fails[f]||0)+1;
       }
       const ms = performance.now()-t0;
-      G.seed = savedSeed; G.seedText = savedText; P = savedP;
+      G.seed = savedSeed; G.seedText = savedText; G.seedNum = savedNum; P = savedP;
       generateWorld();     // put the player's own world back
       flash(
         `${pass}/${n} passed all guarantees\n`
@@ -10337,9 +10595,15 @@ function setProgress(f, msg){
 }
 const frameBreak = ()=> new Promise(r=> requestAnimationFrame(()=> setTimeout(r, 0)));
 
-async function startRun(seedText){
-  G.seedText = seedText;
-  G.seed = hashString(seedText);
+async function startRun(seedInput){
+  /* Whatever comes in — a number, the input's text, a URL parameter —
+     becomes a seed here or the run does not start with it. Nothing
+     downstream ever sees anything but the number. */
+  const n = typeof seedInput === 'number' && seedInput >= 0 && seedInput <= SEED_MAX
+    ? Math.floor(seedInput) : parseSeed(seedInput);
+  G.seedNum = n == null ? randomSeed() : n;
+  G.seedText = seedLabel(G.seedNum);
+  G.seed = seedState(G.seedNum);
   P = rollPersonality();
 
   setProgress(0.03, 'reading the seed');
@@ -10420,21 +10684,54 @@ function boot(){
   UI.init();
   initInput();
   const params = new URL(location.href).searchParams;
-  const urlSeed = params.get('seed');
   const input = document.getElementById('seedin');
   const btn = document.getElementById('startbtn');
-  const rand = ()=> Math.random().toString(36).slice(2, 9);
+  const msg = document.getElementById('bootmsg');
 
-  input.value = urlSeed || rand();
-  btn.disabled = false;
-  document.getElementById('bootmsg').textContent = 'ready';
-  document.getElementById('randseed').onclick = ()=>{ input.value = rand(); };
-  input.addEventListener('keydown', e=>{ if(e.key === 'Enter') btn.click(); });
+  /* DIGITS ONLY, AND NEVER MORE THAN SEVEN. Filtering as they type is
+     kinder than refusing afterwards: a letter simply does not appear,
+     so there is nothing to explain and nothing to undo. The value is
+     still parsed on start, because a field can be filled by other means
+     than typing. */
+  input.value = String(parseSeed(params.get('seed')) ?? randomSeed());
+  input.setAttribute('maxlength', '7');
+  input.setAttribute('inputmode', 'numeric');
+  input.setAttribute('pattern', '[0-9]*');
+  input.setAttribute('aria-label', 'seed, 0 to ' + SEED_MAX);
+  /* REFUSED, NOT CORRECTED. Stripping a stray letter out of the middle
+     of "12a34" leaves 1234, which is a seed the player did not ask for
+     and will not be able to ask for again; truncating 10000000 to seven
+     digits leaves 1000000, which is worse, because it is a valid seed
+     and looks deliberate. So an edit that does not produce a seed is
+     rejected outright and the field keeps the last value that did. */
+  let lastGood = input.value;
+  const clean = ()=>{
+    const v = input.value;
+    if(v === ''){ lastGood = ''; btn.disabled = true; msg.textContent = 'enter a seed'; return; }
+    if(parseSeed(v) == null){
+      input.value = lastGood;
+      btn.disabled = parseSeed(lastGood) == null;
+      msg.textContent = /[^0-9]/.test(v) ? 'digits only'
+                      : 'seed must be 0 to ' + SEED_MAX;
+      return;
+    }
+    lastGood = v;
+    btn.disabled = false;
+    msg.textContent = 'seed ' + String(parseSeed(v));
+  };
+  input.addEventListener('input', clean);
+  input.addEventListener('paste', ()=> setTimeout(clean, 0));
+  document.getElementById('randseed').onclick = ()=>{
+    input.value = String(randomSeed()); clean(); };
+  input.addEventListener('keydown', e=>{ if(e.key === 'Enter' && !btn.disabled) btn.click(); });
+  clean();
 
   btn.onclick = ()=>{
+    const n = parseSeed(input.value);
+    if(n == null){ clean(); return; }
     btn.disabled = true;
     document.getElementById('seedrow').style.display = 'none';
-    startRun((input.value || rand()).trim());
+    startRun(n);
   };
   if(params.get('auto') === '1') btn.click();
   animate();
@@ -10453,6 +10750,7 @@ window.DR = {
   setP(p){ P = p; },
   heightAt, waterLevelAt, waterDepthAt, slopeAt, normalAt, cellHazard, cellWalkCost,
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
+  parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders,
   CollisionView, get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
