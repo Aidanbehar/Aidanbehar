@@ -705,6 +705,15 @@ const CFG = {
     shoreGrade: 0.20,        // the gradient the smoothed bank aims for
   },
 
+  /* ---- the people in the town --------------------------------------- */
+  PEOPLE: {
+    count: [4, 9],       // how many live here
+    pause: [2.5, 11],    // seconds standing still between walks
+    indoors: [12, 40],   // ... and out of sight inside a house
+    simRange: 210,       // metres from the town centre before they stop moving
+    drawRange: 150,      // ... and before they stop being drawn
+  },
+
   /* ---- routes ------------------------------------------------------- */
   ROUTE: {
     roadSlopeCost: 260,  // roads hate slope more than anything
@@ -3365,6 +3374,34 @@ function genRoutes(){
    cabin here" test reads it. Derived from the terrain rather than
    scattered, so a clearing is somewhere the land explains.
    ------------------------------------------------------------------- */
+/* The town's street, written into the route network AFTER genRoutes has
+   built it — genRoutes allocates ROUTE fresh, so anything stamped before
+   it is thrown away. Marking it as road rather than trail is what makes
+   the ground painter surface it and the map draw it, and it is what the
+   player follows the last few hundred metres. */
+function stampStreet(){
+  const S = Wld.street;
+  if(!S || !Wld.ROUTE) return;
+  const N = Wld.N;
+  const half = S.width*0.5;
+  const steps = Math.ceil(Math.hypot(S.x1-S.x0, S.z1-S.z0) / (Wld.cell*0.5));
+  const rad = Math.ceil(half/Wld.cell);
+  for(let k=0;k<=steps;k++){
+    const t = k/steps;
+    const x = S.x0 + (S.x1-S.x0)*t, z = S.z0 + (S.z1-S.z0)*t;
+    const ix = Math.round(gxOf(x)), iz = Math.round(gzOf(z));
+    for(let dz=-rad; dz<=rad; dz++) for(let dx=-rad; dx<=rad; dx++){
+      const nx = ix+dx, nz = iz+dz;
+      if(!inGrid(nx,nz)) continue;
+      if(Math.hypot(dx,dz)*Wld.cell > half) continue;
+      const i = nz*N+nx;
+      if(Wld.WLEV[i] > Wld.H[i]-0.1) continue;      // not across the river
+      Wld.ROUTE[i] = 2;
+      Wld.WORN[i] = Math.max(Wld.WORN[i], 0.92);
+    }
+  }
+}
+
 function genCanopy(){
   const N = Wld.N, n2 = N*N;
   const CLEARF = new Float32Array(n2);
@@ -4397,6 +4434,7 @@ function generateWorld(onProgress){
         }
       }
       genRoutes();
+      stampStreet();
       genCanopy();
       genStructures();
       /* The ground is levelled under everything that was just placed,
@@ -4957,12 +4995,30 @@ const Veg = {
       const r = (t.clearR || 10);
       this.clearings.push({ x: t.x, z: t.z, r2: r*r });
     }
+    /* The street, and the ground either side of it. A town in a forest
+       is a town with the forest cut back from it; without this the
+       houses stood among the trunks with spruce growing in the road. */
+    const S = Wld.street;
+    if(S) this.clearings.push({ seg:true, x0:S.x0, z0:S.z0, x1:S.x1, z1:S.z1,
+                                r2: (S.width*0.5 + 4.5)*(S.width*0.5 + 4.5) });
   },
   inClearing(x, z){
     for(let i=0;i<this.clearings.length;i++){
       const c = this.clearings[i];
-      const dx = x-c.x, dz = z-c.z;
-      if(dx*dx + dz*dz < c.r2) return true;
+      if(c.seg){
+        /* A street is a corridor, not a circle: distance to the line
+           segment, so the trees stop at the verge along its whole
+           length instead of only round its middle. */
+        const vx = c.x1-c.x0, vz = c.z1-c.z0;
+        const L2 = vx*vx + vz*vz || 1;
+        let t = ((x-c.x0)*vx + (z-c.z0)*vz) / L2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const dx = x - (c.x0 + vx*t), dz = z - (c.z0 + vz*t);
+        if(dx*dx + dz*dz < c.r2) return true;
+      } else {
+        const dx = x-c.x, dz = z-c.z;
+        if(dx*dx + dz*dz < c.r2) return true;
+      }
     }
     return false;
   },
@@ -6450,6 +6506,186 @@ const Doors = {
 };
 
 /* ---------------------------------------------------------------------
+   ===== PEOPLE =====
+
+   There are people in the town. They walk up and down the street, stand
+   about, and go in and out of the houses, and that is the whole of their
+   behaviour — a state machine with four states and a list of places to
+   walk to. It is enough, because what they are for is the moment the
+   player comes out of the trees and sees somebody, after an hour of a
+   forest that has been lying to them.
+
+   Two decisions worth stating.
+
+   THEY DO NOT COLLIDE. A person standing in a doorway that the player
+   cannot walk through is an invisible wall with a hat on, and this file
+   has spent a lot of effort removing those. They are drawn and they are
+   not in any collision list, so the worst case is walking through
+   somebody, which is a great deal better than being trapped by them.
+
+   THEY ARE REAL. They are not on the phantom layer, they are not drawn
+   from the hallucination library, and the mind cannot invent them. The
+   town is the one place in this game where what the player sees is true,
+   and that is worth protecting: if the people could be lies, arriving
+   would mean nothing.
+   ------------------------------------------------------------------- */
+const People = {
+  list: [], waypoints: [], active: false,
+
+  clear(){
+    for(const p of this.list) if(p.obj && p.obj.parent) p.obj.parent.remove(p.obj);
+    this.list.length = 0; this.waypoints.length = 0; this.active = false;
+  },
+
+  /* A body, at about the size of one. Shoulders, a head, two arms and
+     two legs that swing: enough silhouette to read as a person at forty
+     metres, which is the range that matters. */
+  makeBody(rng){
+    const g = new THREE.Group();
+    const coatTone = new THREE.Color().setHSL(rng.range(0.05, 0.62), rng.range(0.05, 0.28),
+                                              rng.range(0.16, 0.38));
+    const coat = new THREE.MeshStandardMaterial({ color: coatTone, roughness: 0.85, metalness: 0.0 });
+    const skin = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(0.07, 0.30, rng.range(0.34, 0.62)),
+      roughness: 0.75 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x23262a, roughness: 0.9 });
+    const box = (w,h,d, mat, x,y,z)=>{
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      m.position.set(x,y,z); m.castShadow = true; m.receiveShadow = true;
+      m.userData.noclip = true;
+      g.add(m); return m;
+    };
+    box(0.40, 0.62, 0.24, coat, 0, 1.12, 0);                 // torso
+    box(0.44, 0.10, 0.26, coat, 0, 1.40, 0);                 // shoulders
+    box(0.19, 0.22, 0.20, skin, 0, 1.56, 0);                 // head
+    box(0.20, 0.07, 0.22, dark, 0, 1.68, 0);                 // hair
+    const armL = box(0.11, 0.54, 0.13, coat, -0.26, 1.10, 0);
+    const armR = box(0.11, 0.54, 0.13, coat,  0.26, 1.10, 0);
+    const legL = box(0.14, 0.78, 0.16, dark, -0.11, 0.42, 0);
+    const legR = box(0.14, 0.78, 0.16, dark,  0.11, 0.42, 0);
+    for(const m of [armL, armR, legL, legR]) m.geometry.translate(0, -0.27, 0);
+    armL.position.y = 1.37; armR.position.y = 1.37;
+    legL.position.y = 0.81; legR.position.y = 0.81;
+    g.userData.limbs = { armL, armR, legL, legR };
+    return g;
+  },
+
+  build(){
+    this.clear();
+    const town = Wld.townBuildings || [];
+    if(!town.length || !Wld.street) return;
+    const rng = rngFor('people');
+    const S = Wld.street;
+    const dx = S.x1 - S.x0, dz = S.z1 - S.z0;
+    const len = Math.hypot(dx, dz) || 1;
+    const ux = dx/len, uz = dz/len;
+
+    /* Places worth walking to: points along the street, and the patch of
+       ground outside each door. */
+    for(let t=0.08; t<=0.92; t+=0.085){
+      const x = S.x0 + dx*t + (rng()-0.5)*1.8;
+      const z = S.z0 + dz*t + (rng()-0.5)*1.8;
+      this.waypoints.push({ x, z, kind:'street' });
+    }
+    for(const b of town){
+      if(!b.mesh || !b.mesh.userData.entry) continue;
+      const e = b.mesh.userData.entry.clone().applyMatrix4(b.mesh.matrixWorld);
+      this.waypoints.push({ x:e.x, z:e.z, kind:'door', host:b });
+    }
+    const h = Wld.hospital;
+    if(h && h.entryWorld) this.waypoints.push({ x:h.entryWorld.x, z:h.entryWorld.z, kind:'door', host:h });
+    if(this.waypoints.length < 3) return;
+
+    const n = rng.irange(CFG.PEOPLE.count[0], CFG.PEOPLE.count[1]);
+    for(let i=0;i<n;i++){
+      const w = this.waypoints[rng.irange(0, this.waypoints.length-1)];
+      const obj = this.makeBody(rng);
+      obj.position.set(w.x, heightAt(w.x, w.z), w.z);
+      setLayerDeep(obj, LAYER_WORLD);
+      scene.add(obj);
+      this.list.push({
+        obj, x:w.x, z:w.z, yaw: rng()*TAU,
+        speed: rng.range(0.85, 1.35),
+        state: 'idle', timer: rng.range(0.5, 6), phase: rng()*TAU,
+        target: null, indoorsUntil: 0,
+      });
+    }
+    this.active = true;
+    Wld.stats.people = this.list.length;
+  },
+
+  pick(rng, p){
+    const w = this.waypoints[Math.floor(rng()*this.waypoints.length)];
+    return w || null;
+  },
+
+  update(dt){
+    if(!this.active || !this.list.length) return;
+    /* Nothing happens to people the player cannot see. The town is one
+       place on a 1km map and this runs every frame of the other 59
+       minutes for nothing otherwise. */
+    const px = Player.pos.x, pz = Player.pos.z;
+    const S = Wld.street;
+    const near = Math.hypot(px - (S.x0+S.x1)/2, pz - (S.z0+S.z1)/2) < CFG.PEOPLE.simRange;
+    const rng = rngFor('peopleTick', Math.floor(G.t*3));
+    for(const p of this.list){
+      const d2 = (p.x-px)*(p.x-px) + (p.z-pz)*(p.z-pz);
+      p.obj.visible = !p.hidden && d2 < CFG.PEOPLE.drawRange*CFG.PEOPLE.drawRange;
+      if(!near) continue;
+
+      p.timer -= dt;
+      if(p.state === 'idle'){
+        if(p.timer <= 0){
+          const w = this.pick(rng, p);
+          if(w){ p.target = w; p.state = 'walk'; p.timer = 30; }
+          else p.timer = 2;
+        }
+      } else if(p.state === 'walk'){
+        const tx = p.target.x - p.x, tz = p.target.z - p.z;
+        const d = Math.hypot(tx, tz);
+        if(d < 0.6 || p.timer <= 0){
+          p.state = 'idle';
+          p.timer = rng.range(CFG.PEOPLE.pause[0], CFG.PEOPLE.pause[1]);
+          /* At a door, a person goes in and is gone for a while, which
+             is the cheapest possible "enters and exits buildings". */
+          if(p.target.kind === 'door' && rng.chance(0.45)){
+            p.hidden = true; p.state = 'inside';
+            p.timer = rng.range(CFG.PEOPLE.indoors[0], CFG.PEOPLE.indoors[1]);
+          }
+        } else {
+          const step = Math.min(p.speed*dt, d);
+          p.x += tx/d*step; p.z += tz/d*step;
+          p.yaw = Math.atan2(tx, tz);
+        }
+      } else if(p.state === 'inside'){
+        if(p.timer <= 0){ p.hidden = false; p.state = 'idle'; p.timer = 0.5; }
+      }
+
+      // stand on the ground, or on the floor of whatever they are on
+      const gy = heightAt(p.x, p.z);
+      const fy = surfaceAt(p.x, p.z, gy, 0.3);
+      const y = Math.max(gy, fy > -1e8 ? fy : -Infinity);
+      p.obj.position.set(p.x, y, p.z);
+      p.obj.rotation.y = p.yaw;
+      // a walk cycle, and a little breathing when standing
+      const L = p.obj.userData.limbs;
+      if(L){
+        if(p.state === 'walk'){
+          p.phase += dt*p.speed*4.4;
+          const sw = Math.sin(p.phase)*0.55;
+          L.legL.rotation.x = sw; L.legR.rotation.x = -sw;
+          L.armL.rotation.x = -sw*0.7; L.armR.rotation.x = sw*0.7;
+        } else {
+          const ease = clamp(dt*4, 0, 1);
+          for(const k of ['legL','legR','armL','armR'])
+            L[k].rotation.x = lerp(L[k].rotation.x, 0, ease);
+        }
+      }
+    }
+  },
+};
+
+/* ---------------------------------------------------------------------
    ===== THE TOWN =====
 
    The hospital used to stand by itself in the woods: one concrete box at
@@ -6475,13 +6711,95 @@ const Doors = {
 const TOWN = {
   streetOffset: 21,      // metres from the hospital's front to the street
   streetHalfLength: 78,  // how far the street runs either way
-  rowNear: 13.5,         // house rows, as offsets from the hospital front
-  rowFar: 31,
+  /* THE ROWS SIT ON THE ROAD BED. The street is graded across a verge
+     seven metres either side of its centre line; rows outside that band
+     were being placed on raw hillside, and then rejected for being on
+     raw hillside. Measured across twenty seeds before this: a median of
+     ONE house, and seeds with none at all. */
+  rowOffset: 11.5,       // metres from the street's centre line to a front door
   gapAtEntrance: 13,     // no house directly in front of the doors
   spacing: [15, 26],     // metres between neighbours along the street
   houses: [5, 9],
   sheds: [1, 3],
+  grade: 0.085,          // the steepest the road bed is allowed to run
+  maxCut: 4.5,           // ... and the most earth it may move to get there
+  verge: 11,             // how far either side of it is graded with it
+  plotRelief: 4.0,       // how uneven a plot may be before its pad is a quarry
+  nudge: [0, 5, -5, 9, -9, 14]   // metres along the street to try if a plot fails
 };
+
+/* ---------------------------------------------------------------------
+   THE STREET IS GRADED, LIKE A ROAD
+
+   A street laid straight across a hillside is not a street. Measured on
+   one seed before this existed, the ground 70m along the town's road was
+   45 metres below the hospital's floor — a 0.64 gradient, which is a
+   cliff with houses beside it.
+
+   So the road bed is built the way the mountain pass already is in this
+   file: sample the ground along the line, limit the profile to a
+   walkable grade with alternating forward and backward sweeps, and blend
+   the terrain into it across the width plus a verge. Where the cut or
+   fill needed would be bigger than a road cutting reasonably is, the
+   street STOPS there — a shorter town on a steep site, rather than a
+   viaduct.
+   ------------------------------------------------------------------- */
+function carveStreet(S, maxGrade, maxCut, dryRun){
+  const step = 2.0;
+  const len = Math.hypot(S.x1-S.x0, S.z1-S.z0);
+  const n = Math.max(2, Math.round(len/step));
+  const ux = (S.x1-S.x0)/len, uz = (S.z1-S.z0)/len;
+  const prof = [], px = [], pz = [];
+  for(let i=0;i<=n;i++){
+    const d = i*step;
+    const x = S.x0 + ux*d, z = S.z0 + uz*d;
+    px.push(x); pz.push(z); prof.push(heightAt(x, z));
+  }
+  /* The hospital's own doorstep is the height the street has to meet, so
+     the profile is anchored at the point nearest it. */
+  const h = Wld.hospital;
+  let anchor = 0, ad = Infinity;
+  for(let i=0;i<=n;i++){
+    const d = Math.hypot(px[i]-h.x, pz[i]-h.z);
+    if(d < ad){ ad = d; anchor = i; }
+  }
+  prof[anchor] = h.y;
+  const lim = maxGrade*step;
+  for(let pass=0; pass<4; pass++){
+    for(let i=anchor+1;i<=n;i++) prof[i] = clamp(prof[i], prof[i-1]-lim, prof[i-1]+lim);
+    for(let i=anchor-1;i>=0;i--) prof[i] = clamp(prof[i], prof[i+1]-lim, prof[i+1]+lim);
+    // and a smoothing pass, so the road is not a staircase of limits
+    const cp = prof.slice();
+    for(let i=1;i<n;i++) prof[i] = (cp[i-1] + cp[i]*2 + cp[i+1])/4;
+    prof[anchor] = h.y;
+  }
+  /* Where the earthworks stop being a road cutting, the road stops. */
+  let lo = anchor, hi = anchor;
+  while(lo > 0   && Math.abs(prof[lo-1] - heightAt(px[lo-1], pz[lo-1])) < maxCut) lo--;
+  while(hi < n   && Math.abs(prof[hi+1] - heightAt(px[hi+1], pz[hi+1])) < maxCut) hi++;
+
+  if(dryRun) return { from: (lo-anchor)*step, to: (hi-anchor)*step,
+                      x0: px[lo], z0: pz[lo], x1: px[hi], z1: pz[hi] };
+  const half = S.width*0.5, verge = TOWN.verge;
+  const N = Wld.N, H = Wld.H;
+  for(let i=lo;i<=hi;i++){
+    const rad = Math.ceil((half+verge)/Wld.cell);
+    const ix = Math.round(gxOf(px[i])), iz = Math.round(gzOf(pz[i]));
+    for(let dz=-rad; dz<=rad; dz++) for(let dx=-rad; dx<=rad; dx++){
+      const nx = ix+dx, nz = iz+dz;
+      if(!inGrid(nx,nz)) continue;
+      const j = nz*N+nx;
+      if(Wld.WLEV[j] > H[j]-0.05) continue;        // never carve water
+      const d = Math.hypot(wxOf(nx)-px[i], wzOf(nz)-pz[i]);
+      if(d > half+verge) continue;
+      const w = 1 - smoothstep(half, half+verge, d);
+      H[j] = lerp(H[j], prof[i], w);
+    }
+  }
+  recomputeSlope();
+  return { x0: px[lo], z0: pz[lo], x1: px[hi], z1: pz[hi],
+           from: (lo-anchor)*step, to: (hi-anchor)*step };
+}
 
 function genTown(){
   const out = [];
@@ -6494,16 +6812,53 @@ function genTown(){
   const toWorld = (lx, lz)=>({ x: hos.x + lx*c + lz*s, z: hos.z - lx*s + lz*c });
   const LIM = Wld.size*0.46;
 
+  /* WHICH WAY THE STREET RUNS.
+     Along the hospital's own axis by preference, because that is the way
+     it faces and the way the road leaves — but a hospital can face along
+     a river that runs straight up a hillside, and then a street on that
+     axis survives forty metres before the earthworks stop it and the
+     town is one house. So a handful of bearings are tried, each is asked
+     how much street it would actually yield, and the best is taken with
+     a penalty for turning away from the hospital's own direction. */
+  const anchor = toWorld(0, TOWN.streetOffset);
+  let bestDir = 0, bestScore = -Infinity, graded = null;
+  for(const off of [0, 22*DEG, -22*DEG, 45*DEG, -45*DEG, 68*DEG, -68*DEG, 90*DEG]){
+    const th = hos.yaw + off;
+    const dx2 = Math.cos(th), dz2 = -Math.sin(th);
+    const probe = { x0: anchor.x - dx2*TOWN.streetHalfLength,
+                    z0: anchor.z - dz2*TOWN.streetHalfLength,
+                    x1: anchor.x + dx2*TOWN.streetHalfLength,
+                    z1: anchor.z + dz2*TOWN.streetHalfLength, width: 6.5 };
+    const dry = carveStreet(probe, TOWN.grade, TOWN.maxCut, true);
+    const usable = Math.min(Math.abs(dry.from), TOWN.streetHalfLength)
+                 + Math.min(Math.abs(dry.to), TOWN.streetHalfLength);
+    const score = usable - Math.abs(off)*22;
+    if(score > bestScore){ bestScore = score; bestDir = th; }
+  }
+  const sdx = Math.cos(bestDir), sdz = -Math.sin(bestDir);
+  graded = carveStreet({ x0: anchor.x - sdx*TOWN.streetHalfLength,
+                         z0: anchor.z - sdz*TOWN.streetHalfLength,
+                         x1: anchor.x + sdx*TOWN.streetHalfLength,
+                         z1: anchor.z + sdz*TOWN.streetHalfLength, width: 6.5 },
+                       TOWN.grade, TOWN.maxCut);
+  /* From here on the town is laid out in the STREET's frame: along it,
+     and offset to either side of it. */
+  const perpX = -sdz, perpZ = sdx;
+  const townPos = (along, side)=>({
+    x: anchor.x + sdx*along + perpX*side,
+    z: anchor.z + sdz*along + perpZ*side });
+  const townYaw = (side)=> bestDir + (side > 0 ? Math.PI : 0) + Math.PI/2;
   const want = rng.irange(TOWN.houses[0], TOWN.houses[1]);
   const plots = [];
   /* Walk out from the middle of the street in both directions, dropping
      a house on one side or the other as the gaps come up. */
+  const reachA = Math.abs(graded.from), reachB = Math.abs(graded.to);
   for(const side of [-1, 1]){
+    const reach = Math.min(TOWN.streetHalfLength, side < 0 ? reachA : reachB) - 6;
     let along = TOWN.gapAtEntrance + rng.range(0, 9);
-    while(along < TOWN.streetHalfLength && plots.length < want + 4){
-      const far = rng.chance(0.55);
-      const lz = far ? TOWN.rowFar : TOWN.rowNear;
-      plots.push({ lx: side*along, lz, far, kind:'house' });
+    while(along < reach && plots.length < want + 4){
+      const across = rng.chance(0.55) ? 1 : -1;     // which side of the road
+      plots.push({ along: side*along, side: across, kind:'house' });
       along += rng.range(TOWN.spacing[0], TOWN.spacing[1]);
     }
   }
@@ -6513,11 +6868,9 @@ function genTown(){
      a reason attached to it rather than being a mystery. */
   const rej = { offMap:0, wet:0, rough:0, tried:0 };
   const place = (p, kind)=>{
-    const w = toWorld(p.lx, p.lz);
+    const w = townPos(p.along, p.side * TOWN.rowOffset);
+    const yaw = townYaw(p.side);
     if(Math.abs(w.x) > LIM || Math.abs(w.z) > LIM){ rej.offMap++; return false; }
-    /* Facing the street: the near row looks back at the hospital, the
-       far row looks across the street toward it. */
-    const yaw = hos.yaw + (p.far ? Math.PI : 0);
     const style = kind === 'shed'
       ? { footprint:[3.6, 3.0], height:2.2, rooms:1, windows:0 }
       : { footprint:[rng.range(7.2, 9.6), rng.range(6.0, 7.8)],
@@ -6527,7 +6880,11 @@ function genTown(){
                         style.footprint[1]*0.5 + PAD.margin];
     const g = padGround(w.x, w.z, phx, phz, yaw);
     if(g.wet > 0){ rej.wet++; return false; }
-    if(g.relief > PAD.maxRelief*2.2){ rej.rough++; return false; }
+    /* A town plot is allowed rougher ground than a cabin's because its
+       foundation is going in beside a road that has already been cut:
+       the pad levels it, and the limit is only there to stop a house
+       standing on the side of a hill. */
+    if(g.relief > TOWN.plotRelief){ rej.rough++; return false; }
     // not on top of the hospital or a neighbour
     if(Math.hypot(w.x-hos.x, w.z-hos.z) < 19) return false;
     /* Neighbours keep a house's distance from each other; a shed is
@@ -6553,24 +6910,40 @@ function genTown(){
   let made = 0;
   for(const p of plots){
     if(made >= want) break;
-    if(place(p, 'house')) made++;
+    /* A plot that does not work is nudged along the street before it is
+       given up on: the row is a row of houses, not a row of exact
+       positions, and moving one five metres costs nothing. */
+    /* Nudged along the street, and tried on the other side of it: the
+       hospital stands at the river's outlet, so one side of the road is
+       often the bank. Rejections for water outnumbered every other
+       reason two to one, and a plot refused on the wet side is usually
+       fine directly opposite. */
+    let done = false;
+    for(const nudge of TOWN.nudge){
+      for(const side of [p.side, -p.side]){
+        if(place({ along: p.along + Math.sign(p.along || 1)*nudge, side }, 'house')){
+          made++; done = true; break;
+        }
+      }
+      if(done) break;
+    }
   }
   // a couple of outbuildings, tucked behind the houses
   const sheds = rng.irange(TOWN.sheds[0], TOWN.sheds[1]);
   for(let i=0;i<sheds;i++){
     const host = out[rng.irange(0, Math.max(0, out.length-1))];
     if(!host) break;
-    const a = rng()*TAU, d = rng.range(7, 11);
-    const sx = host.x + Math.cos(a)*d, sz = host.z + Math.sin(a)*d;
-    const lx = (sx-hos.x)*c - (sz-hos.z)*s, lz = (sx-hos.x)*s + (sz-hos.z)*c;
-    place({ lx, lz, far:false, kind:'shed' }, 'shed');
+    /* Behind the house, away from the road, which is where a shed goes. */
+    const along = (host.x-anchor.x)*sdx + (host.z-anchor.z)*sdz + rng.range(-4, 4);
+    const side  = (host.x-anchor.x)*perpX + (host.z-anchor.z)*perpZ;
+    place({ along, side: Math.sign(side || 1) * (Math.abs(side) + rng.range(6, 9))
+                          / TOWN.rowOffset }, 'shed');
   }
 
   /* The street itself, as a line the route layer can follow and the
      ground painter can darken. Two points is enough: it is straight. */
-  const a0 = toWorld(-TOWN.streetHalfLength, TOWN.streetOffset);
-  const a1 = toWorld( TOWN.streetHalfLength, TOWN.streetOffset);
-  Wld.street = { x0:a0.x, z0:a0.z, x1:a1.x, z1:a1.z, width: 6.5 };
+  Wld.street = { x0:graded.x0, z0:graded.z0, x1:graded.x1, z1:graded.z1, width: 6.5 };
+  Wld.stats.streetLength = Math.round(Math.hypot(graded.x1-graded.x0, graded.z1-graded.z0));
   Wld.townBuildings = out;
   recomputeSlope();
   Wld.stats.townBuildings = out.length;
@@ -6740,6 +7113,9 @@ function buildAllStructures(){
   registerColliders();
   Veg.rebuildClearings();
   Veg.dirty = true;
+  /* The people are built last, because where they walk is derived from
+     the doors of buildings that have to exist first. */
+  People.build();
 }
 
 /* ---------------------------------------------------------------------
@@ -11204,6 +11580,7 @@ function stepWorld(dt){
   updateSky(dt);
   updateFires(dt);
   Doors.update(dt);
+  People.update(dt);
   Survival.update(dt);
   Gear.update(dt);
   Mind.update(dt);
@@ -11414,7 +11791,7 @@ window.DR = {
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders,
-  CollisionView, get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
+  CollisionView, People, get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
 };
 
 boot();
