@@ -986,6 +986,25 @@ const CFG = {
   },
 
   /* ---- rendering ------------------------------------------------------ */
+  /* ---- THE THINGS THAT ARE ACTUALLY THERE ----------------------
+     Numbers for the creatures. They are here rather than inside the
+     system so that "how dangerous is this forest" is one block a reader
+     can find, and so the dev panel can turn the whole thing off and
+     prove the rest of the game does not depend on it. */
+  FAUNA: {
+    on: true,
+    count: [2, 5],         // how many are alive on a given seed
+    spawnMin: 190,         // metres from the player's start, at the least
+    spawnMax: 620,         // ... and at the most
+    startKeepOut: 170,     // nothing spawns inside this of the spawn
+    townKeepOut: 95,       // and nothing comes within this of the hospital
+    roam: 130,             // how far one wanders from where it woke up
+    lungeFrom: 7.5,        // it breaks into a charge this far out
+    chargeFor: 5.0,        // and gives up on a charge after this long
+    backOff: 2.4,          // seconds of ground given back after a hit
+    woundsFatal: 4,        // this many landed attacks and the run is over
+  },
+
   QUALITY: {
     texSize: 512,
     macroSize: 2048,     // the baked whole-world ground map, texels per side
@@ -7246,6 +7265,417 @@ const TOWN = {
   nudge: [0, 5, -5, 9, -9, 14]   // metres along the street to try if a plot fails
 };
 
+/* =====================================================================
+   ===== FAUNA =====
+   THE THINGS IN THE TREES THAT ARE ACTUALLY THERE.
+
+   Everything else the forest does to the player is a lie the player is
+   telling themselves. The phantom library owns no collision and does no
+   damage, and guarantee G7 exists to keep it that way: whatever you see
+   at stage three, it cannot touch you, and the only thing it can cost
+   you is the time you spend running from it.
+
+   These are the other kind. They have bodies, they are on the collision
+   list, they can put you on the ground, and they do not care what stage
+   your mind is at. A creature at forty metres and a phantom at forty
+   metres are drawn by different code and answer to different rules, and
+   the player is given NO way to tell them apart from the outside. That
+   is the whole point of having both: the game's question stops being
+   "is this real" in the abstract and becomes "is this one real", which
+   is a question with a wrong answer and a cost attached to it.
+
+   Three of them, and they hunt in three different ways, because a
+   monster you have met before is a monster you can plan around:
+
+     THE STILT    stands still. It is tall and thin and it holds between
+                  two trunks at the edge of what you can see, and while
+                  you are looking at it, it does not move at all. Look
+                  away, or let the fog take it, and it is closer. Inside
+                  its reach it stops pretending.
+
+     THE CRAWLER  circles. It is low and fast and it stays in the brush
+                  where the silhouette breaks up, working round to
+                  whatever is behind you, and it charges from there.
+                  It is the one you hear before you see.
+
+     THE HOLLOW   walks. Man-shaped, no faster than you are, and it
+                  never stops and never loses you. You cannot outrun it
+                  by sprinting because it does not sprint; you outrun it
+                  by leaving, which costs you the ground you wanted.
+
+   WHAT THEY WILL NOT DO. They do not enter the town and they do not go
+   near the hospital — the place the whole walk is about stays the one
+   place nothing is behind you — and they never spawn inside the start
+   clearance, so the first minute of a run is yours. They are also not
+   allowed to be a wall: they move, so a creature standing on the
+   guaranteed route is a creature you wait out or walk around, not a
+   blocked corridor.
+   ===================================================================== */
+const BEASTS = {
+  stilt: {
+    label: 'the stilt',
+    height: 2.9, radius: 0.42, walk: 1.5, charge: 5.6,
+    notice: 46, reach: 2.1, giveUp: 62,
+    /* Its whole trick: it will not move while it is in shot. A stilt
+       you are looking at is furniture. */
+    freezeInView: true,
+    patience: 0.75,        // how long it holds after losing sight of you
+    dmg: 26, cold: 9, shock: 0.5,
+    call: 'beastCall', near: 'beastBreath', rush: 'beastScream',
+    callEvery: [15, 34],
+  },
+  crawler: {
+    label: 'the crawler',
+    height: 1.0, radius: 0.55, walk: 2.6, charge: 7.4,
+    notice: 34, reach: 1.8, giveUp: 40,
+    freezeInView: false,
+    circles: true,         // works round to behind you before it comes
+    patience: 0.2,
+    dmg: 17, cold: 6, shock: 0.36,
+    call: 'beastClick', near: 'beastDrag', rush: 'beastScream',
+    callEvery: [9, 21],
+  },
+  hollow: {
+    label: 'the hollow',
+    height: 1.95, radius: 0.40, walk: 2.35, charge: 2.55,
+    /* IT HAS TO FIND YOU. Then it never stops. The first version knew
+       where the player was from the moment the world loaded, six
+       hundred metres away, and walked at them for the whole run —
+       which killed a walker that never reacts on two seeds of six
+       before it had gone half way. Relentless is the frightening part
+       and it is kept; omniscient was just a shorter game. */
+    notice: 120,
+    reach: 1.7, giveUp: 1e9,
+    freezeInView: false,
+    relentless: true,
+    patience: 1e9,
+    dmg: 21, cold: 7, shock: 0.44,
+    call: 'beastBreath', near: 'beastBreath', rush: 'beastCall',
+    callEvery: [20, 46],
+  },
+};
+
+const Fauna = {
+  list: [], active: false, kills: 0, attacks: 0, lastHurt: -1e9,
+
+  clear(){
+    for(const b of this.list) if(b.obj && b.obj.parent) b.obj.parent.remove(b.obj);
+    this.list.length = 0; this.active = false;
+  },
+
+  /* ---- the bodies ------------------------------------------------
+     Built from boxes like everything else in this file, because a
+     silhouette is what carries at the range these are seen at and a
+     silhouette is cheap. They are DARK: not textured, barely lit, and
+     shadowed — a shape you resolve rather than a model you inspect. */
+  makeBody(kind, rng){
+    const g = new THREE.Group();
+    const K = BEASTS[kind];
+    const hide = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(rng.range(0.02, 0.10), 0.10, rng.range(0.025, 0.055)),
+      roughness: 0.98, metalness: 0 });
+    const pale = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(0.09, 0.08, rng.range(0.42, 0.62)),
+      roughness: 0.85 });
+    const box = (w,h,d, mat, x,y,z)=>{
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      m.position.set(x,y,z);
+      m.castShadow = true; m.receiveShadow = false;
+      m.userData.noclip = true;       // the body collides as a circle, not as boxes
+      g.add(m); return m;
+    };
+    const limbs = {};
+    if(kind === 'stilt'){
+      const H = K.height;
+      box(0.26, H*0.42, 0.20, hide, 0, H*0.70, 0);              // trunk
+      box(0.30, 0.09, 0.24, hide, 0, H*0.90, 0);                // shoulders
+      const head = box(0.17, 0.30, 0.19, hide, 0, H*0.99, 0.02);
+      box(0.10, 0.05, 0.02, pale, 0, H*1.02, 0.11);             // the face, such as it is
+      limbs.head = head;
+      for(const s of [-1, 1]){
+        const arm = box(0.085, H*0.56, 0.085, hide, s*0.19, H*0.66, 0);
+        arm.geometry.translate(0, -H*0.28, 0); arm.position.y = H*0.90;
+        limbs[s < 0 ? 'armL' : 'armR'] = arm;
+        const leg = box(0.10, H*0.52, 0.10, hide, s*0.10, H*0.26, 0);
+        leg.geometry.translate(0, -H*0.26, 0); leg.position.y = H*0.52;
+        limbs[s < 0 ? 'legL' : 'legR'] = leg;
+      }
+    } else if(kind === 'crawler'){
+      box(0.52, 0.30, 0.96, hide, 0, 0.58, 0);                  // body, long and low
+      const head = box(0.30, 0.24, 0.34, hide, 0, 0.60, 0.62);
+      box(0.16, 0.05, 0.03, pale, 0, 0.64, 0.79);
+      limbs.head = head;
+      for(const s of [-1, 1]) for(const f of [0.34, -0.34]){
+        const leg = box(0.09, 0.62, 0.09, hide, s*0.28, 0.40, f);
+        leg.geometry.translate(0, -0.31, 0); leg.position.y = 0.66;
+        limbs[(f > 0 ? 'f' : 'b') + (s < 0 ? 'L' : 'R')] = leg;
+      }
+    } else {
+      const H = K.height;
+      box(0.38, 0.60, 0.22, hide, 0, H*0.60, 0);
+      box(0.42, 0.10, 0.24, hide, 0, H*0.76, 0);
+      const head = box(0.19, 0.24, 0.20, hide, 0, H*0.88, 0);
+      limbs.head = head;
+      for(const s of [-1, 1]){
+        const arm = box(0.11, H*0.40, 0.12, hide, s*0.25, H*0.58, 0);
+        arm.geometry.translate(0, -H*0.20, 0); arm.position.y = H*0.76;
+        limbs[s < 0 ? 'armL' : 'armR'] = arm;
+        const leg = box(0.13, H*0.44, 0.14, hide, s*0.11, H*0.24, 0);
+        leg.geometry.translate(0, -H*0.22, 0); leg.position.y = H*0.46;
+        limbs[s < 0 ? 'legL' : 'legR'] = leg;
+      }
+    }
+    g.userData.limbs = limbs;
+    return g;
+  },
+
+  /* Somewhere to put one: walkable, dry, out of the start clearance,
+     well away from the town, and not in the player's lap. */
+  findSpot(rng, awayFrom, minD, maxD){
+    const F = CFG.FAUNA;
+    const LIM = Wld.size*0.45;
+    for(let tries = 0; tries < 200; tries++){
+      const a = rng()*TAU, d = minD + rng()*(maxD - minD);
+      const x = awayFrom.x + Math.cos(a)*d, z = awayFrom.z + Math.sin(a)*d;
+      if(Math.abs(x) > LIM || Math.abs(z) > LIM) continue;
+      if(slopeAt(x, z) > CFG.HAZARD.slipSlope) continue;
+      if(waterDepthAt(x, z) > 0.25) continue;
+      if(Wld.hospital && Math.hypot(x-Wld.hospital.x, z-Wld.hospital.z) < F.townKeepOut) continue;
+      if(Wld.start && Math.hypot(x-Wld.start.x, z-Wld.start.z) < F.startKeepOut) continue;
+      return { x, z };
+    }
+    return null;
+  },
+
+  build(){
+    this.clear();
+    if(!CFG.FAUNA.on) return;
+    const rng = rngFor('fauna');
+    const F = CFG.FAUNA;
+    /* HOW MANY, and of what, is the seed's business like everything
+       else — a seed with three hollows on it is a different walk from a
+       seed with one crawler, and the player should be able to learn
+       that the hard way and then go back to it. */
+    const want = F.count[0] + Math.floor(rng()*(F.count[1] - F.count[0] + 1));
+    const kinds = Object.keys(BEASTS);
+    for(let i = 0; i < want; i++){
+      const kind = kinds[Math.floor(rng()*kinds.length)];
+      const spot = this.findSpot(rng, Wld.start, F.spawnMin, F.spawnMax);
+      if(!spot) continue;
+      this.spawn(kind, spot.x, spot.z, rng);
+    }
+    this.active = this.list.length > 0;
+    Wld.stats.fauna = this.list.length;
+  },
+
+  spawn(kind, x, z, rng){
+    rng = rng || rngFor('fauna', this.list.length*17 + 3);
+    const K = BEASTS[kind];
+    const obj = this.makeBody(kind, rng);
+    obj.position.set(x, heightAt(x, z), z);
+    scene.add(obj);
+    const b = {
+      kind, K, obj, x, z, yaw: rng()*TAU,
+      state: 'wander', stateT: 0, seen: 0, lostFor: 1e9, everSaw: false,
+      target: null, nextCall: rng.range ? rng.range(2, 12) : 2 + rng()*10,
+      gait: rng()*TAU, hitAt: -1e9, orbit: rng() < 0.5 ? 1 : -1,
+      home: { x, z },
+    };
+    this.list.push(b);
+    return b;
+  },
+
+  nearest(x, z){
+    let best = null, bd = Infinity;
+    for(const b of this.list){
+      const d = Math.hypot(b.x-x, b.z-z);
+      if(d < bd){ bd = d; best = b; }
+    }
+    return best ? { beast: best, d: bd } : null;
+  },
+
+  /* Is this one in the player's view? The stilt's whole behaviour hangs
+     off the answer, so it is asked of the CAMERA and it is generous
+     about the edges of the screen — a thing that moves the instant it
+     leaves the exact frustum reads as a bug rather than as a threat. */
+  inView(b){
+    const dx = b.x - camera.position.x, dz = b.z - camera.position.z;
+    const d = Math.hypot(dx, dz) || 1e-5;
+    const fx = -Math.sin(Player.yaw), fz = -Math.cos(Player.yaw);
+    const facing = (dx*fx + dz*fz)/d;
+    if(facing < Math.cos(CFG.QUALITY.fovDefault*DEG*0.62)) return false;
+    /* And it has to be visible, not merely in front: fog and night both
+       hide it, which is exactly when it is allowed to move. */
+    const fogHide = Weather.fogBoost > 0.6 && d > 26;
+    const darkHide = Sky.sunUp < 0.06 && !Gear.torchOn && d > 18;
+    return !(fogHide || darkHide);
+  },
+
+  update(dt){
+    if(!this.list.length || G.over) return;
+    const F = CFG.FAUNA;
+    const px = Player.pos.x, pz = Player.pos.z;
+    for(const b of this.list){
+      const K = b.K;
+      const dx = px - b.x, dz = pz - b.z;
+      const d = Math.hypot(dx, dz) || 1e-5;
+      const ux = dx/d, uz = dz/d;
+      b.stateT += dt;
+
+      /* ---- does it know where you are? ---- */
+      const dark = Sky.sunUp < 0.08 ? 1.35 : 1.0;
+      const noise = Player.sprinting ? 1.5 : Player.moving ? 1.0 : 0.55;
+      const noticeAt = K.notice * dark * noise;
+      /* Once it has had you, it has you: relentless means it does not
+         lose the scent, not that it starts with it. */
+      if(d < noticeAt) b.everSaw = true;
+      const knows = (K.relentless && b.everSaw) || d < noticeAt;
+      if(knows) b.lostFor = 0; else b.lostFor += dt;
+
+      /* ---- the state machine ---- */
+      let speed = K.walk, wantX = 0, wantZ = 0, moving = true;
+      if(b.state === 'wander'){
+        if(knows && d < noticeAt){ b.state = 'stalk'; b.stateT = 0; }
+        if(!b.target || Math.hypot(b.target.x-b.x, b.target.z-b.z) < 3){
+          const r = rngFor('faunaWander', Math.floor(G.t*3) + this.list.indexOf(b)*91);
+          b.target = this.findSpot(r, b.home, 8, F.roam) || null;
+        }
+        if(b.target){
+          const tx = b.target.x-b.x, tz = b.target.z-b.z;
+          const tl = Math.hypot(tx,tz) || 1;
+          wantX = tx/tl; wantZ = tz/tl;
+        } else moving = false;
+        speed = K.walk*0.55;
+      } else if(b.state === 'stalk'){
+        if(b.lostFor > K.patience && !K.relentless && b.stateT > 3){
+          b.state = 'wander'; b.stateT = 0; b.target = null;
+        }
+        if(d > K.giveUp){ b.state = 'wander'; b.stateT = 0; b.target = null; }
+        if(d < K.reach + F.lungeFrom){ b.state = 'charge'; b.stateT = 0;
+          Audio.play(K.rush, { gain: 1.0, pos: new THREE.Vector3(b.x, b.obj.position.y+1.2, b.z) });
+          Mind.shock(0.10); }
+        if(K.circles && d > K.reach + 4){
+          /* Round, not straight at you: it wants your back. */
+          const tang = Math.atan2(uz, ux) + b.orbit*1.05;
+          wantX = Math.cos(tang)*0.75 + ux*0.55;
+          wantZ = Math.sin(tang)*0.75 + uz*0.55;
+          const l = Math.hypot(wantX, wantZ) || 1; wantX /= l; wantZ /= l;
+        } else { wantX = ux; wantZ = uz; }
+        speed = K.walk;
+        /* THE STILT DOES NOT MOVE WHILE YOU CAN SEE IT. */
+        if(K.freezeInView && this.inView(b) && d > K.reach + 1.5) moving = false;
+      } else if(b.state === 'charge'){
+        wantX = ux; wantZ = uz;
+        speed = K.charge;
+        if(d <= K.reach){ b.state = 'strike'; b.stateT = 0; }
+        if(b.stateT > F.chargeFor || d > K.giveUp){ b.state = 'stalk'; b.stateT = 0; }
+      } else if(b.state === 'strike'){
+        moving = false;
+        if(b.stateT > 0.18 && b.hitAt < b.stateT + G.t - 0.2){
+          this.strike(b, d);
+          b.state = 'back'; b.stateT = 0;
+        }
+      } else if(b.state === 'back'){
+        /* It gives the ground back after it lands one, which is the only
+           reason a run continues after the first time. */
+        wantX = -ux; wantZ = -uz;
+        speed = K.charge*0.7;
+        if(b.stateT > F.backOff){ b.state = 'stalk'; b.stateT = 0; }
+      }
+
+      /* ---- move it, on the same ground rules the player walks by ---- */
+      if(moving && (wantX || wantZ)){
+        const step = speed*dt;
+        const nx = b.x + wantX*step, nz = b.z + wantZ*step;
+        const gh = heightAt(nx, nz);
+        const rise = gh - heightAt(b.x, b.z);
+        const ok = slopeAt(nx, nz) < 0.85 && waterDepthAt(nx, nz) < 1.1
+                   && Math.abs(nx) < Wld.size*0.47 && Math.abs(nz) < Wld.size*0.47
+                   && Math.abs(rise) < step*3.2 + 0.5;
+        if(ok){ b.x = nx; b.z = nz; }
+        else {
+          /* Round whatever it is, the same way the player slides. */
+          const t = contourDir(b.x, b.z, wantX, wantZ);
+          if(t){ b.x += t[0]*step*0.8; b.z += t[1]*step*0.8; }
+          else b.target = null;
+        }
+        b.yaw = Math.atan2(wantX, wantZ);
+        b.gait += dt*speed*2.2;
+      }
+      /* It never comes into the town. Whatever it was doing, the edge of
+         the place the player is walking to is where it stops. */
+      const h = Wld.hospital;
+      if(h){
+        const hd = Math.hypot(b.x-h.x, b.z-h.z);
+        if(hd < F.townKeepOut){
+          const k = (F.townKeepOut - hd);
+          b.x += (b.x-h.x)/(hd||1)*k; b.z += (b.z-h.z)/(hd||1)*k;
+          if(b.state !== 'wander'){ b.state = 'wander'; b.stateT = 0; b.target = null; }
+        }
+      }
+
+      /* ---- put it on the ground and animate it ---- */
+      const gy = heightAt(b.x, b.z);
+      b.obj.position.set(b.x, gy, b.z);
+      b.obj.rotation.y = b.yaw;
+      const L = b.obj.userData.limbs;
+      const sw = moving ? Math.sin(b.gait)*(b.state === 'charge' ? 0.85 : 0.45) : 0;
+      if(L.armL){ L.armL.rotation.x = sw; L.armR.rotation.x = -sw; }
+      if(L.legL){ L.legL.rotation.x = -sw; L.legR.rotation.x = sw; }
+      if(L.fL){ L.fL.rotation.x = sw; L.bR.rotation.x = sw;
+                L.fR.rotation.x = -sw; L.bL.rotation.x = -sw; }
+      if(L.head) L.head.rotation.y = b.state === 'wander' ? Math.sin(G.t*0.6 + b.gait)*0.4
+                                                          : Math.atan2(ux, uz) - b.yaw;
+
+      /* ---- what it sounds like ---- */
+      b.nextCall -= dt;
+      if(b.nextCall <= 0){
+        const near = d < 30;
+        const cat = b.state === 'wander' ? K.call : near ? K.near : K.call;
+        Audio.play(cat, { gain: clamp(1.15 - d/90, 0.25, 1.0),
+          pitch: 0.82 + (b.gait % 1)*0.2,
+          pos: new THREE.Vector3(b.x, gy + K.height*0.7, b.z) });
+        const e = K.callEvery;
+        b.nextCall = e[0] + Math.random()*(e[1]-e[0]);
+        if(b.state !== 'wander') b.nextCall *= 0.45;
+      }
+
+      /* ---- and what it does to the player's head just by being close ---- */
+      if(d < 22 && b.state !== 'wander') Mind.dread = Math.min(1.4, (Mind.dread||0) + dt*(1 - d/22)*1.5);
+    }
+  },
+
+  /* THE ONE PLACE A CREATURE DOES DAMAGE. It is a method rather than
+     four scattered lines so that "can this hurt me" has one answer that
+     can be read, tested and turned off. */
+  strike(b, d){
+    const K = b.K;
+    b.hitAt = G.t;
+    this.attacks++;
+    this.lastHurt = G.t;
+    Survival.hurt(K.dmg, K.cold, K.shock, K.label);
+    Audio.play('beastScream', { gain: 1.0,
+      pos: new THREE.Vector3(b.x, b.obj.position.y + 1.2, b.z) });
+    /* Knocked back, and off balance: the player loses ground and the
+       camera is thrown, which is the difference between being bitten
+       and being told you were bitten. */
+    const ang = Math.atan2(Player.pos.x - b.x, Player.pos.z - b.z);
+    Player.vel.x += Math.sin(ang)*5.5;
+    Player.vel.z += Math.cos(ang)*5.5;
+    Player.yaw += (Math.random()-0.5)*0.9;
+    Player.pitch = clamp(Player.pitch + (Math.random()-0.35)*0.5, -1.4, 1.4);
+  },
+
+  /* For the dev panel and the collision view. */
+  summary(){
+    if(!this.list.length) return 'none';
+    const by = {};
+    for(const b of this.list) by[b.kind] = (by[b.kind]||0) + 1;
+    return Object.entries(by).map(([k,v])=> v+'x '+k).join(', ')
+      + '  attacks ' + this.attacks;
+  },
+};
+
 /* ---------------------------------------------------------------------
    THE STREET IS GRADED, LIKE A ROAD
 
@@ -7634,6 +8064,7 @@ function buildAllStructures(){
   /* The people are built last, because where they walk is derived from
      the doors of buildings that have to exist first. */
   People.build();
+  Fauna.build();
 }
 
 /* ---------------------------------------------------------------------
@@ -7965,6 +8396,26 @@ function resolveCollisions(p, radius){
       t = t < 0 ? 0 : t > 1 ? 1 : t;
       const dx = p.x - (L.x0 + vx*t), dz = p.z - (L.z0 + vz*t);
       const rr = L.r + radius;
+      const d2 = dx*dx + dz*dz;
+      if(d2 >= rr*rr) continue;
+      const d = Math.sqrt(d2);
+      hits++;
+      if(d < 1e-6){ mx += rr; deepest = Math.max(deepest, rr); continue; }
+      const pen = rr - d;
+      if(pen > deepest) deepest = pen;
+      mx += dx/d*pen; mz += dz/d*pen;
+    }
+
+    /* A CREATURE IS SOLID. It is the difference between a thing in the
+       forest and a picture of one: you cannot walk through it, it can
+       block a gap between two trunks, and when it has hold of you the
+       reason you are not moving is that something is in the way. They
+       are circles like the trees, because at this size and this speed
+       nothing finer would be felt. */
+    for(let fi=0; fi<Fauna.list.length; fi++){
+      const B = Fauna.list[fi];
+      const dx = p.x - B.x, dz = p.z - B.z;
+      const rr = B.K.radius + radius;
       const d2 = dx*dx + dz*dz;
       if(d2 >= rr*rr) continue;
       const d = Math.sqrt(d2);
@@ -8562,6 +9013,7 @@ function shelterAt(x, z, feetY){
 
 const Survival = {
   thirst: 0, hunger: 0, cold: 0, sick: 0, sickKind: null,
+  wounds: 0, bleeding: 0,
   bottle: 0, bottleMax: CFG.GEAR.bottleML, hasBottle: false,
   food: 0, tablets: 0, matches: 0,
   sheltered: false, warm: 0,
@@ -8570,6 +9022,7 @@ const Survival = {
 
   reset(){
     this.thirst = 8; this.hunger = 6; this.cold = 0; this.sick = 0; this.sickKind = null;
+    this.wounds = 0; this.bleeding = 0;
     this.hasBottle = P.gear.bottle;
     this.bottle = this.hasBottle ? Math.round(P.gear.bottleFull*this.bottleMax) : 0;
     this.food = P.gear.food; this.tablets = 0; this.matches = 0;
@@ -8705,6 +9158,43 @@ const Survival = {
       this.die(this.cold >= S.coldDeadlyAt ? 'exposure'
              : this.thirst >= S.thirstDeadlyAt ? 'dehydration' : 'starvation');
     }
+    /* A WOUND GOES ON COSTING AFTER THE THING THAT MADE IT HAS GONE.
+       It closes on its own over a few minutes, and while it is open it
+       takes warmth — so being caught once, out in the rain, at night,
+       is a different problem an hour later than it was at the time. */
+    if(this.bleeding > 0){
+      this.bleeding = Math.max(0, this.bleeding - dt*0.006);
+      this.cold = clamp(this.cold + dt*this.bleeding*0.9, 0, 100);
+    }
+  },
+
+  /* THE ONE PLACE ANYTHING REAL DOES DAMAGE TO THE PLAYER.
+     There is no health bar in this game and there should not be one —
+     the body reports its state through stamina, cold and the mind, and
+     a number draining in a corner would flatten all three into an
+     abstraction. So a wound is spent across the systems the player
+     already reads: it takes their legs, it takes their warmth, and it
+     takes their grip on what is happening. Enough of them and the run
+     ends, which is counted rather than accumulated so that "how many
+     more of those can I take" has an answer the code can state.
+
+     A hallucination never reaches this method. It cannot: guarantee G7
+     says the phantom library owns no damage, and this is the method it
+     would have to call. */
+  wounds: 0,
+  hurt(power, chill, shock, from){
+    if(G.over) return;
+    this.wounds++;
+    Player.stamina = Math.max(0, Player.stamina - power);
+    this.cold = clamp(this.cold + chill, 0, 100);
+    this.bleeding = Math.max(this.bleeding||0, 0.5 + this.wounds*0.25);
+    Mind.shock(shock);
+    Mind.dread = Math.min(1.4, (Mind.dread||0) + 0.6);
+    Audio.play('fallImpact', { gain: 0.8 });
+    UI.say(this.wounds >= CFG.FAUNA.woundsFatal - 1
+      ? 'You cannot take another one of those.'
+      : 'Something had hold of you.', 3.0);
+    if(this.wounds >= CFG.FAUNA.woundsFatal) this.die(from || 'something in the trees');
   },
 
   landed(drop){
@@ -9244,6 +9734,7 @@ const Hold = {
    ===================================================================== */
 const Mind = {
   progress: 0, stage: 0, intensity: 0, agitation: 0,
+  dread: 0,              // raised by anything real that is hunting you
   pressure: 0, wave: 0, spike: 0, spikeUntil: 0,
   pauseUntil: -1, pauseRollAt: 0,
   compassReversed: false, reverseUntil: 0,
@@ -9421,13 +9912,22 @@ const Mind = {
       + night*0.34
       + (Weather.rain*0.13 + Weather.fogBoost*0.12)
       + this.agitation*0.30
-      + exhaust*0.14;
-    return clamp(p, 0, 1.4);
+      + exhaust*0.14
+      /* AND WHATEVER IS OUT THERE. A creature closing on the player
+         feeds this rather than touching intensity directly, so the
+         thing in the trees makes the mind worse by the same route
+         everything else does — through pressure — and a player cannot
+         tell from the inside whether the dread is the forest or the
+         illness. Which is the point of having both. */
+      + clamp(this.dread, 0, 1)*0.38;
+    return clamp(p, 0, 1.6);
   },
 
   update(dt){
     if(CFG.DEBUG.freezeMind) return;
     const M = CFG.MIND;
+    // dread bleeds away on its own; only proximity puts it back
+    this.dread = Math.max(0, (this.dread||0) - dt*0.22);
     this.pressure = this.computePressure();
 
     /* ---- progression ---- */
@@ -9720,6 +10220,32 @@ const Audio = (()=>{
     breath:    { n:16, make:r=>({ kind:'breath', f0:r.range(380,620), f1:r.range(760,1250), q:r.range(0.9,1.8), dur:r.range(0.35,0.75), gain:r.range(0.05,0.13) }) },
     thunder:   { n:14, make:r=>({ kind:'thunder', crackF:r.range(1400,3600), bodyF0:r.range(400,1100),
                                    bodyF1:r.range(38,90), rolls:r.irange(2,5), gain:r.range(0.5,1.0) }) },
+    /* ---- THE THINGS THAT ARE ACTUALLY THERE ---------------------
+       Built from the same synths as everything else, and deliberately
+       from the NEAR-HUMAN end of them: the call is the voice synth with
+       its pitch dragged under where a voice goes and its formants
+       widened, so it lands in the same part of the ear as the
+       hallucinated voices do. A player who hears one at ninety metres
+       should not be able to tell, from the sound alone, whether they
+       need to run. */
+    beastCall:   { n:20, make:r=>({ kind:'voice', syll:r.irange(1,2),
+                                   fmt:[r.range(110,210), r.range(300,540), r.range(760,1200)],
+                                   q:r.range(6,14), rate:r.range(0.06,0.16), gain:r.range(0.22,0.46),
+                                   pitch:r.range(38,74), breathy:r.range(0.5,1.0) }) },
+    beastBreath: { n:18, make:r=>({ kind:'breath', f0:r.range(120,240), f1:r.range(320,620),
+                                   q:r.range(1.4,3.2), dur:r.range(0.8,1.9), gain:r.range(0.16,0.34) }) },
+    beastClick:  { n:16, make:r=>({ kind:'knock', f:r.range(420,1100), q:r.range(3,8),
+                                   count:r.irange(4,9), gap:r.range(0.045,0.11),
+                                   dec:r.range(0.02,0.06), gain:r.range(0.12,0.30) }) },
+    beastDrag:   { n:14, make:r=>({ kind:'swell', noise:'brown', f0:r.range(90,220),
+                                   f1:r.range(500,1200), dur:r.range(1.0,2.6),
+                                   gain:r.range(0.14,0.30), q:r.range(0.6,1.4) }) },
+    beastScream: { n:16, make:r=>({ kind:'siren', f0:r.range(240,460), f1:r.range(1500,3000),
+                                   rate:r.range(1.6,3.4), dur:r.range(0.8,1.8),
+                                   gain:r.range(0.30,0.62) }) },
+    beastStep:   { n:14, make:r=>({ kind:'step', noise:'brown', f:r.range(140,380),
+                                   q:r.range(1.2,2.6), dec:r.range(0.14,0.30),
+                                   gain:r.range(0.20,0.42), thud:r.range(0.6,1.0) }) },
     // ---- stage 1: things that are not there ----------------------
     twigSnap:  { n:22, make:r=>({ kind:'snap', f:r.range(1600,4800), q:r.range(2.5,7), dec:r.range(0.035,0.10), gain:r.range(0.16,0.45), body:r.range(0,0.5) }) },
     brushPush: { n:16, make:r=>({ kind:'swell', noise:'white', f0:r.range(1400,3000), f1:r.range(3600,7200), dur:r.range(0.35,1.1), gain:r.range(0.08,0.22), q:r.range(1.0,2.4) }) },
@@ -11908,6 +12434,44 @@ const DEV = (()=>{
     button(g1, 'reverse compass', ()=>{ Mind.compassReversed = true; Mind.reverseUntil = G.t+120; });
     D._sync = ()=>{ sStage.sync(); sInt.sync(); sAgit.sync(); };
 
+    /* ---- the things that are actually there ----
+       Everything here exists so that "is this one real" can be answered
+       from outside the game while it stays unanswerable inside it. */
+    const sF = section('fauna');
+    const fRead = el('div'); fRead.id = 'devfauna'; sF.appendChild(fRead);
+    const gF = el('div','grid'); sF.appendChild(gF);
+    for(const k of Object.keys(BEASTS))
+      button(gF, 'spawn ' + k, ()=>{
+        const a = Player.yaw + Math.PI + (Math.random()-0.5)*0.8, d = 26;
+        Fauna.spawn(k, Player.pos.x + Math.sin(a)*d, Player.pos.z + Math.cos(a)*d);
+      });
+    button(gF, 'bring one to me', ()=>{
+      const n = Fauna.nearest(Player.pos.x, Player.pos.z);
+      if(!n) return;
+      const a = Player.yaw + Math.PI;
+      n.beast.x = Player.pos.x + Math.sin(a)*9;
+      n.beast.z = Player.pos.z + Math.cos(a)*9;
+      n.beast.state = 'charge'; n.beast.stateT = 0; n.beast.everSaw = true;
+    });
+    button(gF, 'clear the forest', ()=> Fauna.clear());
+    button(gF, 'respawn them', ()=> Fauna.build());
+    button(gF, 'take a wound', ()=> Survival.hurt(18, 6, 0.3, 'the dev panel'));
+    button(gF, 'heal', ()=>{ Survival.wounds = 0; Survival.bleeding = 0; });
+    button(gF, 'fauna on/off', ()=>{
+      CFG.FAUNA.on = !CFG.FAUNA.on;
+      if(CFG.FAUNA.on) Fauna.build(); else Fauna.clear();
+    });
+    D._syncFauna = ()=>{
+      const n = Fauna.nearest(Player.pos.x, Player.pos.z);
+      fRead.textContent =
+        `${Fauna.list.length} alive — ${Fauna.summary()}\n`
+        + `wounds ${Survival.wounds}/${CFG.FAUNA.woundsFatal}  bleeding `
+        + `${(Survival.bleeding||0).toFixed(2)}  dread ${(Mind.dread||0).toFixed(2)}\n`
+        + (n ? `nearest ${n.beast.kind} ${n.d.toFixed(0)}m  ${n.beast.state}`
+             + (Fauna.inView(n.beast) ? '  (you can see it)' : '  (out of sight)')
+             : 'nothing within reach of anything');
+    };
+
     // ---- survival ----
     const s2 = section('survival');
     const g2 = el('div','grid three'); s2.appendChild(g2);
@@ -12382,6 +12946,7 @@ const DEV = (()=>{
       + `           view ${CollisionView.summary()}`;
     paintLog();
     if(D._sync) D._sync();
+    if(D._syncFauna) D._syncFauna();
     if(D._syncCV) D._syncCV();
     if(D._syncSurv) D._syncSurv();
     if(D._syncHour) D._syncHour();
@@ -12778,6 +13343,7 @@ function stepWorld(dt){
   updateFires(dt);
   Doors.update(dt);
   People.update(dt);
+  Fauna.update(dt);
   Survival.update(dt);
   Gear.update(dt);
   Mind.update(dt);
@@ -12988,7 +13554,7 @@ window.DR = {
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders,
-  CollisionView, People, resolveCollisions, pushOutOfTerrain,
+  CollisionView, People, Fauna, BEASTS, resolveCollisions, pushOutOfTerrain,
   get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
 };
 
