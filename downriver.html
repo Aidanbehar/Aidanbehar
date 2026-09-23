@@ -2250,6 +2250,7 @@ const WaterShader = {
     uFogColor:{value:new THREE.Color(0x0a0d12)}, uFogDensity:{value:0.01},
     uSun:{value:new THREE.Vector3(0,1,0)}, uSunColor:{value:new THREE.Color(0xffffff)},
     uLight:{value:0.6},
+    uDayl:{value:1.0},
   },
   vertexShader: /* glsl */`
     attribute float aFlow;      // 0 still, 1 fast
@@ -2269,7 +2270,7 @@ const WaterShader = {
       gl_Position = projectionMatrix*mv;
     }`,
   fragmentShader: /* glsl */`
-    uniform float uTime, uOpacity, uFogDensity, uLight;
+    uniform float uTime, uOpacity, uFogDensity, uLight, uDayl;
     uniform sampler2D uNormal;
     uniform vec3 uShallow, uDeep, uSky, uFogColor, uSun, uSunColor;
     varying vec2 vUvW; varying float vFlow; varying vec2 vDir;
@@ -2339,6 +2340,23 @@ const WaterShader = {
         col += uSunColor * pow(max(dot(vec3(0.0,1.0,0.0), H), 0.0), 90.0)
                * 0.85 * uLight * thick;
       }
+      /* ---- WATER IS A HOLE AT NIGHT, NOT A LAMP --------------------
+         Measured on seed 1640 at 01:30: the frozen river came back at
+         34.7 luma against ground at 3.3 -- ten and a half times
+         brighter than everything around it, which is the glowing
+         ribbon. Halving uLight's floor took it to 5.2x, which is still
+         a ribbon.
+
+         The reason it stays bright is physical and the fix is the same
+         physics: land SCATTERS what little light there is, water
+         REFLECTS a sky that is nearly black. A lake at midnight is
+         darker than the field beside it, not brighter. So the whole
+         surface is pulled down hard as the daylight goes, and what
+         survives is the specular -- the moon on the water, and the
+         white of the pressure seams in the ice, which are the only
+         things that should catch anything. */
+      col *= mix(0.16, 1.0, clamp(uDayl, 0.0, 1.0));
+
       float a = mix(0.55, uOpacity, clamp(vDepth/0.7, 0.0, 1.0));
       a = mix(a, 1.0, fres*0.4);
       a = mix(a, mix(0.88, 1.0, smoothstep(1.0, 2.0, ice)), frozen);
@@ -6974,6 +6992,7 @@ function updateSky(dt){
      nothing downstream can put it back. */
   scene.fog.density = CFG.DEBUG.noFog ? 0 : Sky.fogNow * Mind.fogWobble();
 
+  const dayl = clamp(ai*1.15 + si*0.75, 0, 1);
   if(MAT.water){
     MAT.water.uniforms.uFogColor.value.copy(Sky.tintNow);
     MAT.water.uniforms.uFogDensity.value = scene.fog.density;
@@ -6992,10 +7011,10 @@ function updateSky(dt){
        The floor is the moon and the stars, and at true midnight under
        cloud there is no reason for it to be four times the ground. */
     MAT.water.uniforms.uLight.value = clamp(ai*0.8 + si*0.5 + 0.004, 0.004, 1.4);
+    MAT.water.uniforms.uDayl.value = dayl;
   }
   /* The same number the water gets, without the floor: at midnight the
      snow should go with everything else. */
-  const dayl = clamp(ai*1.15 + si*0.75, 0, 1);
   if(MAT.terrainU && MAT.terrainU.uDayl) MAT.terrainU.uDayl.value = dayl;
   const lay = P.winter ? clamp(0.55 + P.winterHard*0.45, 0, 1) : 0;
   for(const u of SNOWY_MATS){ u.uSnowAmt.value = lay; u.uSnowDayl.value = dayl; }
