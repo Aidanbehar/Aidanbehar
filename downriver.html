@@ -4909,6 +4909,21 @@ function generateWorld(onProgress){
   const log = [];
   for(; attempt<14; attempt++){
     if(onProgress) onProgress(attempt/14, attempt===0 ? 'shaping the land' : 'the land did not work, trying again');
+    /* EVERY ATTEMPT STARTS FROM NOTHING. markBuildings() runs near the
+       END of an attempt and leaves Wld.BLOCK standing, and genRoutes()
+       runs near the BEGINNING and reads it through cellWalkCost — so
+       the second world built in a page was routed around the FIRST
+       world's buildings, and the third around the second's. The route
+       differs, so validation differs, so the relaxation differs, so the
+       terrain differs: the same seed built a different world depending
+       on what had been built before it in that page.
+
+       A fresh load was always fine, because there was no previous world
+       to leak — which is why this survived a determinism check that
+       reloads the page. It is not fine for the dev panel's regenerate,
+       for the seed validator, or for anything that builds more than one
+       world without a reload. */
+    Wld.BLOCK = null;
     genTerrain(attempt);
     genHydrology();
     placeHospital();
