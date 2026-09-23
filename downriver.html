@@ -16100,8 +16100,11 @@ const DEV = (()=>{
          cylinder around at ground level. 21 meshes -> 19
        its arms hung BELOW its soles, so the foot-planting rested the
          body on its knuckles and left the legs dangling
-       after: lowest vertex 0.05m below the root and 0.01m below the
-         ground; the hollow 0.07m and 0.01m; both stand on their feet
+       after: lowest vertex 0.05m below the root and 0.01m above the
+         ground. The hollow: 17 parts, 0.07m and 0.01m above. The
+         crawler: 19 parts, 0.05m and 0.03m above. All three stand on
+         their own feet and none of them carries anything it should
+         not -- only the stilt was ever wrong
 
      THE TOWNSPEOPLE  (seed 42, twelve simulated minutes, 34,000 samples)
        worst penetration into something solid: 1.12m before, 0.11m
@@ -16155,6 +16158,31 @@ const DEV = (()=>{
          every light per fragment, and a real GPU at a real resolution
          may not agree. What this rules out is the idea that the light
          COUNT is the problem; it does not rule out fill cost.
+
+     THE GLOW ON THE WATER  (seed 1640 at 01:30. The frame is rendered
+     twice, once as shipped and once with the water mesh hidden; the
+     pixels that changed are the water, and they are compared with
+     everything else. Four attempts, because the first three were not
+     enough and the numbers said so.)
+
+                                        water   ground   ratio
+       as it was                         34.7      3.3    10.5x
+       light floor 0.03 -> 0.004         17.5      3.3     5.2x
+       surface pulled down with daylight  8.7      2.9     2.97x
+       ... on a smoothstep curve          7.8      2.9     2.63x
+
+       so: four and a half times less light coming off the water at
+       night than when this started, and a tenth of a grey level above
+       ground that is itself nearly black
+       NOT CLAIMED: that it reads as "no longer glowing" on real
+       hardware. The ratio is still above 1, and the last attempt moved
+       it by less than the one before -- what is left is the fog term,
+       which is applied after the surface colour and is the same fog
+       the ground gets. Going below the ground's brightness from here
+       means making water invisible at night, which is a different
+       problem from the one reported.
+       Day and dusk are untouched by construction: the curve reaches
+       1.0 by a quarter of daylight in the sky.
 
      RENDERING  (one seed, at the start position)
        566,492 triangles in 21 draw calls
