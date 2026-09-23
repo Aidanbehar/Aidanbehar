@@ -16116,6 +16116,21 @@ const DEV = (()=>{
        the largest gain is turning with the torch on, which is what a
          player actually does
 
+     AND WHAT THE LIGHTS DO NOT COST  (seed 42, standing in the town
+     at 21:00 with every fixture lit)
+       15 lights in the scene: 11 point, 2 directional, 1 spot, 1
+         hemisphere
+       the frame with all of them:        4ms
+       the frame with every point light off: 4ms
+       so the point lights are 0% of it, and capping them -- which was
+         the next thing on the list -- would buy nothing. Recorded
+         because a measurement that says "do not do this" is worth as
+         much as one that says to.
+       CAVEAT: this is software rendering. A forward renderer evaluates
+         every light per fragment, and a real GPU at a real resolution
+         may not agree. What this rules out is the idea that the light
+         COUNT is the problem; it does not rule out fill cost.
+
      RENDERING  (one seed, at the start position)
        566,492 triangles in 21 draw calls
        worldgen 441ms, materials 786ms, ground bake 1174ms
