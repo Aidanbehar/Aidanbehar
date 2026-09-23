@@ -16055,6 +16055,49 @@ const DEV = (()=>{
          clear moment, but that is an absence of evidence and not a
          result.
 
+     THE TORCH, AND WHAT IT USED TO COST  (seed 1640, at night)
+       the first press of F: 83.5 SECONDS against a steady frame of
+         20.3ms -- a hitch of 4,115x
+       the cause was not the beam. The light was switched with
+         `visible`, and an invisible light is not in three.js's lights
+         list, so that press added a spot light AND a spot shadow to
+         the scene's shader configuration at once and the renderer
+         rebuilt every material in the world in one frame
+       after: 14.7ms for the first frame with the torch against 18.3ms
+         steady -- a hitch multiple of 0.80, which is no hitch
+       the load-time warm-up that replaces it costs 401ms
+
+     THE CREATURES' GEOMETRY  (seed 42, rest pose, measured not eyeballed)
+       the stilt carried two meshes nobody ever asked for: `box(...)
+         .parent === g;` and `cyl(...).parent;` were leftover
+         expressions that still CALLED functions which add their mesh
+         to the group, so every stilt dragged a 0.40m plank and a
+         cylinder around at ground level. 21 meshes -> 19
+       its arms hung BELOW its soles, so the foot-planting rested the
+         body on its knuckles and left the legs dangling
+       after: lowest vertex 0.05m below the root and 0.01m below the
+         ground; the hollow 0.07m and 0.01m; both stand on their feet
+
+     THE TOWNSPEOPLE  (seed 42, twelve simulated minutes, 34,000 samples)
+       worst penetration into something solid: 1.12m before, 0.11m
+         after, and no villager among what is left -- only staff
+         standing a few centimetres inside hospital furniture
+       floating: 0 of 34,000, against one that stood on a roof because
+         surfaceAt was asked from the terrain height
+       asleep at 02:00 on seed 2711453: 6 of 6 sleepers on their own
+         bed, 0.00m off it, 0.10m above the mattress, lying down and
+         inside the house. Before this they were placed half a metre
+         INSIDE the frame and rotated without regard for which way the
+         bed pointed
+
+     WEATHER INDOORS  (seed 42, in a storm)
+       precipitation opacity: 0.398 in the open, 0 at the hospital
+         desk, 0 inside a house, 0.398 back outside
+       keyed on `roof` and not `indoors`, because the hospital's lobby
+         scores as a porch and it was snowing on the reception desk
+       sheds: 80-88% roof cover before, 100% after -- a slab tilted
+         about its centre lifts clear of the wall it sits on
+
      RENDERING  (one seed, at the start position)
        566,492 triangles in 21 draw calls
        worldgen 441ms, materials 786ms, ground bake 1174ms
