@@ -16585,6 +16585,26 @@ const DEV = (()=>{
          INSIDE the frame and rotated without regard for which way the
          bed pointed
 
+     THE TOWNSPEOPLE IN THE WALLS  (twelve simulated minutes per seed,
+     every person put through the resolver on every sample)
+
+                                 seed 3190231      seed 42
+       worst penetration, before      0.43m          0.11m
+       worst penetration, after       0.00m          0.00m
+       samples inside something      24.3% -> 0%     25% -> 0%
+       floating                        0              0
+                                    (33,974)       (34,513)
+
+       stepToward REJECTS any candidate step the resolver has to push,
+       which is the right test for choosing a direction and useless for
+       somebody already overlapping something: from inside a wall every
+       direction is pushed, so all of them are rejected and the person
+       stays embedded for the rest of the run. The clearance margin
+       added before this did nothing about it, because clearance only
+       helps somebody who starts outside.
+       The player has been resolved unconditionally every frame since
+       the collision system was written. The people were not.
+
      WEATHER INDOORS  (seed 42, in a storm)
        precipitation opacity: 0.398 in the open, 0 at the hospital
          desk, 0 inside a house, 0.398 back outside
