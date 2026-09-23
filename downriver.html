@@ -2291,7 +2291,11 @@ const WaterShader = {
       vec3 V = normalize(cameraPosition - vWorld);
       float fres = pow(1.0 - clamp(dot(n, V), 0.0, 1.0), 3.0);
       vec3 base = mix(uShallow, uDeep, clamp(vDepth/2.2, 0.0, 1.0));
-      vec3 col = mix(base, uSky, clamp(fres*0.55, 0.0, 1.0)) * uLight;
+      /* The sky in the surface. At 0.55 of a fresnel that reaches 1 at
+         a grazing angle, a pond seen from the bank came back as a flat
+         bright cyan cut-out -- the "small very white patches". Water
+         does reflect the sky, but not as a mirror at every angle. */
+      vec3 col = mix(base, uSky, clamp(fres*0.38, 0.0, 0.72)) * uLight;
       // a hard little specular, which is most of what "wet" means
       vec3 H = normalize(uSun + V);
       col += uSunColor * pow(max(dot(n,H), 0.0), 64.0) * 0.5 * uLight;
@@ -6976,7 +6980,18 @@ function updateSky(dt){
     MAT.water.uniforms.uSky.value.copy(k.sky).multiplyScalar(crush*1.4 + 0.04);
     MAT.water.uniforms.uSun.value.copy(Sky.sunDir);
     MAT.water.uniforms.uSunColor.value.copy(k.sun);
-    MAT.water.uniforms.uLight.value = clamp(ai*0.8 + si*0.5 + 0.03, 0.03, 1.4);
+    /* ---- WHY THE FROZEN RIVER GLOWED AT NIGHT --------------------
+       The floor here was 0.03, and it was applied to a surface with an
+       albedo of 0.8. The gamma encode at the end of the post stack
+       turns that 0.024 of linear light into about 49 in sRGB, while
+       the ground beside it -- albedo 0.15 under the same sky -- lands
+       near 13. Four times brighter than everything around it is a
+       glowing ribbon through a black forest, which is exactly what it
+       looked like.
+
+       The floor is the moon and the stars, and at true midnight under
+       cloud there is no reason for it to be four times the ground. */
+    MAT.water.uniforms.uLight.value = clamp(ai*0.8 + si*0.5 + 0.004, 0.004, 1.4);
   }
   /* The same number the water gets, without the floor: at midnight the
      snow should go with everything else. */
