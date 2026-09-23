@@ -776,6 +776,28 @@ const CFG = {
        measured spread of wet cells: on a typical seed the wet flowing
        cells run from 150 to thirty thousand with a median near 1,700,
        so a riverAcc of 210 called nine tenths of the map a river. */
+    /* ---- HOW DEEP THE SNOW LIES -----------------------------------
+       Coverage and DEPTH are two different questions and the first
+       version only answered the first, badly: it gated snow on
+       altitude, so a winter valley floor was bare ground with a white
+       line somewhere up the hill. A winter forest is not like that. It
+       is white from the water's edge to the treeline, and what varies
+       across it is not whether there is snow but how much — ankle deep
+       on the open ground, scoured to nothing on a windward rock, and
+       thigh deep in the hollow you did not see.
+
+       That last one is the hazard. Snow is not an obstacle, it is a
+       cost, and deep soft snow is the most expensive ground in the
+       game: it halves your pace, it takes your legs, and it is cold. */
+    snowBase: [0.28, 0.78],  // metres, from the softest winter to the hardest
+    snowBlanket: 0.40,       // the share that simply fell and stayed, everywhere
+    snowDrift: 0.70,         // how much the wind varies the rest of it
+    snowHollow: 0.85,        // how much a hollow collects
+    snowSheds: 1.35,         // the slope at which shedding is in full swing
+    snowCling: 0.30,         // what even the steepest rock still holds
+    powderMul: 1.55,         // x this winter's settled depth = soft and dangerous
+    powderWorstMul: 2.70,    // ... and x this it is as bad as it gets
+    powderSlow: 0.38,        // what your pace falls to in the worst of it
     /* ---- WHAT FREEZES, AND HOW HARD -------------------------------
        Still water freezes; moving water does not, and the faster it
        moves the longer it holds out. So ice is decided per cell from
@@ -2455,6 +2477,21 @@ function iceAt(x, z){
   if(!inGrid(ix, iz)) return 0;
   return Wld.ICE[iz*Wld.N + ix];
 }
+/* HOW DEEP THE SNOW IS UNDER YOUR FEET, in metres. Bilinear off the
+   same field the terrain is coloured from, so what you see and what you
+   wade through are the same thing. */
+function snowDepthAt(x, z){
+  if(!Wld.SNOW) return 0;
+  return sampleGrid(Wld.SNOW, x, z, 0);
+}
+/* What that depth costs. Below the ankle it is nothing but a sound;
+   over the knee it is the most expensive ground in the game. */
+function snowDrag(d){
+  const hi = Wld.powderWorst || 1e9;
+  const lo = (Wld.powderFrom || 1e9)*0.45;   // the settled blanket is free-ish
+  if(d <= lo) return 0;
+  return clamp((d - lo) / Math.max(0.05, hi - lo), 0, 1);
+}
 /* The depth of water you would be IN at this point. On thick ice that
    is nothing, because you are on top of it. */
 function waterDepthAt(x, z){
@@ -3376,6 +3413,86 @@ function genHydrology(){
   Wld.ICE = ICE;
   Wld.stats.ice = { thin: thinCells, thick: thickCells, open: openCells };
 
+  /* ---- HOW DEEP THE SNOW IS, EVERYWHERE ----------------------------
+     A field rather than a flag, because the whole point is that it is
+     not the same everywhere. Four things decide it, and all four are
+     things you can see in a real winter:
+
+       the season      how hard this seed's winter is, which sets the
+                       depth on flat open ground and is most of it
+       the slope       snow slides off steep ground. This is what keeps
+                       the rock and the cliffs bare and is the reason a
+                       snowy hillside reads as a hillside.
+       the wind        a prevailing direction per seed: the windward
+                       face is scoured thin and the lee is loaded. It is
+                       what makes the cover uneven at the scale of a
+                       hundred metres rather than uniformly deep.
+       the ground      hollows collect. A dip that is a puddle in summer
+                       is a drift in winter, and the deep ones are the
+                       hazard: soft, unconsolidated, and over your knee.
+
+     Water is not snowed on — ice gets its own surface — and neither is
+     anything under a roof. */
+  const SNOW = new Float32Array(n2);
+  let powderCells = 0, snowCells = 0, deepest = 0, landCells = 0;
+  /* What counts as dangerous is relative to how much snow this winter
+     brought. A hard seed is deep everywhere, so a fixed metre mark would
+     call the whole map a hazard and nothing would read as a hazard at
+     all. Scaled off the seed's own settled depth, the drifts stay the
+     exception on every seed. */
+  let powderFrom = 1e9, powderWorst = 1e9;
+  if(P.winter){
+    const hard = P.winterHard;
+    const base = lerp(HY.snowBase[0], HY.snowBase[1], hard);
+    powderFrom  = base*HY.powderMul;
+    powderWorst = base*HY.powderWorstMul;
+    const windA = rngFor('snowwind')()*TAU;
+    const wx = Math.sin(windA), wz = Math.cos(windA);
+    for(let iz=1; iz<N-1; iz++) for(let ix=1; ix<N-1; ix++){
+      const i = iz*N+ix;
+      if(WLEV[i] > -9000 && WLEV[i] > H[i] + 0.02) continue;   // it is water
+      landCells++;
+      const gx = (H[i+1] - H[i-1]) / (2*Wld.cell);
+      const gz = (H[i+N] - H[i-N]) / (2*Wld.cell);
+      const slope = Math.hypot(gx, gz);
+      // steep ground sheds it -- but only the steepest sheds it all
+      const lie = lerp(1, HY.snowCling,
+                       smoothstep(HY.snowSheds*0.55, HY.snowSheds*1.7, slope));
+      // windward scoured, lee loaded: the slope's facing against the wind
+      const face = (gx*wx + gz*wz) / (slope || 1);
+      const lee = 1 + face*0.55*clamp(slope*2.2, 0, 1);
+      // hollows collect: how far this cell sits below its neighbours
+      const lap = (H[i-1] + H[i+1] + H[i-N] + H[i+N])*0.25 - H[i];
+      const hollow = 1 + clamp(lap, 0, 1.4)*HY.snowHollow;
+      // and it is uneven at every scale, because snow is
+      const d1 = vnoise2(wxOf(ix)*0.013, wzOf(iz)*0.013, (G.seed^0x5e11)>>>0);
+      const d2 = vnoise2(wxOf(ix)*0.052, wzOf(iz)*0.052, (G.seed^0x77a3)>>>0);
+      const drift = 1 + ((d1-0.5)*1.5 + (d2-0.5)*0.7)*HY.snowDrift;
+      /* Two parts, and the split is the whole point. The blanket is what
+         fell out of a still sky and stayed: it is on everything that is
+         not a rock face, which is why a winter map is white to the
+         horizon rather than white in the creases. The drifted part is
+         what the wind then pushed around, and THAT is what is uneven,
+         and what gets deep enough to be a trap. */
+      const blanket = base*HY.snowBlanket*lie;
+      const drifted = base*(1 - HY.snowBlanket)*lie*lee*hollow*drift;
+      const depth = blanket + Math.max(0, drifted);
+      SNOW[i] = depth;
+      if(depth > 0.02) snowCells++;
+      if(depth > powderFrom) powderCells++;
+      if(depth > deepest) deepest = depth;
+    }
+  }
+  Wld.SNOW = SNOW;
+  Wld.snowWind = P.winter ? 1 : 0;
+  Wld.powderFrom = powderFrom;
+  Wld.powderWorst = powderWorst;
+  Wld.stats.snow = { covered: snowCells, powder: powderCells, land: landCells,
+                     deepest: +deepest.toFixed(2),
+                     from: +powderFrom.toFixed(2),
+                     coveredPct: +(snowCells/Math.max(1,landCells)*100).toFixed(1),
+                     powderPct: +(powderCells/Math.max(1,landCells)*100).toFixed(1) };
+
   /* ---- THE RIM IS A FRAME, NOT A CLIFF.
      The breacher cuts its outflow trenches to the map's edge, which is
      right: that is where the water goes, and protecting the border left
@@ -3461,6 +3578,11 @@ function cellHazard(i){
   if(dep > CFG.HYDRO.deepDepth) return 'deep';
   if(sl > CFG.HAZARD.slipSlope) return 'steep';
   if(dep > 0.02 && dep < 0.5 && sl < 0.05 && Wld.ACC[i] < CFG.HYDRO.streamAcc*2) return 'bog';
+  /* DEEP SOFT SNOW IS A HAZARD, and it is one the route has to know
+     about: a corridor that runs through a metre of unconsolidated
+     powder is not the walkable corridor the guarantee promises, even
+     though nothing about it is steep or wet. */
+  if(Wld.SNOW && Wld.SNOW[i] > Wld.powderFrom) return 'powder';
   return null;
 }
 function cellWalkCost(i){
@@ -3495,6 +3617,15 @@ function cellWalkCost(i){
   if(dep > CFG.PLAYER.swimDepth && Wld.ACC[i] > CFG.HYDRO.fastAcc) return Infinity;
   let c = 1;
   c += sl*sl*38;                                       // steep is slow
+  /* Deep snow is expensive but never impossible: a route through a
+     drift is a bad route, not a wall, and the player can always wade.
+     Priced so the router goes round a powder field the way a person
+     would and only crosses one when there is nothing better. */
+  if(Wld.SNOW){
+    const sn = Wld.SNOW[i];
+    const lo = (Wld.powderFrom || 1e9)*0.45;
+    if(sn > lo) c += (sn - lo)*22 + (sn > Wld.powderFrom ? 14 : 0);
+  }
   if(dep > 0.05) c += 2.5 + dep*6;                     // wading is slower still
   if(dep > CFG.PLAYER.swimDepth) c += 26;              // and swimming is a last resort
   return c;
@@ -5432,22 +5563,26 @@ function buildTerrainMesh(){
 
      On a summer seed every one of these is zero and the shader branch
      costs nothing. */
-  const snowA = new Float32Array(pos.count);
-  if(P.winter){
-    const hard = P.winterHard;
-    const floorY = Wld.seaLevel || 0;
-    const relief = CFG.WORLD.RELIEF;
-    const line = floorY + lerp(relief*0.34, -relief*0.04, hard);
+  /* THE COVER COMES FROM THE DEPTH FIELD, not from a second opinion.
+     The first version worked this out again here, from altitude and
+     slope, and gated it on a snow LINE — so a winter valley floor was
+     bare ground with a white band somewhere up the hill, which is not
+     what a winter forest looks like. It is white from the water's edge
+     up, and the only bare ground is what is too steep to hold it.
+
+     Two channels now: how much cover (x), and how deep (y), both read
+     from the one field the physics also reads, so what the player sees
+     and what the player wades through cannot disagree. */
+  const snowA = new Float32Array(pos.count*2);
+  if(P.winter && Wld.SNOW){
     for(let i=0;i<pos.count;i++){
-      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-      const up = nrm[i*3+1];                       // 1 flat, 0 vertical
-      const lie = smoothstep(0.62, 0.93, up);      // it slides off steep ground
-      const cold = smoothstep(line - relief*0.12, line + relief*0.16, y);
-      const drift = 0.72 + vnoise2(x*0.012, z*0.012, (G.seed^0x5e11)>>>0)*0.56;
-      snowA[i] = clamp(lie * lerp(cold, 1.0, hard*0.55) * drift * (0.45 + hard*0.75), 0, 1);
+      const d = snowDepthAt(pos.getX(i), pos.getZ(i));
+      // a couple of centimetres already covers the ground completely
+      snowA[i*2]   = clamp(d/0.035, 0, 1);
+      snowA[i*2+1] = clamp(d/(Wld.powderWorst || 1), 0, 1);
     }
   }
-  geo.setAttribute('aSnow', new THREE.BufferAttribute(snowA, 1));
+  geo.setAttribute('aSnow', new THREE.BufferAttribute(snowA, 2));
   geo.computeBoundingSphere();
 
   const macro = TexLib.tex(bakeGroundMacro(CFG.QUALITY.macroSize), { srgb:true, repeat:[1,1], aniso:16 });
@@ -5466,15 +5601,28 @@ function buildTerrainMesh(){
   m.onBeforeCompile = (sh)=>{
     sh.uniforms.uDetail = { value: MAT.groundDetailMap };
     sh.uniforms.uDetailAmt = { value: 0.50 };
+    /* How much light is in the sky, 0 at true dark. Snow has six times
+       the albedo of anything around it, so at night it is the one thing
+       still catching what little the ambient term gives -- which reads
+       as a glowing white ribbon in an otherwise black forest. It gets
+       its own night colour rather than a brightness scale, because snow
+       at night is not dim white, it is blue-grey. */
+    sh.uniforms.uDayl = { value: 1 };
+    MAT.terrainU = sh.uniforms;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
-        attribute float aSnow; varying float vSnow;`)
+        attribute vec2 aSnow; varying vec2 vSnow;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        vSnow = aSnow;`);
+        vSnow = aSnow;
+        /* DEEP SNOW STANDS PROUD OF THE GROUND. A few centimetres of
+           lift where it is deepest, which is enough to round off the
+           hollows it has filled and to make a drift read as a drift
+           rather than as a pale patch of ground. */
+        transformed.y += aSnow.y * 0.34;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-        uniform sampler2D uDetail; uniform float uDetailAmt;
-        varying float vSnow;`)
+        uniform sampler2D uDetail; uniform float uDetailAmt, uDayl;
+        varying vec2 vSnow;`)
       .replace('#include <map_fragment>', `#include <map_fragment>
         {
           vec3 det = texture2D(uDetail, vMapUv * 220.0).rgb;
@@ -5485,12 +5633,25 @@ function buildTerrainMesh(){
              grain the ground has and does not read as a flat sheet,
              and the coverage is sharpened so the edge between snow and
              rock is a line rather than a long grey smear. */
-          float sn = smoothstep(0.34, 0.66, vSnow);
-          vec3 snowCol = vec3(0.80, 0.84, 0.90) * (0.72 + l*0.5);
-          diffuseColor.rgb = mix(diffuseColor.rgb, snowCol, sn);
+          /* COVER IS NEARLY BINARY. Snow either covers the ground or
+             it does not; the long grey smear between the two is what
+             made the old version look like paint. What VARIES is the
+             surface: shallow cover still shows the grain and the
+             shape of what is under it, and deep snow buries all of
+             it and goes flat and blue-white. */
+          float sn = smoothstep(0.10, 0.34, vSnow.x);
+          float deep = smoothstep(0.18, 0.72, vSnow.y);
+          float lit = clamp(uDayl, 0.0, 1.0);
+          vec3 nightSnow = vec3(0.075, 0.088, 0.125) * (0.7 + l*0.6);
+          vec3 shallowSnow = mix(nightSnow,
+                                 vec3(0.78, 0.82, 0.88) * (0.66 + l*0.62), lit);
+          vec3 deepSnow    = mix(nightSnow*1.2,
+                                 vec3(0.86, 0.89, 0.95) * (0.88 + l*0.18), lit);
+          diffuseColor.rgb = mix(diffuseColor.rgb, mix(shallowSnow, deepSnow, deep), sn);
         }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, 0.62, smoothstep(0.34, 0.66, vSnow));`);
+        roughnessFactor = mix(roughnessFactor, mix(0.72, 0.52, smoothstep(0.18,0.72,vSnow.y)),
+                               smoothstep(0.10, 0.34, vSnow.x));`);
   };
   m.customProgramCacheKey = ()=> 'terrain-detail-snow';
   MAT.terrain = m;
@@ -6373,6 +6534,10 @@ function updateSky(dt){
     MAT.water.uniforms.uSunColor.value.copy(k.sun);
     MAT.water.uniforms.uLight.value = clamp(ai*0.8 + si*0.5 + 0.03, 0.03, 1.4);
   }
+  /* The same number the water gets, without the floor: at midnight the
+     snow should go with everything else. */
+  if(MAT.terrainU && MAT.terrainU.uDayl)
+    MAT.terrainU.uDayl.value = clamp(ai*1.15 + si*0.75, 0, 1);
 }
 
 /* ---------------------------------------------------------------------
@@ -9632,6 +9797,21 @@ function updatePlayer(dt){
   const hazard = cellHazard(Math.round(clamp(gzOf(p.pos.z),0,Wld.N-1))*Wld.N
                           + Math.round(clamp(gxOf(p.pos.x),0,Wld.N-1)));
   if(hazard === 'bog') speed *= CFG.HAZARD.bogSlow;
+  /* ---- WADING THROUGH IT ------------------------------------------
+     Snow is a cost rather than an obstacle, and the cost is real: the
+     deepest of it halves a walk and makes a sprint pointless, because
+     you cannot run through snow over your knee and the game should not
+     pretend otherwise. It is also the reason a winter seed is harder
+     than a summer one in a way that has nothing to do with the
+     temperature: everything takes longer, and taking longer is what
+     kills people out here. */
+  p.snow = snowDepthAt(p.pos.x, p.pos.z);
+  p.snowDrag = snowDrag(p.snow);
+  if(p.snowDrag > 0){
+    speed *= lerp(1, CFG.HYDRO.powderSlow, p.snowDrag);
+    // and it takes the legs, which is what stops you simply sprinting it
+    if(p.sprinting) p.stamina = Math.max(0, p.stamina - p.snowDrag*18*dt);
+  }
   // uphill is slow
   const sl = slopeAt(p.pos.x, p.pos.z);
   speed *= 1 - clamp(sl, 0, 0.9)*0.45;
@@ -10115,6 +10295,13 @@ const Survival = {
       this.die(this.cold >= S.coldDeadlyAt ? 'exposure'
              : this.thirst >= S.thirstDeadlyAt ? 'dehydration' : 'starvation');
     }
+    /* WADING THROUGH SNOW IS COLD. Not because the air is — that is
+       already in the model — but because you are in it up to the knee
+       and it is taking your legs, and the two together are how people
+       actually get into trouble in winter. */
+    if(Player.snowDrag > 0 && Player.moving)
+      this.cold = clamp(this.cold + dt*Player.snowDrag*1.6, 0, 100);
+
     /* A WOUND GOES ON COSTING AFTER THE THING THAT MADE IT HAS GONE.
        It closes on its own over a few minutes, and while it is open it
        takes warmth — so being caught once, out in the rain, at night,
@@ -14812,7 +14999,7 @@ window.DR = {
      seed validator in the dev panel does the same thing from inside. */
   setP(p){ P = p; },
   heightAt, waterLevelAt, waterDepthAt, waterBodyDepthAt, iceAt,
-  slopeAt, normalAt, cellHazard, cellWalkCost,
+  slopeAt, normalAt, cellHazard, cellWalkCost, snowDepthAt, snowDrag,
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
