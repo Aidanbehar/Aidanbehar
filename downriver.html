@@ -437,6 +437,25 @@ button:active{ transform:translateY(1px); }
                               electricity. The run ends at the desk and
                               nothing is said about who is behind it.
 
+     THE CREATURES, WHICH ARE THE BIGGEST HOLE IN THIS FILE
+       * the stilt ......... what is it, why does it stop when it is
+                             watched, and why is that the rule?
+       * the crawler ....... why does it want to be behind you?
+       * the hollow ........ it never stops. Nothing in the world says
+                             what it wants, only that it is coming. If
+                             it is a person, that is a different game
+                             from if it is an animal, and the file has
+                             not decided.
+       * why the town ...... they keep 95 metres from the hospital and
+                             nothing says why. Lights? People? Or is the
+                             hospital the reason they are here at all?
+       * why now ........... the campsites and the fence line imply
+                             people used this wood. Something changed.
+       * and the question the whole game turns on: are these what the
+         illness is FOR? Does the disease let you see them, or does it
+         invent them and the real ones came later? The game must never
+         answer this out loud, but the lore has to know.
+
      THINGS THE NEW SYSTEMS IMPLY AND DO NOT EXPLAIN
        * snow above the treeline, and what season this is
        * the car you can sit in — whose keys, and why it stopped here
@@ -981,6 +1000,25 @@ const CFG = {
        predictable moment. */
     firstUrgeFrom: 70,       // real seconds before the urge starts
     firstUrgeTo: 300,        // ... and where it is near certain
+    /* ---- THE SCARE CHANNEL -------------------------------------
+       The roll above is gated on how far gone the player is, which is
+       right for the slow work of a mind coming apart and wrong for the
+       other thing a forest does to people, which is to make them jump.
+       A jump does not wait for stage three. So scares are drawn on
+       their own hazard, which barely cares about the stage at all, and
+       they carry their own cooldown because the only thing that ruins
+       one is the last one. */
+    /* MEASURED AND CUT. The first numbers here put twenty-four scares
+       into thirty minutes at stage zero — one every seventy-five
+       seconds, which is not a horror game, it is a fairground ride, and
+       the twenty-fifth one is funny. These give roughly one every eight
+       to ten minutes on a calm day and one every five or six on a bad
+       night, which is rare enough that the player stops bracing. */
+    scareBase: 0.0040,       // per roll, at stage 0 and dead calm
+    scarePerStage: 0.0035,
+    scarePerNight: 0.0060,
+    scareCool: [240, 520],   // seconds of nothing after one lands
+    scareFirstAfter: 90,     // none in the first minute and a half of a run
     firstUrgeMax: 0.030,
     announceChance: 0.5,     // half of all events arrive with a sound
   },
@@ -5853,7 +5891,7 @@ function updateWeather(dt){
   Weather.windGust = Weather.wind * (0.6 + 0.4*Math.sin(G.t*0.31) * Math.sin(G.t*0.13+1.7));
 
   World.wind.uTime.value += dt * (0.6 + Weather.wind*2.2);
-  World.wind.uGust.value = Weather.windGust;
+  World.wind.uGust.value = Weather.windGust + Echo.lean();
 
   // lightning
   Weather.flash = Math.max(0, Weather.flash - dt*5.5);
@@ -8923,7 +8961,8 @@ function updatePlayer(dt){
   const camX = p.pos.x + bobX*Math.cos(p.yaw), camZ = p.pos.z - bobX*Math.sin(p.yaw);
   const camFloor = heightAt(camX, camZ) + 0.22;
   camera.position.set(camX, Math.max(eyeY + bobY, camFloor), camZ);
-  camera.rotation.set(p.pitch, p.yaw, Math.sin(p.bob*0.5)*0.008*p.bobAmt);
+  camera.rotation.set(p.pitch, p.yaw,
+    Math.sin(p.bob*0.5)*0.008*p.bobAmt + Echo.roll());
 
   Veg.update(p.pos.x, p.pos.z);
   Mind.noteMovement(dt, wants, p.sprinting, heading);
@@ -10035,7 +10074,7 @@ const Mind = {
     u.uVignette.value = 0.52 + I*0.22;
     u.uAberr.value = Math.pow(clamp(I*0.8 + A*0.5, 0, 1), 1.8) * 0.9;
     u.uWarp.value = Math.pow(I, 2.0) * (0.35 + A*0.4);
-    u.uDesat.value = clamp(I*0.16 + (Survival.sick>0 ? 0.10 : 0), 0, 0.35);
+    u.uDesat.value = clamp(I*0.16 + (Survival.sick>0 ? 0.10 : 0) + Echo.desat(), 0, 0.85);
     u.uPulse.value = clamp((1 - Player.stamina/CFG.PLAYER.staminaMax)*0.7 + I*0.3, 0, 1)
                      * (0.5 + 0.5*Math.sin(G.t*2.6));
     u.uExposure.value = 1.06 - I*0.06;
@@ -10246,6 +10285,31 @@ const Audio = (()=>{
     beastStep:   { n:14, make:r=>({ kind:'step', noise:'brown', f:r.range(140,380),
                                    q:r.range(1.2,2.6), dec:r.range(0.14,0.30),
                                    gain:r.range(0.20,0.42), thud:r.range(0.6,1.0) }) },
+    /* ---- THE ONES THAT ARE MEANT TO MAKE YOU JUMP ---------------
+       Loud, close, and over before you can place them, which is the
+       only honest way to do this: a scare that lingers is a scare you
+       get to examine, and a scare you can examine is furniture. */
+    shriek:    { n:14, make:r=>({ kind:'siren', f0:r.range(700,1200), f1:r.range(2600,4600),
+                                   rate:r.range(3.0,6.5), dur:r.range(0.35,0.8), gain:r.range(0.55,0.95) }) },
+    rushPast:  { n:14, make:r=>({ kind:'swell', noise:'white', f0:r.range(300,900),
+                                   f1:r.range(3000,7000), dur:r.range(0.22,0.5),
+                                   gain:r.range(0.35,0.7), q:r.range(0.8,2.0) }) },
+    bigSnap:   { n:14, make:r=>({ kind:'snap', f:r.range(500,1500), q:r.range(1.6,4),
+                                   dec:r.range(0.10,0.24), gain:r.range(0.5,0.95),
+                                   body:r.range(0.5,1.0) }) },
+    heartbeatLoud:{n:8, make:r=>({ kind:'thumpS', f:r.range(34,56), dec:r.range(0.18,0.34),
+                                   gain:r.range(0.5,0.85) }) },
+    inhale:    { n:12, make:r=>({ kind:'breath', f0:r.range(200,420), f1:r.range(900,1700),
+                                   q:r.range(1.0,2.4), dur:r.range(0.22,0.5), gain:r.range(0.4,0.8) }) },
+    whisperName:{n:16, make:r=>({ kind:'voice', syll:r.irange(1,2),
+                                   fmt:[r.range(250,480), r.range(800,1400), r.range(2000,3000)],
+                                   q:r.range(7,16), rate:r.range(0.10,0.22), gain:r.range(0.24,0.5),
+                                   pitch:r.range(95,150), breathy:r.range(0.7,1.0) }) },
+    boneRattle:{ n:12, make:r=>({ kind:'knock', f:r.range(700,1800), q:r.range(4,10),
+                                   count:r.irange(5,11), gap:r.range(0.03,0.075),
+                                   dec:r.range(0.015,0.04), gain:r.range(0.2,0.42) }) },
+    groundThump:{n:12, make:r=>({ kind:'thumpS', f:r.range(60,110), dec:r.range(0.22,0.44),
+                                   gain:r.range(0.4,0.8) }) },
     // ---- stage 1: things that are not there ----------------------
     twigSnap:  { n:22, make:r=>({ kind:'snap', f:r.range(1600,4800), q:r.range(2.5,7), dec:r.range(0.035,0.10), gain:r.range(0.16,0.45), body:r.range(0,0.5) }) },
     brushPush: { n:16, make:r=>({ kind:'swell', noise:'white', f0:r.range(1400,3000), f1:r.range(3600,7200), dur:r.range(0.35,1.1), gain:r.range(0.08,0.22), q:r.range(1.0,2.4) }) },
@@ -11114,6 +11178,7 @@ function makeFigure(scale=1){
 const Director = (()=>{
   const state = {
     acc: 0, quiet: 12, fired: 0, lastRoll: 0, lastChance: 0,
+    scareCool: 0, scares: 0, lastScareChance: 0,
     recent: {},              // id -> t
     log: [],
     firstDone: false,
@@ -11142,6 +11207,38 @@ const Director = (()=>{
     return lerp(D.recencyFloor, 1, age/D.recencyWindow);
   }
 
+  /* A SCARE IS DRAWN SEPARATELY, on its own hazard and its own cooldown,
+     from the events that carry `scare`. It ignores the ordinary quiet
+     window entirely — the whole point is that it arrives when nothing
+     was happening. */
+  function rollScare(){
+    const D = CFG.DIRECT;
+    if(G.t < D.scareFirstAfter) return null;
+    if(state.scareCool > 0){ state.scareCool -= D.tick; return null; }
+    const chance = D.scareBase + Mind.stage*D.scarePerStage + night()*D.scarePerNight;
+    state.lastScareChance = chance;
+    const r = rngFor('scare', Math.floor(G.t*211));
+    if(r() > chance) return null;
+    const bag = [];
+    let total = 0;
+    for(const ev of EVENTS){
+      if(!ev.scare) continue;
+      if(ev.ok && !ev.ok()) continue;
+      const w = ev.p * recency(ev.id);
+      if(w <= 0) continue;
+      bag.push([w, ev]); total += w;
+    }
+    if(!bag.length) return null;
+    let x = r()*total;
+    let chosen = bag[bag.length-1][1];
+    for(const [w, ev] of bag){ x -= w; if(x <= 0){ chosen = ev; break; } }
+    const out = fire(chosen, Mind.stage);
+    const c = D.scareCool;
+    state.scareCool = rngFor('scareCool', Math.floor(G.t*29)).range(c[0], c[1]);
+    state.scares = (state.scares||0) + 1;
+    return out;
+  }
+
   function roll(){
     const D = CFG.DIRECT;
     if(state.quiet > 0){ state.quiet -= D.tick; return null; }
@@ -11162,6 +11259,14 @@ const Director = (()=>{
     const bag = [];
     let total = 0;
     for(const ev of EVENTS){
+      /* SCARES ARE NOT IN THIS BAG. They are written at stage 0 so that
+         the other channel can throw them at a player who is barely
+         unwell, and stage 0 is exactly what makes them the most likely
+         thing in this one at EVERY stage. Left in, they arrived every
+         sixty-seven seconds — thirty-six of them in forty minutes, with
+         their own cooldown untouched at zero because the channel that
+         owns it never got to fire one. */
+      if(ev.scare) continue;
       const sf = stageFit(ev.stage, drawStage);
       if(sf <= 0) continue;
       if(ev.ok && !ev.ok()) continue;
@@ -11207,6 +11312,7 @@ const Director = (()=>{
     let guard = 0;
     while(state.acc >= CFG.DIRECT.tick && guard++ < 6){
       state.acc -= CFG.DIRECT.tick;
+      rollScare();
       roll();
     }
     /* THE RISING URGE. A per-second hazard rather than a deadline: the
@@ -11638,6 +11744,168 @@ function buildEventLibrary(){
       return true;
     }});
 
+  /* =================================================================
+     ===== SYMPTOMS =====
+     The strange ones. Not things in the forest — things the illness is
+     doing to the apparatus the player is using to look at the forest.
+     A noise can be explained away as an animal. These cannot, because
+     there is nothing out there to blame them on: the horizon is not
+     level, your own feet are making two sets of sounds, the compass is
+     lying in a way compasses cannot lie. They are the cheapest way this
+     file has of saying "the problem is you" without a line of dialogue.
+     ================================================================= */
+  add({ id:'symHorizonTilt', stage:2, flavour:'structural', p:1.2, fire:()=>{
+    /* The world is not level any more. It comes back on its own over
+       about twenty seconds, slowly enough that you doubt it happened. */
+    Echo.tilt(lerp(0.045, 0.16, I()) * (Math.random()<0.5?-1:1), lerp(9, 22, I()));
+    return true;
+  }});
+  add({ id:'symDoubleStep', stage:1, flavour:'auditory', p:1.3, fire:()=>{
+    /* Every footfall you make for the next while has a second one
+       behind it, a beat late. You cannot stop walking to check,
+       because stopping is when it stops. */
+    Echo.doubleSteps(lerp(14, 40, I()));
+    return true;
+  }});
+  add({ id:'symBreathNotYours', stage:2, flavour:'auditory', p:1.1, fire:()=>{
+    for(let k=0;k<4;k++)
+      Audio.play('breath', { pan: (k%2?1:-1)*0.5, gain: 0.5 + I()*0.5, delay: k*1.15 });
+    return true;
+  }});
+  add({ id:'symCompassLies', stage:2, flavour:'navigational', p:1.2,
+    ok:()=> Gear.hasCompass,
+    fire:()=>{
+      Mind.compassReversed = true;
+      Mind.reverseUntil = G.t + lerp(50, 190, I());
+      return true;
+    }});
+  add({ id:'symCompassSpin', stage:3, flavour:'navigational', p:1.0,
+    ok:()=> Gear.hasCompass && Gear.compassUp,
+    fire:()=>{ Gear.needleVel += (Math.random()<0.5?-1:1)*(9 + I()*14); return true; }});
+  add({ id:'symColourGoes', stage:3, flavour:'visual', p:1.1, fire:()=>{
+    Echo.drain(lerp(6, 16, I()));
+    return true;
+  }});
+  add({ id:'symTimeSlips', stage:3, flavour:'structural', p:0.9, fire:()=>{
+    /* A piece of the clock is missing. Nothing else changes, and
+       nothing tells the player except the number in the corner. */
+    const jump = lerp(0.12, 0.55, I());
+    G.hours = mod(G.hours + jump, 24);
+    Hush.start(3.5);
+    return true;
+  }});
+  add({ id:'symHeartLoud', stage:2, flavour:'auditory', p:1.2, fire:()=>{
+    const beats = 5 + Math.floor(I()*7);
+    for(let k=0;k<beats;k++)
+      Audio.play('heartbeat', { gain: 0.45 + I()*0.5, delay: k*(0.72 - I()*0.22) });
+    return true;
+  }});
+  add({ id:'symWrongTrees', stage:4, flavour:'visual', p:1.0, fire:()=>{
+    /* The wood leans. All of it, the same way, for a few seconds. */
+    Echo.leanTrees(lerp(0.05, 0.14, I()), 5 + I()*6);
+    return true;
+  }});
+  add({ id:'symSomeoneCounting', stage:3, flavour:'auditory', p:1.0, fire:()=>{
+    const n = 4 + Math.floor(Math.random()*5);
+    for(let k=0;k<n;k++)
+      Audio.play('voice', { gain: 0.35 + I()*0.4, pitch: 0.95, delay: k*1.35,
+                            pan: -0.5 + k*0.25 });
+    return true;
+  }});
+
+  /* =================================================================
+     ===== THE SCARE LIBRARY =====
+     These are drawn on the Director's other channel, which barely cares
+     what stage the mind is at, because being made to jump is not a
+     symptom of anything. They obey the same rule as the rest of the
+     hallucination library — no collision, no damage, nothing that
+     reaches Survival.hurt — so a scare can take a year off your life
+     and cannot cost you a single point of anything. The thing in the
+     trees that CAN is somewhere else entirely, and looks much the same.
+     ================================================================= */
+  add({ id:'scareShriekBehind', stage:0, scare:true, flavour:'auditory', p:1.4, fire:()=>{
+    Audio.play('shriek', { pos: behindPlayer(2.2), gain: 1.0 });
+    Mind.shock(0.22);
+    return true;
+  }});
+  add({ id:'scareRushPast', stage:0, scare:true, flavour:'auditory', p:1.3, fire:()=>{
+    /* Something crosses behind you, close enough to move air. Two
+       sounds a fifth of a second apart, left to right or right to
+       left, which is what makes it a thing with a direction rather
+       than a noise. */
+    const side = Math.random() < 0.5 ? -1 : 1;
+    Audio.play('rushPast', { pan: side*0.9, gain: 0.8 });
+    Audio.play('rushPast', { pan: -side*0.9, gain: 0.7, delay: 0.19 });
+    Audio.play('brushPush', { pos: behindPlayer(3), gain: 0.8, delay: 0.1 });
+    Mind.shock(0.20);
+    return true;
+  }});
+  add({ id:'scareFaceInTheDark', stage:0, scare:true, flavour:'visual', p:1.5,
+    ok:()=> Sky.sunUp < 0.15 || Weather.fogBoost > 0.5,
+    fire:()=>{
+      /* IN YOUR FACE, AND GONE. Three metres out, dead ahead, for a
+         third of a second — long enough to register and far too short
+         to look at. */
+      const a = Player.yaw + (Math.random()-0.5)*0.35;
+      const d = 2.6 + Math.random()*1.1;
+      const x = Player.pos.x - Math.sin(a)*d, z = Player.pos.z - Math.cos(a)*d;
+      const g = makeFigure(1.05);
+      g.position.set(x, heightAt(x,z) + 0.05, z);
+      g.rotation.y = bearingTo(Player.pos.x, Player.pos.z);
+      Phantoms.add(g, { life: 0.34, fade: 0.06, label:'face' });
+      Audio.play('inhale', { gain: 0.95 });
+      Audio.play('heartbeatLoud', { gain: 0.7, delay: 0.12 });
+      Mind.shock(0.34);
+      return true;
+    }});
+  add({ id:'scareStanding', stage:0, scare:true, flavour:'visual', p:1.2, fire:()=>{
+    /* Not close. Just there, exactly where you are looking, and it does
+       not do anything at all, which is worse. */
+    const a = Player.yaw + (Math.random()-0.5)*0.5;
+    const d = 11 + Math.random()*9;
+    const x = Player.pos.x - Math.sin(a)*d, z = Player.pos.z - Math.cos(a)*d;
+    const g = makeFigure(1.5);
+    g.position.set(x, heightAt(x,z), z);
+    g.rotation.y = bearingTo(Player.pos.x, Player.pos.z);
+    Phantoms.add(g, { life: 2.6, fade: 0.5, lookAway: true, label:'standing' });
+    Audio.play('whisperName', { gain: 0.5, delay: 0.8 });
+    Mind.shock(0.24);
+    return true;
+  }});
+  add({ id:'scareSnapOverhead', stage:0, scare:true, flavour:'auditory', p:1.0, fire:()=>{
+    Audio.play('bigSnap', { pos: V(Player.pos.x, Player.pos.y + 9, Player.pos.z), gain: 1.0 });
+    Audio.play('branchCreak', { pos: V(Player.pos.x, Player.pos.y + 7, Player.pos.z),
+                                gain: 0.8, delay: 0.14 });
+    Mind.shock(0.18);
+    return true;
+  }});
+  add({ id:'scareGrabbed', stage:0, scare:true, flavour:'structural', p:0.9, fire:()=>{
+    /* The camera is thrown as if something took hold of your shoulder.
+       Nothing did — this does no damage and there is nothing behind
+       you — but the body does not know that for about a second. */
+    Player.yaw += (Math.random()-0.5)*0.55;
+    Player.pitch = clamp(Player.pitch + 0.22, -1.4, 1.4);
+    Audio.play('inhale', { pan: Math.random()<0.5?-1:1, gain: 0.9 });
+    Audio.play('boneRattle', { pos: behindPlayer(1.4), gain: 0.6, delay: 0.08 });
+    Mind.shock(0.40);
+    return true;
+  }});
+  add({ id:'scareUnderfoot', stage:0, scare:true, flavour:'auditory', p:0.9, fire:()=>{
+    Audio.play('groundThump', { gain: 0.9 });
+    Audio.play('groundThump', { gain: 0.7, delay: 0.34 });
+    Audio.play('groundThump', { gain: 0.5, delay: 0.72 });
+    Mind.shock(0.16);
+    return true;
+  }});
+  add({ id:'scareNameCalled', stage:0, scare:true, flavour:'auditory', p:1.1, fire:()=>{
+    /* Somebody says something with your shape to it, once, very close,
+       and never again. */
+    Audio.play('whisperName', { pan: Math.random()<0.5?-0.6:0.6, gain: 0.85 });
+    Mind.shock(0.26);
+    UI.say('\u2014', 1.2);
+    return true;
+  }});
+
   Director.setEvents(E);
   return E;
 }
@@ -11647,9 +11915,53 @@ function buildEventLibrary(){
    ------------------------------------------------------------------- */
 /* Footsteps that match yours, a beat behind. Stops if you stop, which is
    the whole horror of it. */
+/* ---------------------------------------------------------------------
+   THE SYMPTOMS THAT ARE NOT SOUNDS OR SHAPES
+
+   Everything else the mind does to the player arrives as a thing in the
+   world: a noise from behind, a figure between the trunks. These are
+   the other kind — the apparatus the player is looking THROUGH going
+   wrong. There is nothing out there to blame them on, which is exactly
+   why they land: a snapping twig is an animal until proven otherwise,
+   but a horizon that is not level is not the forest's fault.
+
+   All four decay on their own, over long enough that the player is
+   never sure when it stopped. None of them touch collision, damage or
+   the survival model — a symptom cannot hurt you, the same rule the
+   whole hallucination library lives by.
+   ------------------------------------------------------------------- */
 const Echo = {
   until: 0, delay: 0.3, lastStep: 0,
+  rollAmt: 0, rollUntil: 0, rollFor: 1,
+  desatUntil: 0, desatFor: 1,
+  leanAmt: 0, leanUntil: 0, leanFor: 1,
+
   start(seconds, delay){ this.until = G.t + seconds; this.delay = delay; },
+  /* Your own footsteps, with a second set a beat behind them. Stopping
+     to listen is what makes it stop, which is what makes it useless to
+     check. */
+  doubleSteps(seconds){ this.start(seconds, 0.20 + Math.random()*0.10); },
+  /* The horizon is not level. It eases in, holds, and eases out. */
+  tilt(rad, seconds){
+    this.rollAmt = rad; this.rollUntil = G.t + seconds; this.rollFor = seconds;
+  },
+  /* The colour goes out of everything for a while. */
+  drain(seconds){ this.desatUntil = G.t + seconds; this.desatFor = seconds; },
+  /* The whole wood leans, all of it the same way at once. */
+  leanTrees(amount, seconds){
+    this.leanAmt = amount; this.leanUntil = G.t + seconds; this.leanFor = seconds;
+  },
+
+  /* A bell curve over the effect's life, so nothing snaps on or off. */
+  env(until, span){
+    if(G.t > until) return 0;
+    const left = (until - G.t)/Math.max(0.001, span);
+    return Math.sin(clamp(1 - left, 0, 1)*Math.PI);
+  },
+  roll(){ return this.rollAmt * this.env(this.rollUntil, this.rollFor); },
+  desat(){ return 0.55 * this.env(this.desatUntil, this.desatFor); },
+  lean(){ return this.leanAmt * this.env(this.leanUntil, this.leanFor); },
+
   update(dt){
     if(G.t > this.until) return;
     if(!Player.moving) return;
@@ -13272,8 +13584,40 @@ const DEV = (()=>{
          boarded means. Doors are opened with E from either side and
          never close on their own.
 
+     THE THINGS THAT ARE ACTUALLY THERE
+       spawn rules over the seeds tested: 0 inside the start clearance,
+         0 within 95m of the hospital, 0 in water, 0 on a cliff
+       the stilt, watched for 25 seconds: 0.00 metres moved. The same
+         25 seconds with the player looking away: 79.6 metres, closing
+         from 18m to 7.8m, and it struck.
+       all three reach a stationary player from 26m and land a hit in
+         9 to 13 seconds; a player who runs takes 0 hits in two minutes,
+         and the stilt gives up entirely at 149m
+       four landed attacks end the run, with the right cause
+       a raycast from the eye at each one hits the creature first —
+         nothing occludes them; 38 to 160 pixels tall at 7 to 9 metres
+       the hollow knew where the player was from 600m the moment the
+         world loaded and killed an agent that never reacts on 2 seeds
+         of 6. Given a 120m nose and the same relentlessness after it
+         has you: 7 of 8 arrive.
+
+     THE SCARE CHANNEL
+       51 events in the library, all 51 fire without throwing
+       scares are drawn on their own hazard and their own cooldown, and
+         they were ALSO in the ordinary bag — written at stage 0, which
+         is exactly what made them the likeliest thing at every stage.
+         36 of them in 40 minutes, one every 67 seconds, with their own
+         cooldown sitting at zero because the channel that owns it never
+         got to fire one. Out of that bag:
+       40 minutes, stage 0, calm daylight: 21 events, 5 scares
+       40 minutes, stage 0, calm night:    20 events, 3 scares
+       40 minutes, stage 3, night:         79 events, 6 scares, 19 symptoms
+       so the ordinary rate scales 21 -> 79 with the illness and the
+       scares barely move, which is the design: being made to jump is
+       not a symptom of anything.
+
      COST
-       simulation 0.09ms a frame in the wilderness, 0.15ms in the town
+       simulation 0.10ms a frame in the wilderness, 0.19ms in the town
        522 draw calls and 408k triangles at the spawn, 218 and 468k in
          the town; 3,519 instances across 15 instanced meshes
        a full vegetation refill after a 120m jump: 2.2ms
