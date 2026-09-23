@@ -5292,6 +5292,12 @@ const Veg = {
   trunks: {}, crowns: {}, scrub: null, rocks: null, deadfall: null,
   logs: [],                 // fallen trunks, as segments rather than circles
   colliders: [],           // { x, z, r } for trees close enough to matter
+  boulders: [],            // { x, z, r, y } — the crown of every rock near
+                           // enough to stand on. A rock too low to be an
+                           // obstacle still has a top, and without this it
+                           // was neither: measured on seed 42, six of the
+                           // thirteen rocks around the player were solid
+                           // in neither sense and you walked through them.
   rockR: 1.0, rockTop: 1.0,   // measured off the rock geometry in build()
   lastX: 1e9, lastZ: 1e9, dirty: true,
   counts: {},
@@ -5496,6 +5502,7 @@ const Veg = {
     let ns=0, nr=0, nd=0;
     this.colliders.length = 0;
     this.logs.length = 0;
+    this.boulders.length = 0;
     const CR = CFG.QUALITY.colliderRadius, CR2 = CR*CR;
     const items = [];
     const seed = (G.seed ^ 0x9e37) >>> 0;
@@ -5556,6 +5563,17 @@ const Veg = {
           const stands = sc*this.rockTop - sc*0.28;
           if(dd < CR2 && stands > CFG.PLAYER.stepUp)
             this.colliders.push({ x: cxw, z: czw, r: sc*this.rockR });
+          /* AND EVERY ROCK HAS A TOP. The rule above decides whether a
+             rock is an OBSTACLE, and a rock below the threshold was
+             then nothing whatsoever — not a wall and not a floor — so
+             you walked through the middle of it. Measured on seed 42,
+             six of the thirteen rocks within forty metres were exactly
+             that, standing between 26 and 49cm out of the ground.
+             A rock you can step onto is a rock you step onto, which is
+             the same rule a fallen trunk already lives by. */
+          if(dd < CR2)
+            this.boulders.push({ x: cxw, z: czw, r: sc*this.rockR*0.82,
+                                 y: heightAt(cxw,czw) - sc*0.28 + sc*this.rockTop });
         }
         if(!underwater && nd < this.deadfall.instanceMatrix.count &&
            ihash2(cx-13, cz+29, seed+303) < 0.07*(1-open)*2){
@@ -6303,6 +6321,16 @@ function obbPush(b, px, pz, radius, out){
    interiors work at all. */
 function surfaceAt(x, z, feetY, radius){
   let best = -Infinity;
+  /* A ROCK'S CROWN, on the same terms as a fallen trunk: near enough to
+     your feet to step onto, and not so far below that you are standing
+     over it in mid-air. */
+  for(let bi=0; bi<Veg.boulders.length; bi++){
+    const B = Veg.boulders[bi];
+    if(B.y > feetY + CFG.PLAYER.stepUp || B.y < feetY - 2.2) continue;
+    const dx = x - B.x, dz = z - B.z;
+    if(dx*dx + dz*dz > B.r*B.r) continue;
+    if(B.y > best) best = B.y;
+  }
   /* A fallen trunk is something you end up standing on top of, so it is
      a surface as well as an obstacle. */
   for(let li=0; li<Veg.logs.length; li++){
