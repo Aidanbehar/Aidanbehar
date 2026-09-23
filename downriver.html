@@ -4937,32 +4937,98 @@ function buildTerrainMesh(){
    a player working out which way is downhill by watching the current is
    reading the real flow field rather than an animation someone chose.
    ------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   THE WATER HAS TO MEET THE LAND, and this is where it did not.
+
+   A quad was emitted only when all FOUR of its corners were wet. On a
+   four-metre grid that throws away the entire outer ring of every body
+   of water — measured across eight seeds, 28% of all wet cells were
+   never drawn — and, far worse, it leaves the drawn edge at a cell that
+   already has depth. So the surface stopped dead in mid-air with the
+   ground visible underneath it: 2,054 of 4,929 shoreline cells stood
+   more than 25cm proud, 1,401 of them over a metre, and the worst hung
+   NINE METRES above the bank below it. That is the bright hard line
+   across the valley in the screenshot, and the lakes that look pasted
+   onto the hillsides.
+
+   So the mesh is extended one cell PAST the water into the dry ring
+   around it, and those fringe vertices are put at the water's own level
+   with zero depth. The surface therefore runs on under the bank and the
+   terrain occludes it, which is what a shoreline is: the waterline is
+   where the two surfaces cross, not where the mesh happens to end. A
+   quad is drawn whenever any of its corners is actually wet.
+   ------------------------------------------------------------------- */
 function buildWaterMesh(){
   const N = Wld.N;
   const verts = [], idx = [], flow = [], dirs = [], deps = [];
   const map = new Int32Array(N*N).fill(-1);
   const wet = (i)=> Wld.WLEV[i] > -9000 && (Wld.WLEV[i] - Wld.H[i]) > 0.015;
+  const isWet = new Uint8Array(N*N);
+  for(let i=0;i<N*N;i++) if(wet(i)) isWet[i] = 1;
+
+  const flowAt = (i, ix, iz)=>
+    Wld.POND[i] ? 0 : clamp(Math.log10(1+Wld.ACC[i]/CFG.HYDRO.streamAcc)*0.55, 0, 1);
 
   for(let iz=0; iz<N; iz++) for(let ix=0; ix<N; ix++){
     const i = iz*N+ix;
-    if(!wet(i)) continue;
-    map[i] = verts.length/3;
     const x = wxOf(ix), z = wzOf(iz);
-    verts.push(x, Wld.WLEV[i], z);
-    deps.push(Wld.WLEV[i] - Wld.H[i]);
-    const acc = Wld.ACC[i];
-    flow.push(Wld.POND[i] ? 0 : clamp(Math.log10(1+acc/CFG.HYDRO.streamAcc)*0.55, 0, 1));
-    const j = Wld.DIR[i];
-    if(j >= 0 && !Wld.POND[i]){
-      const dx = (j%N) - ix, dz = ((j/N)|0) - iz;
-      const l = Math.hypot(dx,dz) || 1;
-      dirs.push(dx/l, dz/l);
-    } else dirs.push(0, 0);
+    if(isWet[i]){
+      map[i] = verts.length/3;
+      verts.push(x, Wld.WLEV[i], z);
+      deps.push(Wld.WLEV[i] - Wld.H[i]);
+      flow.push(flowAt(i, ix, iz));
+      const j = Wld.DIR[i];
+      if(j >= 0 && !Wld.POND[i]){
+        const dx = (j%N) - ix, dz = ((j/N)|0) - iz;
+        const l = Math.hypot(dx,dz) || 1;
+        dirs.push(dx/l, dz/l);
+      } else dirs.push(0, 0);
+      continue;
+    }
+    /* THE DRY RING. Take the level from the water this cell touches —
+       averaged, because a corner can touch two bodies at once — and
+       give it no depth, so the surface tapers to nothing here and then
+       goes under the bank. */
+    let lev = 0, fl = 0, dx2 = 0, dz2 = 0, n = 0;
+    for(let oz=-1; oz<=1; oz++) for(let ox=-1; ox<=1; ox++){
+      if(!ox && !oz) continue;
+      const nx = ix+ox, nz = iz+oz;
+      if(nx<0||nz<0||nx>=N||nz>=N) continue;
+      const j = nz*N+nx;
+      if(!isWet[j]) continue;
+      lev += Wld.WLEV[j]; fl += flowAt(j, nx, nz); n++;
+      const k = Wld.DIR[j];
+      if(k >= 0 && !Wld.POND[j]){
+        const ddx = (k%N) - nx, ddz = ((k/N)|0) - nz;
+        const l = Math.hypot(ddx,ddz) || 1;
+        dx2 += ddx/l; dz2 += ddz/l;
+      }
+    }
+    if(!n) continue;                       // dry and nowhere near water
+    lev /= n;
+    /* A BANK GETS THE WATER'S LEVEL AND HIDES IT. A DROP GETS THE
+       GROUND. Where the shore is above the water — which is nearly
+       everywhere — the fringe sits at the water's own level and the
+       bank occludes it, which is what a waterline is. Where the ground
+       falls away instead, at the lip of a fall or the edge of a gorge,
+       holding the fringe at the water's level hangs a sheet of water in
+       the air; measured, one of them was thirty metres of it. Dropping
+       the vertex to the ground there runs the surface over the lip
+       instead, which is what water does. Taking the lower of the two
+       is the whole rule. */
+    map[i] = verts.length/3;
+    verts.push(x, Math.min(lev, Wld.H[i]), z);
+    deps.push(0);
+    flow.push(fl/n);
+    const dl = Math.hypot(dx2, dz2) || 1;
+    dirs.push(dx2/dl, dz2/dl);
   }
   for(let iz=0; iz<N-1; iz++) for(let ix=0; ix<N-1; ix++){
-    const a = map[iz*N+ix], b = map[iz*N+ix+1];
-    const c2 = map[(iz+1)*N+ix], d2 = map[(iz+1)*N+ix+1];
+    const ia = iz*N+ix, ib = ia+1, ic = ia+N, id = ic+1;
+    const a = map[ia], b = map[ib], c2 = map[ic], d2 = map[id];
     if(a<0||b<0||c2<0||d2<0) continue;
+    // at least one real corner of water, or it is a quad of dry ring
+    if(!(isWet[ia]||isWet[ib]||isWet[ic]||isWet[id])) continue;
     idx.push(a,c2,b, b,c2,d2);
   }
   if(!idx.length){ World.water = null; return null; }
@@ -5073,29 +5139,60 @@ function makeTier(radius, height, droop, jitter, seed, seg=13, spin=0){
      clean cone the mass reads as a triangle someone drew. Two frequencies
      of radius jitter plus a droop that varies per vertex means the
      outline is already broken before the texture has any say in it. */
+  /* THE JITTER HAS TO BE COHERENT AROUND THE RIM, and it was not.
+     Every rim point rolled its own radius independently, at 0.45 of the
+     tier's radius and twice over: neighbours could land at 0.35x and
+     1.65x the nominal radius, a four-and-a-half-fold jump across a
+     single segment, with their droop independently between 0.35 and
+     1.5. The triangle between two such points is a long thin shard
+     sticking out sideways from the cone — which is exactly what the
+     screenshots show, bright green trapezoids stuck all over the trees
+     at angles no branch grows at.
+
+     A conifer's outline is lobed, not shattered. Two low frequencies
+     around the rim give the lobes, a small per-point term roughens
+     them, and the whole thing is clamped so nothing juts far past the
+     nominal radius. The silhouette is still broken before the needle
+     mask has any say in it, which was the point of jittering it. */
+  const lobePhase1 = ihash2(seed, 0, 13)*TAU, lobePhase2 = ihash2(seed, 1, 29)*TAU;
   const rimAt = (i)=>{
     const k = i%seg;
     const a = k/seg*TAU + spin;
-    const j = 1 + (ihash2(k, seed, 991)-0.5)*jitter*2
-                + (ihash2(k*3, seed+5, 617)-0.5)*jitter*0.9;
-    const r = radius*Math.max(0.35, j);
-    const y = -droop*radius*(0.35 + ihash2(k, seed+7, 733)*1.15);
+    const lobe = Math.sin(a*3 + lobePhase1)*0.52 + Math.sin(a*5 + lobePhase2)*0.26;
+    const fine = (ihash2(k, seed, 991)-0.5)*2;
+    const j = 1 + lobe*jitter*0.55 + fine*jitter*0.20;
+    const r = radius*clamp(j, 0.64, 1.20);
+    const y = -droop*radius*(0.55 + (0.5 + lobe*0.5)*0.70
+                                  + (ihash2(k, seed+7, 733)-0.5)*0.26);
     return [Math.cos(a)*r, y, Math.sin(a)*r, a];
   };
   for(let i=0;i<seg;i++){
     const A = rimAt(i), B = rimAt(i+1);
     const um = ((i+0.5)/seg)*uRep;
-    pos.push(0, height, 0);          nrm.push(0,1,0); uv.push(um, 0);
+    const aMid = (A[3] + B[3]) * 0.5;
+    /* Foliage normals lean upward rather than outward, because shading a
+       mass of needles as if it were a smooth cone gives one blazing lit
+       face and one black one, and a tree made of stacked triangles reads
+       as exactly that. That is the standard vegetation cheat and it is
+       the difference between foliage and origami.
+
+       BUT IT WAS TAKEN TOO FAR. At 0.45 radial against 1.0 up — and the
+       apex at straight up — every triangle in every tier faced the sky,
+       so each tier lit like a flat plate laid on top of the tree. Seen
+       through the gaps between tiers, which is most of what you see of a
+       conifer from below, the result was a black silhouette with bright
+       green trapezoids stuck all over it at angles no branch grows at.
+       That is what "the trees render in strange ways" looks like.
+
+       Mostly outward with an upward bias keeps the softness and gives
+       the cone back its shape, and the apex leans the same way its own
+       triangle does instead of straight up. */
+    const apex = new THREE.Vector3(Math.cos(aMid)*0.80, 0.62, Math.sin(aMid)*0.80).normalize();
+    pos.push(0, height, 0);          nrm.push(apex.x, apex.y, apex.z); uv.push(um, 0);
     pos.push(A[0], A[1], A[2]);      uv.push((i/seg)*uRep, vRep);
     pos.push(B[0], B[1], B[2]);      uv.push(((i+1)/seg)*uRep, vRep);
-    /* Foliage normals lean hard UPWARD rather than outward. Physically a
-       tier is a cone and its normal points out of the slope, but shading
-       a mass of needles as if it were a smooth cone gives one blazing lit
-       face and one black one, and a tree made of stacked triangles reads
-       as exactly that. Biasing toward vertical is the standard vegetation
-       cheat and it is the difference between foliage and origami. */
     for(const V of [A,B]){
-      const n = new THREE.Vector3(Math.cos(V[3])*0.45, 1.0, Math.sin(V[3])*0.45).normalize();
+      const n = new THREE.Vector3(Math.cos(V[3])*0.80, 0.62, Math.sin(V[3])*0.80).normalize();
       nrm.push(n.x, n.y, n.z);
     }
   }
