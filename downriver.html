@@ -1085,7 +1085,24 @@ const CFG = {
     roam: 130,             // how far one wanders from where it woke up
     lungeFrom: 7.5,        // it breaks into a charge this far out
     chargeFor: 5.0,        // and gives up on a charge after this long
-    backOff: 2.4,          // seconds of ground given back after a hit
+    /* ---- WHAT HAPPENS AFTER IT LANDS ONE --------------------------
+       The recoil used to be 2.4 seconds at seven tenths of charge
+       speed, which is fifteen metres of ground given back — the thing
+       hit you and then left the area, and the encounter was over by
+       accident. A recoil should be a flinch you can see, not an exit:
+       three or four metres, and it is still right there.
+
+       The exit is a separate thing, and it is deliberate. Half the
+       time, the crawler and the hollow break off completely: they turn,
+       they run, and they go back into the forest. That is the moment
+       worth having — it hit me, and then it was just gone — and it only
+       works if it is rare enough to be a surprise and total enough to
+       be a relief. The stilt does not do it. */
+    backOff: 0.95,         // seconds of ground given back after a hit
+    backOffSpeed: 0.60,    // ... at this much of charge speed
+    fleeFor: 34,           // seconds a full retreat runs for
+    fleeSpeed: 1.15,       // and how much faster than its charge it goes
+    fleeClear: 120,        // metres of separation that ends the pursuit
     woundsFatal: 4,        // this many landed attacks and the run is over
   },
 
@@ -7874,11 +7891,17 @@ const BEASTS = {
   stilt: {
     label: 'the stilt',
     height: 2.9, radius: 0.42, walk: 1.5, charge: 5.6,
-    notice: 46, reach: 2.1, giveUp: 62,
-    /* Its whole trick: it will not move while it is in shot. A stilt
-       you are looking at is furniture. */
-    freezeInView: true,
-    patience: 0.75,        // how long it holds after losing sight of you
+    notice: 46, reach: 2.1, giveUp: 240,
+    /* ITS WHOLE TRICK, INVERTED. It used to freeze while you were
+       looking at it, which made looking at it the safe thing to do —
+       a stilt you had eyes on was furniture. That is backwards. Being
+       seen is the thing that sets it off: it registers, it holds for a
+       fraction of a second in a way nothing alive holds, and then it
+       comes. Looking at it is now the worst thing that can happen to
+       you, and the player learns that once. */
+    seenSets: true,
+    reactMin: 0.15, reactMax: 0.60,   // the pause after it knows you saw
+    patience: 12,          // and it does not forget quickly
     dmg: 26, cold: 9, shock: 0.5,
     call: 'beastCall', near: 'beastBreath', rush: 'beastScream',
     callEvery: [15, 34],
@@ -7887,9 +7910,9 @@ const BEASTS = {
     label: 'the crawler',
     height: 1.0, radius: 0.55, walk: 2.6, charge: 7.4,
     notice: 34, reach: 1.8, giveUp: 40,
-    freezeInView: false,
     circles: true,         // works round to behind you before it comes
     patience: 0.2,
+    fullRetreat: 0.5,      // half of its hits and it is gone
     dmg: 17, cold: 6, shock: 0.36,
     call: 'beastClick', near: 'beastDrag', rush: 'beastScream',
     callEvery: [9, 21],
@@ -7905,14 +7928,18 @@ const BEASTS = {
        and it is kept; omniscient was just a shorter game. */
     notice: 120,
     reach: 1.7, giveUp: 1e9,
-    freezeInView: false,
     relentless: true,
     patience: 1e9,
+    fullRetreat: 0.5,      // half of its hits and it is gone
     dmg: 21, cold: 7, shock: 0.44,
     call: 'beastBreath', near: 'beastBreath', rush: 'beastCall',
     callEvery: [20, 46],
   },
 };
+
+/* Which of the three this is, asked in one place so the animation and
+   the behaviour do not each invent their own test. */
+function kindIs(b, k){ return b.kind === k; }
 
 const Fauna = {
   list: [], active: false, kills: 0, attacks: 0, lastHurt: -1e9,
@@ -7927,63 +7954,241 @@ const Fauna = {
      silhouette is what carries at the range these are seen at and a
      silhouette is cheap. They are DARK: not textured, barely lit, and
      shadowed — a shape you resolve rather than a model you inspect. */
+  /* ---- THE BODIES -------------------------------------------------
+     These were six boxes each, and six boxes read as a prototype no
+     matter how dark you make them. What makes a shape frightening at
+     fifteen metres in a wood is not detail — you cannot see detail —
+     it is the OUTLINE, and specifically an outline your eye tries to
+     resolve into something it knows and fails.
+
+     So every one of these is built out of the same short list of
+     wrongness, applied differently:
+
+       asymmetry      no limb matches its opposite. Every pair gets a
+                      per-side length and thickness roll, and the
+                      shoulders and hips are tilted, so the silhouette
+                      never mirrors and never settles.
+       elongation     limbs longer than the body can justify, tapering,
+                      with a joint in the wrong third of their length.
+       bad joints     a limb is three segments, and the middle one bends
+                      the way a knee does not.
+       posture        nothing stands straight. Torsos lean, necks come
+                      out of shoulders at an angle, heads sit forward of
+                      where a spine would put them.
+       proportion     heads too small for the body, or too long; rib
+                      cages deeper than they are wide.
+
+     They are still built from boxes and cylinders and capsules,
+     because that is what this file has, and they are still very dark.
+     The flashlight is the only thing that resolves the head, and it
+     only resolves it for as long as you keep the beam on it.
+     ----------------------------------------------------------------- */
   makeBody(kind, rng){
     const g = new THREE.Group();
     const K = BEASTS[kind];
+    /* Almost black, with a faint warmth that only shows under a torch.
+       Nothing here is ever more than dark grey in daylight. */
     const hide = new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setHSL(rng.range(0.02, 0.10), 0.10, rng.range(0.025, 0.055)),
-      roughness: 0.98, metalness: 0 });
+      color: new THREE.Color().setHSL(rng.range(0.02, 0.09), 0.13, rng.range(0.022, 0.048)),
+      roughness: 0.97, metalness: 0 });
+    /* The one lighter material, used for a few square centimetres of
+       face. At range it is nothing; in a torch beam it is the thing
+       the player wishes they had not resolved. */
     const pale = new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setHSL(0.09, 0.08, rng.range(0.42, 0.62)),
-      roughness: 0.85 });
-    const box = (w,h,d, mat, x,y,z)=>{
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
-      m.position.set(x,y,z);
+      color: new THREE.Color().setHSL(0.08, 0.06, rng.range(0.30, 0.46)),
+      roughness: 0.88, metalness: 0 });
+
+    const put = (geo, mat, x, y, z)=>{
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
       m.castShadow = true; m.receiveShadow = false;
-      m.userData.noclip = true;       // the body collides as a circle, not as boxes
+      m.userData.noclip = true;      // the body collides as a circle
       g.add(m); return m;
     };
+    const box  = (w,h,d, mat, x,y,z)=> put(new THREE.BoxGeometry(w,h,d), mat, x,y,z);
+    const cyl  = (rt,rb,h, mat, x,y,z, seg=5)=>
+      put(new THREE.CylinderGeometry(rt,rb,h,seg), mat, x,y,z);
+    /* A limb segment whose pivot is its TOP, so rotating it swings from
+       the joint instead of about its middle. */
+    const bone = (rt, rb, len, mat)=>{
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, len, 5), mat);
+      m.geometry.translate(0, -len*0.5, 0);
+      m.castShadow = true; m.userData.noclip = true;
+      return m;
+    };
+    /* THREE SEGMENTS, AND THE MIDDLE ONE BENDS WRONG. Upper, lower and
+       a foot or hand, hung off each other so the whole chain follows
+       the shoulder and the bends stay put. The `flip` is what makes it
+       disturbing: the second joint folds forward where a leg folds
+       back, and the eye reads it as broken long before it works out
+       why. */
+    const limb = (parent, ax, ay, az, len, thick, flip, mat)=>{
+      const upper = bone(thick, thick*0.82, len*0.52, mat);
+      upper.position.set(ax, ay, az);
+      parent.add(upper);
+      const lower = bone(thick*0.80, thick*0.55, len*0.40, mat);
+      lower.position.set(0, -len*0.52, 0);
+      lower.rotation.x = flip;
+      upper.add(lower);
+      const tip = bone(thick*0.55, thick*0.28, len*0.22, mat);
+      tip.position.set(0, -len*0.40, 0);
+      tip.rotation.x = -flip*0.75;
+      lower.add(tip);
+      return { upper, lower, tip };
+    };
+    /* Every pair is rolled twice, never mirrored. */
+    const pair = (f)=> [f(-1, rng()), f(1, rng())];
     const limbs = {};
+
     if(kind === 'stilt'){
+      /* TOO TALL, ON TOO LITTLE. The body is a narrow slab held up near
+         three metres by legs that are most of its height, and the mass
+         is all at the top — which is the posture of something that
+         should fall over and does not. */
       const H = K.height;
-      box(0.26, H*0.42, 0.20, hide, 0, H*0.70, 0);              // trunk
-      box(0.30, 0.09, 0.24, hide, 0, H*0.90, 0);                // shoulders
-      const head = box(0.17, 0.30, 0.19, hide, 0, H*0.99, 0.02);
-      box(0.10, 0.05, 0.02, pale, 0, H*1.02, 0.11);             // the face, such as it is
-      limbs.head = head;
-      for(const s of [-1, 1]){
-        const arm = box(0.085, H*0.56, 0.085, hide, s*0.19, H*0.66, 0);
-        arm.geometry.translate(0, -H*0.28, 0); arm.position.y = H*0.90;
-        limbs[s < 0 ? 'armL' : 'armR'] = arm;
-        const leg = box(0.10, H*0.52, 0.10, hide, s*0.10, H*0.26, 0);
-        leg.geometry.translate(0, -H*0.26, 0); leg.position.y = H*0.52;
-        limbs[s < 0 ? 'legL' : 'legR'] = leg;
+      const hips = new THREE.Group(); hips.position.y = H*0.545; g.add(hips);
+      limbs.hips = hips;
+      // a thin, deep rib cage, leaning forward
+      const torso = box(0.21, H*0.30, 0.34, hide, 0, H*0.15, 0.02);
+      torso.rotation.x = -0.16;
+      hips.add(torso);
+      /* SHOULDERS THAT ARE NOT LEVEL, which is most of the asymmetry
+         the eye actually catches at distance. */
+      const yoke = new THREE.Group();
+      yoke.position.set(0, H*0.31, 0.01);
+      yoke.rotation.z = rng.range(0.10, 0.19)*(rng()<0.5?-1:1);
+      hips.add(yoke); limbs.yoke = yoke;
+      box(0.40, 0.075, 0.17, hide, 0, 0, 0).parent === g;
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.075, 0.17), hide);
+      bar.castShadow = true; bar.userData.noclip = true; yoke.add(bar);
+      /* THE NECK COMES OUT OF THE SHOULDERS AT AN ANGLE and the head
+         sits forward of any spine that could hold it. */
+      const neck = new THREE.Group();
+      neck.position.set(rng.range(-0.035, 0.035), 0.05, 0.02);
+      neck.rotation.set(rng.range(0.20, 0.36), 0, rng.range(-0.09, 0.09));
+      yoke.add(neck);
+      cyl(0.040, 0.055, H*0.105, hide, 0, H*0.052, 0).parent;
+      const neckCol = new THREE.Mesh(new THREE.CylinderGeometry(0.040,0.055,H*0.105,5), hide);
+      neckCol.position.y = H*0.052; neckCol.castShadow = true;
+      neckCol.userData.noclip = true; neck.add(neckCol);
+      const head = new THREE.Group();
+      head.position.y = H*0.105; neck.add(head);
+      /* A LONG HEAD, not a round one: narrow, deep, and hanging past
+         the neck. Small enough that it is a smudge at twenty metres. */
+      const skull = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.135, 0.275), hide);
+      skull.position.z = 0.055; skull.castShadow = true;
+      skull.userData.noclip = true; head.add(skull);
+      const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.045, 0.20), hide);
+      jaw.position.set(0, -0.072, 0.085); jaw.rotation.x = 0.10;
+      jaw.castShadow = true; jaw.userData.noclip = true; head.add(jaw);
+      /* The face. Two shallow marks, off centre, and nothing else.
+         No eyes, nothing that glows, nothing readable past a few
+         metres or outside a torch beam. */
+      for(const sx of [-1, 1]){
+        const f = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.011, 0.012), pale);
+        f.position.set(sx*0.028 + rng.range(-0.006,0.006), 0.020 + sx*0.006, 0.188);
+        f.userData.noclip = true; head.add(f);
       }
+      limbs.head = head; limbs.neck = neck;
+      // arms: longer than the legs are tall, hung off uneven shoulders
+      const arms = pair((sx, r)=> limb(yoke, sx*0.20, -0.01, 0,
+        H*(0.62 + r*0.10), 0.036 + r*0.010, -(0.45 + r*0.35), hide));
+      limbs.armL = arms[0].upper; limbs.armR = arms[1].upper;
+      limbs.armLo = [arms[0].lower, arms[1].lower];
+      // legs: the height of the thing, and not the same height
+      const legs = pair((sx, r)=> limb(hips, sx*0.085, 0, 0,
+        H*(0.50 + r*0.055), 0.048 + r*0.011, 0.42 + r*0.30, hide));
+      limbs.legL = legs[0].upper; limbs.legR = legs[1].upper;
+      limbs.legLo = [legs[0].lower, legs[1].lower];
+
     } else if(kind === 'crawler'){
-      box(0.52, 0.30, 0.96, hide, 0, 0.58, 0);                  // body, long and low
-      const head = box(0.30, 0.24, 0.34, hide, 0, 0.60, 0.62);
-      box(0.16, 0.05, 0.03, pale, 0, 0.64, 0.79);
-      limbs.head = head;
-      for(const s of [-1, 1]) for(const f of [0.34, -0.34]){
-        const leg = box(0.09, 0.62, 0.09, hide, s*0.28, 0.40, f);
-        leg.geometry.translate(0, -0.31, 0); leg.position.y = 0.66;
-        limbs[(f > 0 ? 'f' : 'b') + (s < 0 ? 'L' : 'R')] = leg;
+      /* LOW, LONG AND WRONG-WAY-ROUND. The mass is at the front, the
+         hips are higher than the shoulders, and the legs fold above
+         the line of the back — so from the side it is a wedge with its
+         joints in the air, which is an insect's arrangement on
+         something the size of a dog. */
+      const spine = new THREE.Group(); spine.position.y = 0.60; g.add(spine);
+      limbs.hips = spine;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.26, 1.05), hide);
+      body.rotation.x = -0.10; body.castShadow = true;
+      body.userData.noclip = true; spine.add(body);
+      const hump = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.20, 0.42), hide);
+      hump.position.set(rng.range(-0.03,0.03), 0.16, -0.24);
+      hump.rotation.z = rng.range(-0.12, 0.12);
+      hump.castShadow = true; hump.userData.noclip = true; spine.add(hump);
+      /* The neck comes out of the FRONT of the body and drops, so the
+         head is carried below the shoulders. */
+      const neck = new THREE.Group();
+      neck.position.set(0, -0.02, 0.50);
+      neck.rotation.x = rng.range(0.28, 0.46);
+      spine.add(neck);
+      const head = new THREE.Group(); head.position.z = 0.22; neck.add(head);
+      const skull = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.155, 0.34), hide);
+      skull.castShadow = true; skull.userData.noclip = true; head.add(skull);
+      const snout = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.075, 0.20), hide);
+      snout.position.set(rng.range(-0.02,0.02), -0.035, 0.24);
+      snout.castShadow = true; snout.userData.noclip = true; head.add(snout);
+      for(const sx of [-1, 1]){
+        const f = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.010, 0.011), pale);
+        f.position.set(sx*0.052, 0.036 + sx*0.008, 0.150);
+        f.userData.noclip = true; head.add(f);
       }
+      limbs.head = head; limbs.neck = neck;
+      /* FOUR LEGS, ALL DIFFERENT, and the front pair longer than the
+         back so it stands nose-down. They fold up above the spine. */
+      const mk = (sx, fz, len, r)=> limb(spine, sx*0.20, 0.02, fz,
+        len, 0.036 + r*0.012, -(0.85 + r*0.5), hide);
+      limbs.fL = mk(-1,  0.33, 0.70 + rng()*0.10, rng()).upper;
+      limbs.fR = mk( 1,  0.33, 0.70 + rng()*0.10, rng()).upper;
+      limbs.bL = mk(-1, -0.30, 0.60 + rng()*0.10, rng()).upper;
+      limbs.bR = mk( 1, -0.30, 0.60 + rng()*0.10, rng()).upper;
+      const tail = bone(0.05, 0.012, 0.85, hide);
+      tail.position.set(0, 0.02, -0.52); tail.rotation.x = -1.30;
+      spine.add(tail); limbs.tail = tail;
+
     } else {
+      /* A PERSON'S PLAN, BUILT SLIGHTLY WRONG. This is the one that has
+         to be almost right, because almost right is worse than clearly
+         inhuman: a little too tall, a little too narrow, arms that
+         reach past the knee, a head set low between raised shoulders,
+         and a lean it never corrects. */
       const H = K.height;
-      box(0.38, 0.60, 0.22, hide, 0, H*0.60, 0);
-      box(0.42, 0.10, 0.24, hide, 0, H*0.76, 0);
-      const head = box(0.19, 0.24, 0.20, hide, 0, H*0.88, 0);
-      limbs.head = head;
-      for(const s of [-1, 1]){
-        const arm = box(0.11, H*0.40, 0.12, hide, s*0.25, H*0.58, 0);
-        arm.geometry.translate(0, -H*0.20, 0); arm.position.y = H*0.76;
-        limbs[s < 0 ? 'armL' : 'armR'] = arm;
-        const leg = box(0.13, H*0.44, 0.14, hide, s*0.11, H*0.24, 0);
-        leg.geometry.translate(0, -H*0.22, 0); leg.position.y = H*0.46;
-        limbs[s < 0 ? 'legL' : 'legR'] = leg;
+      const hips = new THREE.Group(); hips.position.y = H*0.49; g.add(hips);
+      limbs.hips = hips;
+      const torso = box(0.34, H*0.30, 0.20, hide, 0, H*0.15, 0);
+      torso.rotation.x = -0.09;
+      torso.rotation.z = rng.range(-0.06, 0.06);
+      hips.add(torso);
+      const yoke = new THREE.Group();
+      yoke.position.set(0, H*0.30, 0);
+      yoke.rotation.z = rng.range(0.06, 0.14)*(rng()<0.5?-1:1);
+      hips.add(yoke); limbs.yoke = yoke;
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.10, 0.21), hide);
+      bar.position.y = 0.03; bar.castShadow = true;
+      bar.userData.noclip = true; yoke.add(bar);
+      /* The head sits DOWN between the shoulders, not on top of them. */
+      const head = new THREE.Group();
+      head.position.set(rng.range(-0.02,0.02), 0.085, 0.015);
+      head.rotation.x = rng.range(0.05, 0.16);
+      yoke.add(head);
+      const skull = new THREE.Mesh(new THREE.BoxGeometry(0.155, 0.195, 0.175), hide);
+      skull.castShadow = true; skull.userData.noclip = true; head.add(skull);
+      for(const sx of [-1, 1]){
+        const f = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.010, 0.010), pale);
+        f.position.set(sx*0.036, 0.022 + sx*0.005, 0.092);
+        f.userData.noclip = true; head.add(f);
       }
+      limbs.head = head;
+      const arms = pair((sx, r)=> limb(yoke, sx*0.215, -0.02, 0,
+        H*(0.46 + r*0.07), 0.046 + r*0.010, -(0.22 + r*0.22), hide));
+      limbs.armL = arms[0].upper; limbs.armR = arms[1].upper;
+      limbs.armLo = [arms[0].lower, arms[1].lower];
+      const legs = pair((sx, r)=> limb(hips, sx*0.105, 0, 0,
+        H*(0.45 + r*0.035), 0.056 + r*0.010, 0.20 + r*0.16, hide));
+      limbs.legL = legs[0].upper; limbs.legR = legs[1].upper;
+      limbs.legLo = [legs[0].lower, legs[1].lower];
     }
+
     g.userData.limbs = limbs;
     return g;
   },
@@ -8041,6 +8246,7 @@ const Fauna = {
     const b = {
       kind, K, obj, x, z, yaw: rng()*TAU,
       state: 'wander', stateT: 0, seen: 0, lostFor: 1e9, everSaw: false,
+      provoked: false, reactUntil: 0, lag: 0, headY: 0,
       target: null, nextCall: rng.range ? rng.range(2, 12) : 2 + rng()*10,
       gait: rng()*TAU, hitAt: -1e9, orbit: rng() < 0.5 ? 1 : -1,
       home: { x, z },
@@ -8118,16 +8324,53 @@ const Fauna = {
         if(d < K.reach + F.lungeFrom){ b.state = 'charge'; b.stateT = 0;
           Audio.play(K.rush, { gain: 1.0, pos: new THREE.Vector3(b.x, b.obj.position.y+1.2, b.z) });
           Mind.shock(0.10); }
-        if(K.circles && d > K.reach + 4){
-          /* Round, not straight at you: it wants your back. */
-          const tang = Math.atan2(uz, ux) + b.orbit*1.05;
-          wantX = Math.cos(tang)*0.75 + ux*0.55;
-          wantZ = Math.sin(tang)*0.75 + uz*0.55;
-          const l = Math.hypot(wantX, wantZ) || 1; wantX /= l; wantZ /= l;
-        } else { wantX = ux; wantZ = uz; }
-        speed = K.walk;
-        /* THE STILT DOES NOT MOVE WHILE YOU CAN SEE IT. */
-        if(K.freezeInView && this.inView(b) && d > K.reach + 1.5) moving = false;
+        /* ---- IT KNOWS YOU SAW IT ------------------------------------
+           The stilt's whole behaviour hangs off this. A clear look at
+           it — in frame, close enough to resolve, not lost in fog or
+           dark — and it stops being a thing in the distance. It holds
+           first, for between a sixth of a second and six tenths, which
+           is the part that does the work: long enough to register as a
+           pause, far too short to be a decision, and nothing alive
+           pauses like that. Then it comes, and it does not lose
+           interest for four minutes. */
+        if(K.seenSets && !b.provoked && this.inView(b) && d < K.notice*0.75){
+          b.provoked = true;
+          b.reactUntil = G.t + rngFor('react', this.list.indexOf(b)*13 + Math.floor(G.t))
+                                  .range(K.reactMin, K.reactMax);
+          b.everSaw = true;
+          Audio.play(K.near, { gain: 0.85,
+            pos: new THREE.Vector3(b.x, b.obj.position.y + K.height*0.8, b.z) });
+          Mind.dread = Math.min(1.4, (Mind.dread||0) + 0.45);
+        }
+        if(b.provoked && G.t < b.reactUntil){
+          moving = false;                       // the hold, before the rush
+        } else if(b.provoked){
+          /* No circling, no hesitation, no waiting for a better angle:
+             straight at the player from wherever it is. */
+          wantX = ux; wantZ = uz;
+          speed = K.walk*1.55;
+        } else if(K.circles && d > K.reach + 4){
+          /* Round, not straight at you: it wants your back. And it does
+             not orbit at a constant radius like a planet — it closes,
+             holds, drifts and picks its moment, which is what makes it
+             hard to keep track of in trees. */
+          b.orbitT = (b.orbitT || 0) - dt;
+          if(b.orbitT <= 0){
+            const r = rngFor('orbit', this.list.indexOf(b)*7 + Math.floor(G.t*0.5));
+            b.orbit = r() < 0.5 ? -1 : 1;
+            b.orbitBias = r.range(0.25, 1.05);   // how hard it cuts in
+            b.orbitT = r.range(1.4, 4.2);
+            b.orbitPause = r() < 0.22;           // and sometimes it just stops
+          }
+          if(b.orbitPause && d > K.reach + 9){ moving = false; }
+          else {
+            const tang = Math.atan2(uz, ux) + b.orbit*1.15;
+            wantX = Math.cos(tang)*0.85 + ux*b.orbitBias;
+            wantZ = Math.sin(tang)*0.85 + uz*b.orbitBias;
+            const l = Math.hypot(wantX, wantZ) || 1; wantX /= l; wantZ /= l;
+          }
+          speed = K.walk;
+        } else { wantX = ux; wantZ = uz; speed = K.walk; }
       } else if(b.state === 'charge'){
         wantX = ux; wantZ = uz;
         speed = K.charge;
@@ -8137,14 +8380,68 @@ const Fauna = {
         moving = false;
         if(b.stateT > 0.18 && b.hitAt < b.stateT + G.t - 0.2){
           this.strike(b, d);
-          b.state = 'back'; b.stateT = 0;
+          /* HALF THE TIME, FOR TWO OF THE THREE, IT LEAVES. Seeded, so
+             a given hit on a given seed always goes the same way and
+             the behaviour can be tested rather than felt at. The stilt
+             is not in this: it hits, it flinches, it comes back. */
+          const chance = K.fullRetreat || 0;
+          const roll = rngFor('retreat', this.list.indexOf(b)*101 + this.attacks)();
+          if(chance > 0 && roll < chance){
+            b.state = 'flee'; b.stateT = 0;
+            /* WHERE IT GOES. Its own ground if that is genuinely away
+               from here — but a creature that woke up near where the
+               player is now would otherwise "flee" in a circle back
+               past them, which is the opposite of the moment this
+               exists for. So the anchor is chosen at the moment it
+               breaks off: somewhere real, far, and on the other side of
+               it from the player. */
+            const away = Math.atan2(b.x - Player.pos.x, b.z - Player.pos.z);
+            const r = rngFor('fleeTo', this.list.indexOf(b)*37 + this.attacks);
+            b.fleeTo = null;
+            for(let tries=0; tries<40 && !b.fleeTo; tries++){
+              const a = away + r.range(-0.85, 0.85);
+              const dd = r.range(F.fleeClear*0.9, F.fleeClear*1.5);
+              const fx = b.x + Math.sin(a)*dd, fz = b.z + Math.cos(a)*dd;
+              const LIM = Wld.size*0.45;
+              if(Math.abs(fx) > LIM || Math.abs(fz) > LIM) continue;
+              if(slopeAt(fx, fz) > CFG.HAZARD.slipSlope) continue;
+              if(waterDepthAt(fx, fz) > 0.25) continue;
+              if(Math.hypot(fx-Player.pos.x, fz-Player.pos.z) < F.fleeClear*0.8) continue;
+              b.fleeTo = { x: fx, z: fz };
+            }
+            if(!b.fleeTo) b.fleeTo = { x: b.home.x, z: b.home.z };
+            Audio.play('beastDrag', { gain: 0.7,
+              pos: new THREE.Vector3(b.x, b.obj.position.y + 0.8, b.z) });
+          } else {
+            b.state = 'back'; b.stateT = 0;
+          }
         }
       } else if(b.state === 'back'){
-        /* It gives the ground back after it lands one, which is the only
-           reason a run continues after the first time. */
+        /* THE FLINCH. Three or four metres, and it is still right
+           there — it recoiled, it did not leave. */
         wantX = -ux; wantZ = -uz;
-        speed = K.charge*0.7;
+        speed = K.charge*F.backOffSpeed;
         if(b.stateT > F.backOff){ b.state = 'stalk'; b.stateT = 0; }
+      } else if(b.state === 'flee'){
+        /* AND THEN IT WAS GONE. It turns away and runs, properly, back
+           into the forest toward the ground it came from — not deleted,
+           not faded out: it covers the distance through the world and
+           you can watch it go if you are quick. When it is far enough
+           away, or when it has run long enough, it forgets you and goes
+           back to whatever it was doing before. */
+        const to = b.fleeTo || b.home;
+        const hx = to.x - b.x, hz = to.z - b.z;
+        const hl = Math.hypot(hx, hz) || 1;
+        // straight away from the player first, onto the line home after
+        const mix = clamp(d/45, 0, 1);
+        wantX = lerp(-ux, hx/hl, mix);
+        wantZ = lerp(-uz, hz/hl, mix);
+        const wl = Math.hypot(wantX, wantZ) || 1; wantX /= wl; wantZ /= wl;
+        speed = K.charge*F.fleeSpeed;
+        if(d > F.fleeClear || b.stateT > F.fleeFor){
+          b.state = 'wander'; b.stateT = 0; b.target = null;
+          b.provoked = false; b.everSaw = false; b.lostFor = 1e9;
+        }
       }
 
       /* ---- move it, on the same ground rules the player walks by ---- */
@@ -8183,14 +8480,88 @@ const Fauna = {
       const gy = heightAt(b.x, b.z);
       b.obj.position.set(b.x, gy, b.z);
       b.obj.rotation.y = b.yaw;
+      /* ---- HOW IT MOVES, WHICH IS MOST OF WHAT IT IS ---------------
+         Each one gets its own motion rather than the same swinging
+         limbs at a different speed, because the way a thing carries
+         itself is read faster than its shape and from further away.
+
+         All of it is procedural and none of it is large: the point is
+         that the movement is WRONG, not that it is busy. A person
+         reads a gait in about a second and knows when it is not one. */
       const L = b.obj.userData.limbs;
-      const sw = moving ? Math.sin(b.gait)*(b.state === 'charge' ? 0.85 : 0.45) : 0;
-      if(L.armL){ L.armL.rotation.x = sw; L.armR.rotation.x = -sw; }
-      if(L.legL){ L.legL.rotation.x = -sw; L.legR.rotation.x = sw; }
-      if(L.fL){ L.fL.rotation.x = sw; L.bR.rotation.x = sw;
-                L.fR.rotation.x = -sw; L.bL.rotation.x = -sw; }
-      if(L.head) L.head.rotation.y = b.state === 'wander' ? Math.sin(G.t*0.6 + b.gait)*0.4
-                                                          : Math.atan2(ux, uz) - b.yaw;
+      const charging = b.state === 'charge' || b.state === 'strike';
+      const swing = moving ? Math.sin(b.gait) : 0;
+      /* Limbs lag the body. A third of a stride of delay is enough to
+         make the whole thing look like it is being dragged along by
+         something rather than walking. */
+      b.lag = lerp(b.lag || 0, swing, clamp(dt*(charging ? 16 : 7), 0, 1));
+      const sw = b.lag;
+
+      if(kindIs(b,'stilt')){
+        /* THE HIGH STEP. Knees come up far too far, the body rides
+           almost level over them, and between strides there are small
+           corrections that look like balance and are not. */
+        const lift = moving ? 1 : 0;
+        if(L.legL){
+          L.legL.rotation.x = -sw*1.15*lift;
+          L.legR.rotation.x =  sw*1.15*lift;
+          if(L.legLo){
+            L.legLo[0].rotation.x = 0.42 + Math.max(0, -sw)*1.5*lift;
+            L.legLo[1].rotation.x = 0.42 + Math.max(0,  sw)*1.5*lift;
+          }
+        }
+        if(L.armL){
+          // the arms barely move, which is the disturbing part
+          L.armL.rotation.x =  sw*0.22;
+          L.armR.rotation.x = -sw*0.16;
+          L.armL.rotation.z =  0.06 + Math.sin(G.t*0.7)*0.05;
+        }
+        /* THE TWITCH. Tiny, irregular, and it happens when it is
+           standing still — the thing has not settled, it has stopped. */
+        if(!moving){
+          const tw = Math.sin(G.t*13.0 + b.gait*7.0);
+          if(L.yoke) L.yoke.rotation.y = (Math.abs(tw) > 0.93 ? tw*0.10 : 0);
+        } else if(L.yoke) L.yoke.rotation.y = -sw*0.13;
+        if(L.hips) L.hips.position.y = b.K.height*0.545 + (moving ? Math.abs(sw)*0.055 : 0);
+      } else if(kindIs(b,'crawler')){
+        /* THE SCRAMBLE. Diagonal pairs, fast, and the whole body rolls
+           and pitches with it. It never looks like it is walking. */
+        const f = charging ? 1.5 : 1.0;
+        if(L.fL){
+          L.fL.rotation.x =  sw*0.95*f;  L.bR.rotation.x =  sw*0.95*f;
+          L.fR.rotation.x = -sw*0.95*f;  L.bL.rotation.x = -sw*0.95*f;
+        }
+        if(L.hips){
+          L.hips.rotation.z = sw*0.16*f;
+          L.hips.rotation.x = -0.05 + Math.abs(sw)*0.14;
+          L.hips.position.y = 0.60 - Math.abs(sw)*0.05;
+        }
+        if(L.tail) L.tail.rotation.z = Math.sin(b.gait*0.7)*0.28;
+      } else {
+        /* THE WALK THAT DOES NOT CHANGE. Heavy, even, and the same
+           whether it is forty metres away or two. The arms hang. */
+        if(L.legL){ L.legL.rotation.x = -sw*0.52; L.legR.rotation.x = sw*0.52; }
+        if(L.legLo){ L.legLo[0].rotation.x = 0.20 + Math.max(0,-sw)*0.55;
+                     L.legLo[1].rotation.x = 0.20 + Math.max(0, sw)*0.55; }
+        if(L.armL){ L.armL.rotation.x = sw*0.30; L.armR.rotation.x = -sw*0.26; }
+        if(L.hips){ L.hips.position.y = b.K.height*0.49 - Math.abs(sw)*0.03;
+                    L.hips.rotation.z = sw*0.045; }
+      }
+
+      /* THE HEAD TRACKS, AND THE BODY DOES NOT. Every one of them keeps
+         its head on the player while the rest of it is pointed
+         somewhere else, which is the single cheapest unnatural thing a
+         procedural creature can do and the one people notice. */
+      if(L.head){
+        const want = b.state === 'wander'
+          ? Math.sin(G.t*0.5 + b.gait*0.3)*0.5
+          : clamp(angDiff(b.yaw, Math.atan2(ux, uz)), -1.5, 1.5);
+        b.headY = lerp(b.headY || 0, want, clamp(dt*(charging ? 9 : 2.4), 0, 1));
+        L.head.rotation.y = b.headY;
+        // and a tilt, which nothing with a neck does and holds
+        L.head.rotation.z = b.state === 'wander' ? 0
+          : (b.tilt !== undefined ? b.tilt : (b.tilt = (rngFor('tilt', this.list.indexOf(b))()-0.5)*0.55));
+      }
 
       /* ---- what it sounds like ---- */
       b.nextCall -= dt;
