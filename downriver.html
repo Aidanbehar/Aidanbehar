@@ -776,6 +776,16 @@ const CFG = {
        measured spread of wet cells: on a typical seed the wet flowing
        cells run from 150 to thirty thousand with a median near 1,700,
        so a riverAcc of 210 called nine tenths of the map a river. */
+    /* ---- WHAT FREEZES, AND HOW HARD -------------------------------
+       Still water freezes; moving water does not, and the faster it
+       moves the longer it holds out. So ice is decided per cell from
+       flow and depth against how cold the seed is, and NOT by painting
+       every wet cell white — a winter river with a black open channel
+       down the middle of the ice is the whole picture. */
+    freezeStillAcc: 900,    // below this flow, water is still enough to freeze
+    freezeFastAcc: 9000,    // above this it stays open however cold it gets
+    iceThickFrom: 0.45,     // winterHard at which ice starts bearing weight
+    iceDeepOpens: 3.2,      // deep water freezes later than shallow
     creekAcc: 150,       // a source at or above this is a creek
     smallRiverAcc: 420,  // ... a stream
     bigRiverAcc: 4200,   // ... a river
@@ -1478,6 +1488,23 @@ function rollPersonality(){
   p.scarcity  = r.range(0.85, 1.15);        // was 0.35-1.50
   p.foodScarcity = r.range(0.72, 1.02);     // was 0.25-1.40
 
+  /* --- THE SEASON, WHICH IS A PROPERTY OF THE SEED ------------------
+     About half of all seeds are cold enough that the water freezes and
+     the snow lies. This is rolled once, here, with everything else, so
+     a seed is a winter seed forever: typing it in tomorrow gives the
+     same frozen lake it gave today. It is not a weather state and it
+     does not change mid-run.
+
+     `winterHard` is how far into winter — a soft one has snow on the
+     tops and ice only on the ponds, a hard one has the valley floor
+     under it and the lakes solid. It is a continuum so that two winter
+     seeds are not the same winter. */
+  p.winter     = r.chance(0.5);
+  p.winterHard = p.winter ? r.range(0.35, 1.0) : 0;
+  /* How much colder the air is. The survival model already has one
+     temperature; this shifts it rather than starting a second. */
+  p.coldShift  = p.winter ? -(7 + p.winterHard*11) : 0;
+
   // --- starting conditions ---
   p.startHour = r.pick(CFG.TIME.startHours);
   p.weather   = r.weighted([[26,'clear'],[22,'fog'],[24,'rain'],[14,'storm'],[14,'turning']]);
@@ -2001,13 +2028,15 @@ const WaterShader = {
     attribute float aFlow;      // 0 still, 1 fast
     attribute vec2  aDir;       // downstream direction, world space
     attribute float aDepth;
+    attribute float aIce;       // 0 open, 1 thin, 2 thick
     varying vec2 vUvW; varying float vFlow; varying vec2 vDir;
     varying float vDepth; varying vec3 vWorld; varying float vFogDepth;
+    varying float vIce;
     void main(){
       vec4 wp = modelMatrix*vec4(position,1.0);
       vWorld = wp.xyz;
       vUvW = wp.xz;
-      vFlow = aFlow; vDir = aDir; vDepth = aDepth;
+      vFlow = aFlow; vDir = aDir; vDepth = aDepth; vIce = aIce;
       vec4 mv = viewMatrix*wp;
       vFogDepth = -mv.z;
       gl_Position = projectionMatrix*mv;
@@ -2018,9 +2047,17 @@ const WaterShader = {
     uniform vec3 uShallow, uDeep, uSky, uFogColor, uSun, uSunColor;
     varying vec2 vUvW; varying float vFlow; varying vec2 vDir;
     varying float vDepth; varying vec3 vWorld; varying float vFogDepth;
+    varying float vIce;
     vec3 nrm(vec2 uv){ return texture2D(uNormal, uv).xyz*2.0-1.0; }
+    float h21(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1)))*43758.5453); }
     void main(){
-      vec2 drift = vDir * uTime * (0.12 + vFlow*0.95);
+      /* ICE DOES NOT FLOW. The drift that animates the surface is cut
+         to nothing under ice, which is most of what sells it: a frozen
+         reach beside an open one is two surfaces doing different things
+         rather than one surface in two colours. */
+      float ice = clamp(vIce, 0.0, 2.0);
+      float frozen = clamp(ice, 0.0, 1.0);
+      vec2 drift = vDir * uTime * (0.12 + vFlow*0.95) * (1.0 - frozen*0.94);
       vec3 n1 = nrm(vUvW*0.09 - drift*0.09);
       vec3 n2 = nrm(vUvW*0.031 + drift*0.041 + 0.37);
       vec3 n = normalize(vec3(n1.x+n2.x, 3.2/(1.0+vFlow*1.4), n1.y+n2.y));
@@ -2034,8 +2071,30 @@ const WaterShader = {
       // white water where it is moving fast
       float foam = smoothstep(0.55, 1.0, vFlow) * smoothstep(0.35, 0.8, n1.x*n2.y+0.5);
       col = mix(col, vec3(0.62,0.66,0.66)*uLight, foam*0.5);
+      /* ---- AND THE ICE ON TOP OF ALL THAT -------------------------
+         Thin ice is grey, dark and translucent, with the water still
+         showing through it — which is the warning, and the only one
+         the player gets. Thick ice is paler, opaque, snow-dusted and
+         almost flat. Both are broken up by a cheap hash so an ice
+         sheet is a field of plates rather than a white plane, and the
+         seams read at the distance a lake is seen from. */
+      if(ice > 0.0){
+        vec2 plate = floor(vUvW*0.22);
+        float grain = h21(plate);
+        float seam = smoothstep(0.03, 0.0, min(
+          abs(fract(vUvW.x*0.22)-0.5), abs(fract(vUvW.y*0.22)-0.5)) - 0.46);
+        float thick = smoothstep(1.0, 2.0, ice);
+        vec3 thinCol  = vec3(0.30, 0.36, 0.40) * (0.80 + grain*0.40);
+        vec3 thickCol = vec3(0.72, 0.77, 0.82) * (0.86 + grain*0.26);
+        vec3 iceCol = mix(thinCol, thickCol, thick);
+        iceCol = mix(iceCol, vec3(0.88,0.91,0.95), seam*0.5*thick);
+        col = mix(col, iceCol*uLight, mix(0.72, 0.97, thick));
+        col += uSunColor * pow(max(dot(vec3(0.0,1.0,0.0), H), 0.0), 26.0)
+               * 0.25 * uLight * thick;
+      }
       float a = mix(0.55, uOpacity, clamp(vDepth/0.7, 0.0, 1.0));
       a = mix(a, 1.0, fres*0.4);
+      a = mix(a, mix(0.88, 1.0, smoothstep(1.0, 2.0, ice)), frozen);
       float f = 1.0 - exp(-uFogDensity*uFogDensity*vFogDepth*vFogDepth);
       col = mix(col, uFogColor, clamp(f,0.0,1.0));
       gl_FragColor = vec4(col, a);
@@ -2360,7 +2419,37 @@ function waterLevelAt(x, z){
   const A = fill(a) ?? avg, B = fill(b) ?? avg, C = fill(c) ?? avg, D = fill(d) ?? avg;
   return lerp(lerp(A,B,fx), lerp(C,D,fx), fz);
 }
+/* ---------------------------------------------------------------------
+   ICE, AND WHY IT IS ASKED ABOUT HERE
+
+   Frozen water is not water with a white texture on it — the simulation
+   has to know, or the player swims through a lake they are standing on.
+   So there is one place that answers "what is under my feet here", and
+   everything that used to ask waterDepthAt asks it instead.
+
+   iceAt() returns the grade: 0 open, 1 thin, 2 thick. Thin ice reads as
+   ice and does not hold: step onto it and you go through, which is the
+   one place in this game where the world is allowed to be a trap, and
+   it is a trap that looks like what it is if you are paying attention.
+   ------------------------------------------------------------------- */
+function iceAt(x, z){
+  if(!Wld.ICE) return 0;
+  const ix = Math.round(gxOf(x)), iz = Math.round(gzOf(z));
+  if(!inGrid(ix, iz)) return 0;
+  return Wld.ICE[iz*Wld.N + ix];
+}
+/* The depth of water you would be IN at this point. On thick ice that
+   is nothing, because you are on top of it. */
 function waterDepthAt(x, z){
+  const w = waterLevelAt(x,z);
+  if(w < -9000) return 0;
+  if(iceAt(x,z) === 2) return 0;              // you are standing on it
+  return Math.max(0, w - heightAt(x,z));
+}
+/* The depth of water that is THERE, ice or no ice — for the hydrology,
+   the validator, and anything asking about the water body itself
+   rather than about what the player is wading through. */
+function waterBodyDepthAt(x, z){
   const w = waterLevelAt(x,z);
   if(w < -9000) return 0;
   return Math.max(0, w - heightAt(x,z));
@@ -3209,6 +3298,66 @@ function genHydrology(){
   Wld.stats.springCells = springCells;
 
   for(let i=0;i<n2;i++) if(POND[i]) WLEV[i] = pondLevel[i];
+
+  /* ---- THE FREEZE ---------------------------------------------------
+     On a winter seed the water is not painted white, it is frozen, and
+     the simulation is told which cells those are. ICE is a per-cell
+     grade rather than a flag:
+
+        0   open water. Fast channels, and deep water on a soft winter.
+        1   THIN. It has caught over, it looks like ice, and it will not
+            hold a person. Shallow still water, or anywhere on a winter
+            that has not really set in.
+        2   THICK. It bears weight. You walk on it.
+
+     Whether a cell freezes is a question about the water, not about the
+     map: how fast it is moving, how deep it is, and how hard the winter
+     is. A pond goes first, a creek next, a river last, and the middle
+     of a big fast river does not go at all. */
+  const ICE = new Uint8Array(n2);
+  let thinCells = 0, thickCells = 0, openCells = 0;
+  if(P.winter){
+    const hard = P.winterHard;
+    for(let i=0;i<n2;i++){
+      if(WLEV[i] < -9000) continue;
+      const dep = WLEV[i] - H[i];
+      if(dep <= 0.015) continue;
+      const still = POND[i] ? 1
+        : 1 - clamp((ACC[i] - HY.freezeStillAcc)
+                    / (HY.freezeFastAcc - HY.freezeStillAcc), 0, 1);
+      /* Deep water carries more heat and freezes later; a puddle goes
+         overnight. */
+      const deepHold = clamp(dep/HY.iceDeepOpens, 0, 1);
+      const setsUp = still*(0.55 + hard*0.75) - deepHold*0.30;
+      if(setsUp < 0.30){ openCells++; continue; }
+      const thick = setsUp > 0.78 && hard >= HY.iceThickFrom && still > 0.5;
+      ICE[i] = thick ? 2 : 1;
+      if(thick) thickCells++; else thinCells++;
+    }
+  }
+  /* THE ICE REACHES THE BANK. A lake freezes from the edge inward, so
+     the LAST thing that should be liquid is the shallow rim — but the
+     rule above is written per cell from depth and flow, and the rim is
+     where the fringe of the water mesh sits. Left as it was, a frozen
+     lake had a ring of open water around it, and a player walking out
+     onto the ice went through that ring first: measured, they ended up
+     thirteen metres under a surface they were supposed to be standing
+     on. One dilation pass: a shallow cell touching thick ice is thick
+     ice, because that is how the edge of a frozen lake works. */
+  if(P.winter){
+    const grown = ICE.slice();
+    for(let iz=1; iz<N-1; iz++) for(let ix=1; ix<N-1; ix++){
+      const i = iz*N+ix;
+      if(WLEV[i] < -9000 || ICE[i]) continue;
+      if(WLEV[i] - H[i] > 1.2) continue;          // only the shallow rim
+      let best = 0;
+      for(const j of [i-1, i+1, i-N, i+N]) if(ICE[j] > best) best = ICE[j];
+      if(best){ grown[i] = best; if(best === 2) thickCells++; else thinCells++; openCells--; }
+    }
+    ICE.set(grown);
+  }
+  Wld.ICE = ICE;
+  Wld.stats.ice = { thin: thinCells, thick: thickCells, open: openCells };
 
   /* ---- THE RIM IS A FRAME, NOT A CLIFF.
      The breacher cuts its outflow trenches to the map's edge, which is
@@ -4251,9 +4400,18 @@ function genResources(){
        a label. A spring is the cleanest water in the game. */
     const kind = (type === 'river' || type === 'stream' || type === 'spring') ? 'flowing'
                : type === 'creek' ? 'slow' : 'stagnant';
+    /* FROZEN OVER, AND WHAT THAT MEANS FOR DRINKING. Thin ice you can
+       put a boot through and reach the water; thick ice you cannot,
+       not without something to cut it with, so a lake that has really
+       set is not a water source any more. That is the single most
+       important thing winter does to this game's survival layer, and
+       the validator below is told about it so a winter seed cannot
+       quietly become an unwinnable one. */
+    const ice = Wld.ICE ? Wld.ICE[i] : 0;
     water.push({
       id:'w'+water.length, x, z, y: Wld.WLEV[i], kind, type, acc,
-      depth: Wld.WLEV[i]-Wld.H[i], phantom:false, drained:false, frozen:false,
+      depth: Wld.WLEV[i]-Wld.H[i], phantom:false, drained:false,
+      ice, frozen: ice === 2, breakable: ice === 1,
     });
   }
   Wld.water = water;
@@ -4699,7 +4857,7 @@ function mindMinutesBudget(){
 }
 
 const GUARANTEES = ['G1 reachable','G2 in time','G3 water','G4 food','G5 clues','G6 hazards',
-                    'G7 wilderness','G8 water is real'];
+                    'G7 wilderness','G8 water is real','G9 winter holds up'];
 function validateWorld(){
   const res = { pass:true, fail:[], detail:{} };
   const fail = (g, why)=>{ res.pass=false; res.fail.push(g); res.detail[g]=why; };
@@ -4783,6 +4941,11 @@ function validateWorld(){
       const dep = Wld.WLEV[j]-Wld.H[j];
       if(dep < 0.08 || dep > 2.2) continue;                      // out of reach from a bank
       if(Wld.ACC[j] < CFG.HYDRO.riverAcc*0.35) continue;         // too small to trust
+      /* AND IT HAS TO BE LIQUID. A metre of ice over a river is not a
+         drink. Thin ice counts — a boot goes through it — but water
+         that has properly set does not, which is what stops a winter
+         seed from passing this guarantee on water nobody can reach. */
+      if(Wld.ICE && Wld.ICE[j] === 2) continue;
       return true;
     }
     return false;
@@ -4859,6 +5022,36 @@ function validateWorld(){
     if(springStalled) fail('G8', `${springStalled} springs do not run downhill`);
     if(perched > Math.max(1, Math.round(Wld.water.length*0.06)))
       fail('G8', `${perched} of ${Wld.water.length} water sources sit on a hillside`);
+  }
+
+  /* G9 — A WINTER SEED IS STILL A SEED YOU CAN WIN.
+     Half the seeds freeze, so half the seeds could quietly have become
+     unplayable: a lake that is a metre of ice is not a water source,
+     and if every reach on the route sets solid the run is over before
+     it starts. The guarantee below is the thing standing between "half
+     the seeds are winter" and "half the seeds are impossible".
+
+     It also checks the two ways winter could be a lie: a summer seed
+     with ice on it, and a winter seed where the fast water froze too,
+     which would mean the freeze is painting rather than deciding. */
+  if(Wld.ICE){
+    let thin = 0, thick = 0, fastOpen = 0, fastFrozen = 0;
+    for(let i=0;i<Wld.N*Wld.N;i++){
+      const g = Wld.ICE[i];
+      if(g === 1) thin++; else if(g === 2) thick++;
+      if(Wld.WLEV[i] < -9000 || Wld.POND[i]) continue;
+      if(Wld.ACC[i] < CFG.HYDRO.freezeFastAcc) continue;
+      if(g) fastFrozen++; else fastOpen++;
+    }
+    res.detail.iceThin = thin;
+    res.detail.iceThick = thick;
+    res.detail.fastWaterOpen = fastOpen;
+    if(!P.winter && (thin || thick))
+      fail('G9', `${thin+thick} frozen cells on a seed that is not winter`);
+    if(P.winter && !thin && !thick)
+      fail('G9', 'a winter seed with nothing frozen on it');
+    if(P.winter && fastFrozen > 0 && fastOpen === 0)
+      fail('G9', 'every fast watercourse froze solid');
   }
 
   // G4 — at least a little real food
@@ -5205,6 +5398,39 @@ function buildTerrainMesh(){
   }
   pos.needsUpdate = true;
   geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+
+  /* ---- HOW MUCH SNOW LIES HERE -------------------------------------
+     Computed per vertex on the CPU, once, because the answer never
+     changes and the three things it depends on are all already in hand.
+     Snow is not a coat of paint over the world: it LIES, which means it
+     collects where it can and slides off where it cannot.
+
+       flat ground keeps it, steep ground sheds it — the single biggest
+         thing that makes snow read as snow rather than as white paint,
+         because it is what puts the rock back into a snowy hillside
+       height gains it, valley floors lose it, with the line lower the
+         harder the winter is
+       and it is broken up by the same noise the ground is, so a slope
+         has drifts and bare patches instead of one flat tone
+
+     On a summer seed every one of these is zero and the shader branch
+     costs nothing. */
+  const snowA = new Float32Array(pos.count);
+  if(P.winter){
+    const hard = P.winterHard;
+    const floorY = Wld.seaLevel || 0;
+    const relief = CFG.WORLD.RELIEF;
+    const line = floorY + lerp(relief*0.34, -relief*0.04, hard);
+    for(let i=0;i<pos.count;i++){
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const up = nrm[i*3+1];                       // 1 flat, 0 vertical
+      const lie = smoothstep(0.62, 0.93, up);      // it slides off steep ground
+      const cold = smoothstep(line - relief*0.12, line + relief*0.16, y);
+      const drift = 0.72 + vnoise2(x*0.012, z*0.012, (G.seed^0x5e11)>>>0)*0.56;
+      snowA[i] = clamp(lie * lerp(cold, 1.0, hard*0.55) * drift * (0.45 + hard*0.75), 0, 1);
+    }
+  }
+  geo.setAttribute('aSnow', new THREE.BufferAttribute(snowA, 1));
   geo.computeBoundingSphere();
 
   const macro = TexLib.tex(bakeGroundMacro(CFG.QUALITY.macroSize), { srgb:true, repeat:[1,1], aniso:16 });
@@ -5223,17 +5449,33 @@ function buildTerrainMesh(){
   m.onBeforeCompile = (sh)=>{
     sh.uniforms.uDetail = { value: MAT.groundDetailMap };
     sh.uniforms.uDetailAmt = { value: 0.50 };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+        attribute float aSnow; varying float vSnow;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vSnow = aSnow;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-        uniform sampler2D uDetail; uniform float uDetailAmt;`)
+        uniform sampler2D uDetail; uniform float uDetailAmt;
+        varying float vSnow;`)
       .replace('#include <map_fragment>', `#include <map_fragment>
         {
           vec3 det = texture2D(uDetail, vMapUv * 220.0).rgb;
           float l = dot(det, vec3(0.333));
           diffuseColor.rgb *= mix(1.0, l*1.45, uDetailAmt);
-        }`);
+          /* SNOW ON TOP OF THE GROUND, not instead of it. The detail
+             texture still modulates it, so a snowfield has the same
+             grain the ground has and does not read as a flat sheet,
+             and the coverage is sharpened so the edge between snow and
+             rock is a line rather than a long grey smear. */
+          float sn = smoothstep(0.34, 0.66, vSnow);
+          vec3 snowCol = vec3(0.80, 0.84, 0.90) * (0.72 + l*0.5);
+          diffuseColor.rgb = mix(diffuseColor.rgb, snowCol, sn);
+        }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.62, smoothstep(0.34, 0.66, vSnow));`);
   };
-  m.customProgramCacheKey = ()=> 'terrain-detail';
+  m.customProgramCacheKey = ()=> 'terrain-detail-snow';
   MAT.terrain = m;
 
   const mesh = new THREE.Mesh(geo, m);
@@ -5276,7 +5518,7 @@ function buildTerrainMesh(){
    ------------------------------------------------------------------- */
 function buildWaterMesh(){
   const N = Wld.N;
-  const verts = [], idx = [], flow = [], dirs = [], deps = [];
+  const verts = [], idx = [], flow = [], dirs = [], deps = [], ices = [];
   const map = new Int32Array(N*N).fill(-1);
   const wet = (i)=> Wld.WLEV[i] > -9000 && (Wld.WLEV[i] - Wld.H[i]) > 0.015;
   const isWet = new Uint8Array(N*N);
@@ -5293,6 +5535,7 @@ function buildWaterMesh(){
       verts.push(x, Wld.WLEV[i], z);
       deps.push(Wld.WLEV[i] - Wld.H[i]);
       flow.push(flowAt(i, ix, iz));
+      ices.push(Wld.ICE ? Wld.ICE[i] : 0);
       const j = Wld.DIR[i];
       if(j >= 0 && !Wld.POND[i]){
         const dx = (j%N) - ix, dz = ((j/N)|0) - iz;
@@ -5336,6 +5579,16 @@ function buildWaterMesh(){
     verts.push(x, Math.min(lev, Wld.H[i]), z);
     deps.push(0);
     flow.push(fl/n);
+    /* The shore takes the ice of the water it touches, so a frozen lake
+       is frozen right up to its edge instead of having a liquid rim. */
+    let ic = 0;
+    if(Wld.ICE) for(let oz=-1; oz<=1; oz++) for(let ox=-1; ox<=1; ox++){
+      const nx = ix+ox, nz = iz+oz;
+      if(nx<0||nz<0||nx>=N||nz>=N) continue;
+      const j = nz*N+nx;
+      if(isWet[j] && Wld.ICE[j] > ic) ic = Wld.ICE[j];
+    }
+    ices.push(ic);
     const dl = Math.hypot(dx2, dz2) || 1;
     dirs.push(dx2/dl, dz2/dl);
   }
@@ -5354,6 +5607,7 @@ function buildWaterMesh(){
   geo.setAttribute('aFlow', new THREE.Float32BufferAttribute(flow, 1));
   geo.setAttribute('aDir',  new THREE.Float32BufferAttribute(dirs, 2));
   geo.setAttribute('aDepth',new THREE.Float32BufferAttribute(deps, 1));
+  geo.setAttribute('aIce',  new THREE.Float32BufferAttribute(ices, 1));
   geo.setIndex(idx);
   geo.computeBoundingSphere();
 
@@ -6637,6 +6891,14 @@ function obbPush(b, px, pz, radius, out){
    interiors work at all. */
 function surfaceAt(x, z, feetY, radius){
   let best = -Infinity;
+  /* THICK ICE IS A FLOOR. It is the only floor in the game made of
+     water, and it is the reason a frozen lake can be walked across
+     instead of swum. Thin ice is deliberately NOT here: it looks like
+     this and is not this. */
+  if(Wld.ICE && iceAt(x, z) === 2){
+    const w = waterLevelAt(x, z);
+    if(w > -9000 && w <= feetY + CFG.PLAYER.stepUp && w > feetY - 2.2) best = w;
+  }
   /* A ROCK'S CROWN, on the same terms as a fallen trunk: near enough to
      your feet to step onto, and not so far below that you are standing
      over it in mid-air. */
@@ -7737,6 +7999,11 @@ const Fauna = {
       if(Math.abs(x) > LIM || Math.abs(z) > LIM) continue;
       if(slopeAt(x, z) > CFG.HAZARD.slipSlope) continue;
       if(waterDepthAt(x, z) > 0.25) continue;
+      /* NOTHING WAKES UP ON THIN ICE. Thick ice is ground as far as
+         anything walking is concerned — waterDepthAt already says so —
+         but thin ice is a hole with a lid, and a creature standing on
+         one would be a creature standing in a lake. */
+      if(iceAt(x, z) === 1) continue;
       if(Wld.hospital && Math.hypot(x-Wld.hospital.x, z-Wld.hospital.z) < F.townKeepOut) continue;
       if(Wld.start && Math.hypot(x-Wld.start.x, z-Wld.start.z) < F.startKeepOut) continue;
       return { x, z };
@@ -7887,6 +8154,7 @@ const Fauna = {
         const gh = heightAt(nx, nz);
         const rise = gh - heightAt(b.x, b.z);
         const ok = slopeAt(nx, nz) < 0.85 && waterDepthAt(nx, nz) < 1.1
+                   && iceAt(nx, nz) !== 1
                    && Math.abs(nx) < Wld.size*0.47 && Math.abs(nz) < Wld.size*0.47
                    && Math.abs(rise) < step*3.2 + 0.5;
         if(ok){ b.x = nx; b.z = nz; }
@@ -9093,6 +9361,21 @@ function updatePlayer(dt){
       if(Math.abs(p.pos.y - ground) < 0.02) p.pos.y = ground;
     }
   }
+  /* YOU ARE NEVER UNDER THE ICE. Thick ice is a floor, and a floor you
+     can end up beneath is not a floor — a player who went in through a
+     thin patch and swam sideways would otherwise be looking up at the
+     underside of a lake they were meant to be walking on. Coming up is
+     not a teleport: they surface, the way a person does. */
+  if(!p.swimming || true){
+    const ig = iceAt(p.pos.x, p.pos.z);
+    if(ig === 2){
+      const surf = waterLevelAt(p.pos.x, p.pos.z);
+      if(surf > -9000 && p.pos.y < surf - 0.05){
+        p.pos.y = Math.min(surf, p.pos.y + Math.max(1.6, (surf - p.pos.y))*clamp(dt*3.2, 0, 1));
+        if(p.pos.y > surf - 0.08){ p.pos.y = surf; p.swimming = false; p.submerged = 0; }
+      }
+    }
+  }
   // whatever happened above, the feet are not below the ground
   if(p.pos.y < ground) p.pos.y = ground;
   if(!p.swimming) pushOutOfTerrain(p);
@@ -9371,7 +9654,12 @@ const Survival = {
     const t = Math.cos((G.hours - 15) / 24 * TAU);
     const base = lerp(S.nightC, S.dayC, (t + 1) * 0.5);
     const up = Math.max(0, y - (Wld.seaLevel || 0));
-    return base - up * (S.lapseC/100);
+    /* WINTER IS A SHIFT ON THIS ONE CURVE, not a second temperature
+       model running beside it. Everything downstream — felt cold, how
+       much shelter is worth, whether precipitation falls as snow, how
+       fast a wet player loses heat — follows from the same number it
+       always did. */
+    return base - up * (S.lapseC/100) + (P.coldShift || 0);
   },
   temperature(dt, h){
     const S = CFG.SURVIVE;
@@ -14152,7 +14440,8 @@ window.DR = {
      generate a hundred worlds has no way to roll one without this. The
      seed validator in the dev panel does the same thing from inside. */
   setP(p){ P = p; },
-  heightAt, waterLevelAt, waterDepthAt, slopeAt, normalAt, cellHazard, cellWalkCost,
+  heightAt, waterLevelAt, waterDepthAt, waterBodyDepthAt, iceAt,
+  slopeAt, normalAt, cellHazard, cellWalkCost,
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
