@@ -873,6 +873,7 @@ const CFG = {
     count: [5, 10],      // how many live here
     pause: [2.5, 11],    // seconds standing still between walks
     indoors: [12, 40],   // ... and out of sight inside a house
+    radius: 0.32,        // how wide they are, for walking round things
     simRange: 210,       // metres from the town centre before they stop moving
     drawRange: 150,      // ... and before they stop being drawn
     /* ---- THE DAY ---------------------------------------------------
@@ -1283,7 +1284,25 @@ const CFG = {
   QUALITY: {
     texSize: 512,
     macroSize: 2048,     // the baked whole-world ground map, texels per side
-    shadowMap: 2048,
+    /* ---- WHAT THE SHADOWS COST -------------------------------------
+       Two shadow-casting lights, each re-rendering the WHOLE scene into
+       a depth map every frame, is the single most expensive thing this
+       game does -- and neither of them needs it. The sun crosses the
+       sky over an hour and the world under it does not move; the torch
+       follows the camera, so it only needs a new map when the camera
+       has actually turned or moved.
+
+       shadowMap went 2048 -> 1024, which is a quarter of the depth
+       pixels per map, and both maps are now driven on demand instead of
+       automatically. */
+    shadowMap: 1024,
+    /* How far the player has to move, or the view turn, before a shadow
+       map is worth redrawing -- and the longest either may go stale. */
+    sunShadowMove: 3.0,      // metres
+    sunShadowEvery: 0.55,    // seconds, at most
+    torchShadowTurn: 0.035,  // radians of yaw or pitch
+    torchShadowMove: 0.45,   // metres
+    torchShadowEvery: 0.10,  // seconds, at most
     volumetrics: true,
     treeRadius: 150,         // metres of trees kept instanced around you
     colliderRadius: 42,      // ... and how close one needs to be to block
@@ -2292,13 +2311,29 @@ const WaterShader = {
         float seam = smoothstep(0.03, 0.0, min(
           abs(fract(vUvW.x*0.22)-0.5), abs(fract(vUvW.y*0.22)-0.5)) - 0.46);
         float thick = smoothstep(1.0, 2.0, ice);
-        vec3 thinCol  = vec3(0.30, 0.36, 0.40) * (0.80 + grain*0.40);
-        vec3 thickCol = vec3(0.72, 0.77, 0.82) * (0.86 + grain*0.26);
+        /* ---- IT HAS TO READ AS ICE, NOT AS A SNOWDRIFT --------------
+           thickCol was 0.72-0.82 across all three channels: a pale,
+           flat, almost white surface, which is what snow looks like.
+           A frozen lake is not white. It is dark blue-green with the
+           water still visible through it, it has a hard specular sheen
+           that snow does not have, and the white on it is confined to
+           the pressure seams and the refrozen cracks.
+
+           So the body of the ice is dark and blue, the seams stay
+           bright, and it keeps a sharp highlight -- which is what makes
+           the eye read a hard, slippery surface rather than a soft
+           one. */
+        vec3 thinCol  = vec3(0.16, 0.24, 0.29) * (0.80 + grain*0.40);
+        vec3 thickCol = vec3(0.30, 0.44, 0.50) * (0.84 + grain*0.30);
         vec3 iceCol = mix(thinCol, thickCol, thick);
-        iceCol = mix(iceCol, vec3(0.88,0.91,0.95), seam*0.5*thick);
-        col = mix(col, iceCol*uLight, mix(0.72, 0.97, thick));
-        col += uSunColor * pow(max(dot(vec3(0.0,1.0,0.0), H), 0.0), 26.0)
-               * 0.25 * uLight * thick;
+        iceCol = mix(iceCol, vec3(0.80, 0.88, 0.94), seam*0.75*thick);
+        /* And the water under it still shows through, which is the
+           other half of why ice is not snow. */
+        col = mix(col, iceCol*uLight, mix(0.62, 0.86, thick));
+        /* The sheen. Tighter and stronger than open water's, because a
+           sheet of ice is a mirror with a texture on it. */
+        col += uSunColor * pow(max(dot(vec3(0.0,1.0,0.0), H), 0.0), 90.0)
+               * 0.85 * uLight * thick;
       }
       float a = mix(0.55, uOpacity, clamp(vDepth/0.7, 0.0, 1.0));
       a = mix(a, 1.0, fres*0.4);
@@ -5770,7 +5805,18 @@ function buildMaterials(onStep){
      metres in a black forest what the player is looking for is a warm
      rectangle, and anything that takes the scene lighting into account
      goes out with the sun. */
-  MAT.lampWin = new THREE.MeshBasicMaterial({ color:0xffcf92 });
+  /* A WINDOW WITH A LIT ROOM BEHIND IT, NOT A YELLOW RECTANGLE.
+     A flat unshaded fill reads as a painted panel: you cannot see in,
+     and up close it is obviously a sticker. This is still glass -- part
+     transparent, with the room and its furniture visible through it --
+     and the warmth comes from an emissive term, which is what a lamp
+     inside a room actually does to a pane. At two hundred metres the
+     emissive is all that survives, so it still says "somebody is home"
+     from the treeline. */
+  MAT.lampWin = new THREE.MeshStandardMaterial({
+    color:0x1b2124, roughness:0.10, metalness:0.05,
+    transparent:true, opacity:0.62,
+    emissive:new THREE.Color(0xffc98a), emissiveIntensity:0.85 });
   MAT.lampOff = new THREE.MeshStandardMaterial({ color:0x1a1713, roughness:0.95 });
   MAT.rock = snowify(
     new THREE.MeshStandardMaterial({ color:0x8a8b85, roughness:0.96 }), 1.0);
@@ -6822,6 +6868,7 @@ function buildSky(){
   sun.shadow.camera.top = S2; sun.shadow.camera.bottom = -S2;
   sun.shadow.bias = -0.0009;
   sun.shadow.normalBias = 0.6;
+  sun.shadow.autoUpdate = false;     // driven by updateShadowBudget()
   scene.add(sun); scene.add(sun.target);
   World.sun = sun;
 
@@ -7054,10 +7101,24 @@ function updateRain(dt){
   const air = Survival.airTemp(camera.position.y);
   const snowing = Weather.rain > 0.02 && air <= CFG.SURVIVE.snowBelowC;
   Weather.snow = snowing ? Weather.rain : 0;
-  p.material.uniforms.uOpacity.value = Weather.rain*(snowing ? 0.85 : 0.5);
+  /* ---- IT DOES NOT RAIN INDOORS -----------------------------------
+     The particles are a 44m box carried on the camera, so walking into
+     a building took the weather in with you: snow falling through the
+     hospital's ceiling and rain inside a cabin. Survival already
+     measures how much roof is over the player's head for the warmth
+     model; the same number scales the precipitation, so it thins out
+     under the canopy, stops under a roof, and comes back as you step
+     into the doorway rather than switching off at a threshold. */
+  /* `roof` alone, not `indoors`: the hospital's lobby is big enough
+     that the enclosure test scores it as a porch rather than a room,
+     and it was still snowing on the reception desk. What matters is
+     whether something solid is over your head, which is exactly what
+     roof measures -- 1 under a building, a fraction under a canopy. */
+  const sky = 1 - clamp(Survival.roof, 0, 1);
+  p.material.uniforms.uOpacity.value = Weather.rain*(snowing ? 0.85 : 0.5)*sky;
   p.material.uniforms.uSize.value = snowing ? 4.6 : 2.0;
   p.material.uniforms.uColor.value.setHex(snowing ? 0xe8eef4 : 0x9fb0c0);
-  p.visible = Weather.rain > 0.02;
+  p.visible = Weather.rain > 0.02 && sky > 0.01;
   if(!p.visible) return;
   const pos = p.geometry.attributes.position, spd = p.geometry.attributes.aSpd;
   const fall = (snowing ? 2.2 + Weather.wind*2.4 : 13 + Weather.wind*10) * dt;
@@ -7071,6 +7132,70 @@ function updateRain(dt){
   }
   pos.needsUpdate = true;
   p.position.set(camera.position.x, camera.position.y, camera.position.z);
+}
+
+/* ---------------------------------------------------------------------
+   THE SHADOW BUDGET
+
+   Three.js re-renders a shadow-casting light's depth map every frame by
+   default. With a sun and a torch, both at 2048 squared, that is two
+   full passes over every tree, rock, building and creature in range
+   before the visible frame has been started -- and it is why the game
+   could sit at twenty-odd frames a second on a map with a lot on it.
+
+   Neither map needs that rate. The sun moves across the sky over an
+   hour and the world beneath it is static, so its map only matters when
+   the player has walked far enough for the shadow cascade to have
+   drifted. The torch is carried, so its map matters when the camera
+   turns or the player walks -- but standing still and looking at one
+   thing needs no new map at all.
+
+   Both are therefore driven here, on demand, with a ceiling on how
+   stale either may get. When the resolution ladder steps down under
+   load, these step down with it.
+   ------------------------------------------------------------------- */
+const ShadowBudget = { sunT: 0, sunX: 1e9, sunZ: 1e9, sunDir: 0,
+                       torchT: 0, yaw: 1e9, pitch: 1e9, x: 1e9, z: 1e9 };
+function updateShadowBudget(dt){
+  const Q = CFG.QUALITY, B = ShadowBudget;
+  /* Under load everything gets lazier together: the ladder's rung is
+     the one dial for how hard the frame is being pushed. */
+  const slack = 1 + RES.rung*1.6;
+
+  // ---- the sun ----
+  const sun = World.sun;
+  if(sun){
+    B.sunT += dt;
+    const moved = Math.hypot(Player.pos.x - B.sunX, Player.pos.z - B.sunZ);
+    const turned = Math.abs(Sky.sunUp - B.sunDir);
+    if(!sun.shadow.map ||
+       moved > Q.sunShadowMove*slack ||
+       turned > 0.02 ||
+       B.sunT > Q.sunShadowEvery*slack){
+      sun.shadow.needsUpdate = true;
+      B.sunT = 0; B.sunX = Player.pos.x; B.sunZ = Player.pos.z; B.sunDir = Sky.sunUp;
+    }
+  }
+
+  // ---- the torch ----
+  const t = Gear.torchLight;
+  if(t){
+    const on = t.intensity > 0.01;
+    if(!on){ t.shadow.autoUpdate = false; return; }
+    t.shadow.autoUpdate = false;
+    B.torchT += dt;
+    const dy = Math.abs(angDiff(Player.yaw, B.yaw));
+    const dp = Math.abs(Player.pitch - B.pitch);
+    const moved = Math.hypot(Player.pos.x - B.x, Player.pos.z - B.z);
+    if(!t.shadow.map ||
+       dy > Q.torchShadowTurn*slack || dp > Q.torchShadowTurn*slack ||
+       moved > Q.torchShadowMove*slack ||
+       B.torchT > Q.torchShadowEvery*slack){
+      t.shadow.needsUpdate = true;
+      B.torchT = 0; B.yaw = Player.yaw; B.pitch = Player.pitch;
+      B.x = Player.pos.x; B.z = Player.pos.z;
+    }
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -8394,6 +8519,13 @@ const People = {
       for(let i=0;i<sn && posts.length;i++){
         const post = posts[i % posts.length];
         const w = post.clone().applyMatrix4(hosp.mesh.matrixWorld);
+        /* A post is a spot somebody stands, and it was measured off the
+           furniture it stands AT -- so half of them started a few
+           centimetres inside a desk or a station worktop. Resolve each
+           one once, here, and the person starts on clear floor. */
+        { const q = { x:w.x, y:w.y + 0.9, z:w.z };
+          resolveCollisions(q, CFG.PEOPLE.radius);
+          w.x = q.x; w.z = q.z; }
         const obj = this.makeBody(rng);
         obj.position.set(w.x, w.y, w.z);
         setLayerDeep(obj, LAYER_WORLD);
@@ -8406,7 +8538,9 @@ const People = {
           role: 'staff', home: null, bed: null,
           posts: posts.map(q=>{
             const v = q.clone().applyMatrix4(hosp.mesh.matrixWorld);
-            return { x:v.x, z:v.z, kind:'post' };
+            const c = { x:v.x, y:v.y + 0.9, z:v.z };
+            resolveCollisions(c, CFG.PEOPLE.radius);
+            return { x:c.x, z:c.z, kind:'post' };
           }),
         });
       }
@@ -8424,6 +8558,50 @@ const People = {
     if(h >= P2.up && h < P2.dusk) return 'out';
     if(h >= P2.dusk && h < P2.allIn) return 'homeward';
     return 'abed';
+  },
+
+  /* ---- THEY WALK ROUND THINGS -------------------------------------
+     They used to move by straight interpolation toward a waypoint with
+     no collision of any kind, which is why they walked through house
+     walls, through each other and through trees: nothing was ever
+     asked. They now take their step through the same resolver the
+     player does, and when it pushes back they try either side of the
+     way they wanted to go rather than grinding into it -- which is
+     what walking round something is.
+
+     A person who cannot find a way past anything for a few seconds
+     gives up on that waypoint and picks another. That is the difference
+     between an obstacle and a trap, and it means a villager can never
+     be stuck against a shed for the rest of the run. */
+  stepToward(p, tx, tz, dist, speed, dt){
+    const R = CFG.PEOPLE.radius;
+    const step = Math.min(speed*dt, dist);
+    const ux = tx/dist, uz = tz/dist;
+    /* Straight on, then a little off each way, then hard off each way.
+       The first one that survives the resolver is the way they go. */
+    const tries = [0, 0.5, -0.5, 1.1, -1.1, 1.9, -1.9];
+    for(let i=0;i<tries.length;i++){
+      const a = tries[i];
+      const c = Math.cos(a), sn = Math.sin(a);
+      const dx = ux*c - uz*sn, dz = ux*sn + uz*c;
+      const q = { x: p.x + dx*step, y: p.obj.position.y, z: p.z + dz*step };
+      const bx = q.x, bz = q.z;
+      resolveCollisions(q, R);
+      if(Math.hypot(q.x-bx, q.z-bz) > 0.02) continue;   // that way is blocked
+      /* And it has to be ground they could stand on, so nobody walks
+         off a bank or up a cliff to get somewhere. */
+      if(slopeAt(q.x, q.z) > CFG.HAZARD.slipSlope) continue;
+      if(waterDepthAt(q.x, q.z) > 0.35) continue;
+      p.x = q.x; p.z = q.z;
+      p.yaw = Math.atan2(dx, dz);
+      p.blocked = 0;
+      return true;
+    }
+    /* Every way is shut. Note it, and after a few seconds of it give up
+       on this waypoint rather than standing there forever. */
+    p.blocked = (p.blocked || 0) + dt;
+    if(p.blocked > 2.5){ p.target = null; p.state = 'idle'; p.timer = 0.4; p.blocked = 0; }
+    return false;
   },
 
   pick(rng, p){
@@ -8548,15 +8726,20 @@ const People = {
         if(d < 0.8 || p.timer <= 0){
           p.state = 'asleep'; p.hidden = false;
           if(p.bed && p.home){
-            const b = new THREE.Vector3(p.bed.x, 0.95, p.bed.z)
-                        .applyMatrix4(p.home.mesh.matrixWorld);
+            /* ON the mattress, along it, head at the pillow. The first
+               version put the body's origin 0.95 up in house space and
+               then dropped it another 0.62, which is half a metre BELOW
+               the mattress top -- so the sleeper was sunk through the
+               bed -- and rotated it about X without regard for which
+               way the bed pointed, so they lay across it. The mattress
+               top is at bedTop in house space, the bed runs along the
+               house's z, and the pillow is at its -z end. */
+            const M = p.home.mesh.matrixWorld;
+            const b = new THREE.Vector3(p.bed.x, p.bed.top, p.bed.z).applyMatrix4(M);
             p.x = b.x; p.z = b.z; p.sleepY = b.y;
+            p.sleepYaw = (p.home.yaw || 0);
           } else p.hidden = true;
-        } else {
-          const step = Math.min(p.speed*1.15*dt, d);
-          p.x += tx/d*step; p.z += tz/d*step;
-          p.yaw = Math.atan2(tx, tz);
-        }
+        } else this.stepToward(p, tx, tz, d, p.speed*1.15, dt);
       } else if(p.state === 'idle'){
         if(p.timer <= 0){
           const w = this.pick(rng, p);
@@ -8575,24 +8758,35 @@ const People = {
             p.hidden = true; p.state = 'inside';
             p.timer = rng.range(CFG.PEOPLE.indoors[0], CFG.PEOPLE.indoors[1]);
           }
-        } else {
-          const step = Math.min(p.speed*dt, d);
-          p.x += tx/d*step; p.z += tz/d*step;
-          p.yaw = Math.atan2(tx, tz);
-        }
+        } else this.stepToward(p, tx, tz, d, p.speed, dt);
       } else if(p.state === 'inside'){
         if(p.timer <= 0){ p.hidden = false; p.state = 'idle'; p.timer = 0.5; }
       }
 
-      // stand on the ground, or on the floor of whatever they are on
+      /* ---- STANDING ON SOMETHING ---------------------------------
+         surfaceAt was asked from the TERRAIN height, so a person beside
+         a building could be handed the height of its ROOF and stand in
+         the air on top of it. It is asked from where their feet
+         actually are now, which is the same question the player's feet
+         ask, and the answer is clamped to something they could step
+         onto. */
       const gy = heightAt(p.x, p.z);
-      const fy = surfaceAt(p.x, p.z, gy, 0.3);
-      const y = Math.max(gy, fy > -1e8 ? fy : -Infinity);
+      const from = p.footY == null ? gy : p.footY;
+      const fy = surfaceAt(p.x, p.z, from, 0.3);
+      let y = Math.max(gy, fy > -1e8 ? fy : -Infinity);
+      if(y > from + CFG.PLAYER.stepUp) y = gy;       // not a roof
+      p.footY = y;
       if(p.state === 'asleep'){
-        /* Lying on the bed rather than standing on it: tipped onto
-           their back and dropped to mattress height. */
-        p.obj.position.set(p.x, (p.sleepY != null ? p.sleepY : y) - 0.62, p.z);
-        p.obj.rotation.set(-Math.PI*0.5, p.yaw, 0);
+        /* ---- LYING DOWN ------------------------------------------
+           The body is built standing, with its origin at the feet and
+           its head at about 1.68m. Tipped onto its back about X it
+           lies along the group's +Z, feet at the origin -- so the
+           origin goes at the FOOT of the bed, on the mattress, and the
+           body runs up it to the pillow. p.sleepY is the mattress top,
+           not a point inside the frame. */
+        const top = p.sleepY != null ? p.sleepY : y;
+        p.obj.position.set(p.x, top + 0.10, p.z);
+        p.obj.rotation.set(-Math.PI*0.5, p.sleepYaw || 0, 0);
       } else {
         p.obj.position.set(p.x, y, p.z);
         p.obj.rotation.set(0, p.yaw, 0);
@@ -8900,8 +9094,10 @@ const Fauna = {
       const H = K.height;
       const hips = new THREE.Group(); hips.position.y = H*0.545; g.add(hips);
       limbs.hips = hips;
-      // a thin, deep rib cage, leaning forward
-      const torso = box(0.21, H*0.30, 0.34, hide, 0, H*0.15, 0.02);
+      /* A rib cage with some depth to it. At 0.21 wide it was a plank
+         seen edge-on from any angle but one, and a plank is not a body
+         however tall you make it. */
+      const torso = box(0.30, H*0.30, 0.38, hide, 0, H*0.15, 0.02);
       torso.rotation.x = -0.16;
       hips.add(torso);
       /* SHOULDERS THAT ARE NOT LEVEL, which is most of the asymmetry
@@ -8910,7 +9106,13 @@ const Fauna = {
       yoke.position.set(0, H*0.31, 0.01);
       yoke.rotation.z = rng.range(0.10, 0.19)*(rng()<0.5?-1:1);
       hips.add(yoke); limbs.yoke = yoke;
-      box(0.40, 0.075, 0.17, hide, 0, 0, 0).parent === g;
+      /* THE BAR THAT WAS LYING ON THE GROUND. `box(...).parent === g;`
+         was a leftover expression that still CALLED box(), and box()
+         adds its mesh to the group -- so every stilt carried a stray
+         0.40m plank at its own origin, at ground level, for the whole
+         run. That, and the stray cylinder below, are the detached
+         pieces lying at its feet in the recordings. The value was
+         discarded; the geometry was not. */
       const bar = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.075, 0.17), hide);
       bar.castShadow = true; bar.userData.noclip = true; yoke.add(bar);
       /* THE NECK COMES OUT OF THE SHOULDERS AT AN ANGLE and the head
@@ -8919,7 +9121,7 @@ const Fauna = {
       neck.position.set(rng.range(-0.035, 0.035), 0.05, 0.02);
       neck.rotation.set(rng.range(0.20, 0.36), 0, rng.range(-0.09, 0.09));
       yoke.add(neck);
-      cyl(0.040, 0.055, H*0.105, hide, 0, H*0.052, 0).parent;
+      // (see the bar above: the same leftover, emitting the same litter)
       const neckCol = new THREE.Mesh(new THREE.CylinderGeometry(0.040,0.055,H*0.105,5), hide);
       neckCol.position.y = H*0.052; neckCol.castShadow = true;
       neckCol.userData.noclip = true; neck.add(neckCol);
@@ -8942,14 +9144,28 @@ const Fauna = {
         f.userData.noclip = true; head.add(f);
       }
       limbs.head = head; limbs.neck = neck;
-      // arms: longer than the legs are tall, hung off uneven shoulders
+      /* ---- ARMS THAT HANG TO THE SHIN, NOT TO THE FLOOR ------------
+         These were H*(0.62..0.72) long, and limb() builds a chain
+         1.14x its length argument, hung off a shoulder at 0.855H. That
+         put the fingertips BELOW the soles -- so the foot-planting
+         offset, which lifts the body until its lowest point rests on
+         the ground, was resting the body on its KNUCKLES and leaving
+         the legs dangling in the air. That is the floating, broken
+         look: the arms were the feet.
+
+         Long enough to be wrong, short enough that the legs are what
+         it stands on. */
       const arms = pair((sx, r)=> limb(yoke, sx*0.20, -0.01, 0,
-        H*(0.62 + r*0.10), 0.036 + r*0.010, -(0.45 + r*0.35), hide));
+        H*(0.44 + r*0.07), 0.036 + r*0.010, -(0.45 + r*0.35), hide));
       limbs.armL = arms[0].upper; limbs.armR = arms[1].upper;
       limbs.armLo = [arms[0].lower, arms[1].lower];
-      // legs: the height of the thing, and not the same height
-      const legs = pair((sx, r)=> limb(hips, sx*0.085, 0, 0,
-        H*(0.50 + r*0.055), 0.048 + r*0.011, 0.42 + r*0.30, hide));
+      /* Legs sized so the chain reaches the ground from the hips: the
+         three segments span 1.14 of the length argument, and the bends
+         take about 6% off it, so hipY/1.07 is where it stands. They
+         are still not the same length as each other. */
+      const legReach = H*0.545;
+      const legs = pair((sx, r)=> limb(hips, sx*0.17, 0, 0,
+        legReach/1.07 * (0.99 + r*0.05), 0.050 + r*0.012, 0.42 + r*0.30, hide));
       limbs.legL = legs[0].upper; limbs.legR = legs[1].upper;
       limbs.legLo = [legs[0].lower, legs[1].lower];
 
@@ -9713,7 +9929,14 @@ function genTown(){
     const spec = {
       kind, id: kind + '-' + out.length, x: w.x, z: w.z, y: g.mean, yaw,
       style, decay: rng.range(0.05, 0.35),
-      enterable: kind === 'house' && rng.chance(0.75),
+      /* EVERY HOUSE IN THE TOWN IS SOMEBODY'S HOUSE. A quarter of them
+         used to roll un-enterable, which builds a sealed shell with a
+         boarded doorway and nothing inside -- fine for a cabin alone in
+         the forest, wrong for a street where people live, and it is
+         exactly the "house with no door" that got reported. The
+         variation that remains is the one that means something: how far
+         the door hangs open, and whether the lamps are lit. */
+      enterable: kind === 'house',
       /* Most houses in a town have a light on in the evening. At 0.45
          a five-house town had two, which from the treeline read as an
          abandoned village rather than a place people live. */
@@ -9939,6 +10162,51 @@ function buildHouse(spec){
     for(let i=0;i<3;i++)                                               // its plates
       put(0.18, 0.03, 0.18, MAT.fabric, -stoveX*0.92, 0.62 + i*0.44, fz - 0.7);
     put(0.34, 0.60, 0.34, MAT.metal, -stoveX*0.55, 0.30, fz - 0.3);    // a pail
+    /* ---- THE THINGS THAT MAKE IT SOMEBODY'S ------------------------
+       A room with a table and a stove in it is a floor plan. What makes
+       it a house somebody lives in is the small stuff at the heights
+       people leave things: a coat on a peg by the door, boots under it,
+       a kettle on the stove, cups on the table, a crate of jars, a
+       broom in the corner, a picture on the wall. None of it means
+       anything -- no text, nothing to read -- and all of it is rolled
+       from the house's own seed, so a given house is always the same
+       house. */
+    // by the door: pegs, a coat, boots
+    const pegX = doorAt > 0 ? -W*0.34 : W*0.34;
+    put(0.50, 0.06, 0.10, MAT.timber, pegX, 1.72, fz + 0.02).userData.noclip = true;
+    for(let i=0;i<3;i++)
+      put(0.035, 0.035, 0.12, MAT.metal, pegX - 0.18 + i*0.18, 1.66, fz - 0.04)
+        .userData.noclip = true;
+    if(r() < 0.8){
+      const coat = put(0.42, 0.95, 0.16, MAT.fabric, pegX + 0.12, 1.16, fz - 0.10);
+      coat.rotation.z = r.range ? r.range(-0.05, 0.05) : 0;
+    }
+    if(r() < 0.7) for(const bx2 of [-0.11, 0.11])
+      put(0.17, 0.26, 0.32, MAT.timber, pegX + bx2, 0.13, fz - 0.28);
+    // on the stove: a kettle and a pan
+    put(0.22, 0.20, 0.22, MAT.metal, stoveX - 0.16, 1.05, fz - 1.02);
+    put(0.06, 0.10, 0.06, MAT.metal, stoveX - 0.16, 1.19, fz - 1.02).userData.noclip = true;
+    put(0.30, 0.07, 0.30, MAT.metal, stoveX + 0.17, 0.99, fz - 1.16);
+    // on the table: cups, a bowl, a lamp base
+    for(let i=0;i<3;i++)
+      put(0.085, 0.10, 0.085, MAT.fabric, tx - 0.42 + i*0.40, 0.90,
+          tz - 0.18 + (i%2)*0.30).userData.noclip = true;
+    put(0.26, 0.09, 0.26, MAT.fabric, tx + 0.12, 0.89, tz + 0.12).userData.noclip = true;
+    // a crate of jars against the wall
+    if(r() < 0.75){
+      const crX = stoveX*0.35;
+      put(0.62, 0.42, 0.44, MAT.timber, crX, 0.21, fz - 2.6);
+      for(let i=0;i<4;i++)
+        put(0.10, 0.16, 0.10, MAT.glass, crX - 0.20 + (i%2)*0.40, 0.50,
+            fz - 2.7 + ((i/2)|0)*0.22).userData.noclip = true;
+    }
+    // a broom in the corner, and a picture on the back wall
+    { const br = put(0.05, 1.30, 0.05, MAT.timber, -W/2 + 0.32, 0.65, crossZ + 0.5);
+      br.rotation.z = 0.12; br.userData.noclip = true;
+      put(0.26, 0.10, 0.16, MAT.fabric, -W/2 + 0.40, 0.06, crossZ + 0.5).userData.noclip = true; }
+    if(r() < 0.6)
+      put(0.44, 0.34, 0.04, MAT.timber, W*0.22, 1.62, crossZ + wall*0.6)
+        .userData.noclip = true;
     // a rug, because a bare floor reads as a set
     const rug = put(Math.min(2.6, W*0.42), 0.02, Math.min(1.8, D*0.26),
                     MAT.fabric, tx, 0.25, tz);
@@ -9953,7 +10221,15 @@ function buildHouse(spec){
       put(1.25, 0.55, 0.12, MAT.timber, cx2, 0.85, bz2 - 1.04);        // headboard
       put(0.80, 0.10, 0.55, MAT.fabric, cx2, 0.88, bz2 - 0.70);        // pillow
       put(0.46, 0.58, 0.40, MAT.timber, cx2 + 0.95, 0.29, bz2 - 0.75); // night stand
-      beds.push({ x: cx2, z: bz2 });
+      // a blanket folded over the foot, a candle on the stand, shoes
+      put(1.20, 0.09, 0.70, MAT.fabric, cx2, 0.92, bz2 + 0.62).userData.noclip = true;
+      put(0.05, 0.16, 0.05, MAT.fabric, cx2 + 0.95, 0.66, bz2 - 0.75).userData.noclip = true;
+      if(r() < 0.6) for(const sx3 of [-0.09, 0.09])
+        put(0.15, 0.10, 0.28, MAT.timber, cx2 + sx3, 0.05, bz2 + 1.35).userData.noclip = true;
+      /* Where a body actually goes: the mattress TOP, and the foot of
+         the bed, because a sleeper is laid from there toward the
+         pillow. */
+      beds.push({ x: cx2, z: bz2 + 0.95, top: 0.87, headZ: bz2 - 1.04 });
     };
     if(splitX !== null){
       bedIn((-W/2 + splitX)/2);
@@ -9999,11 +10275,47 @@ function buildHouse(spec){
   /* The door: the cabin's pattern exactly, hinged on the jamb, because
      that is the arrangement whose clear channel has been measured. */
   if(inside){
-    const leafW = doorW;
+    /* ---- A DOOR, NOT A PLANK ------------------------------------
+       The leaf was one flat box the full width of the opening, which
+       reads as a board someone leaned against the wall. A door has a
+       frame around it that stays put, a leaf narrower than its
+       opening, two recessed panels, and a handle on the swinging
+       edge. All of it is boxes, and only the LEAF is the collider --
+       the frame is part of the wall and the handle is noclip -- so the
+       measured clear channel through the doorway is unchanged. */
+    const jamb = 0.10;
+    for(const sx of [-1, 1])                                   // the jambs
+      addBox(g, jamb, 2.22, 0.18, MAT.timber, sx*(doorW/2 + jamb/2), 1.11, D/2)
+        .userData.noclip = true;
+    addBox(g, doorW + jamb*2, 0.14, 0.18, MAT.timber, 0, 2.29, D/2)  // the head
+      .userData.noclip = true;
+    addBox(g, doorW + jamb*2 + 0.3, 0.09, 0.26, MAT.timber, 0, 2.42, D/2)
+      .userData.noclip = true;                                  // the drip board
+
+    const leafW = doorW - 0.06;
     const door = addBox(g, leafW, 2.10, 0.07, MAT.timber, 0, 1.05, D/2);
     door.geometry.translate(leafW*0.5, 0, 0);
     door.position.x = -doorW*0.5;
     door.userData.isDoor = true;
+    /* The panels and the handle ride WITH the leaf, so they swing with
+       it. They are noclip: the leaf alone is the solid part. */
+    for(const py of [0.62, 1.52]){
+      const pn = new THREE.Mesh(new THREE.BoxGeometry(leafW-0.34, 0.62, 0.045), MAT.timber);
+      pn.position.set(leafW*0.5, py - 1.05, 0.05);
+      pn.userData.noclip = true; pn.castShadow = false;
+      door.add(pn);
+    }
+    {
+      const kn = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.09, 8), MAT.metal);
+      kn.rotation.x = Math.PI/2;
+      kn.position.set(leafW - 0.16, -0.06, 0.08);
+      kn.userData.noclip = true;
+      door.add(kn);
+      const pl = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.22, 0.02), MAT.metal);
+      pl.position.set(leafW - 0.16, -0.06, 0.05);
+      pl.userData.noclip = true;
+      door.add(pl);
+    }
     g.userData.door = door;
     g.userData.doorOpen = spec.decay > 0.28 ? 2.75 : 0;
     door.rotation.y = -g.userData.doorOpen;
@@ -10023,8 +10335,37 @@ function buildShed(spec){
   addBox(g, doorW, H-1.95, 0.14, MAT.timber, 0, 1.95+(H-1.95)/2, D/2);
   addBox(g, W, H, 0.14, MAT.timber, 0, H/2, -D/2);
   for(const sx of [-1,1]) addBox(g, 0.14, H, D, MAT.timber, sx*W/2, H/2, 0);
-  const r = addBox(g, W+0.5, 0.14, D+0.6, MAT.roof, 0, H+0.22, 0);
-  r.rotation.x = 0.16;
+  /* ---- A SHED HAS A DOOR AND A ROOF THAT COVERS IT ---------------
+     The roof was a single slab tilted 0.16 radians about its centre,
+     so its uphill edge lifted clear of the wall and left a gap you
+     could see the sky through -- which is why it snowed inside one.
+     Measured before this, the shelter test found 80-88% cover inside
+     a shed against 100% in a house. A flat slab sitting ON the walls
+     with a generous overhang covers all of it, and a second slab makes
+     the pitch without opening a seam.
+
+     And it has a door, because a shed with a doorway and no door is
+     the thing the player reported. It is shut and it stays shut: a
+     shed is somewhere you look into, not somewhere you live. */
+  addBox(g, W+0.5, 0.16, D+0.6, MAT.roof, 0, H+0.10, 0);
+  const rr = addBox(g, W+0.6, 0.12, D*0.62, MAT.roof, 0, H+0.30, -D*0.16);
+  rr.rotation.x = 0.22;
+  const leaf = addBox(g, doorW-0.05, 1.92, 0.06, MAT.timber, 0, 0.96, D/2);
+  leaf.geometry.translate((doorW-0.05)*0.5, 0, 0);
+  leaf.position.x = -doorW*0.5;
+  leaf.userData.isDoor = true;
+  g.userData.door = leaf;
+  g.userData.doorOpen = 0;
+  for(const sx of [-1, 1])
+    addBox(g, 0.08, 2.02, 0.16, MAT.timber, sx*(doorW/2 + 0.04), 1.01, D/2)
+      .userData.noclip = true;
+  { const kn = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.05), MAT.metal);
+    kn.position.set(doorW-0.20, -0.10, 0.06);
+    kn.userData.noclip = true; leaf.add(kn); }
+  // something in it, because an empty box is not a shed
+  addBox(g, W-0.5, 0.06, 0.42, MAT.timber, 0, 1.25, -D/2+0.35).userData.noclip = true;
+  addBox(g, 0.5, 0.9, 0.34, MAT.timber, -W/2+0.45, 0.45, -D/2+0.4);
+  addBox(g, 0.30, 1.35, 0.12, MAT.timber, W/2-0.42, 0.68, -D/2+0.5);
   g.userData.entry = new THREE.Vector3(0, 0, D/2 + 1.0);
   return g;
 }
@@ -11438,6 +11779,45 @@ const Gear = {
     scene.add(camera);        // the camera carries its own children
   },
 
+  /* ---- THE FIRST PRESS OF F MUST NOT COST A SECOND ------------------
+     Three.js compiles a shader program the first time a material is
+     actually drawn, and everything the torch brings with it -- the beam
+     cone, and every material in the scene recompiled for a spot light
+     that is now contributing -- had never been drawn before the player
+     pressed F. So the first press froze the game while the driver built
+     those programs, which is exactly when the player wants the light.
+
+     This draws all of it once, off-screen, at the end of loading: the
+     cone visible, the spotlight at full strength, one compile() over
+     the scene. By the time the run starts, pressing F is a switch. */
+  warmup(){
+    if(!this.torchLight || !this.cone) return;
+    const wasVisible = this.cone.visible, wasI = this.torchLight.intensity;
+    this.cone.visible = true;
+    this.torchLight.visible = true;
+    this.torchLight.shadow.autoUpdate = true;
+    this.torchLight.intensity = 42;
+    const mask = camera.layers.mask;
+    const t0 = performance.now();
+    this._warmError = null;
+    try {
+      camera.layers.enableAll();
+      renderer.compile(scene, camera);
+      /* Through the COMPOSER, not the renderer: the composer is what
+         actually draws the game, and rendering straight to the canvas
+         warms a different target with a different size and format. */
+      renderer.shadowMap.needsUpdate = true;
+      composer.render();
+      renderer.shadowMap.needsUpdate = true;
+      composer.render();
+    } catch(e){ this._warmError = String(e && e.message || e); }
+    camera.layers.mask = mask;
+    this.cone.visible = wasVisible;
+    this.torchLight.intensity = wasI;
+    this._warmedUp = true;
+    this._warmMs = Math.round(performance.now() - t0);
+  },
+
   toggleTorch(){
     if(this.battery <= 0){ UI.say('Nothing.', 1.6); return; }
     this.torchOn = !this.torchOn;
@@ -11492,7 +11872,22 @@ const Gear = {
     const power = on ? flick * lerp(0.45, 1.0, clamp(this.battery/0.35, 0, 1)) : 0;
     t.intensity = power * 42;
     t.distance = 62 * lerp(0.55, 1, power);
-    t.visible = power > 0.01;
+    /* ---- THE LIGHT IS ALWAYS IN THE SCENE ------------------------
+       It used to be switched with `visible`, and an invisible light is
+       not in three.js's lights list -- so the first press of F changed
+       the shader configuration of EVERY material in the scene at once
+       (a spot light and a spot shadow appearing) and the renderer
+       rebuilt all of them, plus a depth program for every shadow
+       caster, in one frame. Measured: 83.5 SECONDS for that frame
+       against 20ms for a steady one.
+
+       So it stays visible and contributes nothing at intensity 0,
+       which costs nothing in the fragment shader and keeps the
+       programs stable. The shadow map is what is actually expensive,
+       and that is frozen while the torch is off rather than rendered
+       for a light nobody can see. */
+    /* The shadow map's cadence is updateShadowBudget()'s business now,
+       not this function's -- see THE SHADOW BUDGET. */
     if(this.cone){
       this.cone.visible = power > 0.01 && CFG.QUALITY.volumetrics && RES.rung < 2;
       MAT.cone.uniforms.uPower.value = power * (0.16 + Weather.fogBoost*0.5 + Weather.rain*0.3);
@@ -16098,6 +16493,7 @@ function animate(){
   Mind.applyPost();
   UI.update(dt);
   adaptResolution(dt, DEV.fps);
+  updateShadowBudget(dt);
   composer.render();
 }
 
@@ -16178,6 +16574,12 @@ async function startRun(seedInput){
   Veg.refill(s.x, s.z);
 
   for(let i=0;i<20;i++){ updateWeather(0.2); updateSky(0.2); }
+  /* Draw everything the torch brings with it ONCE, here, while the
+     loading screen is still up -- so the first press of F is a switch
+     and not a freeze. */
+  setProgress(0.97, 'checking the torch');
+  await frameBreak();
+  Gear.warmup();
   setProgress(1.0, 'walk');
   await frameBreak();
 
@@ -16272,7 +16674,7 @@ window.DR = {
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
-  admit, townDepth, checkArrival,
+  admit, townDepth, checkArrival, updateShadowBudget, ShadowBudget,
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders,
   CollisionView, People, Fauna, BEASTS, resolveCollisions, pushOutOfTerrain,
   get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
