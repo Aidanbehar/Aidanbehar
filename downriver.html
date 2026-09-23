@@ -5765,7 +5765,12 @@ function buildMaterials(onStep){
      material swap rather than a rebuild. */
   MAT.lamp = new THREE.MeshStandardMaterial({
     color:0x40331f, roughness:0.9, emissive:new THREE.Color(0xffd9a0),
-    emissiveIntensity:1.0 });
+    emissiveIntensity:1.6 });
+  /* A window with a lit room behind it. Unshaded, because at two hundred
+     metres in a black forest what the player is looking for is a warm
+     rectangle, and anything that takes the scene lighting into account
+     goes out with the sun. */
+  MAT.lampWin = new THREE.MeshBasicMaterial({ color:0xffcf92 });
   MAT.lampOff = new THREE.MeshStandardMaterial({ color:0x1a1713, roughness:0.95 });
   MAT.rock = snowify(
     new THREE.MeshStandardMaterial({ color:0x8a8b85, roughness:0.96 }), 1.0);
@@ -8346,7 +8351,11 @@ const People = {
       const r = rngFor('bedtime', hashString(b.id));
       b.bedAt = CFG.PEOPLE.dusk + 0.6 + r()*CFG.PEOPLE.bedSpread;
       b.wakeAt = CFG.PEOPLE.up - 0.4 + r()*1.1;
-      b.lampsOn = true;
+      /* null, not true: lights() only touches the panes when the state
+         CHANGES, and the panes are built in mixed states (the ceiling
+         lamp lit, the windows as plain glass). Starting from unknown
+         forces the first pass to put every one of them right. */
+      b.lampsOn = null;
     }
     const n = rng.irange(CFG.PEOPLE.count[0], CFG.PEOPLE.count[1]);
     for(let i=0;i<n;i++){
@@ -8442,12 +8451,17 @@ const People = {
       if(!b.mesh || !b.mesh.userData.lamps || !b.mesh.userData.lit) continue;
       const bed = b.bedAt == null ? 22 : b.bedAt;
       const wake = b.wakeAt == null ? 6.5 : b.wakeAt;
-      // lit between waking and bedtime, dark in between
-      const on = bed > wake ? (h >= wake && h < bed) : (h >= wake || h < bed);
+      /* Lit when the household is up AND there is a reason to have a
+         light on. Nobody leaves the lamps burning at noon, and a town
+         lit in broad daylight reads as a diorama. */
+      const awake = bed > wake ? (h >= wake && h < bed) : (h >= wake || h < bed);
+      const dim = Sky.sunUp < 0.22;
+      const on = awake && dim;
       if(b.lampsOn !== on){
         b.lampsOn = on;
         for(const L of b.mesh.userData.lamps)
-          L.pane.material = on ? MAT.lamp : MAT.lampOff;
+          L.pane.material = on ? (L.window ? MAT.lampWin : MAT.lamp)
+                               : (L.window ? MAT.glass : MAT.lampOff);
       }
       if(on) cands.push({ b, d: Math.hypot(b.x-px, b.z-pz) });
     }
@@ -8457,7 +8471,7 @@ const People = {
       const b = cands[i].b, want = i < budget && cands[i].d < 90;
       if(!!b.liveLight === want) continue;
       if(want){
-        const L = b.mesh.userData.lamps[0];
+        const L = b.mesh.userData.lamps.find(q=>!q.window) || b.mesh.userData.lamps[0];
         const bulb = new THREE.PointLight(0xffd9a0, 1.5, 11, 2.0);
         bulb.position.set(L.x, L.y - 0.1, L.z);
         b.mesh.add(bulb); b.liveLight = bulb;
@@ -9818,6 +9832,7 @@ function buildHouse(spec){
   addBox(g, W, H, wall, MAT.timber, 0, H/2, -D/2);
 
   // side walls, with windows
+  const panes = [];
   for(const sx of [-1, 1]){
     const nWin = clamp(st.windows, 0, 3);
     if(!nWin){ addBox(g, wall, H, D, MAT.timber, sx*W/2, H/2, 0); continue; }
@@ -9833,6 +9848,12 @@ function buildHouse(spec){
       addBox(g, wall, topH, halfGap*2, MAT.timber, sx*W/2, (winY+winH/2)+topH/2, wz);
       const pane = addBox(g, 0.05, winH, halfGap*2-0.08, MAT.glass, sx*W/2, winY, wz);
       pane.userData.noclip = true; pane.castShadow = false;
+      /* THE WINDOW IS WHAT YOU SEE FROM THE STREET. A lamp pane on the
+         ceiling is invisible from outside -- measured from the end of
+         the street, a town with four lit houses in it was black. The
+         windows are what carry a lit house at distance, so they are
+         what gets swapped between the lit and unlit materials. */
+      panes.push(pane);
       cursor = wz + halfGap;
     }
     const tail = D/2 - cursor;
@@ -9966,6 +9987,8 @@ function buildHouse(spec){
       };
       lampAt(tx, H - 0.40, tz);
       if(beds.length) lampAt(beds[0].x, H - 0.40, beds[0].z + 0.6);
+      for(const pn of panes) lamps.push({ x:pn.position.x, y:pn.position.y,
+                                          z:pn.position.z, pane:pn, window:true });
       g.userData.lamps = lamps;
       g.userData.lit = !!spec.lit;
   } else {
@@ -15574,8 +15597,14 @@ const DEV = (()=>{
            22:30  homeward  0 outside, 1 walking home, 7 asleep, 1 lit
            02:00  abed      0 outside, 8 asleep, 0 lit
            05:00  abed      0 outside, 8 asleep, 0 lit
-       live PointLights follow the lit houses and the budget: 5 at
-         09:00, 4 at 21:00, 1 at 22:30, 0 through the night
+       the lamps come on when the household is up AND the sky is dim,
+         so a town in daylight is not lit: 0 houses lit at 09:00 and
+         19:00, 4 at 21:00, 1 at 22:30, 0 at 02:00 and 05:00
+       live PointLights follow them exactly: 4, 1, 0, 0
+       a lit house reads from OUTSIDE because the WINDOWS carry it. A
+         pane on the ceiling is invisible from the street -- measured,
+         a town with four lit houses in it was black from 55m -- so the
+         window panes are what swap between lit and unlit
        all 5 staff are inside the hospital (1-10m from its centre)
        the creature keep-out is the town's own footprint now: radius 69m
          plus a 42m margin on seed 42, against a farthest building at
@@ -15601,10 +15630,12 @@ const DEV = (()=>{
        THE ONE RULE HOLDS THROUGH IT: 2 phantoms present, 2 visible,
          before a clear moment, during it at clarity 1.00, and after it
        the vegetation refill cost 2.3ms before the bilinear water test,
-         148.2ms with it applied everywhere, and 8.5ms once it was
+         148.2ms with it applied everywhere, and 8.5-14ms once it was
          gated on a one-cell dilation of the wet mask -- the bank is
          the only place the cheap answer can be wrong
-       simulation 0.243ms/frame, 0.196ms in town
+       simulation 0.24-0.71ms/frame, 0.20-0.37ms in town (headless
+         software rendering, and noisy between runs -- the useful fact
+         is the order of magnitude, not the digits)
        NOT ESTABLISHED: whether a clear moment predicts a scare. Over 90
          simulated minutes there were 3 clear moments and only 1 scare,
          which is far too little to measure a correlation with. The
