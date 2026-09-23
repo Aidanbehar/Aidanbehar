@@ -209,6 +209,10 @@ button:active{ transform:translateY(1px); }
 }
 #devaudit{ max-height:150px; overflow-y:auto; white-space:pre-wrap; line-height:1.5; color:#818d87; }
 #devhint{ padding:6px 12px; border-top:1px solid #1b2124; color:#4d5650; font-size:10px; }
+#comfortrow{ display:flex; align-items:center; gap:10px; margin-top:14px;
+  font-size:12px; letter-spacing:0.08em; opacity:0.72; justify-content:center; }
+#comfortrow input{ width:150px; }
+#comfortrow span{ min-width:3.2em; text-align:right; }
 </style>
 </head>
 <body>
@@ -239,7 +243,21 @@ button:active{ transform:translateY(1px); }
 </div>
 
 <div id="fps"></div>
-<div id="pausenote"><span>click to resume</span></div>
+<div id="pausenote"><span>click to resume</span>
+  <!-- COMFORT, WHERE SOMEBODY WHO NEEDS IT WILL FIND IT. This is the
+       one game setting that lives outside the dev panel, because a
+       player who cannot tolerate the screen effects should not have to
+       open a debug overlay to turn them down. It scales the blur, the
+       warp, the smear, the aberration, the camera lag and the tinnitus,
+       and it changes NOTHING about what happens in the world: the same
+       events fire, the same phantoms appear, and the run is the same
+       run. -->
+  <div id="comfortrow">
+    <label for="comfort">visual effects</label>
+    <input id="comfort" type="range" min="0" max="1" step="0.05" value="1">
+    <span id="comfortval">100%</span>
+  </div>
+</div>
 
 <!-- ===== MAP OVERLAY ===== -->
 <div id="mapview">
@@ -432,10 +450,29 @@ button:active{ transform:translateY(1px); }
                               morning. They cannot be spoken to. When
                               they can, everything they say belongs here.
        * the hospital's inside — a lobby, a desk, a corridor, two wards
-                              with beds, a store room, and the lights on
-                              in all of them. Somebody is paying for that
-                              electricity. The run ends at the desk and
-                              nothing is said about who is behind it.
+                              with beds, a nurses' station, a store room,
+                              and the lights on in all of them. Somebody
+                              is paying for that electricity.
+       * WHO IS BEHIND THE DESK — there are staff in the building now,
+                              real people on posts at the desk, the
+                              station, the corridor and both wards. They
+                              are wordless, like the villagers, and
+                              nothing about them says who they are or
+                              what they think they are treating. The
+                              moment any of them speaks, or is named, or
+                              reacts to the state the player arrives in,
+                              this file has committed to a story.
+       * WHETHER BEING ADMITTED IS GOOD — reaching the desk sets
+                              G.admitted, which stops the mind getting
+                              worse. Whether that is help, containment
+                              or something else is not stated anywhere
+                              and is the second thing this file will
+                              have to decide.
+       * the villagers' day — they go home at dusk and sleep in their
+                              own beds, so somebody lives here and has
+                              for long enough to have beds. Nothing says
+                              who they are to the hospital, or it to
+                              them.
 
      THE CREATURES, WHICH ARE THE BIGGEST HOLE IN THIS FILE
        * the stilt ......... what is it, why does it stop when it is
@@ -446,9 +483,10 @@ button:active{ transform:translateY(1px); }
                              it is a person, that is a different game
                              from if it is an animal, and the file has
                              not decided.
-       * why the town ...... they keep 95 metres from the hospital and
-                             nothing says why. Lights? People? Or is the
-                             hospital the reason they are here at all?
+       * why the town ...... they keep clear of the whole town, not of
+                             one building in it, and nothing says why.
+                             Lights? People? Or is the hospital the
+                             reason they are here at all?
        * why now ........... the campsites and the fence line imply
                              people used this wood. Something changed.
        * and the question the whole game turns on: are these what the
@@ -832,11 +870,24 @@ const CFG = {
 
   /* ---- the people in the town --------------------------------------- */
   PEOPLE: {
-    count: [4, 9],       // how many live here
+    count: [5, 10],      // how many live here
     pause: [2.5, 11],    // seconds standing still between walks
     indoors: [12, 40],   // ... and out of sight inside a house
     simRange: 210,       // metres from the town centre before they stop moving
     drawRange: 150,      // ... and before they stop being drawn
+    /* ---- THE DAY ---------------------------------------------------
+       Hours of the clock. People are out between `up` and `dusk`, drift
+       home over the hour after that, and are indoors and asleep until
+       `up` again. Bedtimes are spread across `bedSpread` hours, drawn
+       per house from the seed, so the town goes dark unevenly. */
+    up: 6.5, dusk: 20.0, allIn: 23.0,
+    bedSpread: 3.0,
+    /* How many houses may hold a real PointLight at once. The fixture
+       is always drawn; only the nearest few are actually lit, because
+       the rest cost a forward-pass light each for a glow the emissive
+       pane already gives. */
+    liveLights: 6,
+    staff: [3, 5],       // how many people work in the hospital
   },
 
   /* ---- routes ------------------------------------------------------- */
@@ -1045,6 +1096,63 @@ const CFG = {
   },
 
   /* ---- behaviour tracking -------------------------------------------- */
+  /* ---- HOW BADLY THE LATE STAGES SHOW ------------------------------
+     Everything in applyPost() used to scale off intensity with gentle
+     curves, so at stage 4 (intensity 0.55-1.0) the aberration was under
+     a pixel, the desaturation under a tenth, and there was no blur in
+     the stack at all. Between events the screen looked very nearly
+     normal, which is the opposite of what stage 4 is supposed to be.
+
+     These are a FLOOR, per stage, that the waves ride on top of rather
+     than a steeper curve on the same numbers. At stage 4 the player's
+     perception is degraded all the time; a wave makes it worse. */
+  DEGRADE: {
+    //        stage:   0     1     2     3     4
+    blur:           [0.00, 0.04, 0.14, 0.34, 0.62],
+    desat:          [0.00, 0.04, 0.12, 0.26, 0.44],
+    aberr:          [0.00, 0.06, 0.18, 0.40, 0.72],
+    warp:           [0.00, 0.03, 0.10, 0.26, 0.48],
+    grain:          [0.00, 0.01, 0.03, 0.06, 0.10],
+    vignette:       [0.00, 0.02, 0.07, 0.15, 0.26],
+    smear:          [0.00, 0.00, 0.05, 0.16, 0.34],
+    /* The audio side: how far the master low-pass closes, how far the
+       ambience detunes, and how loud the tinnitus tone sits. */
+    muffle:         [0.00, 0.05, 0.18, 0.42, 0.72],
+    detune:         [0.00, 0.01, 0.04, 0.09, 0.16],
+    tinnitus:       [0.00, 0.00, 0.02, 0.06, 0.13],
+    /* The head that does not answer straight away: seconds of lag the
+       camera adds to the player's own look input. Presentation only --
+       Player.yaw is still exactly where the mouse put it, this is the
+       camera following it late. */
+    lookLag:        [0.00, 0.00, 0.02, 0.06, 0.12],
+    lookOvershoot:  [0.00, 0.00, 0.05, 0.14, 0.26],
+    /* The breath: how deep the slow irregular vignette/exposure swell
+       goes. It is NOT the stamina pulse and deliberately runs at a
+       different rate, so the two never lock. */
+    breath:         [0.00, 0.03, 0.09, 0.18, 0.30],
+  },
+
+  /* ---- THE CLEAR MOMENT ---------------------------------------------
+     Rarely, everything stops. The distortion goes to nothing, the mixer
+     goes to true silence, and the world is exactly what it is for a few
+     seconds -- then it fades back.
+
+     TWO RULES IT CANNOT BREAK. Phantoms stay visible and stay solid
+     throughout: a clear moment is not an X-ray, and if it were, it
+     would answer the one question this whole game is built on. And it
+     must never become a warning: it is chosen on its own seeded timer
+     with an enforced gap after anything the director fired, so silence
+     before a scare can only ever be coincidence. */
+  CLEAR: {
+    fromStage: 2,          // it does not happen before the mind is going
+    chancePerMin: 0.55,    // per minute at or above that stage
+    hold: [4.0, 8.0],      // seconds of it
+    fadeIn: 0.7,           // how fast it arrives
+    fadeOut: 3.0,          // ... and how slowly it lets go
+    gapAfterEvent: 25,     // seconds clear of anything the director did
+    minGap: 170,           // ... and between one clear moment and the next
+  },
+
   AGITATE: {
     window: 60,              // seconds of history that count
     /* Each of these is a rate of agitation-per-second while the pattern
@@ -1070,6 +1178,14 @@ const CFG = {
   /* ---- the director --------------------------------------------------- */
   DIRECT: {
     tick: 1.0,               // seconds between rolls
+    /* ---- INSIDE THE TOWN -------------------------------------------
+       The director's clock runs at this fraction of its speed inside
+       the town's footprint, and this share of scare rolls are dropped.
+       Not zero: a place where nothing can ever happen is a place the
+       player can use to tell real from unreal, and that is the one
+       thing this file is not allowed to give them. */
+    townCalm: 0.35,
+    townScareDrop: 0.7,
     base: 0.055,             // chance per roll at stage 0, intensity 0
     perStage: 0.036,
     perIntensity: 0.075,
@@ -1124,7 +1240,7 @@ const CFG = {
     spawnMin: 190,         // metres from the player's start, at the least
     spawnMax: 620,         // ... and at the most
     startKeepOut: 170,     // nothing spawns inside this of the spawn
-    townKeepOut: 95,       // and nothing comes within this of the hospital
+    townKeepOut: 95,       // (superseded by townMargin; kept for old saves)
     roam: 130,             // how far one wanders from where it woke up
     /* ---- WHAT MAKES A FOREST FRIGHTENING RATHER THAN A CREATURE ----
        One thing hunting you is an encounter. Everything in earshot
@@ -1132,6 +1248,13 @@ const CFG = {
        something, and it is a different feeling entirely -- so when one
        of them commits, the rest hear it and come. It is also the
        honest consequence of the noise they make when they charge. */
+    /* ---- THE TOWN IS NOT THEIR GROUND ------------------------------
+       This used to be a 95m circle round the HOSPITAL, and the farthest
+       houses already stood 85m out; bigger houses put half the town
+       outside its own exclusion. It is measured off the town's real
+       footprint now -- every building and the whole street -- with a
+       margin on top, so growing the town grows the quiet with it. */
+    townMargin: 42,        // metres beyond the town's own footprint
     packHear: 240,         // a rush is heard this far, by everything
     torchSeen: 1.85,       // the flashlight multiplies how far they notice
     lungeFrom: 7.5,        // it breaks into a charge this far out
@@ -1169,7 +1292,18 @@ const CFG = {
     fovDefault: 74,
   },
 
-  DEBUG: { freezeClock:false, freezeMind:false, showPhantoms:false, logRolls:true, noFog:false },
+  /* ---- COMFORT -------------------------------------------------------
+     One number, 0..1, that scales EVERY distortion this file applies to
+     the player's perception: blur, warp, smear, aberration, the camera
+     lag, the breath and the audio detune. 1 is the game as designed; 0
+     is the same game with the same events and the same phantoms and
+     none of the screen effects. It is in the pause menu as well as the
+     dev panel, because somebody who needs it should not have to find
+     the dev panel to get it. */
+  COMFORT: { level: 1.0 },
+
+  DEBUG: { freezeClock:false, freezeMind:false, showPhantoms:false, logRolls:true,
+           noFog:false, forceClear:false, forceStage:-1 },
 };
 
 /* The single mutable game state object. Everything reads the clock and the
@@ -1182,6 +1316,12 @@ const G = {
   hours: 8,            // in-fiction hour of day, 0..24, wraps
   day: 1,
   started: false, paused: true, over: false, won: false,
+  /* ---- ADMITTED ----------------------------------------------------
+     Set once, by the real hospital's desk, and never unset inside a
+     run. It is deliberately a named state and not an ending: while it
+     is true the mind stops getting worse, and whatever comes after
+     reaching the hospital is built on top of it. */
+  admitted: false, admittedAt: 0, admittedStage: 0, admittedCollapsing: false,
   stress: 0.05,        // 0..1 — drives vignette, grain, breathing. NOT sanity:
                        // it is a presentation value and the player never sees
                        // it as a number.
@@ -2189,12 +2329,22 @@ const PostShader = {
     uAberr:{value:0.0}, uStress:{value:0.0}, uFade:{value:0.0},
     uWarp:{value:0.0}, uTint:{value:new THREE.Vector3(1,1,1)},
     uDesat:{value:0.0}, uFlash:{value:0.0}, uPulse:{value:0.0}, uBlack:{value:0.0},
+    /* ---- THE LATE STAGES ------------------------------------------
+       uBlur is a defocus that is strongest at the edges of the frame:
+       at stage four the periphery never resolves, which is the single
+       most legible way to say "your eyes are not working" and the one
+       thing this stack did not have. uSmear drags a little of the
+       previous frame's colour along the warp direction, so motion
+       leaves a trail. Both are separate uniforms rather than more
+       intensity on the existing ones, because the point is a FLOOR
+       under the late stages, not a steeper curve. */
+    uBlur:{value:0.0}, uSmear:{value:0.0},
   },
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
   fragmentShader: NOISE_GLSL + /* glsl */`
     uniform sampler2D tDiffuse;
     uniform float uTime,uExposure,uGrain,uVignette,uAberr,uStress,uFade;
-    uniform float uWarp,uDesat,uFlash,uPulse,uBlack;
+    uniform float uWarp,uDesat,uFlash,uPulse,uBlack,uBlur,uSmear;
     uniform vec3 uTint;
     uniform vec2 uRes;
     varying vec2 vUv;
@@ -2227,6 +2377,32 @@ const PostShader = {
       col.r = texture2D(tDiffuse, uv + c*ab).r;
       col.g = texture2D(tDiffuse, uv).g;
       col.b = texture2D(tDiffuse, uv - c*ab).b;
+
+      /* ---- THE EDGES STOP RESOLVING -------------------------------
+         Six taps on a rotated ring, radius growing with distance from
+         the centre. The middle of the frame stays nearly sharp, so the
+         player can still play; everything they are not looking straight
+         at goes soft, which is what failing perception feels like from
+         the inside and what a still screenshot cannot fake. */
+      if(uBlur > 0.002){
+        float rad = uBlur * (0.0016 + r2*0.018);
+        vec3 acc = col;
+        for(int i=0;i<6;i++){
+          float a2 = float(i)*1.0472 + uTime*0.07;
+          vec2 o = vec2(cos(a2), sin(a2))*rad;
+          acc += texture2D(tDiffuse, clamp(uv+o, 0.0, 1.0)).rgb;
+        }
+        col = mix(col, acc/7.0, clamp(uBlur, 0.0, 1.0));
+      }
+      /* And a smear along the radial direction, so turning your head
+         drags the world after it. */
+      if(uSmear > 0.002){
+        vec2 d2 = normalize(c + 1e-5) * uSmear * 0.010;
+        col = mix(col, (col
+                + texture2D(tDiffuse, clamp(uv+d2,0.0,1.0)).rgb
+                + texture2D(tDiffuse, clamp(uv+d2*2.0,0.0,1.0)).rgb)/3.0,
+                clamp(uSmear, 0.0, 1.0));
+      }
 
       col *= uExposure * (1.0 + uFlash*0.6);
       col *= uTint;
@@ -3528,6 +3704,32 @@ function genHydrology(){
       if(depth > powderFrom) powderCells++;
       if(depth > deepest) deepest = depth;
     }
+  }
+  /* ---- WHERE THE BILINEAR WATER TEST IS WORTH PAYING FOR -----------
+     The scatter has to ask the real, interpolated water level whether a
+     spot is wet, because the nearest-cell answer disagrees with the
+     water the player can see. But that is four grid reads per candidate
+     plant, and the streamer calls it tens of thousands of times a
+     refill: measured, it took the vegetation refill from 2.3ms to
+     148ms, which is a visible hitch every time the player crosses a
+     cell boundary.
+
+     Almost none of the map is anywhere near water. This is the wet mask
+     dilated by one cell, so the expensive test is only paid where the
+     cheap one could possibly be wrong -- which is the bank, and only
+     the bank. */
+  {
+    const NEAR = new Uint8Array(n2);
+    for(let iz=0; iz<N; iz++) for(let ix=0; ix<N; ix++){
+      const i = iz*N+ix;
+      if(!(WLEV[i] > -9000 && WLEV[i] > H[i] - 0.6)) continue;
+      for(let dz=-1; dz<=1; dz++) for(let dx=-1; dx<=1; dx++){
+        const x = ix+dx, z = iz+dz;
+        if(x<0||z<0||x>=N||z>=N) continue;
+        NEAR[z*N+x] = 1;
+      }
+    }
+    Wld.NEARWET = NEAR;
   }
   Wld.SNOW = SNOW;
   Wld.snowWind = P.winter ? 1 : 0;
@@ -5106,7 +5308,14 @@ function validateWorld(){
   /* x3 is the wander factor: the player does not know which way the
      hospital is, so the direct path is a floor, not a forecast. Requiring
      three times the direct walk to fit inside 80% of the mind's clock is
-     what "reachable with reasonable play" means here. */
+     what "reachable with reasonable play" means here.
+
+     WHAT THIS GUARANTEES IS UNCHANGED BY ADMISSION. It was never "the
+     run can be finished in time"; it was always "the desk can be
+     REACHED before the mind runs out", and that is exactly what
+     admission needs too -- getting there is what stops the clock, so
+     the clock still has to be long enough to get there. Only the
+     wording of what happens on arrival has changed. */
   if(walkMin*3 > budget*0.8) fail('G2', `${walkMin.toFixed(1)}min walk vs ${budget.toFixed(0)}min mind`);
   /* And a route that is five times the straight line is not a route, it is
      a maze the terrain happened to leave: the player will never find it by
@@ -5548,6 +5757,16 @@ function buildMaterials(onStep){
   MAT.glass = new THREE.MeshStandardMaterial({
     color:0x141a1c, roughness:0.12, metalness:0.05, transparent:true, opacity:0.55 });
   MAT.dark = new THREE.MeshStandardMaterial({ color:0x07090a, roughness:1 });
+  /* A LAMP PANE, WHICH IS A LIGHT AT A DISTANCE FOR NOTHING. Emissive
+     rather than illuminating: from the street a window with this behind
+     it reads as a lit room, and only the few houses nearest the player
+     are given an actual PointLight to go with it. The emissive value is
+     swapped between on and off, so a house going dark at bedtime is one
+     material swap rather than a rebuild. */
+  MAT.lamp = new THREE.MeshStandardMaterial({
+    color:0x40331f, roughness:0.9, emissive:new THREE.Color(0xffd9a0),
+    emissiveIntensity:1.0 });
+  MAT.lampOff = new THREE.MeshStandardMaterial({ color:0x1a1713, roughness:0.95 });
   MAT.rock = snowify(
     new THREE.MeshStandardMaterial({ color:0x8a8b85, roughness:0.96 }), 1.0);
   MAT.ripples = TexLib.tex(TexLib.heightToNormal(TexLib.ripples({ seed: 91 + (G.seed % 887) }), 1.6), { repeat:[1,1] });
@@ -6274,8 +6493,10 @@ const Veg = {
        Both sides are bilinear now, so they cannot disagree, and there is
        a margin: a trunk standing exactly on the waterline still looks
        like it is in the river. */
-    const lvl = waterLevelAt(x, z);
-    if(lvl > -9000 && lvl > heightAt(x, z) - CFG.VEG.bankClear) d = 0;
+    if(!Wld.NEARWET || Wld.NEARWET[i]){
+      const lvl = waterLevelAt(x, z);
+      if(lvl > -9000 && lvl > heightAt(x, z) - CFG.VEG.bankClear) d = 0;
+    }
     if(this.inClearing(x, z)) d = 0;
     return clamp(d, 0, 1);
   },
@@ -6453,9 +6674,12 @@ const Veg = {
         /* Same bilinear test as the trees, for the same reason -- the
            undergrowth, the rocks and the deadfall were all placed off
            the nearest cell and all of them stood in the water. */
-        const wl = waterLevelAt(cxw, czw);
-        const underwater = (wl > -9000 && wl > heightAt(cxw, czw) - CFG.VEG.bankClear)
-                           || this.inClearing(cxw, czw);
+        let wet = false;
+        if(!Wld.NEARWET || Wld.NEARWET[gi]){
+          const wl = waterLevelAt(cxw, czw);
+          wet = wl > -9000 && wl > heightAt(cxw, czw) - CFG.VEG.bankClear;
+        }
+        const underwater = wet || this.inClearing(cxw, czw);
         if(!underwater && ns < this.scrub.instanceMatrix.count && hb < 0.34*P.scrub*(0.35+open)){
           const sc = 0.7 + ihash2(cx*7, cz*3, seed+55)*1.5;
           E.set(0, hb*TAU, 0); Q.setFromEuler(E);
@@ -7681,10 +7905,16 @@ function buildCar(spec){
    building the entire walk is about was a marker with a texture.
 
    It is a building now. A lobby with a reception desk, a corridor with
-   doors off it, two wards with beds, a store room, and the lights on.
-   The run ends at the desk, INSIDE, so the last thing the player does is
-   walk in out of the dark and stand in a lit room — which is the ending
-   the walk has been earning.
+   doors off it, two wards with beds and drip stands, a nurses' station,
+   a store room, chairs to wait in, and the lights on. There are people
+   working in it.
+
+   REACHING THE DESK NO LONGER ENDS THE RUN. It ADMITS you: G.admitted
+   goes true, the mind stops getting worse, and a collapse in progress
+   stops. Everything after that is content this file does not have yet,
+   which is exactly why it is a named state and not an ending — see
+   admit() near checkArrival(). Only the real Wld.hospital's own
+   deskWorld can set it, so no phantom can, however good it looks.
 
    It is built from the same parts as everything else, for the same
    reason: walls are boxes with gaps left for openings, every opening is
@@ -7781,8 +8011,46 @@ function buildHospital(spec){
   // the store room: shelving along the back
   for(let i=0;i<3;i++)
     addBox(g, 0.5, 1.9, 2.6, MAT.metal, roomX[2] + 0.9 + i*1.5, 0.95 + 0.30, -D/2 + 2.2);
+  /* ---- WHAT MAKES IT A PLACE THAT WORKS ---------------------------
+     A ward with beds in it is a storeroom with beds in it. What says
+     somebody works here is the small stuff at working height: a
+     nurses' station in the corridor with a chart rack, drip stands
+     beside the beds, chairs where a visitor would sit, a trolley of
+     linen. None of it means anything -- there is no text on any of it
+     and nothing to read -- it is there so the building is furnished
+     rather than blocked out. */
+  const dripAt = (x, z)=>{
+    addBox(g, 0.05, 1.75, 0.05, MAT.metal, x, 0.87 + 0.30, z);
+    addBox(g, 0.42, 0.04, 0.42, MAT.metal, x, 0.06 + 0.30, z);
+    addBox(g, 0.13, 0.30, 0.10, MAT.glass, x + 0.10, 1.60 + 0.30, z);
+  };
+  const chairAt = (x, z, ry)=>{
+    const c = new THREE.Group();
+    addBox(c, 0.46, 0.07, 0.46, MAT.timber, 0, 0.45, 0);
+    addBox(c, 0.46, 0.52, 0.06, MAT.timber, 0, 0.74, -0.20);
+    for(const [ox, oz] of [[-0.19,-0.19],[0.19,-0.19],[-0.19,0.19],[0.19,0.19]])
+      addBox(c, 0.05, 0.44, 0.05, MAT.metal, ox, 0.22, oz);
+    c.position.set(x, 0.30, z); c.rotation.y = ry || 0;
+    c.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+    g.add(c);
+  };
+  dripAt(roomX[0] + 1.4, wardZ + 1.1);
+  dripAt(roomX[0] + 3.8, wardZ + 1.1);
+  dripAt(roomX[1] + 1.6, wardZ + 1.1);
+  chairAt(roomX[0] + 3.4, wardZ + 2.5, Math.PI);
+  chairAt(roomX[1] + 4.2, wardZ + 2.5, Math.PI);
+  // the nurses' station, in the corridor, against the lobby wall
+  const stnX = W/2 - 3.4, stnZ = (lobbyZ + corrZ)/2;
+  addBox(g, 2.4, 0.95, 0.62, MAT.timber, stnX, 0.48 + 0.30, stnZ);
+  addBox(g, 2.4, 0.08, 0.90, MAT.timber, stnX, 0.95 + 0.30, stnZ - 0.14);
+  addBox(g, 0.42, 0.62, 0.10, MAT.metal, stnX - 0.8, 1.45 + 0.30, stnZ - 0.40);
+  addBox(g, 0.42, 0.62, 0.10, MAT.metal, stnX + 0.0, 1.45 + 0.30, stnZ - 0.40);
+  addBox(g, 0.80, 0.46, 0.55, MAT.fabric, stnX - 1.9, 0.23 + 0.30, stnZ + 0.1);
+  // a linen trolley in the corridor, and a bin
+  trolley(-W/2 + 3.0, (lobbyZ + corrZ)/2);
+  addBox(g, 0.44, 0.70, 0.44, MAT.metal, -W/2 + 1.4, 0.35 + 0.30, lobbyZ - 1.0);
 
-  /* ---- the lobby, and the desk the run ends at ---- */
+  /* ---- the lobby, and the desk that admits you ---- */
   /* THE DESK STANDS TO ONE SIDE, and that is not decoration.
      Centred, it sat exactly across the way through to the corridor: the
      opening was clear, the approach to it was not, and a flood fill of
@@ -7792,12 +8060,35 @@ function buildHospital(spec){
      desk is against the left-hand wall where a reception desk goes. */
   const deskX = -W/2 + 4.6;
   const deskZ = lobbyZ + 1.9;
+  g.userData.deskLocal = new THREE.Vector3(deskX, 0, deskZ);
   addBox(g, 4.4, 1.08, 0.75, MAT.timber, deskX, 0.54 + 0.30, deskZ);
   addBox(g, 4.4, 0.10, 1.25, MAT.timber, deskX, 1.08 + 0.30, deskZ - 0.25);
   addBox(g, 1.6, 0.46, 0.55, MAT.fabric,  5.2, 0.23 + 0.30, deskZ + 0.2);  // a bench
   addBox(g, 1.6, 0.52, 0.10, MAT.fabric,  5.2, 0.72 + 0.30, deskZ + 0.45);
   for(const sx of [-1, 1])
     addBox(g, 0.7, 1.15, 0.7, MAT.concrete, sx*(W/2 - 2.2), 0.57 + 0.30, D/2 - 1.6);
+  for(let i=0;i<4;i++) chairAt(2.0 + i*0.65, D/2 - 2.4, Math.PI);
+
+  /* ---- WHERE THE STAFF STAND --------------------------------------
+     Posts in the building's own space, handed to People.build, which
+     puts a real person on each one and lets them move between them.
+     Behind the desk, at the station, in the corridor, in each ward.
+     They are people, not phantoms, and nothing here says who they
+     are. */
+  {
+    const post = (x, z, yaw)=>{
+      const v = new THREE.Vector3(x, 0.30, z);
+      v.userData = { yaw };
+      return v;
+    };
+    g.userData.posts = [
+      post(deskX + 0.6, deskZ - 1.1, 0),                 // behind the desk
+      post(stnX, stnZ - 1.0, 0),                         // the station
+      post(0, (lobbyZ + corrZ)/2, Math.PI*0.5),          // the corridor
+      post(roomX[0] + 3.4, wardZ + 2.4, Math.PI),        // ward one
+      post(roomX[1] + 4.0, wardZ + 2.4, Math.PI),        // ward two
+    ];
+  }
 
   /* ---- light, which is what the player sees from the trees ---- */
   /* THE LIGHTS ARE THE POINT OF THE PLACE, so they are lights rather
@@ -8044,6 +8335,19 @@ const People = {
     if(h && h.entryWorld) this.waypoints.push({ x:h.entryWorld.x, z:h.entryWorld.z, kind:'door', host:h });
     if(this.waypoints.length < 3) return;
 
+    /* ---- WHOSE HOUSE IS WHOSE -------------------------------------
+       Every villager gets a home and a bed in it. The home is what
+       "going home at night" means, and the bed is where they are when
+       the player looks in a window at three in the morning. Each house
+       also gets its own bedtime, spread across bedSpread hours from the
+       seed, so the town does not go dark all at once. */
+    const homes = town.filter(b=> b.kind === 'house' && b.enterable && b.mesh);
+    for(const b of homes){
+      const r = rngFor('bedtime', hashString(b.id));
+      b.bedAt = CFG.PEOPLE.dusk + 0.6 + r()*CFG.PEOPLE.bedSpread;
+      b.wakeAt = CFG.PEOPLE.up - 0.4 + r()*1.1;
+      b.lampsOn = true;
+    }
     const n = rng.irange(CFG.PEOPLE.count[0], CFG.PEOPLE.count[1]);
     for(let i=0;i<n;i++){
       const w = this.waypoints[rng.irange(0, this.waypoints.length-1)];
@@ -8051,20 +8355,123 @@ const People = {
       obj.position.set(w.x, heightAt(w.x, w.z), w.z);
       setLayerDeep(obj, LAYER_WORLD);
       scene.add(obj);
+      const home = homes.length ? homes[i % homes.length] : null;
       this.list.push({
         obj, x:w.x, z:w.z, yaw: rng()*TAU,
         speed: rng.range(0.85, 1.35),
         state: 'idle', timer: rng.range(0.5, 6), phase: rng()*TAU,
         target: null, indoorsUntil: 0,
+        role: 'villager', home,
+        /* Where in the house this one sleeps: their own bed if the
+           house has more than one, so two people in a house are not
+           standing in the same place. */
+        bed: home && home.mesh.userData.beds && home.mesh.userData.beds.length
+          ? home.mesh.userData.beds[i % home.mesh.userData.beds.length] : null,
       });
+    }
+
+    /* ---- THE HOSPITAL HAS STAFF ------------------------------------
+       Real people, built by the same builder as the villagers, on their
+       own indoor waypoints: the desk, the corridor, the wards. They are
+       not phantoms and they are not drawn from the hallucination
+       library -- the town is the one place where what the player sees
+       is true, and that has to include the people in it. They are
+       wordless, like the villagers, and nothing about them says who
+       they are. */
+    const hosp = Wld.hospital;
+    if(hosp && hosp.mesh && hosp.mesh.userData.posts){
+      const posts = hosp.mesh.userData.posts;
+      const sn = rng.irange(CFG.PEOPLE.staff[0], CFG.PEOPLE.staff[1]);
+      for(let i=0;i<sn && posts.length;i++){
+        const post = posts[i % posts.length];
+        const w = post.clone().applyMatrix4(hosp.mesh.matrixWorld);
+        const obj = this.makeBody(rng);
+        obj.position.set(w.x, w.y, w.z);
+        setLayerDeep(obj, LAYER_WORLD);
+        scene.add(obj);
+        this.list.push({
+          obj, x:w.x, z:w.z, yaw: post.userData && post.userData.yaw || rng()*TAU,
+          speed: rng.range(0.7, 1.05),
+          state: 'idle', timer: rng.range(1, 7), phase: rng()*TAU,
+          target: null, indoorsUntil: 0,
+          role: 'staff', home: null, bed: null,
+          posts: posts.map(q=>{
+            const v = q.clone().applyMatrix4(hosp.mesh.matrixWorld);
+            return { x:v.x, z:v.z, kind:'post' };
+          }),
+        });
+      }
     }
     this.active = true;
     Wld.stats.people = this.list.length;
+    Wld.stats.staff = this.list.filter(p=>p.role === 'staff').length;
+  },
+
+  /* ---- WHAT TIME OF DAY IT IS, FOR SOMEBODY WHO LIVES HERE --------
+     'out' between waking and dusk, 'homeward' for the hour after it,
+     'abed' through the night. */
+  phaseOfDay(){
+    const P2 = CFG.PEOPLE, h = G.hours;
+    if(h >= P2.up && h < P2.dusk) return 'out';
+    if(h >= P2.dusk && h < P2.allIn) return 'homeward';
+    return 'abed';
   },
 
   pick(rng, p){
+    /* Staff move between their posts inside the hospital and nowhere
+       else; a nurse crossing the street to stand outside a shed is not
+       a hospital. */
+    if(p && p.role === 'staff' && p.posts && p.posts.length)
+      return p.posts[Math.floor(rng()*p.posts.length)];
     const w = this.waypoints[Math.floor(rng()*this.waypoints.length)];
     return w || null;
+  },
+
+  /* ---- THE LIGHTS ---------------------------------------------------
+     Two things at once. A house's lamps go OUT at its own bedtime and
+     come back on when the household wakes, which is what makes the town
+     get darker as the night goes on rather than all at once. And only
+     the nearest few lit houses are given a real PointLight: the pane is
+     emissive and reads as a lit window from the street for nothing, so
+     the light itself is only worth paying for up close. */
+  lights(px, pz){
+    const town = Wld.townBuildings || [];
+    const h = G.hours;
+    const cands = [];
+    for(const b of town){
+      if(!b.mesh || !b.mesh.userData.lamps || !b.mesh.userData.lit) continue;
+      const bed = b.bedAt == null ? 22 : b.bedAt;
+      const wake = b.wakeAt == null ? 6.5 : b.wakeAt;
+      // lit between waking and bedtime, dark in between
+      const on = bed > wake ? (h >= wake && h < bed) : (h >= wake || h < bed);
+      if(b.lampsOn !== on){
+        b.lampsOn = on;
+        for(const L of b.mesh.userData.lamps)
+          L.pane.material = on ? MAT.lamp : MAT.lampOff;
+      }
+      if(on) cands.push({ b, d: Math.hypot(b.x-px, b.z-pz) });
+    }
+    cands.sort((a,b2)=> a.d - b2.d);
+    const budget = CFG.PEOPLE.liveLights;
+    for(let i=0;i<cands.length;i++){
+      const b = cands[i].b, want = i < budget && cands[i].d < 90;
+      if(!!b.liveLight === want) continue;
+      if(want){
+        const L = b.mesh.userData.lamps[0];
+        const bulb = new THREE.PointLight(0xffd9a0, 1.5, 11, 2.0);
+        bulb.position.set(L.x, L.y - 0.1, L.z);
+        b.mesh.add(bulb); b.liveLight = bulb;
+      } else {
+        b.mesh.remove(b.liveLight); b.liveLight.dispose && b.liveLight.dispose();
+        b.liveLight = null;
+      }
+    }
+    // and a house that went dark loses its light whatever the distance
+    for(const b of town)
+      if(b.liveLight && !b.lampsOn){
+        b.mesh.remove(b.liveLight); b.liveLight = null;
+      }
+    Wld.stats.liveLights = town.filter(b=>b.liveLight).length;
   },
 
   update(dt){
@@ -8076,13 +8483,67 @@ const People = {
     const S = Wld.street;
     const near = Math.hypot(px - (S.x0+S.x1)/2, pz - (S.z0+S.z1)/2) < CFG.PEOPLE.simRange;
     const rng = rngFor('peopleTick', Math.floor(G.t*3));
+    const phase = this.phaseOfDay();
+    this.lights(px, pz);
     for(const p of this.list){
       const d2 = (p.x-px)*(p.x-px) + (p.z-pz)*(p.z-pz);
       p.obj.visible = !p.hidden && d2 < CFG.PEOPLE.drawRange*CFG.PEOPLE.drawRange;
       if(!near) continue;
 
+      /* ---- THE DAY DECIDES WHAT THEY ARE DOING --------------------
+         Staff keep their posts round the clock, because a hospital
+         does. Villagers work to the clock: out in the day, walking
+         home after dusk, in bed through the night. Nothing teleports
+         -- 'homeward' sets the target and they walk it, so a player
+         arriving at half past eight watches the street empty. */
+      if(p.role === 'villager' && p.home){
+        if(phase === 'abed' && p.state !== 'asleep' && p.state !== 'goinghome'){
+          p.state = 'goinghome'; p.target = p.homeDoor || (p.homeDoor = (()=>{
+            const e = p.home.mesh.userData.entry.clone()
+                        .applyMatrix4(p.home.mesh.matrixWorld);
+            return { x:e.x, z:e.z, kind:'door', host:p.home };
+          })());
+          p.timer = 240;
+        } else if(phase === 'homeward' && p.state === 'idle' && rng.chance(0.35)){
+          p.state = 'goinghome'; p.target = p.homeDoor || (p.homeDoor = (()=>{
+            const e = p.home.mesh.userData.entry.clone()
+                        .applyMatrix4(p.home.mesh.matrixWorld);
+            return { x:e.x, z:e.z, kind:'door', host:p.home };
+          })());
+          p.timer = 240;
+        } else if(phase === 'out' && p.state === 'asleep'){
+          p.state = 'idle'; p.hidden = false; p.timer = rng.range(0.5, 20);
+          if(p.bed){
+            const e = p.home.mesh.userData.entry.clone()
+                        .applyMatrix4(p.home.mesh.matrixWorld);
+            p.x = e.x; p.z = e.z;
+          }
+        }
+      }
+
       p.timer -= dt;
-      if(p.state === 'idle'){
+      if(p.state === 'asleep'){
+        /* In the house, lying down, out of sight. Their body is parked
+           on the bed so that a look through a window is not an empty
+           room, and hidden past the draw range like anyone indoors. */
+        p.hidden = false;
+        p.obj.visible = d2 < 40*40;
+      } else if(p.state === 'goinghome'){
+        const tx = p.target.x - p.x, tz = p.target.z - p.z;
+        const d = Math.hypot(tx, tz);
+        if(d < 0.8 || p.timer <= 0){
+          p.state = 'asleep'; p.hidden = false;
+          if(p.bed && p.home){
+            const b = new THREE.Vector3(p.bed.x, 0.95, p.bed.z)
+                        .applyMatrix4(p.home.mesh.matrixWorld);
+            p.x = b.x; p.z = b.z; p.sleepY = b.y;
+          } else p.hidden = true;
+        } else {
+          const step = Math.min(p.speed*1.15*dt, d);
+          p.x += tx/d*step; p.z += tz/d*step;
+          p.yaw = Math.atan2(tx, tz);
+        }
+      } else if(p.state === 'idle'){
         if(p.timer <= 0){
           const w = this.pick(rng, p);
           if(w){ p.target = w; p.state = 'walk'; p.timer = 30; }
@@ -8113,8 +8574,15 @@ const People = {
       const gy = heightAt(p.x, p.z);
       const fy = surfaceAt(p.x, p.z, gy, 0.3);
       const y = Math.max(gy, fy > -1e8 ? fy : -Infinity);
-      p.obj.position.set(p.x, y, p.z);
-      p.obj.rotation.y = p.yaw;
+      if(p.state === 'asleep'){
+        /* Lying on the bed rather than standing on it: tipped onto
+           their back and dropped to mattress height. */
+        p.obj.position.set(p.x, (p.sleepY != null ? p.sleepY : y) - 0.62, p.z);
+        p.obj.rotation.set(-Math.PI*0.5, p.yaw, 0);
+      } else {
+        p.obj.position.set(p.x, y, p.z);
+        p.obj.rotation.set(0, p.yaw, 0);
+      }
       // a walk cycle, and a little breathing when standing
       const L = p.obj.userData.limbs;
       if(L){
@@ -8158,23 +8626,42 @@ const People = {
    ------------------------------------------------------------------- */
 const TOWN = {
   streetOffset: 21,      // metres from the hospital's front to the street
-  streetHalfLength: 78,  // how far the street runs either way
+  streetHalfLength: 92,  // how far the street runs either way
   /* THE ROWS SIT ON THE ROAD BED. The street is graded across a verge
      seven metres either side of its centre line; rows outside that band
      were being placed on raw hillside, and then rejected for being on
      raw hillside. Measured across twenty seeds before this: a median of
      ONE house, and seeds with none at all. */
-  rowOffset: 11.5,       // metres from the street's centre line to a front door
-  gapAtEntrance: 13,     // no house directly in front of the doors
-  spacing: [15, 26],     // metres between neighbours along the street
+  /* Bigger houses need the row further back and further apart, or the
+     eaves meet over the street and the doors open into the road. */
+  rowOffset: 13.5,       // metres from the street's centre line to a front door
+  gapAtEntrance: 15,     // no house directly in front of the doors
+  spacing: [19, 30],     // metres between neighbours along the street
   houses: [5, 9],
   sheds: [1, 3],
   grade: 0.085,          // the steepest the road bed is allowed to run
   maxCut: 4.5,           // ... and the most earth it may move to get there
-  verge: 11,             // how far either side of it is graded with it
+  /* THE GRADED BAND HAS TO REACH PAST THE BACK WALL. The rows sit at
+     rowOffset from the centre line and the houses are ~10m deep, so a
+     verge of 11 put the back half of every house on raw hillside --
+     which the plot check then rejected for being raw hillside. With
+     the bigger houses that took the town from five to seven buildings
+     down to one to three. It has to be rowOffset + half a house. */
+  verge: 20,             // how far either side of it is graded with it
   plotRelief: 4.0,       // how uneven a plot may be before its pad is a quarry
-  nudge: [0, 5, -5, 9, -9, 14]   // metres along the street to try if a plot fails
+  nudge: [0, 5, -5, 9, -9, 14, -14, 19, -19]  // metres along the street to try
 };
+
+/* HOW FAR INTO THE TOWN'S GROUND THIS POINT IS, in metres, or 0 if it
+   is outside it. One function, so the creatures and the director cannot
+   disagree about where the town ends. */
+function townDepth(x, z){
+  const T = Wld.town;
+  if(!T) return 0;
+  const keep = T.r + CFG.FAUNA.townMargin;
+  const d = Math.hypot(x - T.x, z - T.z);
+  return d < keep ? keep - d : 0;
+}
 
 /* =====================================================================
    ===== FAUNA =====
@@ -8560,7 +9047,7 @@ const Fauna = {
          but thin ice is a hole with a lid, and a creature standing on
          one would be a creature standing in a lake. */
       if(iceAt(x, z) === 1) continue;
-      if(Wld.hospital && Math.hypot(x-Wld.hospital.x, z-Wld.hospital.z) < F.townKeepOut) continue;
+      if(townDepth(x, z) > 0) continue;
       if(Wld.start && Math.hypot(x-Wld.start.x, z-Wld.start.z) < F.startKeepOut) continue;
       return { x, z };
     }
@@ -8868,15 +9355,15 @@ const Fauna = {
         b.gait += dt*speed*2.2;
       }
       /* It never comes into the town. Whatever it was doing, the edge of
-         the place the player is walking to is where it stops. */
-      const h = Wld.hospital;
-      if(h){
-        const hd = Math.hypot(b.x-h.x, b.z-h.z);
-        if(hd < F.townKeepOut){
-          const k = (F.townKeepOut - hd);
-          b.x += (b.x-h.x)/(hd||1)*k; b.z += (b.z-h.z)/(hd||1)*k;
-          if(b.state !== 'wander'){ b.state = 'wander'; b.stateT = 0; b.target = null; }
-        }
+         the place the player is walking to is where it stops -- and the
+         edge is the town's own footprint, not a circle round one
+         building in it. */
+      const depth = townDepth(b.x, b.z);
+      if(depth > 0 && Wld.town){
+        const T = Wld.town;
+        const hd = Math.hypot(b.x-T.x, b.z-T.z) || 1;
+        b.x += (b.x-T.x)/hd*depth; b.z += (b.z-T.z)/hd*depth;
+        if(b.state !== 'wander'){ b.state = 'wander'; b.stateT = 0; b.target = null; }
       }
 
       /* ---- put it on the ground and animate it ---- */
@@ -9113,7 +9600,7 @@ function carveStreet(S, maxGrade, maxCut, dryRun){
 function genTown(){
   const out = [];
   const hos = Wld.hospital;
-  if(!hos) { Wld.townBuildings = out; return; }
+  if(!hos) { Wld.townBuildings = out; Wld.town = null; return; }
   const rng = rngFor('town');
   const c = Math.cos(hos.yaw), s = Math.sin(hos.yaw);
   /* The hospital's own frame: +Z local is the way its doors face, which
@@ -9182,9 +9669,15 @@ function genTown(){
     if(Math.abs(w.x) > LIM || Math.abs(w.z) > LIM){ rej.offMap++; return false; }
     const style = kind === 'shed'
       ? { footprint:[3.6, 3.0], height:2.2, rooms:1, windows:0 }
-      : { footprint:[rng.range(7.2, 9.6), rng.range(6.0, 7.8)],
-          height:2.62, rooms: rng.chance(0.62) ? 2 : 1,
-          windows: rng.irange(1, 2) };
+      : { footprint:[rng.range(10.4, 13.2), rng.range(8.6, 10.4)],
+          height:2.72,
+          /* THREE ROOMS IS THE COMMON CASE, not the exception. A house
+             with one room and a bed in it is a hut; the town is meant
+             to read as somewhere people live. The third room is a small
+             one off the back -- a pantry or a wash room -- and the roll
+             decides whether this house has it. */
+          rooms: rng.chance(0.55) ? 3 : 2,
+          windows: rng.irange(2, 3) };
     const [phx, phz] = [style.footprint[0]*0.5 + PAD.margin,
                         style.footprint[1]*0.5 + PAD.margin];
     const g = padGround(w.x, w.z, phx, phz, yaw);
@@ -9200,14 +9693,17 @@ function genTown(){
        meant to sit in somebody's yard, so it only has to miss the
        building it belongs to. Applying the house spacing to sheds put
        every one of them inside the rule that placed it. */
-    const near = kind === 'shed' ? 5.5 : 11;
+    const near = kind === 'shed' ? 5.5 : 15;
     for(const o of out) if(Math.hypot(o.x-w.x, o.z-w.z) < near) return false;
     rej.tried++;
     const spec = {
       kind, id: kind + '-' + out.length, x: w.x, z: w.z, y: g.mean, yaw,
       style, decay: rng.range(0.05, 0.35),
       enterable: kind === 'house' && rng.chance(0.75),
-      lit: rng.chance(0.45),
+      /* Most houses in a town have a light on in the evening. At 0.45
+         a five-house town had two, which from the treeline read as an
+         abandoned village rather than a place people live. */
+      lit: kind === 'house' ? rng.chance(0.85) : rng.chance(0.3),
       clearR: Math.max(style.footprint[0], style.footprint[1])*0.5 + 5.5,
       searched:false, items:[], mesh:null, town:true,
     };
@@ -9254,6 +9750,34 @@ function genTown(){
   Wld.street = { x0:graded.x0, z0:graded.z0, x1:graded.x1, z1:graded.z1, width: 6.5 };
   Wld.stats.streetLength = Math.round(Math.hypot(graded.x1-graded.x0, graded.z1-graded.z0));
   Wld.townBuildings = out;
+  /* ---- WHERE THE TOWN ACTUALLY IS ----------------------------------
+     A circle round the hospital is not the town. This is the real
+     envelope: the centroid of the street and every building, and the
+     radius that reaches the far corner of the farthest one. Everything
+     that has to keep its distance from the town -- the creatures, the
+     director's scares -- measures against this, so the town can grow
+     without its quiet staying the same size. */
+  {
+    /* The BUILDINGS and the hospital, not the ends of the road. The
+       street is cut a long way past the last house so the route layer
+       has something to follow out of town, and measuring to its ends
+       made the town's radius the length of its road -- 106m for five
+       buildings, which pushed the creature keep-out out to 148m of
+       mostly empty forest. */
+    const pts = [[hos.x, hos.z]];
+    for(const b of out) pts.push([b.x, b.z]);
+    let cx = 0, cz = 0;
+    for(const p2 of pts){ cx += p2[0]; cz += p2[1]; }
+    cx /= pts.length; cz /= pts.length;
+    let rad = 0;
+    const corner = (b)=> b.style && b.style.footprint
+      ? Math.hypot(b.style.footprint[0], b.style.footprint[1])*0.5 : 0;
+    for(const b of out) rad = Math.max(rad, Math.hypot(b.x-cx, b.z-cz) + corner(b));
+    rad = Math.max(rad, Math.hypot(hos.x-cx, hos.z-cz) + HOSPITAL.D*0.5);
+    rad = Math.max(rad, 26);              // a town of one house is still a town
+    Wld.town = { x: cx, z: cz, r: rad };
+    Wld.stats.townRadius = Math.round(rad);
+  }
   recomputeSlope();
   Wld.stats.townBuildings = out.length;
   Wld.stats.townRejects = rej;
@@ -9328,37 +9852,122 @@ function buildHouse(spec){
   }
   addBox(g, 0.62, 2.1, 0.62, MAT.concrete, W/2-0.9, H*0.5+1.2, -D/2+0.9);
 
-  /* ---- the inside ---- */
+  /* ---- THE INSIDE, WHICH IS SOMEBODY'S HOUSE -----------------------
+     One room with a bed and a stove in it is a hut. This lays out a
+     plan: you come in the front door into the room the household
+     lives in -- stove, table, chairs, the wood by the fire -- and the
+     rooms people sleep in are behind it, off a cross wall, out of
+     sight of the door. The larger roll adds a small third room in a
+     back corner for stores.
+
+     Everything is placed from W and D rather than from constants, so
+     it lays out correctly at any footprint the plot roll produces, and
+     it is all deterministic: the same house is the same house every
+     time it is built, which is what keeps a fake identical to a real
+     one. */
   if(inside){
-    if(st.rooms > 1){
-      /* One partition, with an opening as wide as the front door. The
-         two pieces are placed from the ends inward so the gap is exact
-         whatever the house's width. */
-      const pz = -D*0.12;
-      const gapW = 1.85, side = (W - gapW)/2;
-      addBox(g, side, H, wall, MAT.timber, -(gapW/2 + side/2), H/2, pz);
-      addBox(g, side, H, wall, MAT.timber,  (gapW/2 + side/2), H/2, pz);
-      addBox(g, gapW, H-2.1, wall, MAT.timber, 0, 2.1 + (H-2.1)/2, pz);
+    const r = makeRNG(hashString(spec.id || 'house') ^ G.seed ^ 0x51ee);
+    const put = (w,h,d, mat, x,y,z)=> addBox(g, w,h,d, mat, x,y,z);
+    /* The cross wall, its doorway offset from the front door so you
+       cannot see the bed from the street. */
+    const crossZ = -D*0.06;
+    const dw = 1.0;                       // the doorway's half width
+    const doorAt = (r()<0.5 ? -1 : 1) * W*0.22;
+    {
+      const leftEnd = doorAt - dw, rightStart = doorAt + dw;
+      const lw = leftEnd + W/2, rw = W/2 - rightStart;
+      if(lw > 0.05) put(lw, H, wall, MAT.timber, -W/2 + lw/2, H/2, crossZ);
+      if(rw > 0.05) put(rw, H, wall, MAT.timber,  W/2 - rw/2, H/2, crossZ);
+      put(dw*2, H-2.1, wall, MAT.timber, doorAt, 2.1 + (H-2.1)/2, crossZ);
     }
-    // furniture, against the walls where furniture goes
-    const fx = W/2 - 0.75, fz = D/2 - 0.8;
-    addBox(g, 1.05, 0.52, 2.05, MAT.fabric, -fx + 0.2, 0.36, -fz + 0.3);   // bed
-    addBox(g, 1.15, 0.62, 2.15, MAT.timber, -fx + 0.2, 0.05, -fz + 0.3);   // its frame
-    const table = addBox(g, 1.35, 0.10, 0.85, MAT.timber, fx - 0.7, 0.78, -0.2);
-    for(const [ox, oz] of [[-0.55,-0.33],[0.55,-0.33],[-0.55,0.33],[0.55,0.33]])
-      addBox(g, 0.09, 0.74, 0.09, MAT.timber, fx - 0.7 + ox, 0.37, -0.2 + oz);
-    addBox(g, 0.42, 0.48, 0.42, MAT.timber, fx - 1.65, 0.36, -0.2);        // a chair
-    addBox(g, 0.42, 0.46, 0.06, MAT.timber, fx - 1.65, 0.70, -0.4);
-    addBox(g, 0.55, 1.55, 0.95, MAT.timber, -fx + 0.25, 0.9, fz - 1.4);    // dresser
-    addBox(g, 0.70, 0.90, 0.62, MAT.metal,   fx - 0.5, 0.45, fz - 0.9);    // stove
-    addBox(g, 0.26, 1.9, 0.26, MAT.metal,    fx - 0.5, 1.85, fz - 0.9);    // its flue
-    if(spec.lit){
-      const bulb = new THREE.PointLight(0xffd9a0, 1.35, 9.5, 2.0);
-      bulb.position.set(0, H-0.45, 0);
-      g.add(bulb);
-      const shade = addBox(g, 0.34, 0.16, 0.34, MAT.fabric, 0, H-0.34, 0);
-      shade.userData.noclip = true; shade.castShadow = false;
+    /* And the wall between the two back rooms, when there are two. */
+    const backDepth = (D/2 + crossZ);
+    const splitX = st.rooms >= 3 ? W*0.10 : null;
+    if(splitX !== null){
+      const bz = (crossZ - D/2)/2;
+      const bd = backDepth;
+      const gapZ = crossZ - bd*0.28, gw = 0.95;
+      const nearLen = (crossZ - (gapZ + gw));
+      if(nearLen > 0.05) put(wall, H, nearLen, MAT.timber, splitX, H/2, crossZ - nearLen/2);
+      const farLen = (gapZ - gw) - (-D/2);
+      if(farLen > 0.05) put(wall, H, farLen, MAT.timber, splitX, H/2, -D/2 + farLen/2);
+      put(wall, H-2.05, gw*2, MAT.timber, splitX, 2.05 + (H-2.05)/2, gapZ);
     }
+
+    // ---- the front room: what a household uses every day ----
+    const fx = W/2 - 0.55, fz = D/2 - 0.7;
+    const stoveX = (r()<0.5 ? -1 : 1) * (W/2 - 0.75);
+    put(0.78, 0.95, 0.68, MAT.metal,  stoveX, 0.47, fz - 1.1);        // stove
+    put(0.28, 2.0,  0.28, MAT.metal,  stoveX, 1.95, fz - 1.1);        // flue
+    put(0.85, 0.42, 0.55, MAT.timber, stoveX, 0.21, fz - 2.2);        // wood box
+    for(let i=0;i<4;i++)                                              // split logs in it
+      put(0.60, 0.11, 0.11, MAT.timber, stoveX, 0.46 + i*0.03,
+          fz - 2.2 + (i-1.5)*0.13);
+    // the table, in the middle of the room where a table goes
+    const tz = (D/2 + crossZ)/2 + crossZ*0.2 + 0.4;
+    const tx = -stoveX*0.35;
+    put(1.55, 0.10, 0.95, MAT.timber, tx, 0.80, tz);
+    for(const [ox, oz] of [[-0.66,-0.38],[0.66,-0.38],[-0.66,0.38],[0.66,0.38]])
+      put(0.09, 0.76, 0.09, MAT.timber, tx + ox, 0.38, tz + oz);
+    for(const [cx2, cz2] of [[-1.15, 0], [1.15, 0], [0, 0.85]]){       // chairs
+      put(0.44, 0.44, 0.44, MAT.timber, tx + cx2, 0.34, tz + cz2);
+      put(0.44, 0.48, 0.07, MAT.timber, tx + cx2, 0.74,
+          tz + cz2 + (cz2 > 0 ? 0.20 : 0) + (cz2 ? 0 : (cx2 < 0 ? -0.20 : 0.20)));
+    }
+    put(0.50, 1.80, 1.05, MAT.timber, -stoveX*0.92, 1.0, fz - 0.7);    // dresser
+    for(let i=0;i<3;i++)                                               // its plates
+      put(0.18, 0.03, 0.18, MAT.fabric, -stoveX*0.92, 0.62 + i*0.44, fz - 0.7);
+    put(0.34, 0.60, 0.34, MAT.metal, -stoveX*0.55, 0.30, fz - 0.3);    // a pail
+    // a rug, because a bare floor reads as a set
+    const rug = put(Math.min(2.6, W*0.42), 0.02, Math.min(1.8, D*0.26),
+                    MAT.fabric, tx, 0.25, tz);
+    rug.userData.noclip = true; rug.castShadow = false;
+
+    // ---- the back: where they sleep ----
+    const beds = [];
+    const bedIn = (cx2)=>{
+      const bz2 = -D/2 + 1.35;
+      put(1.15, 0.50, 2.10, MAT.fabric, cx2, 0.62, bz2);               // mattress
+      put(1.25, 0.60, 2.20, MAT.timber, cx2, 0.30, bz2);               // frame
+      put(1.25, 0.55, 0.12, MAT.timber, cx2, 0.85, bz2 - 1.04);        // headboard
+      put(0.80, 0.10, 0.55, MAT.fabric, cx2, 0.88, bz2 - 0.70);        // pillow
+      put(0.46, 0.58, 0.40, MAT.timber, cx2 + 0.95, 0.29, bz2 - 0.75); // night stand
+      beds.push({ x: cx2, z: bz2 });
+    };
+    if(splitX !== null){
+      bedIn((-W/2 + splitX)/2);
+      // the small back room: stores rather than a second bedroom
+      const sx2 = (splitX + W/2)/2;
+      put(0.55, 1.95, 0.75, MAT.timber, sx2, 0.98, -D/2 + 0.85);       // shelving
+      for(let i=0;i<4;i++)
+        put(0.40, 0.05, 0.60, MAT.timber, sx2, 0.42 + i*0.42, -D/2 + 0.85);
+      put(0.72, 0.80, 0.58, MAT.timber, sx2, 0.40, crossZ - 1.0);      // a chest
+      put(0.34, 0.46, 0.34, MAT.metal,  sx2 - 0.55, 0.23, crossZ - 1.9);
+    } else {
+      bedIn(-W*0.22); bedIn(W*0.22);
+    }
+    g.userData.beds = beds;
+
+    /* ---- THE LIGHT, AND WHAT IT COSTS ------------------------------
+       Every lit house used to hold a live PointLight for the whole run.
+       With rooms this size that is two or three of them each, and a
+       town of nine houses would be twenty-odd lights in one shadowless
+       forward pass. So the FIXTURE is always there and always visible
+       -- an emissive pane that reads at distance for nothing -- and the
+       LIGHT is handed out at runtime to the few houses nearest the
+       player. See Town.lights(). */
+      const lamps = [];
+      const lampAt = (x, y, z)=>{
+        const shade = addBox(g, 0.36, 0.16, 0.36, MAT.fabric, x, y + 0.11, z);
+        shade.userData.noclip = true; shade.castShadow = false;
+        const pane = addBox(g, 0.26, 0.05, 0.26, MAT.lamp, x, y, z);
+        pane.userData.noclip = true; pane.castShadow = false;
+        lamps.push({ x, y, z, pane });
+      };
+      lampAt(tx, H - 0.40, tz);
+      if(beds.length) lampAt(beds[0].x, H - 0.40, beds[0].z + 0.6);
+      g.userData.lamps = lamps;
+      g.userData.lit = !!spec.lit;
   } else {
     // boarded up: the opening is filled, and there is nothing inside
     addBox(g, doorW, 2.15, 0.09, MAT.timber, 0, 1.07, D/2);
@@ -10314,8 +10923,38 @@ function updatePlayer(dt){
   const camX = p.pos.x + bobX*Math.cos(p.yaw), camZ = p.pos.z - bobX*Math.sin(p.yaw);
   const camFloor = heightAt(camX, camZ) + 0.22;
   camera.position.set(camX, Math.max(eyeY + bobY, camFloor), camZ);
-  camera.rotation.set(p.pitch, p.yaw,
-    Math.sin(p.bob*0.5)*0.008*p.bobAmt + Echo.roll());
+  /* ---- THE HEAD THAT ANSWERS LATE ---------------------------------
+     At the late stages the camera follows the player's look input a
+     few frames behind and then overshoots it slightly, so turning to
+     look at something feels like turning a heavy head rather than
+     moving a cursor.
+
+     PRESENTATION ONLY. p.yaw and p.pitch are exactly where the mouse
+     put them -- every aim test, every facingScore, every interaction
+     and everything the creatures ask about where the player is looking
+     reads those, not these. This is the camera lagging behind the
+     player, not the player lagging behind themselves. */
+  {
+    const cm = clamp(CFG.COMFORT.level, 0, 1);
+    const clear = 1 - (Mind.clarity || 0);
+    const lag = Mind.floorOf('lookLag') * cm * clear;
+    const over = Mind.floorOf('lookOvershoot') * cm * clear;
+    if(lag > 0.001){
+      const kf = clamp(dt/Math.max(0.001, lag), 0, 1);
+      p.camYaw = p.camYaw == null ? p.yaw : p.camYaw;
+      p.camPitch = p.camPitch == null ? p.pitch : p.camPitch;
+      /* Shortest way round, so crossing the -pi/pi seam does not send
+         the camera the long way about. */
+      const dy = Math.atan2(Math.sin(p.yaw - p.camYaw), Math.cos(p.yaw - p.camYaw));
+      p.camVel = (p.camVel || 0)*(1 - kf) + dy*kf*(1 + over);
+      p.camYaw += p.camVel*kf;
+      p.camPitch += (p.pitch - p.camPitch)*kf;
+    } else {
+      p.camYaw = p.yaw; p.camPitch = p.pitch; p.camVel = 0;
+    }
+    camera.rotation.set(p.camPitch, p.camYaw,
+      Math.sin(p.bob*0.5)*0.008*p.bobAmt + Echo.roll());
+  }
 
   Veg.update(p.pos.x, p.pos.z);
   Mind.noteMovement(dt, wants, p.sprinting, heading);
@@ -10916,12 +11555,16 @@ function pickTarget(){
   let best = null, bestScore = -1;
   const consider = (t, score)=>{ if(score > bestScore){ bestScore = score; best = t; } };
 
-  // --- the hospital, which is the only thing that ends the run well ---
+  /* --- the desk. It does not end the run; it admits you. ---------
+     The check is on the REAL hospital's own desk object, not on
+     "a hospital" or "a desk": FakeHospital never has a deskWorld, so
+     no phantom can put the player in this state however convincing it
+     is from the outside. */
   const h = Wld.hospital;
-  if(h.deskWorld){
+  if(h.deskWorld && !G.admitted){
     const s = facingScore(h.deskWorld.x, h.deskWorld.z);
     if(s > 0) consider({ kind:'hospital', label:'Hold E \u2014 ring the bell', hold:1.8,
-                         act:()=>UI.end(true, null) }, s + 3);
+                         act:()=>admit(h) }, s + 3);
   }
   // --- water, from wherever the bank lets you reach it ---
   {
@@ -11153,6 +11796,7 @@ const Mind = {
 
   reset(){
     this.progress = 0; this.stage = 0; this.intensity = 0; this.agitation = 0;
+    this.clarity = 0; this.clearUntil = 0; this.lastClear = -1e9;
     this.spike = 0; this.spikeUntil = 0; this.pauseUntil = -1; this.pauseRollAt = 0;
     this.compassReversed = false; this.lastLeak = -99;
     for(const k in this.agit) this.agit[k] = 0;
@@ -11379,7 +12023,16 @@ const Mind = {
         this.pauseUntil = G.t + r.range(M.pauseSeconds[0], M.pauseSeconds[1])*scale;
       }
     }
-    const paused = G.t < this.pauseUntil;
+    /* ---- ADMITTED ----------------------------------------------
+       Reaching the desk no longer ends the run; it stops the clock.
+       While G.admitted the progress does not climb, and if the player
+       walked in during the collapse stretch the collapse unwinds
+       rather than killing them. Everything else about the mind keeps
+       running -- the stage they arrived at is the stage they are at,
+       and it still looks and sounds like it -- because being seen by
+       somebody is not the same as being well. */
+    this.tickClear(dt);
+    const paused = G.t < this.pauseUntil || G.admitted;
     if(!paused) this.progress = clamp(this.progress + M.baseRate*mul*(dt/60), 0, 1);
     this.stage = this.stageOf(this.progress);
 
@@ -11416,7 +12069,7 @@ const Mind = {
        a hospital. Then it ends. Death from the mind is the ONLY death
        a hallucination contributes to, and even here it is the clock
        running out rather than anything in the world touching them. */
-    if(this.progress >= 0.999){
+    if(this.progress >= 0.999 && !G.admitted){
       this.collapse = (this.collapse||0) + dt;
       G.stress = 1;
       if(this.collapse > 90) Survival.die('collapse');
@@ -11431,22 +12084,96 @@ const Mind = {
   fogWobble(){
     return 1 + Math.sin(G.t*0.21)*0.16*this.intensity + Math.sin(G.t*0.07+1.3)*0.10*this.intensity;
   },
+  /* ---- THE FLOOR UNDER THIS STAGE ---------------------------------
+     Reads CFG.DEGRADE for whatever stage the mind is at (or the stage
+     the dev panel has pinned), interpolating between the two nearest
+     entries by how far through the stage the progress is, so crossing a
+     boundary is a slope rather than a step. */
+  floorOf(key){
+    const tbl = CFG.DEGRADE[key];
+    if(!tbl) return 0;
+    const forced = CFG.DEBUG.forceStage;
+    const st = forced >= 0 ? forced : this.stage;
+    const lo = clamp(Math.floor(st), 0, tbl.length-1);
+    const hi = clamp(lo+1, 0, tbl.length-1);
+    /* How far through this stage we are, so the degradation climbs
+       within a stage rather than only at its edges. */
+    const cuts = CFG.MIND.stageAt || null;
+    let f = 0;
+    if(forced < 0 && cuts && cuts[lo] != null){
+      const a = cuts[lo], b = cuts[hi] != null ? cuts[hi] : 1;
+      f = b > a ? clamp((this.progress - a)/(b - a), 0, 1) : 0;
+    }
+    return lerp(tbl[lo], tbl[hi], f);
+  },
+
+  /* ---- THE CLEAR MOMENT -------------------------------------------
+     `clarity` runs 0 (fully degraded, the normal state) to 1 (nothing
+     at all). It is chosen on its own seeded timer and is deliberately
+     NOT the director's business: a moment that only ever came before a
+     scare would be a warning, and the player would learn it. */
+  tickClear(dt){
+    const C = CFG.CLEAR;
+    this.clarity = this.clarity || 0;
+    this.clearUntil = this.clearUntil || 0;
+    this.lastClear = this.lastClear == null ? -1e9 : this.lastClear;
+    if(CFG.DEBUG.forceClear){ this.clarity = 1; return; }
+    const inIt = G.t < this.clearUntil;
+    if(!inIt && this.stage >= C.fromStage
+       && G.t - this.lastClear > C.minGap
+       && G.t - (Director.state.lastAt || -1e9) > C.gapAfterEvent){
+      const per = C.chancePerMin/60;
+      if(rngFor('clearmoment', Math.floor(G.t*5)).chance(per*dt)){
+        const r = rngFor('clearlen', Math.floor(G.t));
+        this.clearUntil = G.t + r.range(C.hold[0], C.hold[1]);
+        this.lastClear = G.t;
+      }
+    }
+    /* In fast, out slow: the snap is what makes it land, and the slow
+       return is what makes it worse when it goes. */
+    const want = G.t < this.clearUntil ? 1 : 0;
+    const rate = want > this.clarity ? 1/C.fadeIn : 1/C.fadeOut;
+    this.clarity = clamp(this.clarity + (want - this.clarity > 0 ? 1 : -1)*rate*dt,
+                         0, 1);
+    if(Math.abs(want - this.clarity) < 0.01) this.clarity = want;
+  },
+
   applyPost(){
     const I = this.intensity, A = this.agitation;
     const u = postPass.uniforms;
-    u.uStress.value = G.stress;
-    u.uGrain.value = 0.045 + I*0.055;
-    u.uVignette.value = 0.52 + I*0.22;
-    u.uAberr.value = Math.pow(clamp(I*0.8 + A*0.5, 0, 1), 1.8) * 0.9;
-    u.uWarp.value = Math.pow(I, 2.0) * (0.35 + A*0.4);
-    u.uDesat.value = clamp(I*0.16 + (Survival.sick>0 ? 0.10 : 0) + Echo.desat(), 0, 0.85);
+    /* Two multipliers sit over everything below. `clear` is the clear
+       moment, which takes the whole stack to nothing for a few seconds
+       and is the same number the audio mixer uses. `comfort` is the
+       player's own setting, and it scales the distortions and nothing
+       else -- no event, no phantom and no sound is removed by it. */
+    const clear = 1 - (this.clarity || 0);
+    const cm = clamp(CFG.COMFORT.level, 0, 1);
+    const k = clear * cm;
+
+    /* The breath: slow, irregular, and at a rate that is nothing to do
+       with the stamina pulse, so the two never lock into one rhythm. */
+    const br = this.floorOf('breath')
+      * (0.5 + 0.5*Math.sin(G.t*0.41 + Math.sin(G.t*0.17)*1.7));
+
+    u.uStress.value = G.stress * clear;
+    u.uGrain.value = (0.045 + I*0.055 + this.floorOf('grain')*k);
+    u.uVignette.value = 0.52 + (I*0.22 + this.floorOf('vignette')*k + br*0.5*cm);
+    u.uAberr.value = (Math.pow(clamp(I*0.8 + A*0.5, 0, 1), 1.8) * 0.9
+                      + this.floorOf('aberr')*1.6) * k;
+    u.uWarp.value = (Math.pow(I, 2.0) * (0.35 + A*0.4)
+                     + this.floorOf('warp')*1.4) * k;
+    u.uDesat.value = clamp((I*0.16 + (Survival.sick>0 ? 0.10 : 0) + Echo.desat()
+                            + this.floorOf('desat')) * clear, 0, 0.88);
+    u.uBlur.value = this.floorOf('blur') * (0.75 + I*0.5) * k;
+    u.uSmear.value = this.floorOf('smear') * (0.6 + A*0.7) * k;
     u.uPulse.value = clamp((1 - Player.stamina/CFG.PLAYER.staminaMax)*0.7 + I*0.3, 0, 1)
-                     * (0.5 + 0.5*Math.sin(G.t*2.6));
-    u.uExposure.value = 1.06 - I*0.06;
+                     * (0.5 + 0.5*Math.sin(G.t*2.6)) * cm;
+    u.uExposure.value = 1.06 - I*0.06 - br*0.10*cm;
     // a colour shift that wanders: never the same direction twice
     const tw = vnoise2(G.t*0.013, 3.3, (G.seed^0xAA)>>>0);
     const tb = vnoise2(G.t*0.011, 8.8, (G.seed^0xBB)>>>0);
-    u.uTint.value.set(1 + (tw-0.5)*0.12*I, 1 + (tb-0.5)*0.05*I, 1 - (tw-0.5)*0.10*I);
+    const tk = (I + this.floorOf('desat')) * k;
+    u.uTint.value.set(1 + (tw-0.5)*0.12*tk, 1 + (tb-0.5)*0.05*tk, 1 - (tw-0.5)*0.10*tk);
     u.uFlash.value = Weather.flash;
     u.uTime.value = G.t;
   },
@@ -11474,7 +12201,7 @@ const Mind = {
    ===================================================================== */
 const Audio = (()=>{
   let ctx=null, master=null, verb=null, verbSend=null, verbTone=null, ready=false;
-  let compressor=null;
+  let compressor=null, mindLP=null, mindGain=null, tinnitus=null, tinGain=null;
   const NOISE = { white:null, brown:null, pink:null };
   const NOISE_SECONDS = 6;
   const BANK = {};                 // category -> [recipe, ...]
@@ -12114,7 +12841,29 @@ const Audio = (()=>{
     compressor = ctx.createDynamicsCompressor();
     compressor.threshold.value = -14; compressor.knee.value = 22;
     compressor.ratio.value = 4; compressor.attack.value = 0.006; compressor.release.value = 0.24;
-    master.connect(compressor); compressor.connect(ctx.destination);
+    /* ---- THE EAR THAT IS ALSO FAILING ------------------------------
+       Everything goes through a low-pass and a final gain before the
+       compressor. The filter closes as the mind goes, so the world
+       stops having any top end -- which is what "muffled" actually is,
+       and it works on every sound in the game at once without touching
+       a single recipe. The gain is what the clear moment uses to reach
+       TRUE silence rather than a quiet mix. */
+    mindLP = ctx.createBiquadFilter();
+    mindLP.type = 'lowpass'; mindLP.frequency.value = 20000; mindLP.Q.value = 0.4;
+    mindGain = ctx.createGain(); mindGain.gain.value = 1;
+    master.connect(mindLP); mindLP.connect(mindGain);
+    mindGain.connect(compressor); compressor.connect(ctx.destination);
+
+    /* A tone that is not in the world. It sits just above the speech
+       band, always running, and is inaudible until the late stages
+       bring its gain up -- so it arrives as something the player's ears
+       are doing rather than as a sound effect. */
+    tinnitus = ctx.createOscillator();
+    tinnitus.type = 'sine';
+    tinnitus.frequency.value = 3550 + (G.seed % 400);
+    tinGain = ctx.createGain(); tinGain.gain.value = 0;
+    tinnitus.connect(tinGain); tinGain.connect(compressor);
+    tinnitus.start();
 
     NOISE.white = noiseBuffer('white');
     NOISE.brown = noiseBuffer('brown');
@@ -12136,6 +12885,22 @@ const Audio = (()=>{
   }
 
   function resume(){ if(ctx && ctx.state === 'suspended') ctx.resume(); }
+
+  /* ---- WHAT THE MIND DOES TO EVERYTHING YOU HEAR -------------------
+     Called every frame with the three numbers the mind hands out. It
+     touches the MASTER chain only -- no recipe, no category and no
+     individual sound is treated differently, so audio can never become
+     a way of telling a real sound from a false one. */
+  function setMindAudio(muffle, tin, silence){
+    if(!ready || !mindLP) return;
+    const now = ctx.currentTime;
+    /* 20kHz down to about 700Hz, on a curve rather than linearly, so
+       the last part of the slide is where it really bites. */
+    const f = 20000 * Math.pow(0.035, clamp(muffle, 0, 1));
+    mindLP.frequency.setTargetAtTime(Math.max(600, f), now, 0.25);
+    mindGain.gain.setTargetAtTime(clamp(1 - silence, 0, 1), now, 0.12);
+    tinGain.gain.setTargetAtTime(clamp(tin, 0, 1)*0.045*(1 - silence), now, 0.5);
+  }
 
   function updateListener(){
     if(!ready) return;
@@ -12160,7 +12925,7 @@ const Audio = (()=>{
   }
 
   return {
-    init, resume, play, thunder, updateListener, setBed,
+    init, resume, play, thunder, updateListener, setBed, setMindAudio,
     get ready(){ return ready; },
     get ctx(){ return ctx; },
     get beds(){ return beds; },
@@ -12548,6 +13313,7 @@ const Director = (()=>{
     log: [],
     firstDone: false,
     sinceEvent: 0,
+    lastAt: -1e9,
     forced: false,
   };
   let EVENTS = [];
@@ -12655,6 +13421,7 @@ const Director = (()=>{
     const entry = {
       t: Math.round(G.t), id: ev.id, stage: ev.stage, drawStage,
       real: !!ev.real, flavour: ev.flavour, ok, announced,
+      scare: !!ev.scare,
       I: +Mind.intensity.toFixed(2),
     };
     state.log.push(entry);
@@ -12664,6 +13431,9 @@ const Director = (()=>{
     state.fired++;
     state.firstDone = true;
     state.sinceEvent = 0;
+    /* When the last thing happened, so a clear moment can be forbidden
+       from arriving right after one -- see CFG.CLEAR.gapAfterEvent. */
+    state.lastAt = G.t;
     const q = CFG.DIRECT.quietByStage[Mind.stage] || CFG.DIRECT.quietByStage[0];
     const r = rngFor('quiet', Math.floor(G.t*13));
     state.quiet = r.range(q[0], q[1]) * (ev.weightQuiet || 1);
@@ -12673,11 +13443,23 @@ const Director = (()=>{
   function tick(dt){
     if(G.over || !G.started) return;
     state.sinceEvent += dt;
-    state.acc += dt;
+    /* ---- THE TOWN IS QUIETER, BUT IT IS NOT SAFE ------------------
+       Inside the town's own footprint the director's clock runs slow,
+       so the street is not the same barrage as the forest -- but it
+       does not stop, because a place where nothing can happen is a
+       place the player can read as real, and that would be a tell.
+       The damping is by the same townDepth() the creatures use, so
+       growing the town grows the calm with it. */
+    const inTown = typeof townDepth === 'function'
+      ? townDepth(Player.pos.x, Player.pos.z) : 0;
+    const slow = inTown > 0 ? CFG.DIRECT.townCalm : 1;
+    state.acc += dt*slow;
     let guard = 0;
     while(state.acc >= CFG.DIRECT.tick && guard++ < 6){
       state.acc -= CFG.DIRECT.tick;
-      rollScare();
+      const skipScare = inTown > 0 &&
+        rngFor('townScare', Math.floor(G.t*7)).chance(CFG.DIRECT.townScareDrop);
+      if(!skipScare) rollScare();
       roll();
     }
     /* THE RISING URGE. A per-second hazard rather than a deadline: the
@@ -13462,6 +14244,32 @@ const UI = {
   },
   pauseNote(on, retry){
     this.el.pause.classList.toggle('on', !!on);
+    /* Bound once, the first time the note is shown. The slider lives in
+       the pause overlay, so it is only ever touched while the game is
+       not running and cannot be dragged by accident mid-run. */
+    if(!this._comfortBound){
+      const c = document.getElementById('comfort');
+      const v = document.getElementById('comfortval');
+      if(c && v){
+        this._comfortBound = true;
+        c.value = String(CFG.COMFORT.level);
+        v.textContent = Math.round(CFG.COMFORT.level*100) + '%';
+        c.addEventListener('input', ()=>{
+          CFG.COMFORT.level = clamp(parseFloat(c.value), 0, 1);
+          v.textContent = Math.round(CFG.COMFORT.level*100) + '%';
+        });
+        // and it must not steal the click that resumes the game
+        for(const ev of ['pointerdown','click'])
+          document.getElementById('comfortrow')
+            .addEventListener(ev, e=> e.stopPropagation());
+      }
+    }
+    const cc = document.getElementById('comfort');
+    const cv = document.getElementById('comfortval');
+    if(on && cc && cv){
+      cc.value = String(CFG.COMFORT.level);
+      cv.textContent = Math.round(CFG.COMFORT.level*100) + '%';
+    }
     if(on) this.el.pause.querySelector('span').textContent =
       retry ? 'the browser is still holding the mouse \u2014 click again'
             : 'click to resume';
@@ -14104,12 +14912,37 @@ const DEV = (()=>{
     const sAgit = slider(s1, 'agitation', 0, 1, 0.01,
       ()=> Mind.forceA != null ? Mind.forceA : Mind.agitation,
       v=>{ Mind.forceA = v; Mind.agitation = v; });
+    /* ---- THE LATE-STAGE DEGRADATION, FORCED ------------------------
+       `pin degrade` overrides the stage the DEGRADE table is read at
+       without touching Mind.progress, so the effects can be looked at
+       at full strength without waiting fifty minutes or moving the
+       player's actual stage. -1 is off. */
+    const sPin = slider(s1, 'pin degrade to stage (-1 off)', -1, 4, 1,
+      ()=> CFG.DEBUG.forceStage,
+      v=>{ CFG.DEBUG.forceStage = v; });
+    const sComfort = slider(s1, 'comfort (1 = full effects)', 0, 1, 0.05,
+      ()=> CFG.COMFORT.level,
+      v=>{ CFG.COMFORT.level = v; });
     const g1 = el('div','grid'); s1.appendChild(g1);
-    button(g1, 'clear forced', ()=>{ Mind.forceI = null; Mind.forceA = null; });
+    button(g1, 'clear forced', ()=>{ Mind.forceI = null; Mind.forceA = null;
+                                     CFG.DEBUG.forceStage = -1;
+                                     CFG.DEBUG.forceClear = false; });
     button(g1, 'freeze mind', ()=>{ CFG.DEBUG.freezeMind = !CFG.DEBUG.freezeMind; });
     button(g1, 'spike now', ()=> Mind.dose(0.5));
     button(g1, 'reverse compass', ()=>{ Mind.compassReversed = true; Mind.reverseUntil = G.t+120; });
-    D._sync = ()=>{ sStage.sync(); sInt.sync(); sAgit.sync(); };
+    /* A clear moment on demand, both ways: one that runs its natural
+       length and lets go, and a latch for looking at the clear state. */
+    button(g1, 'clear moment now', ()=>{
+      Mind.clearUntil = G.t + CFG.CLEAR.hold[0];
+      Mind.lastClear = G.t;
+    });
+    button(g1, 'hold clear on/off', ()=>{
+      CFG.DEBUG.forceClear = !CFG.DEBUG.forceClear;
+      if(!CFG.DEBUG.forceClear) Mind.clearUntil = 0;
+    });
+    button(g1, 'admit me', ()=> admit(Wld.hospital));
+    D._sync = ()=>{ sStage.sync(); sInt.sync(); sAgit.sync();
+                    sPin.sync(); sComfort.sync(); };
 
     /* ---- the things that are actually there ----
        Everything here exists so that "is this one real" can be answered
@@ -14611,6 +15444,19 @@ const DEV = (()=>{
       + `  ${Object.entries(M.agit).map(([k,v])=>k.slice(0,5)+':'+v.toFixed(2)).join(' ')}\n`
       + `  yawRate ${M.yawRate.toFixed(2)} drift ${Player.drift.toFixed(2)} turned ${(Player.driftTurned*57.3||0).toFixed(1)}deg\n`
       + `  leak ${G.t-M.lastLeak < 25 ? 'to '+M.leakStage : '-'}   compass ${M.compassReversed?'REVERSED':'ok'}\n`
+      + `DEGRADE    ` + (CFG.DEBUG.forceStage >= 0 ? `[pinned ${CFG.DEBUG.forceStage}] ` : '')
+        + `blur ${M.floorOf('blur').toFixed(2)} desat ${M.floorOf('desat').toFixed(2)} `
+        + `muffle ${M.floorOf('muffle').toFixed(2)} lag ${M.floorOf('lookLag').toFixed(2)}\n`
+      + `CLARITY    ${(M.clarity||0).toFixed(2)}`
+        + `${CFG.DEBUG.forceClear ? ' [HELD]' : (G.t < (M.clearUntil||0) ? ' [CLEAR]' : '')}`
+        + `   comfort ${CFG.COMFORT.level.toFixed(2)}\n`
+      + `ADMITTED   ${G.admitted ? 'yes, at '+Math.floor(G.admittedAt/60)+'m'
+                                   +' (stage '+G.admittedStage
+                                   +(G.admittedCollapsing?', mid-collapse':'')+')' : 'no'}\n`
+      + `TOWN       ${Wld.town ? 'r '+Math.round(Wld.town.r)+'m  keep-out '
+          + Math.round(Wld.town.r + CFG.FAUNA.townMargin) + 'm  you are '
+          + (townDepth(Player.pos.x, Player.pos.z) > 0 ? 'INSIDE it' : 'outside it') : 'none'}`
+        + `   lights ${Wld.stats.liveLights||0}  staff ${Wld.stats.staff||0}\n`
       + `\n`
       + `thirst ${S.thirst.toFixed(0).padStart(3)}  hunger ${S.hunger.toFixed(0).padStart(3)}  cold ${S.cold.toFixed(0).padStart(3)}  sick ${S.sick.toFixed(0)}\n`
       + `body   air ${S.airC.toFixed(1)}C  felt ${S.feltC.toFixed(1)}C  wet ${S.wet.toFixed(2)}  `
@@ -14714,6 +15560,60 @@ const DEV = (()=>{
          in water, worst 6.73m) and passes 12 of 12 once fixed
        it costs nothing: generation 505ms median with it, 515ms without
 
+     THE TOWN  (seed 42, and 12 seeds for the plot counts)
+       houses are 10.4-12.7m by 9.0-10.3m with 2 or 3 rooms, 1-2 beds
+         and 2 lamp fixtures each
+       the bigger footprint cost no houses once the graded verge was
+         widened to reach past their back walls: median 4 houses per
+         town before and after, min 1, max 5 over 12 seeds
+       the day, standing in the town and stepping 40 simulated seconds
+         at each hour (8 villagers, 5 staff):
+           09:00  out       8 outside, 0 asleep, 5 of 5 houses lit
+           19:00  out       7 outside, 0 asleep, 5 of 5 lit
+           21:00  homeward  0 outside, 3 walking home, 5 asleep, 4 lit
+           22:30  homeward  0 outside, 1 walking home, 7 asleep, 1 lit
+           02:00  abed      0 outside, 8 asleep, 0 lit
+           05:00  abed      0 outside, 8 asleep, 0 lit
+       live PointLights follow the lit houses and the budget: 5 at
+         09:00, 4 at 21:00, 1 at 22:30, 0 through the night
+       all 5 staff are inside the hospital (1-10m from its centre)
+       the creature keep-out is the town's own footprint now: radius 69m
+         plus a 42m margin on seed 42, against a farthest building at
+         86m from the hospital and an old circle of 95m
+
+     THE LATE STAGES  (intensity pinned at 0.5, agitation 0.2 -- this is
+     the QUIET screen between events, which is where stage 4 used to
+     look like stage 0)
+       BEFORE: every stage produced an identical screen --
+         blur 0.000  aberr 0.258  warp 0.107  desat 0.080  vig 0.630
+         at stage 0 AND at stage 4
+       AFTER:
+         stage 0  blur 0.000  aberr 0.258  warp 0.107  desat 0.080
+         stage 3  blur 0.340  aberr 0.898  warp 0.471  desat 0.340
+                  smear 0.118  muffle 0.42  look lag 0.060s
+         stage 4  blur 0.620  aberr 1.410  warp 0.779  desat 0.520
+                  smear 0.252  muffle 0.72  look lag 0.120s
+       a clear moment takes blur, smear, aberration, warp and
+         desaturation to exactly 0 and the vignette and grain back to
+         their base, with the master gain at 0
+       comfort at 0 takes blur, smear, aberration and warp to 0 while
+         the director keeps firing events
+       THE ONE RULE HOLDS THROUGH IT: 2 phantoms present, 2 visible,
+         before a clear moment, during it at clarity 1.00, and after it
+       the vegetation refill cost 2.3ms before the bilinear water test,
+         148.2ms with it applied everywhere, and 8.5ms once it was
+         gated on a one-cell dilation of the wet mask -- the bank is
+         the only place the cheap answer can be wrong
+       simulation 0.243ms/frame, 0.196ms in town
+       NOT ESTABLISHED: whether a clear moment predicts a scare. Over 90
+         simulated minutes there were 3 clear moments and only 1 scare,
+         which is far too little to measure a correlation with. The
+         mechanism is built so it cannot (a clear moment is drawn on its
+         own seeded timer, with an enforced 25s gap after anything the
+         director fired), and the 1 scare did not fall within 20s of a
+         clear moment, but that is an absence of evidence and not a
+         result.
+
      RENDERING  (one seed, at the start position)
        566,492 triangles in 21 draw calls
        worldgen 441ms, materials 786ms, ground bake 1174ms
@@ -14805,7 +15705,13 @@ const DEV = (()=>{
        0 phantoms present in Wld.structures / water / berries / items
 
      ENDINGS
-       reaching the real hospital wins
+       reaching the real hospital ADMITS you rather than ending the run:
+         the mind climbed 0.0181 of its progress per minute before the
+         desk and 0.0000 over the two minutes after it, the run did not
+         end, and a collapse that had been running for 20 seconds went
+         to 0 and the player lived
+       a phantom hospital cannot do it: FakeHospital has no deskWorld,
+         and admit() called with a lookalike object was refused
        a fall, dehydration and the stage-4 collapse each end the run
          with the right cause
 
@@ -15053,12 +15959,45 @@ function updateFires(dt){
 
 /* Arriving is being INSIDE, at the desk. Standing at the doors is being
    at the doors, which is a different thing and one the player has
-   earned the right to do slowly. */
+   earned the right to do slowly.
+
+   NOTHING IN THIS FILE ENDS THE RUN WELL ANY MORE. UI.end(true, ...) is
+   no longer called from anywhere: the only ending left is dying, and
+   getting to the desk is admit(), which is a state the run continues
+   in. Anything built on top of reaching the hospital keys off
+   G.admitted. */
 function checkArrival(){
   const h = Wld.hospital;
-  if(!h.deskWorld) return;
+  if(!h.deskWorld || G.admitted) return;
   const d = Math.hypot(Player.pos.x-h.deskWorld.x, Player.pos.z-h.deskWorld.z);
-  if(d < 2.4) UI.end(true, null);
+  if(d < 2.4) admit(h);
+}
+
+/* ---------------------------------------------------------------------
+   BEING ADMITTED
+
+   The run used to end here. It does not any more: getting to the desk
+   is the point at which the thing that is killing you stops getting
+   worse, and what happens after it is content this file does not have
+   yet. So this is a named state rather than an ending, and everything
+   later can key off it.
+
+   ONLY THE REAL HOSPITAL CAN DO THIS. The argument has to be the world's
+   own Wld.hospital, with its own deskWorld; FakeHospital builds a shell
+   with no desk at all, and nothing in ===== EVENTS ===== calls this. A
+   player who walks into a phantom hospital and stands where the desk
+   would be gets nothing, which is the correct and cruel answer.
+   ------------------------------------------------------------------- */
+function admit(h){
+  if(G.admitted) return;
+  if(!h || h !== Wld.hospital || !h.deskWorld) return;
+  G.admitted = true;
+  G.admittedAt = G.t;
+  G.admittedStage = Mind.stage;
+  G.admittedCollapsing = (Mind.collapse || 0) > 0;
+  Mind.collapse = 0;
+  UI.say('Somebody takes your arm. You are inside, and you are expected.', 6);
+  if(typeof Audio !== 'undefined') Audio.play('doorMove', { gain: 0.5 });
 }
 
 /* ONE SIMULATION STEP, separated from the frame that draws it.
@@ -15089,6 +16028,16 @@ function stepWorld(dt){
   FakeHospital.update(dt);
   Ambience.update(dt);
   Audio.updateListener();
+  /* The mind's hand on the master bus. Silence is the clear moment
+     going to true zero -- not a duck, not a fade to a quiet mix, but
+     the world actually stopping, which is the whole reason it lands. */
+  {
+    const cm = clamp(CFG.COMFORT.level, 0, 1);
+    const clear = Mind.clarity || 0;
+    Audio.setMindAudio(Mind.floorOf('muffle') * (1 - clear),
+                       Mind.floorOf('tinnitus') * (1 - clear) * cm,
+                       clear);
+  }
   pickTarget();
   checkArrival();
   if(MAT.water) MAT.water.uniforms.uTime.value = G.t;
@@ -15205,6 +16154,9 @@ async function startRun(seedInput){
   G.started = true;
   G.paused = false;
   G.t = 0;
+  G.over = false; G.won = false; G.deaths = null;
+  G.admitted = false; G.admittedAt = 0;
+  G.admittedStage = 0; G.admittedCollapsing = false;
   clock.getDelta();
   renderer.domElement.requestPointerLock();
   Audio.resume();
@@ -15289,6 +16241,7 @@ window.DR = {
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
+  admit, townDepth, checkArrival,
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders,
   CollisionView, People, Fauna, BEASTS, resolveCollisions, pushOutOfTerrain,
   get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
