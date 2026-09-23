@@ -713,6 +713,22 @@ const CFG = {
     bankSmooth: 2,       // cells either side that get pulled toward the bed
     pondMinDepth: 1.1,   // a filled depression this deep becomes a pond
     pondMinCells: 14,
+    /* ---- AND IT HAS TO BE SOMEWHERE A POND COULD BE ----------------
+       A closed depression is contained by definition — the flood found
+       a rim — but a rim can be a lip on the shoulder of a hill with the
+       whole hillside falling away just beyond it, and filling that lip
+       puts a dish of standing water halfway up a slope. Measured across
+       twelve seeds before these existed, 42 of 301 water sources sat on
+       ground that fell away on most sides, the worst of them standing
+       eighteen metres above the lowest ground within thirty.
+
+       Two things make a real pond: something draining INTO it, and
+       ground around it that is mostly at or above the waterline. A
+       basin that fails either is filled in rather than flooded, so the
+       water stops existing instead of hanging there. */
+    pondCatchment: 26,   // flow accumulation that must reach the basin
+    pondBelowMax: 0.52,  // at most this fraction of nearby ground below it
+    pondBelowReach: 26,  // metres around the basin that fraction looks at
     /* A basin bigger than this is not a pond, it is the map failing to
        drain. breachBasins() cuts its spill point down until it is either
        small enough to be a lake or gone. See the note there. */
@@ -743,6 +759,26 @@ const CFG = {
        rocky chute, not a pool, and drawing a flat sheet across it is the
        thing that looked wrong. */
     waterAcc: 150,       // flow accumulation before a channel holds water
+    /* ---- SPRINGS, which are where channels come from ---------------
+       Nothing under waterAcc is wet, so without these every watercourse
+       began fully formed at the threshold and the map had no
+       headwaters. A seep needs some catchment, real fall under it, and
+       water to reach within a short run downhill. */
+    /* 48 put six hundred seeps on a map — a hillside of puddles rather
+       than a handful of headwaters. Just under waterAcc means only the
+       convergences that were about to become channels get one. */
+    springAccMin: 108,   // catchment a seep needs to be worth anything
+    springFall: 0.12,    // metres of drop to the next cell
+    springRun: 10,       // cells downhill within which it must find water
+    /* ---- WHAT A SOURCE IS CALLED ----------------------------------
+       Separate from the numbers above, which drive carving and hazards
+       and are tuned. These only name things, and they are set from the
+       measured spread of wet cells: on a typical seed the wet flowing
+       cells run from 150 to thirty thousand with a median near 1,700,
+       so a riverAcc of 210 called nine tenths of the map a river. */
+    creekAcc: 150,       // a source at or above this is a creek
+    smallRiverAcc: 420,  // ... a stream
+    bigRiverAcc: 4200,   // ... a river
     minChannel: 0.42,    // metres of cut a channel needs to hold it
     maxWaterGrade: 0.34, // bed gradient past which the channel runs dry
 
@@ -2864,7 +2900,7 @@ function genHydrology(){
   const POND = new Uint8Array(n2);
   const pondLevel = new Float32Array(n2).fill(-9999);
   let pondCells = 0, pondRegions = 0, biggestPond = 0;
-  const lakeGroups = [], rejectedBasins = [];
+  const lakeGroups = [], rejectedBasins = [], perchedBasins = [];
   /* A POND IS A BASIN THAT IS BOTH DEEP AND BIG. Depth alone is not enough:
      a four-metre hollow one cell across is a hole in the noise, not a pool,
      and treating every one of them as water is what put standing water over
@@ -2917,7 +2953,44 @@ function genHydrology(){
       if(bigEnough && !bed.ok)
         rejectedBasins.push({ cells: cells.length, depth:+maxDepth.toFixed(1),
                               bed:+bed.mean.toFixed(2), steep:+bed.steepFrac.toFixed(2) });
+      /* ---- DOES ANYTHING DRAIN INTO IT, AND DOES THE GROUND HOLD IT? */
+      let catchment = 0;
+      if(bigEnough && bed.ok)
+        for(const c of cells) if(ACC[c] > catchment) catchment = ACC[c];
+      let spill = -Infinity;
+      if(bigEnough && bed.ok)
+        for(const c of cells) if(filled[c] > spill) spill = filled[c];
+      let belowFrac = 0;
       if(bigEnough && bed.ok){
+        /* The ground within pondBelowReach of the basin, and how much of
+           it lies under the surface this basin would stand at. In a real
+           hollow almost none of it does; on a shoulder most of it does. */
+        const reach = Math.ceil(HY.pondBelowReach/(CFG.WORLD.SIZE/(N-1)));
+        const seen = new Set();
+        let below = 0, near = 0;
+        for(const c of cells){
+          const cx = c%N, cz = (c/N)|0;
+          for(let dz=-reach; dz<=reach; dz+=2) for(let dx=-reach; dx<=reach; dx+=2){
+            if(dx*dx+dz*dz > reach*reach) continue;
+            const nx = cx+dx, nz = cz+dz;
+            if(nx<0||nz<0||nx>=N||nz>=N) continue;
+            const j = nz*N+nx;
+            if(seen.has(j)) continue;
+            seen.add(j);
+            near++;
+            if(H[j] < spill - 0.05) below++;
+          }
+        }
+        belowFrac = near ? below/near : 1;
+      }
+      const holdsWater = bigEnough && bed.ok
+        && catchment >= HY.pondCatchment*Math.sqrt(cells.length/HY.pondMinCells)
+        && belowFrac <= HY.pondBelowMax;
+      if(bigEnough && bed.ok && !holdsWater)
+        perchedBasins.push({ cells: cells.length, catchment: Math.round(catchment),
+                             below: +belowFrac.toFixed(2) });
+
+      if(holdsWater){
         /* ONE SURFACE FOR ONE LAKE. Giving each cell its own filled value
            tilts the lake by the flood's epsilon and, on a merged group,
            by whole metres. The spill elevation is the level the water
@@ -2927,6 +3000,10 @@ function genHydrology(){
         for(const c of cells){ POND[c] = 1; pondLevel[c] = level; pondCells++; }
         pondRegions++; biggestPond = Math.max(biggestPond, cells.length);
         lakeGroups.push(cells);
+      } else if(bigEnough && bed.ok && !holdsWater){
+        /* A DISH ON A HILLSIDE IS NOT A POND. Fill it in, so the water
+           stops existing rather than being drawn where it cannot be. */
+        for(const c of cells) H[c] = filled[c];
       } else if(cells.length < HY.pondMinCells*3){
         /* A pit a few cells across is an artifact of the noise, and
            raising it to the filled surface is the honest resolution: it
@@ -3082,6 +3159,55 @@ function genHydrology(){
     if(WLEV[i] < -9000 || j < 0 || POND[j] || WLEV[j] < -9000) continue;
     if(WLEV[j] >= WLEV[i]) WLEV[j] = WLEV[i] - 0.012;
   }
+  /* ---- SPRINGS -----------------------------------------------------
+     A spring is the one kind of water that is ALLOWED to be on a slope,
+     and the reason it is allowed is that it runs. Nothing below
+     waterAcc is ever wet, so before this the map had no headwaters at
+     all: every watercourse began, fully formed, at the accumulation
+     threshold, and the only water a player could find on a hillside was
+     a bug. Measured across twelve seeds, the source list contained zero
+     springs and zero creeks — 249 of 297 sources were "river".
+
+     So the top of a channel is given a seep. The rules are the ones a
+     spring actually obeys: enough ground draining to it to be worth
+     something but not enough to have cut a channel yet; real fall under
+     it; and water below, within a short walk downhill, for it to run
+     into. It gets a film rather than a depth, because that is what a
+     spring looks like where it leaves the ground. */
+  let springCells = 0;
+  for(let k=0;k<n2;k++){
+    const i = order[k];
+    if(POND[i] || WLEV[i] > -9000) continue;
+    const a = ACC[i];
+    if(a < HY.springAccMin || a >= HY.waterAcc) continue;
+    const j = DIR[i];
+    if(j < 0) continue;
+    if(H[i] - H[j] < HY.springFall) continue;          // it has to go somewhere
+    /* and it has to arrive somewhere: follow it down and find water. */
+    let cur = j, found = false;
+    for(let n=0; n<HY.springRun; n++){
+      if(WLEV[cur] > -9000){ found = true; break; }
+      const nx = DIR[cur];
+      if(nx < 0 || nx === cur) break;
+      cur = nx;
+    }
+    if(!found) continue;
+    WLEV[i] = H[i] + 0.10;
+    springCells++;
+    /* The trickle it makes on the way down, so the spring is visibly a
+       source and not a dot: a couple of cells of film following the
+       flow field into the channel. */
+    let c = j;
+    for(let n=0; n<3; n++){
+      if(WLEV[c] > -9000 || POND[c]) break;
+      WLEV[c] = H[c] + 0.08;
+      const nx = DIR[c];
+      if(nx < 0 || nx === c) break;
+      c = nx;
+    }
+  }
+  Wld.stats.springCells = springCells;
+
   for(let i=0;i<n2;i++) if(POND[i]) WLEV[i] = pondLevel[i];
 
   /* ---- THE RIM IS A FRAME, NOT A CLIFF.
@@ -4030,38 +4156,108 @@ function genResources(){
   const rng = rngFor('resources');
   const R = CFG.RESOURCE;
 
-  // --- water access points ---
+  /* --- WATER ACCESS POINTS -----------------------------------------
+     A place a person could actually get water, on water that has a
+     reason to be there. The old test was only "this cell is wet and
+     between 10cm and 1.4m deep", which is true of the lip of a dish
+     perched on a hillside as readily as it is of a riverbank — and the
+     hydrology used to make those dishes. It does not any more, but the
+     access point still has to be somewhere you could kneel down, so
+     each one is checked against the thing it is supposed to be:
+
+       river / creek / stream — a real channel: a watercourse with flow
+              accumulation behind it, a downhill direction, and the bank
+              you stand on above the waterline
+       lake / pond           — a real basin, with the shore around it
+              rising away from the water rather than falling from it
+       spring                — allowed on a slope, and ONLY where the
+              ground opens and the water immediately goes downhill into
+              something wetter. A spring that does not run is a puddle
+              halfway up a hill, which is the thing being fixed.
+
+     The type is recorded, because "that stream belongs here" is
+     something the player should be able to read off the world, and
+     because the winter code has to know what it is looking at. */
   const water = [];
   const candidates = [];
+  const cellM = Wld.cell;
+  const sourceKind = (i, ix, iz)=>{
+    const lev = Wld.WLEV[i], dep = lev - Wld.H[i];
+    const acc = Wld.ACC[i];
+    const pond = !!Wld.POND[i];
+    /* How the ground around it lies: a bank rises away from water, a
+       perch falls away from it. */
+    let below = 0, near = 0;
+    const r = Math.ceil(22/cellM);
+    for(let dz=-r; dz<=r; dz+=2) for(let dx=-r; dx<=r; dx+=2){
+      if(dx*dx+dz*dz > r*r) continue;
+      const nx = ix+dx, nz = iz+dz;
+      if(nx<1||nz<1||nx>=N-1||nz>=N-1) continue;
+      near++;
+      if(Wld.H[nz*N+nx] < lev - 0.05) below++;
+    }
+    const belowFrac = near ? below/near : 1;
+    if(pond){
+      // a basin, not a dish: the shore has to come up around it
+      if(belowFrac > 0.50) return null;
+      return acc > CFG.HYDRO.streamAcc*6 ? 'lake' : 'pond';
+    }
+    // flowing: it needs a channel under it and somewhere to go
+    const j = Wld.DIR[i];
+    if(j < 0) return null;
+    const drop = Wld.H[i] - Wld.H[j];
+    if(acc >= CFG.HYDRO.bigRiverAcc)   return belowFrac > 0.62 ? null : 'river';
+    if(acc >= CFG.HYDRO.smallRiverAcc) return belowFrac > 0.62 ? null : 'stream';
+    if(acc >= CFG.HYDRO.creekAcc)      return belowFrac > 0.58 ? null : 'creek';
+    /* Below that it is either a spring or it is nothing. A spring is
+       allowed to sit on a slope — that is what a spring IS — but only
+       where it runs: the ground must fall away downstream and the water
+       must reach something wetter within a short distance. */
+    if(dep > 0.40) return null;                 // too deep to be a seep
+    if(drop < 0.10) return null;                // it does not go anywhere
+    let cur = i, wetter = false;
+    for(let k=0; k<14; k++){
+      const nxt = Wld.DIR[cur];
+      if(nxt < 0 || nxt === cur) break;
+      cur = nxt;
+      if(Wld.ACC[cur] > acc*2.5 && Wld.WLEV[cur] > -9000){ wetter = true; break; }
+    }
+    return wetter ? 'spring' : null;
+  };
+
   for(let iz=2; iz<N-2; iz++) for(let ix=2; ix<N-2; ix++){
     const i = iz*N+ix;
     if(Wld.WLEV[i] < -9000) continue;
     const dep = Wld.WLEV[i] - Wld.H[i];
-    if(dep < 0.10 || dep > 1.4) continue;                 // reachable from a bank
+    if(dep < 0.06 || dep > 1.4) continue;                 // reachable from a bank
     candidates.push(i);
   }
   rng.shuffle(candidates);
   const wantWater = Math.round(rng.irange(R.waterPoints[0], R.waterPoints[1]) * clamp(P.scarcity, 0.45, 1.5));
+  let refused = 0;
   for(const i of candidates){
     if(water.length >= wantWater) break;
-    const x = wxOf(i%N), z = wzOf((i/N)|0);
+    const ix = i%N, iz = (i/N)|0;
+    const type = sourceKind(i, ix, iz);
+    if(!type){ refused++; continue; }
+    const x = wxOf(ix), z = wzOf(iz);
     let ok = true;
     for(const w of water) if(Math.hypot(w.x-x, w.z-z) < 34){ ok=false; break; }
     if(!ok) continue;
-    const pond = !!Wld.POND[i];
     const acc = Wld.ACC[i];
     /* Flowing water is safe; standing water can make you ill. That is the
        single most useful true rule in the survival layer, and it is
        readable from the world (it moves, or it does not) rather than from
-       a label. */
-    const kind = (!pond && acc > CFG.HYDRO.riverAcc*0.35) ? 'flowing'
-               : (pond || acc < CFG.HYDRO.streamAcc*1.6) ? 'stagnant' : 'slow';
+       a label. A spring is the cleanest water in the game. */
+    const kind = (type === 'river' || type === 'stream' || type === 'spring') ? 'flowing'
+               : type === 'creek' ? 'slow' : 'stagnant';
     water.push({
-      id:'w'+water.length, x, z, y: Wld.WLEV[i], kind, acc,
-      depth: Wld.WLEV[i]-Wld.H[i], phantom:false, drained:false,
+      id:'w'+water.length, x, z, y: Wld.WLEV[i], kind, type, acc,
+      depth: Wld.WLEV[i]-Wld.H[i], phantom:false, drained:false, frozen:false,
     });
   }
   Wld.water = water;
+  Wld.stats.waterRefused = refused;
 
   // --- berries ---
   const meaning = rng.shuffle(['safe','sick','intense']);
@@ -4503,7 +4699,7 @@ function mindMinutesBudget(){
 }
 
 const GUARANTEES = ['G1 reachable','G2 in time','G3 water','G4 food','G5 clues','G6 hazards',
-                    'G7 wilderness'];
+                    'G7 wilderness','G8 water is real'];
 function validateWorld(){
   const res = { pass:true, fail:[], detail:{} };
   const fail = (g, why)=>{ res.pass=false; res.fail.push(g); res.detail[g]=why; };
@@ -4616,6 +4812,54 @@ function validateWorld(){
     }
     return false;
   }).length;
+
+  /* G8 — THE WATER HAS A REASON TO BE WHERE IT IS.
+     Everything the hydrology produces is supposed to obey the terrain,
+     and until the checks below existed nothing said so: fourteen per
+     cent of water sources sat on ground that fell away on most sides,
+     the worst standing eighteen metres above the lowest ground within
+     thirty. A seed that produces water on a hilltop is a broken seed
+     and is thrown away like any other.
+
+     A spring is exempt from the perch test and only from that one,
+     because being on a slope is what a spring is — but it has to run,
+     which is checked instead. */
+  {
+    let perched = 0, dryFooted = 0, springStalled = 0, floating = 0;
+    for(const w of Wld.water){
+      const ix = Math.round(gxOf(w.x)), iz = Math.round(gzOf(w.z));
+      if(!inGrid(ix, iz)) continue;
+      const i = iz*Wld.N+ix;
+      // it must still be standing on water at all
+      if(Wld.WLEV[i] < -9000 || Wld.WLEV[i] <= Wld.H[i]){ dryFooted++; continue; }
+      // and its marker must not be hanging above the surface
+      if(Math.abs(w.y - Wld.WLEV[i]) > 0.30) floating++;
+      if(w.type === 'spring'){
+        const j = Wld.DIR[i];
+        if(j < 0 || Wld.H[i] - Wld.H[j] < 0.05) springStalled++;
+        continue;
+      }
+      let below = 0, near = 0;
+      const r = Math.ceil(26/Wld.cell);
+      for(let dz=-r; dz<=r; dz+=2) for(let dx=-r; dx<=r; dx+=2){
+        if(dx*dx+dz*dz > r*r) continue;
+        const nx = ix+dx, nz = iz+dz;
+        if(!inGrid(nx,nz)) continue;
+        near++;
+        if(Wld.H[nz*Wld.N+nx] < w.y - 0.05) below++;
+      }
+      if(near && below/near > 0.66) perched++;
+    }
+    res.detail.waterPerched = perched;
+    res.detail.waterDryFooted = dryFooted;
+    res.detail.waterFloating = floating;
+    res.detail.springsStalled = springStalled;
+    if(dryFooted) fail('G8', `${dryFooted} water sources are not on water`);
+    if(floating > 1) fail('G8', `${floating} water sources float above the surface`);
+    if(springStalled) fail('G8', `${springStalled} springs do not run downhill`);
+    if(perched > Math.max(1, Math.round(Wld.water.length*0.06)))
+      fail('G8', `${perched} of ${Wld.water.length} water sources sit on a hillside`);
+  }
 
   // G4 — at least a little real food
   const food = Wld.berries.filter(b=>b.left>0).length
