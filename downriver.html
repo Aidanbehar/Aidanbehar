@@ -856,7 +856,10 @@ const CFG = {
     cabins:    [2, 5],
     campsites: [3, 8],
     ruins:     [1, 4],
-    car:       [0, 2],
+    /* At least one, always. The car stopped being scenery the moment
+       you could sit in it, and a feature that six seeds in twenty do
+       not have is a feature the player does not learn exists. */
+    car:       [1, 3],
     minApart:  46,       // metres between any two structures
     routeBias: 0.72,     // fraction placed on or near a route
   },
@@ -1099,12 +1102,26 @@ const CFG = {
      prove the rest of the game does not depend on it. */
   FAUNA: {
     on: true,
-    count: [2, 5],         // how many are alive on a given seed
+    /* ONE OF EACH IS THE FLOOR. The old roll was a flat count with the
+       kind picked at random per body, which meant a seed could and did
+       come up three crawlers and nothing else -- and a player who
+       never meets a stilt never learns the one rule that matters about
+       stilts. Every kind now gets its own roll, so every seed has all
+       three in it and the seed's character is how MANY of each. */
+    perKind: [1, 3],       // of every kind, this many are alive
     spawnMin: 190,         // metres from the player's start, at the least
     spawnMax: 620,         // ... and at the most
     startKeepOut: 170,     // nothing spawns inside this of the spawn
     townKeepOut: 95,       // and nothing comes within this of the hospital
     roam: 130,             // how far one wanders from where it woke up
+    /* ---- WHAT MAKES A FOREST FRIGHTENING RATHER THAN A CREATURE ----
+       One thing hunting you is an encounter. Everything in earshot
+       turning toward you at the same moment is the forest deciding
+       something, and it is a different feeling entirely -- so when one
+       of them commits, the rest hear it and come. It is also the
+       honest consequence of the noise they make when they charge. */
+    packHear: 240,         // a rush is heard this far, by everything
+    torchSeen: 1.85,       // the flashlight multiplies how far they notice
     lungeFrom: 7.5,        // it breaks into a charge this far out
     chargeFor: 5.0,        // and gives up on a charge after this long
     /* ---- WHAT HAPPENS AFTER IT LANDS ONE --------------------------
@@ -2484,6 +2501,23 @@ function snowDepthAt(x, z){
   if(!Wld.SNOW) return 0;
   return sampleGrid(Wld.SNOW, x, z, 0);
 }
+/* HOW FAR THE SNOW STANDS PROUD OF THE DIRT, in metres. The terrain's
+   vertex shader lifts deep snow so a drift reads as a drift, which
+   means the ground the player SEES is not the ground heightAt()
+   returns. Anything that has to stand on it -- creatures, props, a
+   footprint -- has to use this, or it stands in a hole. The constant
+   is the shader's, and there is exactly one of it. */
+const SNOW_LIFT = 0.34;
+function snowLiftAt(x, z){
+  if(!Wld.SNOW || !Wld.powderWorst) return 0;
+  return Math.min(snowDepthAt(x, z)/Wld.powderWorst, 1) * SNOW_LIFT;
+}
+/* The top of the ground as it is drawn. */
+function groundTopAt(x, z){ return heightAt(x, z) + snowLiftAt(x, z); }
+/* How far into the snow something of this size settles. Deep drifts
+   swallow a shin, which is the point of them; they do not swallow a
+   body. */
+function snowSinkAt(x, z){ return Math.min(snowDepthAt(x, z)*0.30, 0.40); }
 /* What that depth costs. Below the ankle it is nothing but a sound;
    over the knee it is the most expensive ground in the game. */
 function snowDrag(d){
@@ -5371,6 +5405,51 @@ function generateWorld(onProgress){
    here makes a decision about the world; it only draws what was decided.
    ===================================================================== */
 
+/* ---------------------------------------------------------------------
+   SNOW LIES ON THINGS, NOT JUST ON THE GROUND
+
+   The terrain went white and everything standing on it did not, which
+   made the rocks and the deadfall read as bleached props scattered on a
+   snowfield rather than as objects that had been out in the same
+   weather. This whitens whatever faces the sky, by the world normal, so
+   it works on an instanced mesh at any rotation without a second
+   geometry or a second texture.
+
+   The world normal is recovered from the view-space one by multiplying
+   by the TRANSPOSE of the view matrix's rotation, written out as three
+   dot products because transpose() is not available in GLSL 1. And it
+   takes uDayl for the same reason the ground does: snow is the
+   brightest thing in a wood and at night it has to stop being.
+   ------------------------------------------------------------------ */
+const SNOWY_MATS = [];
+function snowify(mat, amount){
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, rend)=>{
+    if(prev) prev(sh, rend);
+    sh.uniforms.uSnowAmt = { value: 0 };
+    sh.uniforms.uSnowDayl = { value: 1 };
+    sh.uniforms.uSnowBite = { value: amount };
+    SNOWY_MATS.push(sh.uniforms);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float uSnowAmt, uSnowDayl, uSnowBite;`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          vec3 wn = vec3(dot(viewMatrix[0].xyz, normal),
+                         dot(viewMatrix[1].xyz, normal),
+                         dot(viewMatrix[2].xyz, normal));
+          float lay = smoothstep(0.34, 0.80, wn.y) * uSnowAmt * uSnowBite;
+          float lit = clamp(uSnowDayl, 0.0, 1.0);
+          vec3 snow = mix(vec3(0.075, 0.088, 0.125), vec3(0.80, 0.84, 0.90), lit);
+          diffuseColor.rgb = mix(diffuseColor.rgb, snow, lay);
+          roughnessFactor = mix(roughnessFactor, 0.68, lay);
+        }`);
+  };
+  const key = mat.customProgramCacheKey;
+  mat.customProgramCacheKey = ()=> (key ? key.call(mat) : '') + '|snowy';
+  return mat;
+}
+
 function buildMaterials(onStep){
   const st = Wld.style;
   const step = onStep || (()=>{});
@@ -5405,7 +5484,8 @@ function buildMaterials(onStep){
   MAT.glass = new THREE.MeshStandardMaterial({
     color:0x141a1c, roughness:0.12, metalness:0.05, transparent:true, opacity:0.55 });
   MAT.dark = new THREE.MeshStandardMaterial({ color:0x07090a, roughness:1 });
-  MAT.rock = new THREE.MeshStandardMaterial({ color:0x8a8b85, roughness:0.96 });
+  MAT.rock = snowify(
+    new THREE.MeshStandardMaterial({ color:0x8a8b85, roughness:0.96 }), 1.0);
   MAT.ripples = TexLib.tex(TexLib.heightToNormal(TexLib.ripples({ seed: 91 + (G.seed % 887) }), 1.6), { repeat:[1,1] });
   step('done');
 }
@@ -6231,7 +6311,11 @@ const Veg = {
     this.logR = 0.30;                 // the butt end, which is the fat one
     const logGeo = new THREE.CylinderGeometry(0.22, 0.30, 1, 7);
     logGeo.rotateZ(Math.PI/2);
-    this.deadfall = new THREE.InstancedMesh(logGeo, MAT.bark, 500);
+    /* Its own copy, because the trunks standing in the ground use the
+       same bark and a log lying in the snow is a different problem
+       from a trunk in it. */
+    MAT.deadbark = MAT.deadbark || snowify(MAT.bark.clone(), 0.85);
+    this.deadfall = new THREE.InstancedMesh(logGeo, MAT.deadbark, 500);
     this.deadfall.frustumCulled = false; this.deadfall.count = 0;
     this.deadfall.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.deadfall.castShadow = true; this.deadfall.receiveShadow = true;
@@ -6536,8 +6620,10 @@ function updateSky(dt){
   }
   /* The same number the water gets, without the floor: at midnight the
      snow should go with everything else. */
-  if(MAT.terrainU && MAT.terrainU.uDayl)
-    MAT.terrainU.uDayl.value = clamp(ai*1.15 + si*0.75, 0, 1);
+  const dayl = clamp(ai*1.15 + si*0.75, 0, 1);
+  if(MAT.terrainU && MAT.terrainU.uDayl) MAT.terrainU.uDayl.value = dayl;
+  const lay = P.winter ? clamp(0.55 + P.winterHard*0.45, 0, 1) : 0;
+  for(const u of SNOWY_MATS){ u.uSnowAmt.value = lay; u.uSnowDayl.value = dayl; }
 }
 
 /* ---------------------------------------------------------------------
@@ -8065,6 +8151,15 @@ const BEASTS = {
        comes. Looking at it is now the worst thing that can happen to
        you, and the player learns that once. */
     seenSets: true,
+    /* HOW CLOSE IT COMES UNINVITED. It closes hard while it is out of
+       frame and then it stops, at the range where you would resolve it
+       if you turned -- so the thing is always right there and it is
+       always YOUR move. Without this it simply walked up behind a
+       player who was looking where they were going and killed them:
+       the journey walker, which never turns round, died to a stilt
+       at 3.8 minutes on the first seed tried. Being seen is what sets
+       it off, and it should not be able to skip that. */
+    standoff: 20,
     reactMin: 0.15, reactMax: 0.60,   // the pause after it knows you saw
     patience: 12,          // and it does not forget quickly
     dmg: 26, cold: 9, shock: 0.5,
@@ -8092,7 +8187,14 @@ const BEASTS = {
        before it had gone half way. Relentless is the frightening part
        and it is kept; omniscient was just a shorter game. */
     notice: 120,
-    reach: 1.7, giveUp: 1e9,
+    /* LEAVING HAS TO WORK, OR THE NOTE ABOVE IS A LIE. "You outrun it
+       by leaving, which costs you the ground you wanted" was the whole
+       design, and giveUp: 1e9 meant leaving did not work at all: it
+       followed for the rest of the run from any distance. A leash of
+       three hundred and forty metres is still most of a seed -- you
+       give up the line you were walking and a couple of minutes to
+       shake it -- and it is a cost rather than a sentence. */
+    reach: 1.7, giveUp: 340,
     relentless: true,
     patience: 1e9,
     fullRetreat: 0.5,      // half of its hits and it is gone
@@ -8390,13 +8492,13 @@ const Fauna = {
        else — a seed with three hollows on it is a different walk from a
        seed with one crawler, and the player should be able to learn
        that the hard way and then go back to it. */
-    const want = F.count[0] + Math.floor(rng()*(F.count[1] - F.count[0] + 1));
-    const kinds = Object.keys(BEASTS);
-    for(let i = 0; i < want; i++){
-      const kind = kinds[Math.floor(rng()*kinds.length)];
-      const spot = this.findSpot(rng, Wld.start, F.spawnMin, F.spawnMax);
-      if(!spot) continue;
-      this.spawn(kind, spot.x, spot.z, rng);
+    for(const kind of Object.keys(BEASTS)){
+      const want = F.perKind[0] + Math.floor(rng()*(F.perKind[1] - F.perKind[0] + 1));
+      for(let i = 0; i < want; i++){
+        const spot = this.findSpot(rng, Wld.start, F.spawnMin, F.spawnMax);
+        if(!spot) continue;
+        this.spawn(kind, spot.x, spot.z, rng);
+      }
     }
     this.active = this.list.length > 0;
     Wld.stats.fauna = this.list.length;
@@ -8406,7 +8508,20 @@ const Fauna = {
     rng = rng || rngFor('fauna', this.list.length*17 + 3);
     const K = BEASTS[kind];
     const obj = this.makeBody(kind, rng);
-    obj.position.set(x, heightAt(x, z), z);
+    /* WHERE ITS FEET ACTUALLY ARE. Every one of these is a chain of
+       rolled limb lengths hung off a hip height that was written by
+       hand, so the lowest point of the body is wherever the dice put
+       it -- measured, it was a fifth to a half of a metre BELOW the
+       root on all three, which is why they walked with their feet
+       inside the ground. Measure the rest pose once and offset the
+       root by it, and the rest pose stands exactly on the surface.
+       The gait can only ever raise a foot from there: every swing is
+       a rotation about a joint above it, and every knee bend is away
+       from straight. */
+    obj.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(obj);
+    obj.userData.rest = isFinite(bb.min.y) ? bb.min.y : 0;
+    obj.position.set(x, heightAt(x, z) - obj.userData.rest, z);
     scene.add(obj);
     const b = {
       kind, K, obj, x, z, yaw: rng()*TAU,
@@ -8418,6 +8533,22 @@ const Fauna = {
     };
     this.list.push(b);
     return b;
+  },
+
+  /* ONE OF THEM COMMITS AND THE REST COME. Everything within earshot
+     is told where the player is and starts hunting; nothing is
+     teleported and nothing is given a speed it did not have, so what
+     the player gets is the sound of one rush followed, over the next
+     half minute, by the others arriving from their own directions. */
+  alarm(src){
+    const F = CFG.FAUNA;
+    for(const o of this.list){
+      if(o === src) continue;
+      if(Math.hypot(o.x - src.x, o.z - src.z) > F.packHear) continue;
+      if(o.state === 'flee' || o.state === 'strike') continue;
+      o.everSaw = true; o.lostFor = 0;
+      if(o.state === 'wander'){ o.state = 'stalk'; o.stateT = 0; o.target = null; }
+    }
   },
 
   nearest(x, z){
@@ -8459,8 +8590,15 @@ const Fauna = {
 
       /* ---- does it know where you are? ---- */
       const dark = Sky.sunUp < 0.08 ? 1.35 : 1.0;
-      const noise = Player.sprinting ? 1.5 : Player.moving ? 1.0 : 0.55;
-      const noticeAt = K.notice * dark * noise;
+      /* A light in a black wood is the loudest thing in it. The torch
+         is a straight trade now: you can see them, and they can see
+         you from nearly twice as far, which is a decision rather than
+         a free upgrade. Wading also gives you away -- powder is loud
+         and you are slow in it, and those are the same fact. */
+      const lamp = Gear.torchOn ? F.torchSeen : 1.0;
+      const wade = 1 + (Player.snowDrag || 0)*0.45;
+      const noise = (Player.sprinting ? 1.5 : Player.moving ? 1.0 : 0.55) * wade;
+      const noticeAt = K.notice * dark * noise * lamp;
       /* Once it has had you, it has you: relentless means it does not
          lose the scent, not that it starts with it. */
       if(d < noticeAt) b.everSaw = true;
@@ -8486,9 +8624,12 @@ const Fauna = {
           b.state = 'wander'; b.stateT = 0; b.target = null;
         }
         if(d > K.giveUp){ b.state = 'wander'; b.stateT = 0; b.target = null; }
-        if(d < K.reach + F.lungeFrom){ b.state = 'charge'; b.stateT = 0;
+        if(d < K.reach + F.lungeFrom && (!K.seenSets || b.provoked)){
+          b.state = 'charge'; b.stateT = 0;
           Audio.play(K.rush, { gain: 1.0, pos: new THREE.Vector3(b.x, b.obj.position.y+1.2, b.z) });
-          Mind.shock(0.10); }
+          Mind.shock(0.10);
+          this.alarm(b);                       // and everything else hears it
+        }
         /* ---- IT KNOWS YOU SAW IT ------------------------------------
            The stilt's whole behaviour hangs off this. A clear look at
            it — in frame, close enough to resolve, not lost in fog or
@@ -8536,6 +8677,19 @@ const Fauna = {
           }
           speed = K.walk;
         } else { wantX = ux; wantZ = uz; speed = K.walk; }
+        /* WHILE YOU ARE NOT LOOKING AT IT. The stilt's trick was only
+           ever half a trick: being seen set it off, but out of sight
+           it closed at a walk, so turning away cost nothing. It now
+           covers ground fast the moment it is out of frame and slows
+           to nothing the moment it is back in -- which means every
+           time you check, it is nearer, and you cannot prove it moved.
+           It also stops short of your shoulder rather than walking
+           into your back, because the moment worth having is looking
+           up and finding it already close. */
+        if(K.seenSets && !b.provoked){
+          if(this.inView(b) || d <= K.standoff) moving = false;
+          else speed = K.charge*0.92;
+        }
       } else if(b.state === 'charge'){
         wantX = ux; wantZ = uz;
         speed = K.charge;
@@ -8642,7 +8796,29 @@ const Fauna = {
       }
 
       /* ---- put it on the ground and animate it ---- */
-      const gy = heightAt(b.x, b.z);
+      /* On the surface as it is DRAWN, not as the heightfield stores
+         it, and settled into the snow by a shin rather than standing
+         on top of two metres of powder like a table. */
+      /* Over the FOOTPRINT, not the centre point. A foot swung out to
+         the side lands on ground the body's own cell knows nothing
+         about, and on any slope that put it under the hill. Riding the
+         highest ground the body covers costs a few centimetres of
+         float on flat ground and removes the sinking on every slope. */
+      const mid = groundTopAt(b.x, b.z);
+      const fr = b.K.radius + 0.25;
+      let hi = mid;
+      for(let q = 0; q < 4; q++){
+        const a = q*Math.PI*0.5 + b.yaw;
+        const t = groundTopAt(b.x + Math.sin(a)*fr, b.z + Math.cos(a)*fr);
+        if(t > hi) hi = t;
+      }
+      /* Riding the full high point of the footprint floated it half a
+         metre off any hummock it walked past. A capped lift is the
+         compromise the shape actually needs: enough to keep a splayed
+         foot out of a rise it is standing beside, not enough to be a
+         hover. */
+      const top = mid + Math.min(hi - mid, 0.12);
+      const gy = top - snowSinkAt(b.x, b.z) - (b.obj.userData.rest || 0);
       b.obj.position.set(b.x, gy, b.z);
       b.obj.rotation.y = b.yaw;
       /* ---- HOW IT MOVES, WHICH IS MOST OF WHAT IT IS ---------------
@@ -13878,15 +14054,28 @@ const DEV = (()=>{
       CFG.FAUNA.on = !CFG.FAUNA.on;
       if(CFG.FAUNA.on) Fauna.build(); else Fauna.clear();
     });
+    /* THE WHOLE ROSTER, NOT THE NEAREST ONE. Knowing only about the
+       closest creature made the panel useless for the question it
+       exists to answer -- is the thing at forty metres one of these,
+       or is it in my head -- because the answer depends on where ALL
+       of them are. Every body, its distance, its state, and whether
+       it is currently in front of the player's eyes, sorted so the
+       one about to matter is at the top. */
     D._syncFauna = ()=>{
-      const n = Fauna.nearest(Player.pos.x, Player.pos.z);
+      const rows = Fauna.list.map(b=>({ b,
+        d: Math.hypot(b.x - Player.pos.x, b.z - Player.pos.z) }))
+        .sort((p,q)=> p.d - q.d);
       fRead.textContent =
         `${Fauna.list.length} alive — ${Fauna.summary()}\n`
         + `wounds ${Survival.wounds}/${CFG.FAUNA.woundsFatal}  bleeding `
         + `${(Survival.bleeding||0).toFixed(2)}  dread ${(Mind.dread||0).toFixed(2)}\n`
-        + (n ? `nearest ${n.beast.kind} ${n.d.toFixed(0)}m  ${n.beast.state}`
-             + (Fauna.inView(n.beast) ? '  (you can see it)' : '  (out of sight)')
-             : 'nothing within reach of anything');
+        + (rows.length
+            ? rows.map(({b,d})=>
+                `  ${b.kind.padEnd(8)} ${d.toFixed(0).padStart(4)}m  `
+                + `${b.state.padEnd(7)}`
+                + (Fauna.inView(b) ? ' seen' : '     ')
+                + (b.provoked ? ' provoked' : '')).join('\n')
+            : '  nothing alive out there');
     };
 
     // ---- survival ----
@@ -15000,6 +15189,7 @@ window.DR = {
   setP(p){ P = p; },
   heightAt, waterLevelAt, waterDepthAt, waterBodyDepthAt, iceAt,
   slopeAt, normalAt, cellHazard, cellWalkCost, snowDepthAt, snowDrag,
+  snowLiftAt, groundTopAt, snowSinkAt,
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
