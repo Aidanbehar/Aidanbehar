@@ -836,6 +836,15 @@ const CFG = {
     powderMul: 1.55,         // x this winter's settled depth = soft and dangerous
     powderWorstMul: 2.70,    // ... and x this it is as bad as it gets
     powderSlow: 0.38,        // what your pace falls to in the worst of it
+    /* The gradient a riverbank is allowed to come out at. The flare
+       radius is computed from this and the channel's own depth, so it
+       holds for a stream and for a trunk river alike. 0.45 is about
+       24 degrees: walkable, and nothing like a cliff. */
+    /* How steeply the drawn water surface may fall across one cell
+       before it stops being a surface. 1.6 is a steep cascade; past it
+       the quad is a vertical sheet hanging down a cliff and is left
+       out entirely. */
+    maxFallGrade: 1.6,
     /* ---- WHAT FREEZES, AND HOW HARD -------------------------------
        Still water freezes; moving water does not, and the faster it
        moves the longer it holds out. So ice is decided per cell from
@@ -874,6 +883,11 @@ const CFG = {
     pause: [2.5, 11],    // seconds standing still between walks
     indoors: [12, 40],   // ... and out of sight inside a house
     radius: 0.32,        // how wide they are, for walking round things
+    /* And how much clearance they keep on top of that. Without it they
+       walk with a shoulder in the wall: the resolver only says "not
+       inside", and not-inside by a millimetre looks exactly like
+       being inside. */
+    wallGap: 0.22,
     simRange: 210,       // metres from the town centre before they stop moving
     drawRange: 150,      // ... and before they stop being drawn
     /* ---- THE DAY ---------------------------------------------------
@@ -949,7 +963,12 @@ const CFG = {
     eye: 1.66, radius: 0.34,
     walk: 2.55, sprint: 5.05, crouchless: true,
     accel: 13, damp: 10.5,
-    staminaMax: 100, staminaDrain: 17, staminaRegen: 11, staminaFloor: 12,
+    /* A SPRINT YOU CAN ACTUALLY USE. At a drain of 17 a full bar bought
+       5.6 seconds of running, which is not enough to outrun anything or
+       to cross a clearing -- long enough only to be annoying. At 11.5 it
+       is 8.7 seconds, and the recovery is a little faster to match, so
+       sprinting is a thing you do rather than a thing you ration. */
+    staminaMax: 100, staminaDrain: 11.5, staminaRegen: 13, staminaFloor: 12,
     stepUp: 0.55,        // metres of terrain step taken without slowing
     climbLog: 0.85,      // ... and how high a fallen trunk you get over
     swimDepth: 1.05,     // above this you are swimming, not wading
@@ -1026,8 +1045,19 @@ const CFG = {
 
   /* ---- equipment ----------------------------------------------------- */
   GEAR: {
-    batteryMinutes: 62,      // real minutes of continuous beam, fresh cell
-    batteryLowAt: 0.17,      // fraction where the real flicker starts
+    /* A CELL HAS TO RUN OUT INSIDE A RUN, or the torch is not a
+       resource and the dark is not a problem. 62 minutes of continuous
+       beam is longer than most runs last: the light never died, so the
+       spare cells in the world meant nothing and turning it off was
+       never a decision. 26 minutes is long enough to be useful and
+       short enough that leaving it on all night costs you. */
+    batteryMinutes: 26,      // real minutes of continuous beam, fresh cell
+    batteryLowAt: 0.28,      // fraction where the real flicker starts
+    /* And it fades as it goes. The old curve held full brightness down
+       to a third of a cell and then only dropped to 45%, so a nearly
+       dead torch was nearly as good as a fresh one. */
+    batteryFadeFrom: 0.55,   // brightness starts falling here
+    batteryFadeTo: 0.16,     // ... and this is all that is left at empty
     spareBatteryChance: 0.55,// per eligible structure
     bottleML: 900,
     drinkHold: 2.4,          // seconds of HOLD to drink from a source
@@ -1035,6 +1065,15 @@ const CFG = {
     pickHold: 1.9,
     restHold: 3.0,
     compassSettle: 2.6,      // seconds for the needle to stop swinging
+    /* ---- THE HANDS THAT CANNOT FIND IT --------------------------
+       A late symptom that takes the torch away for a few seconds at
+       a time -- see Gear.tickFumble(). It is deliberately short and
+       deliberately rare, because it is not a mechanic to play around,
+       it is a thing that happens to you. */
+    fumbleFromStage: 3,          // not before the mind is well gone
+    fumbleChancePerMin: 0.45,    // at that stage; higher above it
+    fumbleSeconds: [6, 16],      // how long the hands are no use
+    fumbleGap: 90,               // seconds clear between one and the next
   },
 
   /* ---- time and weather ---------------------------------------------- */
@@ -1304,7 +1343,13 @@ const CFG = {
     torchShadowMove: 0.45,   // metres
     torchShadowEvery: 0.10,  // seconds, at most
     volumetrics: true,
-    treeRadius: 150,         // metres of trees kept instanced around you
+    /* HOW FAR THE FOREST GOES. At 150m a player standing on a ridge saw
+       the wood stop in a circle around them and bare ground beyond it,
+       which is the one view in the game that is meant to sell the scale
+       of the place. The streamer keeps whatever is inside this, so the
+       cost is the square of it -- 240 is 2.6x the trees, which the
+       instance caps below were raised to hold. */
+    treeRadius: 240,         // metres of trees kept instanced around you
     colliderRadius: 42,      // ... and how close one needs to be to block
     grassRadius: 34,
     maxPixelRatio: 1.5,
@@ -2251,6 +2296,15 @@ const WaterShader = {
     uSun:{value:new THREE.Vector3(0,1,0)}, uSunColor:{value:new THREE.Color(0xffffff)},
     uLight:{value:0.6},
     uDayl:{value:1.0},
+    /* ---- WIND ON STILL WATER ---------------------------------------
+       A river moves because it is flowing downhill, and that came in
+       per-vertex from the hydrology. A LAKE has no flow, so vFlow and
+       vDir were both near zero on it and the surface sat there like a
+       sheet of glass in a gale -- the one body of water the player
+       stands and looks at was the one that never moved.
+       uWind is the direction the wind is going, scaled by how hard;
+       uWindAmt is 0..1 for how choppy to make it. */
+    uWind:{value:new THREE.Vector2(1,0)}, uWindAmt:{value:0.15},
   },
   vertexShader: /* glsl */`
     attribute float aFlow;      // 0 still, 1 fast
@@ -2270,7 +2324,8 @@ const WaterShader = {
       gl_Position = projectionMatrix*mv;
     }`,
   fragmentShader: /* glsl */`
-    uniform float uTime, uOpacity, uFogDensity, uLight, uDayl;
+    uniform float uTime, uOpacity, uFogDensity, uLight, uDayl, uWindAmt;
+    uniform vec2 uWind;
     uniform sampler2D uNormal;
     uniform vec3 uShallow, uDeep, uSky, uFogColor, uSun, uSunColor;
     varying vec2 vUvW; varying float vFlow; varying vec2 vDir;
@@ -2285,10 +2340,38 @@ const WaterShader = {
          rather than one surface in two colours. */
       float ice = clamp(vIce, 0.0, 2.0);
       float frozen = clamp(ice, 0.0, 1.0);
-      vec2 drift = vDir * uTime * (0.12 + vFlow*0.95) * (1.0 - frozen*0.94);
+      /* ---- WHAT MOVES THE SURFACE ---------------------------------
+         Two things, and which one dominates is the difference between
+         a river and a lake. A river is carried by its own flow, which
+         the hydrology hands in per vertex. Still water is worked by
+         the WIND: the drift follows it, the chop rises with it, and a
+         dead calm leaves the surface nearly flat -- so a lake on a
+         still morning is a mirror and the same lake in a gale is
+         broken up all the way to the far bank.
+
+         Both are killed under ice, which is most of what sells a
+         frozen reach beside an open one. */
+      float still = 1.0 - smoothstep(0.05, 0.45, vFlow);
+      vec2 windDrift = uWind * uTime * (0.045 + uWindAmt*0.30) * still;
+      vec2 drift = (vDir * uTime * (0.12 + vFlow*0.95) + windDrift)
+                   * (1.0 - frozen*0.94);
+      /* The chop: how much the normal layers are allowed to tilt the
+         surface. Flow always makes some; wind makes the rest, and only
+         on the water that is not already being carried. */
+      float chop = (1.0 - frozen*0.92) *
+                   (0.35 + vFlow*0.9 + uWindAmt*still*1.5);
       vec3 n1 = nrm(vUvW*0.09 - drift*0.09);
       vec3 n2 = nrm(vUvW*0.031 + drift*0.041 + 0.37);
-      vec3 n = normalize(vec3(n1.x+n2.x, 3.2/(1.0+vFlow*1.4), n1.y+n2.y));
+      /* A third, finer layer that only appears in wind. This is the
+         cat's paw -- the small stuff that crosses a lake in patches
+         and is the reason a windy lake reads as water and not as a
+         tilted plane. */
+      vec3 n3 = nrm(vUvW*0.21 + windDrift*0.16 + 0.11);
+      float cats = uWindAmt*still*(1.0 - frozen);
+      vec3 n = normalize(vec3(
+        (n1.x + n2.x + n3.x*cats*1.6) * chop,
+        3.2/(1.0 + vFlow*1.4 + uWindAmt*still*2.2),
+        (n1.y + n2.y + n3.y*cats*1.6) * chop));
       vec3 V = normalize(cameraPosition - vWorld);
       float fres = pow(1.0 - clamp(dot(n, V), 0.0, 1.0), 3.0);
       vec3 base = mix(uShallow, uDeep, clamp(vDepth/2.2, 0.0, 1.0));
@@ -2297,12 +2380,24 @@ const WaterShader = {
          bright cyan cut-out -- the "small very white patches". Water
          does reflect the sky, but not as a mirror at every angle. */
       vec3 col = mix(base, uSky, clamp(fres*0.38, 0.0, 0.72)) * uLight;
-      // a hard little specular, which is most of what "wet" means
+      /* The specular, and it widens with the chop. A glassy lake gives
+         one hard pinpoint of sun; a choppy one scatters it into a long
+         broken glitter path, which is the single most recognisable
+         thing wind does to water. */
       vec3 H = normalize(uSun + V);
-      col += uSunColor * pow(max(dot(n,H), 0.0), 64.0) * 0.5 * uLight;
-      // white water where it is moving fast
+      float gloss = mix(120.0, 16.0, clamp(vFlow*0.7 + uWindAmt*still, 0.0, 1.0));
+      float spec = pow(max(dot(n,H), 0.0), gloss);
+      col += uSunColor * spec * (0.45 + uWindAmt*still*0.7) * uLight;
+      // white water where it is moving fast, and whitecaps where it is windy
       float foam = smoothstep(0.55, 1.0, vFlow) * smoothstep(0.35, 0.8, n1.x*n2.y+0.5);
-      col = mix(col, vec3(0.62,0.66,0.66)*uLight, foam*0.5);
+      float caps = smoothstep(0.45, 0.95, uWindAmt) * still
+                 * smoothstep(0.62, 0.95, n3.x*n3.y + 0.5) * (1.0 - frozen);
+      col = mix(col, vec3(0.62,0.66,0.66)*uLight, clamp(foam*0.5 + caps*0.45, 0.0, 1.0));
+      /* And the shore. Where the water is shallow enough to be running
+         over the bank it goes pale and loses its depth colour, which is
+         what stops a lake edge reading as a cut-out. */
+      float shore = 1.0 - smoothstep(0.0, 0.55, vDepth);
+      col = mix(col, mix(col, vec3(0.50,0.55,0.53)*uLight, 0.45), shore*0.6);
       /* ---- AND THE ICE ON TOP OF ALL THAT -------------------------
          Thin ice is grey, dark and translucent, with the water still
          showing through it — which is the warning, and the only one
@@ -2361,7 +2456,9 @@ const WaterShader = {
          there is a quarter of daylight in the sky, and everything it
          takes away it takes away from the small hours. Measured on the
          way down: 10.5x the ground, then 5.2x, then 2.97x, then this. */
-      col *= mix(0.05, 1.0, smoothstep(0.0, 0.25, clamp(uDayl, 0.0, 1.0)));
+      /* The night crush that used to be here is gone with the rest of
+         them. Ice keeps its colour; the ambient decides whether you can
+         see it, and the torch is what shows it to you. */
 
       float a = mix(0.55, uOpacity, clamp(vDepth/0.7, 0.0, 1.0));
       a = mix(a, 1.0, fres*0.4);
@@ -3220,7 +3317,12 @@ function breachBasins(){
         /* The cap matters: a forty-metre cut flared over eight cells is
            still a 1.25 gradient, i.e. still a cliff, and alpine seeds were
            gaining twelve points of cliff fraction from their own breaches.
-           Fourteen cells puts the same cut at about 35 degrees. */
+           Fourteen cells puts the same cut at about 35 degrees.
+
+           (Widening this further was tried against the sheer-sided
+           crevasse on seed 3190231 and made it WORSE -- 22.9% of bank
+           cells over the cliff angle became 31.1% -- which is how we
+           know the crevasse is not made here. See the water mesh.) */
         const WR = clamp(Math.ceil(cut/1.4), 1, 14);
         for(let wz=-WR; wz<=WR; wz++) for(let wx=-WR; wx<=WR; wx++){
           const nx=cx+wx, nz=cz+wz;
@@ -5615,6 +5717,7 @@ function generateWorld(onProgress){
   /* Anything holding a reference into the world being replaced has to
      let go of it here, before the arrays underneath it change. */
   if(typeof CollisionView !== 'undefined') CollisionView.reset();
+  if(typeof CreatureView !== 'undefined') CreatureView.reset();
   const t0 = performance.now();
   let attempt = 0, result = null;
   const log = [];
@@ -5775,9 +5878,8 @@ function snowify(mat, amount){
                          dot(viewMatrix[1].xyz, normal),
                          dot(viewMatrix[2].xyz, normal));
           float lay = smoothstep(0.34, 0.80, wn.y) * uSnowAmt * uSnowBite;
-          float lit = clamp(uSnowDayl, 0.0, 1.0);
-          vec3 snow = mix(vec3(0.075, 0.088, 0.125), vec3(0.80, 0.84, 0.90), lit);
-          diffuseColor.rgb = mix(diffuseColor.rgb, snow, lay);
+          // the same albedo at every hour, for the same reason as the ground
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.84, 0.90), lay);
           roughnessFactor = mix(roughnessFactor, 0.68, lay);
         }`);
   };
@@ -6083,12 +6185,15 @@ function buildTerrainMesh(){
              it and goes flat and blue-white. */
           float sn = smoothstep(0.10, 0.34, vSnow.x);
           float deep = smoothstep(0.18, 0.72, vSnow.y);
-          float lit = clamp(uDayl, 0.0, 1.0);
-          vec3 nightSnow = vec3(0.075, 0.088, 0.125) * (0.7 + l*0.6);
-          vec3 shallowSnow = mix(nightSnow,
-                                 vec3(0.78, 0.82, 0.88) * (0.66 + l*0.62), lit);
-          vec3 deepSnow    = mix(nightSnow*1.2,
-                                 vec3(0.86, 0.89, 0.95) * (0.88 + l*0.18), lit);
+          /* SNOW IS WHITE AT MIDNIGHT TOO -- you simply cannot see it.
+             This used to mix toward a dark blue-grey as the daylight
+             went, which made a snowfield turn BLACK at night and then
+             turn white again under the torch: the material changing
+             colour with the clock, which nothing real does. The night
+             is handled where night belongs, at the ambient light (see
+             SKY_KEYS), and the albedo here is the same at every hour. */
+          vec3 shallowSnow = vec3(0.78, 0.82, 0.88) * (0.66 + l*0.62);
+          vec3 deepSnow    = vec3(0.86, 0.89, 0.95) * (0.88 + l*0.18);
           diffuseColor.rgb = mix(diffuseColor.rgb, mix(shallowSnow, deepSnow, deep), sn);
         }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
@@ -6212,14 +6317,41 @@ function buildWaterMesh(){
     const dl = Math.hypot(dx2, dz2) || 1;
     dirs.push(dx2/dl, dz2/dl);
   }
+  /* ---- WATER DOES NOT STAND UP -------------------------------------
+     A quad used to be emitted whenever its four corners all had a
+     vertex and one of them was wet, with nothing said about how far
+     apart those corners were VERTICALLY. At the lip of a gorge that is
+     a disaster: one corner is a wet cell holding the river's level at
+     the rim, the corner diagonally opposite is a dry-ring vertex that
+     has been dropped to the gorge floor fifteen metres below, and the
+     quad between them is a sheet of water standing on its end down the
+     cliff face. That is the blue, vertically streaked wall in the
+     crevasse -- not terrain at all, which is why widening the terrain's
+     banks twice did nothing for it.
+
+     Water falling IS a real thing and a cascade should still be drawn,
+     so the limit is a gradient rather than a height: across one cell
+     the surface may fall by CFG.HYDRO.maxFallGrade of that cell's
+     width. Past that it is not a surface, and the quad is left out --
+     which reads as the water going over the lip and out of sight,
+     which is what water does. */
+  const maxDrop = Wld.cell * CFG.HYDRO.maxFallGrade;
+  let dropped = 0, worstSpan = 0;
   for(let iz=0; iz<N-1; iz++) for(let ix=0; ix<N-1; ix++){
     const ia = iz*N+ix, ib = ia+1, ic = ia+N, id = ic+1;
     const a = map[ia], b = map[ib], c2 = map[ic], d2 = map[id];
     if(a<0||b<0||c2<0||d2<0) continue;
     // at least one real corner of water, or it is a quad of dry ring
     if(!(isWet[ia]||isWet[ib]||isWet[ic]||isWet[id])) continue;
+    const ya = verts[a*3+1], yb = verts[b*3+1],
+          yc = verts[c2*3+1], yd = verts[d2*3+1];
+    const span = Math.max(ya,yb,yc,yd) - Math.min(ya,yb,yc,yd);
+    if(span > worstSpan) worstSpan = span;
+    if(span > maxDrop){ dropped++; continue; }
     idx.push(a,c2,b, b,c2,d2);
   }
+  Wld.stats.waterWalls = { dropped, worstSpan:+worstSpan.toFixed(1),
+                           limit:+maxDrop.toFixed(1) };
   if(!idx.length){ World.water = null; return null; }
 
   const geo = new THREE.BufferGeometry();
@@ -6611,7 +6743,7 @@ const Veg = {
 
   build(){
     this.species = P.species.slice();
-    const cap = 2600;
+    const cap = 7000;        // enough to fill treeRadius at full density
     for(const sp of this.species){
       const crown = windify(new THREE.MeshStandardMaterial({
         // the hue lives here; the mask supplies variation and the cutout
@@ -6680,7 +6812,7 @@ const Veg = {
       this.rockR = maxR;          // horizontal radius per unit of scale
       this.rockTop = maxY;        // height above the instance origin, ditto
     }
-    this.rocks = new THREE.InstancedMesh(rockGeo, MAT.rock, 900);
+    this.rocks = new THREE.InstancedMesh(rockGeo, MAT.rock, 2400);
     this.rocks.frustumCulled = false; this.rocks.count = 0;
     this.rocks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.rocks.castShadow = true; this.rocks.receiveShadow = true;
@@ -6694,7 +6826,7 @@ const Veg = {
        same bark and a log lying in the snow is a different problem
        from a trunk in it. */
     MAT.deadbark = MAT.deadbark || snowify(MAT.bark.clone(), 0.85);
-    this.deadfall = new THREE.InstancedMesh(logGeo, MAT.deadbark, 500);
+    this.deadfall = new THREE.InstancedMesh(logGeo, MAT.deadbark, 1300);
     this.deadfall.frustumCulled = false; this.deadfall.count = 0;
     this.deadfall.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.deadfall.castShadow = true; this.deadfall.receiveShadow = true;
@@ -6871,14 +7003,32 @@ const Weather = {
    [ sunColour, skyColour, ambient, sunIntensity ] and everything else
    interpolates between them, so retuning the look of dusk is one line. */
 const SKY_KEYS = [
-  { h: 0.0,  sun:0x1a2233, sky:0x03050a, amb:0x0a0f18, si:0.00, ai:0.020 },
-  { h: 5.4,  sun:0x2a2a3c, sky:0x080c16, amb:0x11161f, si:0.02, ai:0.050 },
+  /* ---- HOW DARK THE NIGHT ACTUALLY IS ------------------------------
+     These ambient values are the one dial that decides whether the
+     world is visible without a torch, and they were set for a forest
+     floor with an albedo around 0.15. Snow has an albedo of 0.86.
+
+     Run the numbers at the old midnight figure of 0.020: snow reflects
+     0.0172 of linear light, and the gamma encode at the end of the post
+     stack turns that into 40 in sRGB -- clearly visible pale grey --
+     while the dirt beside it lands near 19. That is why a snowfield
+     glowed at night, and it is also why the first attempt to fix it by
+     PAINTING the snow dark at night was wrong: it made white snow turn
+     black, which is not what happens to snow.
+
+     Snow is white at midnight too. You just cannot see it. So the fix
+     is here, at the light, not in the materials: at 0.005 the same snow
+     lands near 20 and the ground near 9, both close enough to black
+     that the torch is what shows you the world -- and when the beam
+     lands on snow, it is white, because it always was. */
+  { h: 0.0,  sun:0x1a2233, sky:0x03050a, amb:0x0a0f18, si:0.00, ai:0.005 },
+  { h: 5.4,  sun:0x2a2a3c, sky:0x080c16, amb:0x11161f, si:0.02, ai:0.018 },
   { h: 6.4,  sun:0xc08a62, sky:0x2e3644, amb:0x2a3040, si:0.35, ai:0.30 },
   { h: 8.0,  sun:0xffe9c8, sky:0x6d8aa8, amb:0x93a6b8, si:1.05, ai:0.72 },
   { h: 13.0, sun:0xfff6e2, sky:0x8fb0cc, amb:0xa8bcd0, si:1.30, ai:0.95 },
   { h: 17.5, sun:0xffdca8, sky:0x7d9ab6, amb:0x98abbe, si:1.00, ai:0.75 },
   { h: 19.4, sun:0xd07a4a, sky:0x4a4a56, amb:0x3e4450, si:0.40, ai:0.34 },
-  { h: 20.6, sun:0x3a3244, sky:0x121722, amb:0x161c26, si:0.05, ai:0.085 },
+  { h: 20.6, sun:0x3a3244, sky:0x121722, amb:0x161c26, si:0.05, ai:0.030 },
   { h: 22.0, sun:0x1a2233, sky:0x04070c, amb:0x0b1018, si:0.00, ai:0.026 },
   { h: 24.0, sun:0x1a2233, sky:0x03050a, amb:0x0a0f18, si:0.00, ai:0.020 },
 ];
@@ -7018,6 +7168,11 @@ function updateSky(dt){
        cloud there is no reason for it to be four times the ground. */
     MAT.water.uniforms.uLight.value = clamp(ai*0.8 + si*0.5 + 0.004, 0.004, 1.4);
     MAT.water.uniforms.uDayl.value = dayl;
+    /* The wind the weather is actually blowing, as a direction and a
+       strength, so the lake answers to the same number the trees do. */
+    const wa = Weather.windAngle != null ? Weather.windAngle : 0.7;
+    MAT.water.uniforms.uWind.value.set(Math.sin(wa), Math.cos(wa));
+    MAT.water.uniforms.uWindAmt.value = clamp(Weather.wind, 0, 1);
   }
   /* The same number the water gets, without the floor: at midnight the
      snow should go with everything else. */
@@ -8624,9 +8779,13 @@ const People = {
       const a = tries[i];
       const c = Math.cos(a), sn = Math.sin(a);
       const dx = ux*c - uz*sn, dz = ux*sn + uz*c;
+      /* Tested at a MARGIN wider than they are, so a villager keeps a
+         hand's width off a wall instead of walking along it with their
+         shoulder inside the timber -- which is the sliding-along-the-
+         house look. The step they actually take is the clear one. */
       const q = { x: p.x + dx*step, y: p.obj.position.y, z: p.z + dz*step };
       const bx = q.x, bz = q.z;
-      resolveCollisions(q, R);
+      resolveCollisions(q, R + CFG.PEOPLE.wallGap);
       if(Math.hypot(q.x-bx, q.z-bz) > 0.02) continue;   // that way is blocked
       /* And it has to be ground they could stand on, so nobody walks
          off a bank or up a cliff to get somewhere. */
@@ -10168,13 +10327,32 @@ function buildHouse(spec){
     const backDepth = (D/2 + crossZ);
     const splitX = st.rooms >= 3 ? W*0.10 : null;
     if(splitX !== null){
-      const bz = (crossZ - D/2)/2;
-      const bd = backDepth;
-      const gapZ = crossZ - bd*0.28, gw = 0.95;
-      const nearLen = (crossZ - (gapZ + gw));
-      if(nearLen > 0.05) put(wall, H, nearLen, MAT.timber, splitX, H/2, crossZ - nearLen/2);
-      const farLen = (gapZ - gw) - (-D/2);
-      if(farLen > 0.05) put(wall, H, farLen, MAT.timber, splitX, H/2, -D/2 + farLen/2);
+      /* ---- THE WALL HAS TO REACH BOTH ENDS -----------------------
+         This ran from the cross wall to the back wall with a doorway
+         in it, and the doorway was placed at a fixed fraction of the
+         run with the two segments computed from it. On a shallow
+         house the near segment came out shorter than the 0.05 the
+         guard allowed and was simply not built -- so the wall started
+         a metre inside the room and you could see, and walk, straight
+         through the corner. That is the wall that does not meet the
+         room.
+
+         It is laid out from the ENDS now: the run is measured, the
+         doorway is centred in it, and each segment is whatever is
+         left on its side. Neither can vanish, because their lengths
+         are defined as the distance to a wall that is definitely
+         there, and the doorway shrinks on a short run rather than
+         eating a segment. */
+      const z0 = crossZ, z1 = -D/2;          // from the cross wall to the back
+      const run = Math.abs(z0 - z1);
+      const gw = Math.min(0.95, Math.max(0.42, run*0.22));   // half the doorway
+      const gapZ = (z0 + z1)*0.5;                            // centred in the run
+      const nearLen = z0 - (gapZ + gw);
+      const farLen  = (gapZ - gw) - z1;
+      if(nearLen > 0.02)
+        put(wall, H, nearLen, MAT.timber, splitX, H/2, z0 - nearLen/2);
+      if(farLen > 0.02)
+        put(wall, H, farLen, MAT.timber, splitX, H/2, z1 + farLen/2);
       put(wall, H-2.05, gw*2, MAT.timber, splitX, 2.05 + (H-2.05)/2, gapZ);
     }
 
@@ -11326,7 +11504,33 @@ function updatePlayer(dt){
      shown the inside of a hill. */
   const camX = p.pos.x + bobX*Math.cos(p.yaw), camZ = p.pos.z - bobX*Math.sin(p.yaw);
   const camFloor = heightAt(camX, camZ) + 0.22;
-  camera.position.set(camX, Math.max(eyeY + bobY, camFloor), camZ);
+  /* ---- AND IT KEEPS ITS DISTANCE FROM THE SIDES TOO ---------------
+     Clamping the eye above the ground UNDER it is not enough in a
+     narrow place. Standing at the bottom of a cut channel the ground
+     underfoot is metres below the walls a hand's width either side,
+     and the near plane -- 8cm -- slices straight into them: you end up
+     looking through the bank at the sky and the snow on the far side.
+     That is the "see through the wall after falling in" report.
+
+     So the eye is also pushed away from anything close beside it. Four
+     samples at the near-plane distance; if the ground at one of them is
+     above the eye, the eye moves away from it. It costs four height
+     lookups and it makes looking through a hillside impossible. */
+  let cx2 = camX, cz2 = camZ;
+  const eyeNow = Math.max(eyeY + bobY, camFloor);
+  {
+    const probe = 0.34;                 // comfortably past the near plane
+    for(let q = 0; q < 4; q++){
+      const a = q*Math.PI*0.5 + (p.camYaw == null ? p.yaw : p.camYaw);
+      const px2 = camX + Math.sin(a)*probe, pz2 = camZ + Math.cos(a)*probe;
+      const into = heightAt(px2, pz2) - eyeNow;
+      if(into > 0){
+        const push = Math.min(probe, into*0.6 + 0.05);
+        cx2 -= Math.sin(a)*push; cz2 -= Math.cos(a)*push;
+      }
+    }
+  }
+  camera.position.set(cx2, Math.max(eyeNow, heightAt(cx2, cz2) + 0.22), cz2);
   /* ---- THE HEAD THAT ANSWERS LATE ---------------------------------
      At the late stages the camera follows the player's look input a
      few frames behind and then overshoots it slightly, so turning to
@@ -11742,6 +11946,7 @@ const Gear = {
     this.mapPieces = P.gear.mapFrag ? 1 : 0;
     this.hasMap = this.mapPieces > 0;
     this.radio = false; this.radioOn = false;
+    this.fumbleUntil = 0; this.lastFumble = -1e9;
   },
 
   build(){
@@ -11858,7 +12063,48 @@ const Gear = {
     this._warmMs = Math.round(performance.now() - t0);
   },
 
+  /* ---- THE HANDS THAT CANNOT FIND IT --------------------------------
+     A late-stage symptom, and the cruellest one this file has, because
+     it takes away the thing the player reaches for when they are
+     frightened -- at the stage where they are frightened most of the
+     time.
+
+     It is a SEARCH that fails, not an object that vanishes. The torch
+     is still in the pocket; the player is patting the same pocket and
+     not finding it, and the lines say so without ever saying what is
+     wrong with them. It lasts a bounded number of seconds and then it
+     passes, and if the torch was already on when it starts it goes out
+     in their hand.
+
+     IT OBEYS THE ONE RULE. It says nothing about what is real, it
+     cannot be used to test anything, and it is driven by the mind's own
+     stage rather than by the director -- so it is not a warning that
+     something is about to happen. */
+  fumbling(){ return G.t < (this.fumbleUntil || 0); },
+  tickFumble(dt){
+    const F = CFG.GEAR;
+    if(this.fumbling()) return;
+    if(Mind.stage < F.fumbleFromStage) return;
+    if(G.t - (this.lastFumble || -1e9) < F.fumbleGap) return;
+    const per = (F.fumbleChancePerMin * (1 + (Mind.stage - F.fumbleFromStage)*0.8)) / 60;
+    if(!rngFor('fumble', Math.floor(G.t*3)).chance(per*dt)) return;
+    const r = rngFor('fumbleLen', Math.floor(G.t));
+    this.fumbleUntil = G.t + r.range(F.fumbleSeconds[0], F.fumbleSeconds[1]);
+    this.lastFumble = G.t;
+    if(this.torchOn){
+      this.torchOn = false;
+      UI.say(FUMBLE_DROP[Math.floor(r()*FUMBLE_DROP.length)], 3.4);
+    }
+  },
   toggleTorch(){
+    /* The search that fails. This is checked BEFORE the battery,
+       because not finding it and finding it dead are different things
+       and the player is entitled to be told which. */
+    if(this.fumbling()){
+      const r = rngFor('fumbleSay', Math.floor(G.t*2));
+      UI.say(FUMBLE_LINES[Math.floor(r()*FUMBLE_LINES.length)], 3.0);
+      return;
+    }
     if(this.battery <= 0){ UI.say('Nothing.', 1.6); return; }
     this.torchOn = !this.torchOn;
     if(typeof Audio !== 'undefined') Audio.play(this.torchOn ? 'switchOn' : 'switchOff', { gain: 0.5 });
@@ -11885,6 +12131,8 @@ const Gear = {
   },
 
   update(dt){
+    this.tickFumble(dt);
+    if(this.fumbling()) this.torchOn = false;
     // ---- battery ----
     if(this.torchOn){
       this.battery = Math.max(0, this.battery - dt/(CFG.GEAR.batteryMinutes*60));
@@ -11909,7 +12157,9 @@ const Gear = {
 
     const t = this.torchLight;
     const on = this.torchOn && this.battery > 0;
-    const power = on ? flick * lerp(0.45, 1.0, clamp(this.battery/0.35, 0, 1)) : 0;
+    const G2 = CFG.GEAR;
+    const power = on ? flick * lerp(G2.batteryFadeTo, 1.0,
+                                    clamp(this.battery/G2.batteryFadeFrom, 0, 1)) : 0;
     t.intensity = power * 42;
     t.distance = 62 * lerp(0.55, 1, power);
     /* ---- THE LIGHT IS ALWAYS IN THE SCENE ------------------------
@@ -14962,6 +15212,87 @@ const DEATH_LINES = {
    on there is a badge in the corner of the screen saying so — so it can
    never be mistaken for the game.
    ===================================================================== */
+/* ---------------------------------------------------------------------
+   THE CREATURE VIEW
+
+   Every real creature on the map, drawn through everything, so their
+   distribution can be looked at from a hill instead of inferred from a
+   list of distances. A coloured post at each one -- one colour per kind
+   -- plus a beam going up so a creature behind a ridge still tells you
+   where it is.
+
+   IT IS A DEV TOOL AND IT IS NEVER ON IN PLAY. It answers the one
+   question the game spends its whole length refusing to answer, so it
+   lives behind the dev panel with the rest of the things that would
+   spoil it, and it is drawn on the debug layer which the game's own
+   camera does not render.
+   ------------------------------------------------------------------- */
+const CreatureView = (()=>{
+  const V = { on:false, group:null, marks:[] };
+  const COLOUR = { stilt:0xff3b30, crawler:0xffcc00, hollow:0x34c7ff };
+  function mat(hex){
+    return new THREE.MeshBasicMaterial({ color:hex, depthTest:false,
+      depthWrite:false, transparent:true, opacity:0.85, fog:false });
+  }
+  function ensure(){
+    if(V.group) return;
+    V.group = new THREE.Group();
+    V.group.renderOrder = 9000;
+    setLayerDeep(V.group, LAYER_FX);
+    scene.add(V.group);
+  }
+  function build(){
+    ensure();
+    for(const m of V.marks) V.group.remove(m.obj);
+    V.marks.length = 0;
+    for(const b of Fauna.list){
+      const col = COLOUR[b.kind] || 0xffffff;
+      const g = new THREE.Group();
+      /* A post at its feet, so its footprint is readable from above. */
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.35, 0.9), mat(col));
+      post.renderOrder = 9001; g.add(post);
+      /* And a beam, so one behind a ridge still shows. It is tall
+         enough to clear anything on the map. */
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.30, 90, 0.30), mat(col));
+      beam.position.y = 45; beam.material.opacity = 0.30;
+      beam.renderOrder = 9001; g.add(beam);
+      /* A cage round the body itself, at its real size. */
+      const cage = new THREE.Mesh(
+        new THREE.BoxGeometry(b.K.radius*2.2, b.K.height, b.K.radius*2.2), mat(col));
+      cage.material.opacity = 0.22;
+      cage.position.y = b.K.height*0.5;
+      cage.renderOrder = 9001; g.add(cage);
+      setLayerDeep(g, LAYER_FX);
+      V.group.add(g);
+      V.marks.push({ b, obj:g });
+    }
+  }
+  return {
+    get on(){ return V.on; },
+    toggle(){
+      V.on = !V.on;
+      if(V.on) build(); else if(V.group) V.group.visible = false;
+      if(V.group) V.group.visible = V.on;
+      return V.on;
+    },
+    reset(){ if(V.group){ scene.remove(V.group); V.group = null; } V.marks.length = 0; },
+    update(){
+      if(!V.on) return;
+      // rebuild if the roster changed under us
+      if(V.marks.length !== Fauna.list.length) build();
+      for(const m of V.marks){
+        m.obj.position.set(m.b.x, groundTopAt(m.b.x, m.b.z), m.b.z);
+        m.obj.rotation.y = m.b.yaw;
+      }
+    },
+    summary(){
+      const by = {};
+      for(const b of Fauna.list) by[b.kind] = (by[b.kind]||0)+1;
+      return Object.entries(by).map(([k,v])=>v+'x '+k).join(', ') || 'none';
+    },
+  };
+})();
+
 const CollisionView = (()=>{
   const V = {
     on: false,
@@ -15669,14 +16000,111 @@ const DEV = (()=>{
             T.map(t=>Math.abs(t.y - heightAt(t.x, t.z)))).toFixed(2) : '-') + 'm'
         + `\nrejected plots: ` + JSON.stringify(Wld.stats.townRejects || {}));
     });
+    /* ---- TEST PLAYER: a probe, not a readout ----------------------
+       Everything else in this section prints the state of something.
+       This one DOES something: it takes the player's own body and
+       tries to walk it in eight directions for a third of a second
+       each, through the real resolver, and reports how far each one
+       got. It is the fastest way to answer "am I stuck, and if so
+       which way is shut", which is the question every report about
+       being blocked is really asking. The player is put back exactly
+       where they were afterwards. */
+    button(g5d, 'test player', ()=>{
+      const p0 = Player.pos.clone(), v0 = Player.vel.clone();
+      const yaw0 = Player.yaw, fall0 = Player.falling;
+      const R = CFG.PLAYER.radius;
+      const got = [];
+      for(let q=0; q<8; q++){
+        const a = q/8*TAU;
+        Player.pos.copy(p0); Player.vel.set(0,0,0); Player.falling = false;
+        Player.yaw = a;
+        Keys.KeyW = true;
+        for(let f=0; f<20; f++) updatePlayer(1/60);
+        Keys.KeyW = false;
+        got.push(Math.hypot(Player.pos.x-p0.x, Player.pos.z-p0.z));
+      }
+      Player.pos.copy(p0); Player.vel.copy(v0);
+      Player.yaw = yaw0; Player.falling = fall0;
+      const probe = { x:p0.x, y:p0.y, z:p0.z };
+      resolveCollisions(probe, R);
+      const inside = Math.hypot(probe.x-p0.x, probe.z-p0.z);
+      const compass = ['N','NE','E','SE','S','SW','W','NW'];
+      const best = Math.max.apply(null, got);
+      flash(`walked 1/3s in 8 directions, metres gained:\n`
+        + got.map((d,i)=> compass[i].padEnd(3) + d.toFixed(2)).join('  ')
+        + `\nbest ${best.toFixed(2)}m, ways out ${got.filter(d=>d>0.25).length}/8`
+        + (best < 0.15 ? '   *** STUCK ***' : '')
+        + `\ninside something: ` + (inside > 0.001 ? inside.toFixed(2)+'m' : 'no')
+        + `\nslope ${slopeAt(p0.x,p0.z).toFixed(2)}  `
+        + `snow ${snowDepthAt(p0.x,p0.z).toFixed(2)}m  drag ${(Player.snowDrag||0).toFixed(2)}`
+        + `\nstamina ${Player.stamina.toFixed(0)} — a full bar buys `
+        + (CFG.PLAYER.staminaMax/CFG.PLAYER.staminaDrain).toFixed(1) + 's of sprint');
+    });
     button(g5d, 'test people', ()=>{
       const L = People.list;
       if(!L.length){ flash('nobody in this town'); return; }
       const st3 = L.reduce((m,p)=>{ m[p.state]=(m[p.state]||0)+1; return m; }, {});
+      /* And it checks them rather than describing them: every one of
+         them through the resolver, and every sleeper against the bed
+         it is supposed to be on. */
+      let inWall = 0, worst = 0, floating = 0, offBed = 0;
+      for(const p of L){
+        if(p.hidden) continue;
+        const q = { x:p.x, y:p.obj.position.y, z:p.z };
+        resolveCollisions(q, CFG.PEOPLE.radius);
+        const push = Math.hypot(q.x-p.x, q.z-p.z);
+        if(push > 0.02){ inWall++; if(push > worst) worst = push; }
+        const gy = heightAt(p.x, p.z);
+        const fy = surfaceAt(p.x, p.z, p.obj.position.y, 0.3);
+        const floor = Math.max(gy, fy > -1e8 ? fy : -Infinity);
+        if(p.obj.position.y - floor > 0.35) floating++;
+        if(p.state === 'asleep' && p.bed && p.home){
+          p.home.mesh.updateMatrixWorld(true);
+          const b = new THREE.Vector3(p.bed.x, p.bed.top, p.bed.z)
+                      .applyMatrix4(p.home.mesh.matrixWorld);
+          if(Math.hypot(p.obj.position.x-b.x, p.obj.position.z-b.z) > 0.9) offBed++;
+        }
+      }
       flash(`${L.length} people: ` + JSON.stringify(st3)
+        + `\nstaff ${L.filter(p=>p.role==='staff').length}, `
+        + `with a home ${L.filter(p=>p.home).length}, with a bed ${L.filter(p=>p.bed).length}`
         + `\nnearest ` + Math.round(Math.min.apply(null,
             L.map(p=>Math.hypot(p.x-Player.pos.x, p.z-Player.pos.z)))) + 'm'
-        + `\nin any collision list: 0 (they are drawn only)`);
+        + `\ninside something: ${inWall}` + (inWall ? ` (worst ${worst.toFixed(2)}m)` : '')
+        + `\nfloating: ${floating}   sleepers off their bed: ${offBed}`);
+    });
+    button(g5d, 'test creatures', ()=>{
+      const L = Fauna.list;
+      if(!L.length){ flash('nothing alive out there'); return; }
+      let sunk = 0, floatN = 0, worstSink = 0;
+      const rows = L.map(b=>{
+        b.obj.updateMatrixWorld(true);
+        const bb = new THREE.Box3().setFromObject(b.obj);
+        const surf = groundTopAt(b.x, b.z);
+        const clear = bb.min.y - (surf - snowSinkAt(b.x, b.z));
+        if(clear < -0.05){ sunk++; if(-clear > worstSink) worstSink = -clear; }
+        if(clear > 0.30) floatN++;
+        return { b, d: Math.hypot(b.x-Player.pos.x, b.z-Player.pos.z), clear };
+      }).sort((a,b2)=>a.d-b2.d);
+      flash(`${L.length} alive — ${Fauna.summary()}\n`
+        + rows.map(r=> `  ${r.b.kind.padEnd(8)} ${r.d.toFixed(0).padStart(4)}m  `
+            + `${r.b.state.padEnd(7)} feet ${r.clear >= 0 ? '+' : ''}${r.clear.toFixed(2)}m`
+            + (Fauna.inView(r.b) ? '  SEEN' : '')).join('\n')
+        + `\nfeet in the ground: ${sunk}` + (sunk ? ` (worst ${worstSink.toFixed(2)}m)` : '')
+        + `   floating: ${floatN}`);
+    });
+    button(g5d, 'test flashlight', ()=>{
+      const mins = Gear.battery * CFG.GEAR.batteryMinutes;
+      flash(`battery ${(Gear.battery*100).toFixed(0)}% — `
+        + `${mins.toFixed(1)} minutes of beam left, ${Gear.spares} spare cells\n`
+        + `beam ${Gear.torchOn ? 'ON' : 'off'}, `
+        + `brightness ${(Gear.torchLight ? Gear.torchLight.intensity/42 : 0).toFixed(2)} of full\n`
+        + `low-battery flicker starts at ${(CFG.GEAR.batteryLowAt*100).toFixed(0)}%`
+        + ` (${Gear.battery < CFG.GEAR.batteryLowAt ? 'flickering now' : 'not yet'})\n`
+        + `hands: ` + (Gear.fumbling()
+            ? 'CANNOT FIND IT (' + ((Gear.fumbleUntil-G.t)).toFixed(1) + 's left)'
+            : 'fine') + `, symptom starts at stage ${CFG.GEAR.fumbleFromStage}\n`
+        + `shadow map ${CFG.QUALITY.shadowMap}, redrawn on demand`);
     });
     button(g5d, 'test car', ()=>{
       const c = Wld.structures.find(x=>x.kind === 'car');
@@ -15773,6 +16201,17 @@ const DEV = (()=>{
     cvBtn.onclick = (e)=>{ e.preventDefault();
       cvBtn.textContent = 'COLLISION VIEW: ' + (CollisionView.toggle() ? 'ON' : 'off'); };
     g6b.appendChild(cvBtn);
+    /* ---- AND WHERE EVERYTHING ALIVE IS ---------------------------
+       Drawn through the world, so the distribution of the creatures
+       can be LOOKED at from a ridge instead of read off a list of
+       distances. One colour per kind, a post at the feet and a beam
+       going up so one behind a hill still shows. */
+    const creBtn = el('button', null, 'CREATURE VIEW: off');
+    creBtn.onclick = (e)=>{ e.preventDefault();
+      const on = CreatureView.toggle();
+      creBtn.textContent = 'CREATURE VIEW: ' + (on ? 'ON' : 'off')
+        + (on ? '  ' + CreatureView.summary() : ''); };
+    g6b.appendChild(creBtn);
     D._syncCV = ()=>{ cvBtn.textContent = 'COLLISION VIEW: ' + (CollisionView.on ? 'ON' : 'off'); };
     const g6c = el('div','grid three'); s6b.appendChild(g6c);
     for(const k of ['player','terrain','structures','objects','triggers']){
@@ -16587,6 +17026,7 @@ function stepWorld(dt){
   Doors.update(dt);
   People.update(dt);
   Fauna.update(dt);
+  if(typeof CreatureView !== 'undefined') CreatureView.update();
   Survival.update(dt);
   Gear.update(dt);
   Mind.update(dt);
@@ -16742,6 +17182,25 @@ async function startRun(seedInput){
 
 /* Story-neutral: it says where the player is and what is wrong, and
    commits to nothing about who they are or why. */
+/* WHAT IT SAYS WHEN THE HANDS WILL NOT WORK. Every one of these is
+   about the search and never about the searcher: nothing here states
+   that anything is wrong with the player, which is the same rule the
+   rest of the writing in this file follows. */
+const FUMBLE_LINES = [
+  'It is not in that pocket. It is not in the other one either.',
+  'Your hands go over the same places twice and find nothing.',
+  'You had it. You are sure you had it.',
+  'Nothing in the pockets but cold.',
+  'Your fingers will not close on anything.',
+  'You check again. Same nothing.',
+];
+/* And when it is already lit and goes out in their hand. */
+const FUMBLE_DROP = [
+  'It slips, and the light goes with it.',
+  'Your hand opens on its own. The beam swings away and is gone.',
+  'You are holding nothing. You were holding it a second ago.',
+];
+
 const OPENING_LINE = 'You are awake, and you are in the trees, and you cannot remember lying down.';
 
 function boot(){
@@ -16816,11 +17275,12 @@ window.DR = {
   slopeAt, normalAt, cellHazard, cellWalkCost, snowDepthAt, snowDrag,
   snowLiftAt, groundTopAt, snowSinkAt,
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
+  buildWaterMesh, buildTerrainMesh,
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
   admit, townDepth, checkArrival, updateShadowBudget, ShadowBudget,
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders,
-  CollisionView, People, Fauna, BEASTS, resolveCollisions, pushOutOfTerrain,
+  CollisionView, CreatureView, People, Fauna, BEASTS, resolveCollisions, pushOutOfTerrain,
   get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
 };
 
