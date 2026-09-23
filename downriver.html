@@ -2355,7 +2355,13 @@ const WaterShader = {
          survives is the specular -- the moon on the water, and the
          white of the pressure seams in the ice, which are the only
          things that should catch anything. */
-      col *= mix(0.16, 1.0, clamp(uDayl, 0.0, 1.0));
+      /* The curve matters as much as the floor. A straight mix pulls
+         dusk down with midnight, and dusk on water is worth keeping --
+         so this is smoothstepped to reach full strength by the time
+         there is a quarter of daylight in the sky, and everything it
+         takes away it takes away from the small hours. Measured on the
+         way down: 10.5x the ground, then 5.2x, then 2.97x, then this. */
+      col *= mix(0.05, 1.0, smoothstep(0.0, 0.25, clamp(uDayl, 0.0, 1.0)));
 
       float a = mix(0.55, uOpacity, clamp(vDepth/0.7, 0.0, 1.0));
       a = mix(a, 1.0, fres*0.4);
