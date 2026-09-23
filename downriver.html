@@ -840,6 +840,18 @@ const CFG = {
   },
 
   /* ---- routes ------------------------------------------------------- */
+  /* ---- WHAT GROWS, AND WHERE IT IS NOT ALLOWED TO -------------------
+     Placement rules that are about the world rather than about the
+     look of a tree. */
+  VEG: {
+    /* How far back from the water's edge anything has to stand, in
+       metres of freeboard: a trunk needs its base this much above the
+       drawn water surface before it is allowed there. Zero would put
+       trunks exactly on the waterline, which still reads as a tree in
+       the river. */
+    bankClear: 0.18,
+  },
+
   ROUTE: {
     roadSlopeCost: 260,  // roads hate slope more than anything
     trailSlopeCost: 90,
@@ -5039,7 +5051,8 @@ function mindMinutesBudget(){
 }
 
 const GUARANTEES = ['G1 reachable','G2 in time','G3 water','G4 food','G5 clues','G6 hazards',
-                    'G7 wilderness','G8 water is real','G9 winter holds up'];
+                    'G7 wilderness','G8 water is real','G9 winter holds up',
+                    'G10 nothing grows in the water'];
 function validateWorld(){
   const res = { pass:true, fail:[], detail:{} };
   const fail = (g, why)=>{ res.pass=false; res.fail.push(g); res.detail[g]=why; };
@@ -5263,6 +5276,57 @@ function validateWorld(){
   }
   res.detail.startClear = nearHaz ? nearHaz.d : '>'+Math.round(startClearRadius(Wld.stats.startRelax||0));
   if(nearHaz) fail('G6', `${nearHaz.kind} ${nearHaz.d}m from the start`);
+
+  /* ---- G10 — NOTHING GROWS IN THE WATER ---------------------------
+     This exists because it happened. The scatter asked ONE grid cell
+     whether it was wet, while the water surface the player sees is
+     bilinear across four of them, so a tree could be planted on a cell
+     the grid called dry with the drawn water standing over it. Measured
+     before the fix: 131 to 275 trees per seed in water, the worst of
+     them in 7.78 metres of it, plus scrub, rocks and deadfall.
+
+     The check runs the REAL placement function over the scatter cells
+     that straddle a shoreline -- not a re-statement of the rule, which
+     would pass by construction -- and asks the same bilinear question
+     the player's feet ask of every trunk it hands back. It is bounded
+     to a sample, because the alternative is streaming the whole map at
+     generation time. */
+  {
+    const want = [];
+    for(let i = 0; i < Wld.N*Wld.N; i++)
+      if(Wld.WLEV[i] > -9000 && Wld.WLEV[i] > Wld.H[i] + 0.10) want.push(i);
+    const CELL = Veg.CELL;
+    const cells = new Set(), take = Math.min(240, want.length);
+    for(let k = 0; k < take; k++){
+      const i = want[Math.floor(k/take*want.length)];
+      const cx = Math.floor(wxOf(i%Wld.N)/CELL), cz = Math.floor(wzOf((i/Wld.N)|0)/CELL);
+      // the wet cell and its neighbours: the bank is where this goes wrong
+      for(let dz = -1; dz <= 1; dz++) for(let dx = -1; dx <= 1; dx++)
+        cells.add((cx+dx) + ',' + (cz+dz));
+    }
+    /* cellItems reads Veg.species, which Veg.build() sets -- and build
+       has not run yet at generation time. */
+    const hadSpecies = Veg.species && Veg.species.length;
+    if(!hadSpecies) Veg.species = P.species.slice();
+    let planted = 0, wet = 0, deepest = 0;
+    const out = [];
+    for(const key of cells){
+      const [cx, cz] = key.split(',').map(Number);
+      Veg.cellItems(cx, cz, out);
+      for(const it of out){
+        planted++;
+        const lvl = waterLevelAt(it.x, it.z);
+        if(lvl < -9000) continue;
+        const d = lvl - heightAt(it.x, it.z);
+        if(d > 0.05){ wet++; if(d > deepest) deepest = d; }
+      }
+    }
+    if(!hadSpecies) Veg.species = [];
+    Wld.stats.vegInWater = { checked: planted, inWater: wet,
+                             deepest: +deepest.toFixed(2), cells: cells.size };
+    res.detail.vegInWater = wet ? `${wet} of ${planted}, worst ${deepest.toFixed(2)}m` : `0 of ${planted}`;
+    if(wet) fail('G10', `${wet} plants standing in water, the worst in ${deepest.toFixed(2)}m`);
+  }
 
   return res;
 }
@@ -6196,7 +6260,22 @@ const Veg = {
     let d = (1-open) * P.density;
     d *= 1 - smoothstep(treeline*0.88, treeline*1.05, h);
     d *= 1 - smoothstep(0.45, 0.78, Wld.SLOPE[i]);
-    if(Wld.WLEV[i] > Wld.H[i]-0.05) d = 0;
+    /* ---- NOTHING GROWS IN THE WATER, AND THE TEST HAS TO AGREE WITH
+       THE WATER YOU CAN SEE. This asked one grid cell -- the nearest one
+       -- whether it was wet, while the water SURFACE is bilinear across
+       four of them. A cell the grid calls dry can have the drawn water
+       standing over it, because the level bleeds in from its wet
+       neighbours, and that is where the trees in the river came from:
+       measured at (356, -344) on seed 42, the nearest cell reported dry
+       at 49.31m and the water at that exact point was 51.04m over a
+       ground of 49.36m -- a tree in 1.68m of water, on a cell that
+       passed. Worst case found was 7.78m.
+
+       Both sides are bilinear now, so they cannot disagree, and there is
+       a margin: a trunk standing exactly on the waterline still looks
+       like it is in the river. */
+    const lvl = waterLevelAt(x, z);
+    if(lvl > -9000 && lvl > heightAt(x, z) - CFG.VEG.bankClear) d = 0;
     if(this.inClearing(x, z)) d = 0;
     return clamp(d, 0, 1);
   },
@@ -6371,7 +6450,12 @@ const Veg = {
       if(Math.abs(cxw) < Wld.size*0.5 && Math.abs(czw) < Wld.size*0.5){
         const gi = Math.round(clamp(gzOf(czw),0,Wld.N-1))*Wld.N + Math.round(clamp(gxOf(cxw),0,Wld.N-1));
         const open = Wld.CLEAR[gi], slope = Wld.SLOPE[gi];
-        const underwater = Wld.WLEV[gi] > Wld.H[gi]-0.02 || this.inClearing(cxw, czw);
+        /* Same bilinear test as the trees, for the same reason -- the
+           undergrowth, the rocks and the deadfall were all placed off
+           the nearest cell and all of them stood in the water. */
+        const wl = waterLevelAt(cxw, czw);
+        const underwater = (wl > -9000 && wl > heightAt(cxw, czw) - CFG.VEG.bankClear)
+                           || this.inClearing(cxw, czw);
         if(!underwater && ns < this.scrub.instanceMatrix.count && hb < 0.34*P.scrub*(0.35+open)){
           const sc = 0.7 + ihash2(cx*7, cz*3, seed+55)*1.5;
           E.set(0, hb*TAU, 0); Q.setFromEuler(E);
@@ -14617,6 +14701,18 @@ const DEV = (()=>{
          has been generated in between: 5 of 5
        the hospital sits below mean elevation on 18 of 20 seeds
          (the other two are close to the mean, not above it)
+
+     NOTHING GROWS IN THE WATER  (G10, 12 seeds, and the standalone
+     scatter audit over 26 shoreline cells per seed)
+       the scatter asked ONE grid cell whether it was wet; the water
+         surface is bilinear across four, so a cell the grid called dry
+         could have the drawn water standing over it
+       before: 131-275 trees per seed in water, worst 7.78m deep,
+         plus 34-55 scrub, 19-44 rocks and 14-22 logs
+       after:  0 of every kind on all four seeds audited
+       G10 fails 12 of 12 seeds on the broken placement (78-144 plants
+         in water, worst 6.73m) and passes 12 of 12 once fixed
+       it costs nothing: generation 505ms median with it, 515ms without
 
      RENDERING  (one seed, at the start position)
        566,492 triangles in 21 draw calls
