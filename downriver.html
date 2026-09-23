@@ -16098,6 +16098,24 @@ const DEV = (()=>{
        sheds: 80-88% roof cover before, 100% after -- a slab tilted
          about its centre lifts clear of the wall it sits on
 
+     WHAT THE SHADOWS COST  (seed 1640, at night, the same six timed
+     frames on each build. Headless software rendering, so the absolute
+     milliseconds mean nothing and the RATIO is the whole point.)
+
+                                  before      after     faster by
+       torch off, standing       2106.9ms   1439.6ms      1.46x
+       torch on, standing        2391.6ms   1605.1ms      1.49x
+       torch on, turning         3760.9ms   2210.2ms      1.70x
+
+       before: two shadow-casting lights, each re-rendering the whole
+         scene into a 2048 square depth map every frame
+       after: both maps 1024, and both driven on demand -- the sun's
+         when the player has walked 3m or the sun has moved, the
+         torch's when the view has turned 2 degrees or moved half a
+         metre, and both lazier again as the resolution ladder drops
+       the largest gain is turning with the torch on, which is what a
+         player actually does
+
      RENDERING  (one seed, at the start position)
        566,492 triangles in 21 draw calls
        worldgen 441ms, materials 786ms, ground bake 1174ms
