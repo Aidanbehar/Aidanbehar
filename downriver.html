@@ -9096,15 +9096,11 @@ const People = {
      all. The light count is part of every material's program key, so
      the number of distinct counts the game ever shows is the number of
      times it can stop to compile: adding lamps one at a time walked
-     through six counts and compiled at each. Two counts -- none and
-     all -- means one switch on the approach to town, and warmBulbs()
-     below compiles that variant before the first frame so even that
-     one is free.
+     through six counts and stopped at each of them. Two counts -- none
+     and all -- is one stop on the approach to town and none after.
 
-     They are not left in the scene permanently either. Six point
-     lights with the intensity turned down still run their shading in
-     every fragment of every frame, and the player is out in the forest
-     for most of a run. */
+     They are not left in the scene permanently, and the note below
+     says what that costs and what is not known about it. */
   bulbs: [], bulbsIn: false,
   ensureBulbs(){
     while(this.bulbs.length < CFG.PEOPLE.liveLights){
@@ -9119,54 +9115,39 @@ const People = {
     this.bulbsIn = want;
     for(const b of this.bulbs){ if(want) scene.add(b); else scene.remove(b); }
   },
-  /* Compile the with-lamps variant of every material at boot, the same
-     way and for the same reason the torch does -- and, as Gear.warmup
-     says in as many words, THROUGH THE COMPOSER. renderer.compile()
-     alone is not enough: the composer draws into its own target with
-     its own size and format, and a variant warmed against the canvas
-     is warmed for a pass the game never runs. Measured with only the
-     compile() call, the approach to town still stopped to build eleven
-     programs, which is how this was caught. */
-  warmBulbs(){
-    this.ensureBulbs();
-    const was = this.bulbsIn;
-    this.setBulbsIn(true);
-    /* ---- THE THINGS THE LAMPS WILL LIGHT HAVE TO BE VISIBLE -------
-       renderer.compile() walks the scene and skips anything whose
-       `visible` is false. The player starts 800 metres from the town,
-       so every one of its buildings is culled at boot and none of their
-       materials got a with-lamps program -- which is why two earlier
-       attempts at this warm-up changed nothing at all. Measured: the
-       approach compiled 11 programs with the pool switching in and 0
-       with it pinned out, so it is the lamps and it is these meshes.
+  /* ---- WHY THERE IS NO WARM-UP FOR THESE, unlike the torch --------
+     There was one, three times over, and none of the three versions
+     changed the measurement by a single program. The reason is not a
+     detail any of them got wrong: three.js FREES a shader program when
+     nothing references it any more, so the instant a warm-up takes its
+     lights back out of the scene, every variant it just compiled is
+     released. A warm-up cannot hold a light-count variant open. (The
+     torch's warm-up works because the torch light is in the scene for
+     the whole run -- it is switched by intensity, not by presence.)
 
-       They are made visible for the compile and put back exactly as
-       they were. Nothing is drawn to the screen; the loading overlay is
-       still up. */
-    const hidden = [];
-    const show = (o)=>{ if(o && !o.visible){ hidden.push(o); o.visible = true; } };
-    for(const b of (Wld.townBuildings || [])) if(b.mesh){
-      show(b.mesh); b.mesh.traverse(show);
-    }
-    if(Wld.hospital && Wld.hospital.mesh){
-      show(Wld.hospital.mesh); Wld.hospital.mesh.traverse(show);
-    }
-    for(const b of this.bulbs) b.intensity = 0.002;
-    const mask = camera.layers.mask;
-    try {
-      camera.layers.enableAll();
-      renderer.compile(scene, camera);
-      /* Through the composer too, as Gear.warmup does: it draws into a
-         different target with a different size and format. */
-      composer.render();
-    } catch(e){ this._warmError = String(e && e.message || e); }
-    camera.layers.mask = mask;
-    for(const o of hidden) o.visible = false;
-    for(const b of this.bulbs){ b.intensity = 0; b.position.set(0, -400, 0); }
-    this.setBulbsIn(was);
-    this._bulbsWarmed = true;
-    this._bulbsWarmedHidden = hidden.length;
-  },
+     What IS fixed is the repetition. The lamps used to be created one
+     at a time as houses came into range, so the walk into town stepped
+     through six different light counts and stopped at each. Measured on
+     the approach at dusk, seed 42:
+
+       before          54 new programs over 9 compile events
+       batched         16 new programs over 4 compile events
+       pool pinned out  3 new programs over 2 compile events
+
+     The third row is the control: it is what the approach costs with
+     the lamps taken out of the question entirely, and it is how we know
+     the 11-program event that remains is theirs.
+
+     That one event could be removed by leaving the six bulbs in the
+     scene permanently -- the count would never change and nothing would
+     ever recompile -- at the cost of six point lights being shaded in
+     every fragment of every frame, including the fifty minutes of a run
+     spent in the forest. That trade was NOT measured: under software
+     rendering the per-frame cost is swamped by the recompiles
+     themselves, with passes landing anywhere from 134ms to 5980ms and
+     the six-light passes sometimes coming out FASTER than the none.
+     It needs real hardware to settle, and until it is settled the
+     version that costs nothing per frame is the one that ships. */
 
   update(dt){
     if(!this.active || !this.list.length) return;
@@ -17265,6 +17246,43 @@ const DEV = (()=>{
 
        60 and not tighter because the box is also how far shadows REACH.
 
+     THE TOWN'S LAMPS  (seed 42, walking in from 270m at dusk, counting
+     shader programs rather than milliseconds -- the count is the same
+     number on any machine, the milliseconds are not)
+
+                            new programs   compile events
+       before                     54              9
+       batched in and out         16              4
+       pool pinned out             3              2
+
+       The lamps used to be created one at a time as houses came into
+       range, so the walk stepped through six different light counts and
+       the renderer rebuilt every material in the world at each of them.
+       The count is part of a material's program key; the position and
+       the intensity are not. They are a fixed pool now, switched in
+       together.
+
+       The third row is the control -- the same walk with the pool held
+       out of the scene entirely -- and it is how the remaining
+       11-program event is known to be theirs and not the town's
+       geometry coming into view, which was the other candidate.
+
+       A WARM-UP CANNOT REMOVE THAT LAST ONE, and three versions of one
+       were written before that was understood. three.js frees a shader
+       program when nothing references it, so the moment a warm-up takes
+       its lights back out, every variant it compiled is released. All
+       three attempts returned 16 programs and 4 events, to the number,
+       which is what finally gave it away. The torch's warm-up works for
+       the opposite reason: its light is in the scene for the whole run
+       and is switched by intensity.
+
+       It could be removed by leaving the six bulbs in the scene for the
+       whole run. That trade is NOT measured and is not claimed: under
+       software rendering the per-frame cost of six parked lights is
+       swamped by the recompiles, with passes landing between 134ms and
+       5980ms and the six-light passes sometimes faster than the none.
+       Real hardware has to settle it.
+
      WEATHER INDOORS  (seed 42, in a storm)
        precipitation opacity: 0.398 in the open, 0 at the hospital
          desk, 0 inside a house, 0.398 back outside
@@ -17872,11 +17890,6 @@ async function startRun(seedInput){
   setProgress(0.97, 'checking the torch');
   await frameBreak();
   Gear.warmup();
-  /* And the same for the town's lamps: the walk into town at dusk adds
-     six point lights, and the count is part of every material's program
-     key. Compiling that variant here is the difference between arriving
-     at a town and stopping dead outside it. */
-  People.warmBulbs();
   setProgress(1.0, 'walk');
   await frameBreak();
 
