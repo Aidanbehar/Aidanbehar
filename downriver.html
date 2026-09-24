@@ -9120,15 +9120,34 @@ const People = {
     for(const b of this.bulbs){ if(want) scene.add(b); else scene.remove(b); }
   },
   /* Compile the with-lamps variant of every material at boot, the same
-     way and for the same reason the torch does. */
+     way and for the same reason the torch does -- and, as Gear.warmup
+     says in as many words, THROUGH THE COMPOSER. renderer.compile()
+     alone is not enough: the composer draws into its own target with
+     its own size and format, and a variant warmed against the canvas
+     is warmed for a pass the game never runs. Measured with only the
+     compile() call, the approach to town still stopped to build eleven
+     programs, which is how this was caught. */
   warmBulbs(){
     this.ensureBulbs();
     const was = this.bulbsIn;
     this.setBulbsIn(true);
-    for(const b of this.bulbs) b.intensity = 0.001;
-    try { renderer.compile(scene, camera); } catch(e){ this._warmError = String(e); }
-    for(const b of this.bulbs) b.intensity = 0;
+    /* Lit, and put somewhere they actually fall on the world, or the
+       renderer is free to decide they touch nothing. */
+    for(const b of this.bulbs){
+      b.intensity = 0.002;
+      b.position.set(camera.position.x, camera.position.y + 1.5, camera.position.z);
+    }
+    const mask = camera.layers.mask;
+    try {
+      camera.layers.enableAll();
+      renderer.compile(scene, camera);
+      composer.render();
+      composer.render();
+    } catch(e){ this._warmError = String(e && e.message || e); }
+    camera.layers.mask = mask;
+    for(const b of this.bulbs){ b.intensity = 0; b.position.set(0, -400, 0); }
     this.setBulbsIn(was);
+    this._bulbsWarmed = true;
   },
 
   update(dt){
