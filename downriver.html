@@ -5419,7 +5419,7 @@ function mindMinutesBudget(){
 
 const GUARANTEES = ['G1 reachable','G2 in time','G3 water','G4 food','G5 clues','G6 hazards',
                     'G7 wilderness','G8 water is real','G9 winter holds up',
-                    'G10 nothing grows in the water'];
+                    'G10 nothing grows in the water','G11 somewhere to be admitted'];
 function validateWorld(){
   const res = { pass:true, fail:[], detail:{} };
   const fail = (g, why)=>{ res.pass=false; res.fail.push(g); res.detail[g]=why; };
@@ -5700,6 +5700,40 @@ function validateWorld(){
                              deepest: +deepest.toFixed(2), cells: cells.size };
     res.detail.vegInWater = wet ? `${wet} of ${planted}, worst ${deepest.toFixed(2)}m` : `0 of ${planted}`;
     if(wet) fail('G10', `${wet} plants standing in water, the worst in ${deepest.toFixed(2)}m`);
+  }
+
+  /* ---- G11 — SOMEWHERE TO BE ADMITTED ------------------------------
+     The end of the walk is a town with a hospital in it and people in
+     both. A hospital standing alone on a hillside with no street, no
+     houses and nobody in it is not that, and it was reachable: one
+     seed in a hundred and twenty laid out a street whose every plot
+     was turned down, genTown returned an empty list, and People.build
+     -- which used to give up entirely if the town was empty -- then
+     built no villagers AND no staff.
+
+     Both halves of that are fixed at their source (the road is cut as
+     a terrace, so plots are not offered ground they will be refused
+     for; and the staff no longer depend on the town existing). This is
+     the check that says so, because a fix nothing tests is a fix that
+     comes back. A seed that fails it is nudged and generated again,
+     the same as one with no walkable route. */
+  {
+    const t = Wld.townBuildings || [];
+    const houses = t.filter(b=> b.kind === 'house' && b.enterable).length;
+    res.detail.town = `${houses} houses, ${t.length} buildings`;
+    if(!Wld.street) fail('G11', 'no street');
+    else if(houses < TOWN.minHouses)
+      fail('G11', `a town of ${houses} houses, below the ${TOWN.minHouses} a town needs`);
+    /* THE STAFF ARE NOT CHECKED HERE, and the first version of this
+       tried to. validateWorld runs inside the generation loop, where
+       the hospital is a SITE -- a position, a yaw and a height. Its
+       mesh, and the posts its staff stand on, are built later by
+       buildAllStructures. So the check read zero posts on every seed,
+       failed G11 on every seed, and quietly burned all fourteen
+       attempts on each one before giving up and using the last. It was
+       caught because the attempt count read 15 where it should read 1,
+       which is the whole reason that number is on the panel. The staff
+       are counted where they are actually made: see peopleCheck. */
   }
 
   return res;
@@ -8637,19 +8671,28 @@ const People = {
   build(){
     this.clear();
     const town = Wld.townBuildings || [];
-    if(!town.length || !Wld.street) return;
     const rng = rngFor('people');
+    /* THE STAFF ARE NOT THE TOWN'S. This whole function used to begin
+       `if(!town.length || !Wld.street) return;`, so a seed whose town
+       laid out no buildings got no people AT ALL -- including the
+       hospital's staff, who have nothing to do with the town: they
+       stand on posts inside a building that is placed before the town
+       exists and would be there if the street were never cut. That is
+       the reported lone hospital with nobody in it. The town is
+       guaranteed now (see TOWN.minHouses), but the two are no longer
+       wired together either way, so the same seed can never do it
+       again by some other route. */
     const S = Wld.street;
-    const dx = S.x1 - S.x0, dz = S.z1 - S.z0;
-    const len = Math.hypot(dx, dz) || 1;
-    const ux = dx/len, uz = dz/len;
-
-    /* Places worth walking to: points along the street, and the patch of
-       ground outside each door. */
-    for(let t=0.08; t<=0.92; t+=0.085){
-      const x = S.x0 + dx*t + (rng()-0.5)*1.8;
-      const z = S.z0 + dz*t + (rng()-0.5)*1.8;
-      this.waypoints.push({ x, z, kind:'street' });
+    if(S){
+      const dx = S.x1 - S.x0, dz = S.z1 - S.z0;
+      const len = Math.hypot(dx, dz) || 1;
+      /* Places worth walking to: points along the street, and the patch
+         of ground outside each door. */
+      for(let t=0.08; t<=0.92; t+=0.085){
+        const x = S.x0 + dx*t + (rng()-0.5)*1.8;
+        const z = S.z0 + dz*t + (rng()-0.5)*1.8;
+        this.waypoints.push({ x, z, kind:'street' });
+      }
     }
     for(const b of town){
       if(!b.mesh || !b.mesh.userData.entry) continue;
@@ -8658,7 +8701,6 @@ const People = {
     }
     const h = Wld.hospital;
     if(h && h.entryWorld) this.waypoints.push({ x:h.entryWorld.x, z:h.entryWorld.z, kind:'door', host:h });
-    if(this.waypoints.length < 3) return;
 
     /* ---- WHOSE HOUSE IS WHOSE -------------------------------------
        Every villager gets a home and a bed in it. The home is what
@@ -8677,7 +8719,8 @@ const People = {
          forces the first pass to put every one of them right. */
       b.lampsOn = null;
     }
-    const n = rng.irange(CFG.PEOPLE.count[0], CFG.PEOPLE.count[1]);
+    const n = this.waypoints.length >= 3
+      ? rng.irange(CFG.PEOPLE.count[0], CFG.PEOPLE.count[1]) : 0;
     for(let i=0;i<n;i++){
       const w = this.waypoints[rng.irange(0, this.waypoints.length-1)];
       const obj = this.makeBody(rng);
@@ -8743,6 +8786,25 @@ const People = {
     this.active = true;
     Wld.stats.people = this.list.length;
     Wld.stats.staff = this.list.filter(p=>p.role === 'staff').length;
+    /* ---- WHAT THE TOWN ACTUALLY ENDED UP WITH ----------------------
+       G11 guarantees the street and the houses at generation time; this
+       is the other half, recorded where the people are really made and
+       shown on the dev panel. A town with nobody in it is the reported
+       bug, and it is not allowed to go unnoticed again whatever causes
+       it -- an empty plot list, a hospital with no posts, or something
+       nobody has thought of yet. */
+    {
+      const hp = Wld.hospital;
+      const posts = hp && hp.mesh && hp.mesh.userData.posts ? hp.mesh.userData.posts.length : 0;
+      const villagers = this.list.length - Wld.stats.staff;
+      Wld.stats.peopleCheck = {
+        villagers, staff: Wld.stats.staff, posts,
+        houses: town.filter(b=> b.kind === 'house' && b.enterable).length,
+        ok: villagers > 0 && Wld.stats.staff > 0,
+      };
+      if(!Wld.stats.peopleCheck.ok)
+        console.warn('DOWNRIVER: nobody in the town —', JSON.stringify(Wld.stats.peopleCheck));
+    }
   },
 
   /* ---- WHAT TIME OF DAY IT IS, FOR SOMEBODY WHO LIVES HERE --------
@@ -9071,7 +9133,7 @@ const TOWN = {
      eaves meet over the street and the doors open into the road. */
   rowOffset: 13.5,       // metres from the street's centre line to a front door
   gapAtEntrance: 15,     // no house directly in front of the doors
-  spacing: [19, 30],     // metres between neighbours along the street
+  spacing: [17, 26],     // metres between neighbours down one side
   houses: [5, 9],
   sheds: [1, 3],
   grade: 0.085,          // the steepest the road bed is allowed to run
@@ -9082,8 +9144,34 @@ const TOWN = {
      which the plot check then rejected for being raw hillside. With
      the bigger houses that took the town from five to seven buildings
      down to one to three. It has to be rowOffset + half a house. */
-  verge: 20,             // how far either side of it is graded with it
+  /* A ROAD CUT INTO A HILLSIDE IS A TERRACE, NOT A DIP. The grading
+     used to fall off from the kerb outward, so a plot at rowOffset got
+     about HALF the levelling and the back wall of the house got about
+     fifteen percent of it -- measured, not guessed. On rolling ground
+     the raw relief across the plot therefore survived almost intact and
+     the plot was then turned down for being uneven: across 120 seeds,
+     'rough' was the reason for 68% of every rejection, the median town
+     was THREE houses against a wanted six to nine, and one seed in a
+     hundred got none at all and stood there as a hospital with nobody
+     in it.
+
+     So the ground is held FLAT out to the shoulder -- far enough back
+     to take a house and its yard -- and only then feathers away. The
+     feather is long enough that its own steepest point (1.5*cut/feather
+     for a smoothstep) stays well under the slope the legs refuse, so
+     the terrace edge is a bank you walk down, not a step you are
+     stopped by. */
+  shoulder: 21,          // full levelling out to here: rowOffset + a house
+  feather: 18,           // ... then blended out over at least this much
+  bankGrade: 0.42,       // the steepest the bank off the terrace may run
+  maxBank: 58,           // ... however deep the cut, the bank stops here
   plotRelief: 4.0,       // how uneven a plot may be before its pad is a quarry
+  /* A town smaller than this is not a town, and the street is re-cut on
+     a different bearing rather than accepting it. */
+  minHouses: 4,
+  crossPenalty: 7.0,     // metres of road a metre of cross-slope is worth giving up
+  yardGap: 1.6,          // clear air between any two buildings' footprints
+  padResidual: 0.9,      // how uneven a plot may still be AFTER its pad is cut
   nudge: [0, 5, -5, 9, -9, 14, -14, 19, -19]  // metres along the street to try
 };
 
@@ -10033,10 +10121,21 @@ function carveStreet(S, maxGrade, maxCut, dryRun){
 
   if(dryRun) return { from: (lo-anchor)*step, to: (hi-anchor)*step,
                       x0: px[lo], z0: pz[lo], x1: px[hi], z1: pz[hi] };
-  const half = S.width*0.5, verge = TOWN.verge;
+  const half = S.width*0.5;
+  /* Flat to the shoulder, then a BANK back to the hillside -- see
+     TOWN.shoulder. The bank's length is not fixed: it is however long
+     the cut at that point needs it to be. A fixed 18m feather closing a
+     15m cut is a 1.25 grade, which is a cliff, and the first version of
+     this did exactly that -- it took the ground 21 to 44m off the road
+     from 19.7% unwalkable to 25.5%, measured over 25 seeds. Tying the
+     bank's length to the depth of the cut keeps its steepest point
+     (1.5*cut/length for a smoothstep) at bankGrade whatever the
+     hillside does. */
+  const flat = Math.max(half, TOWN.shoulder), feather = TOWN.feather;
+  const maxBank = TOWN.maxBank;
   const N = Wld.N, H = Wld.H;
   for(let i=lo;i<=hi;i++){
-    const rad = Math.ceil((half+verge)/Wld.cell);
+    const rad = Math.ceil((flat+maxBank)/Wld.cell);
     const ix = Math.round(gxOf(px[i])), iz = Math.round(gzOf(pz[i]));
     for(let dz=-rad; dz<=rad; dz++) for(let dx=-rad; dx<=rad; dx++){
       const nx = ix+dx, nz = iz+dz;
@@ -10044,8 +10143,10 @@ function carveStreet(S, maxGrade, maxCut, dryRun){
       const j = nz*N+nx;
       if(Wld.WLEV[j] > H[j]-0.05) continue;        // never carve water
       const d = Math.hypot(wxOf(nx)-px[i], wzOf(nz)-pz[i]);
-      if(d > half+verge) continue;
-      const w = 1 - smoothstep(half, half+verge, d);
+      if(d > flat+maxBank) continue;
+      const bank = clamp(Math.abs(H[j]-prof[i])*1.5/TOWN.bankGrade, feather, maxBank);
+      if(d > flat+bank) continue;
+      const w = 1 - smoothstep(flat, flat+bank, d);
       H[j] = lerp(H[j], prof[i], w);
     }
   }
@@ -10055,10 +10156,8 @@ function carveStreet(S, maxGrade, maxCut, dryRun){
 }
 
 function genTown(){
-  const out = [];
   const hos = Wld.hospital;
-  if(!hos) { Wld.townBuildings = out; Wld.town = null; return; }
-  const rng = rngFor('town');
+  if(!hos) { Wld.townBuildings = []; Wld.town = null; return; }
   const c = Math.cos(hos.yaw), s = Math.sin(hos.yaw);
   /* The hospital's own frame: +Z local is the way its doors face, which
      is the convention every structure in this file is built on. */
@@ -10074,7 +10173,15 @@ function genTown(){
      how much street it would actually yield, and the best is taken with
      a penalty for turning away from the hospital's own direction. */
   const anchor = toWorld(0, TOWN.streetOffset);
-  let bestDir = 0, bestScore = -Infinity, graded = null;
+  /* EVERY bearing is scored and KEPT, best first, because the best one
+     on paper is not always the one that can hold a town: the dry run
+     only knows how much road it would get, and says nothing about
+     whether there is dry, level ground beside it to build on. The
+     hospital stands at the river's outlet, so a street that scores well
+     can still have water down one side and a bank up the other. If the
+     first bearing does not yield a town, the cut is UNDONE and the next
+     one is tried. */
+  const cands = [];
   for(const off of [0, 22*DEG, -22*DEG, 45*DEG, -45*DEG, 68*DEG, -68*DEG, 90*DEG]){
     const th = hos.yaw + off;
     const dx2 = Math.cos(th), dz2 = -Math.sin(th);
@@ -10085,15 +10192,69 @@ function genTown(){
     const dry = carveStreet(probe, TOWN.grade, TOWN.maxCut, true);
     const usable = Math.min(Math.abs(dry.from), TOWN.streetHalfLength)
                  + Math.min(Math.abs(dry.to), TOWN.streetHalfLength);
-    const score = usable - Math.abs(off)*22;
-    if(score > bestScore){ bestScore = score; bestDir = th; }
+    /* HOW MUCH EARTH THIS BEARING WOULD MOVE, which the road length
+       says nothing about. A road can run its full length straight
+       ACROSS a hillside: the profile is fine, and either side of it is
+       a cutting on one hand and a drop on the other. That is where the
+       bank above gets long and the plots get refused, so a bearing that
+       runs along the contour is worth several metres of road. */
+    let cross = 0, cn = 0;
+    for(let t=-0.9; t<=0.9; t+=0.3){
+      const bx = anchor.x + dx2*TOWN.streetHalfLength*t;
+      const bz = anchor.z + dz2*TOWN.streetHalfLength*t;
+      const base = heightAt(bx, bz);
+      for(const sgn of [-1, 1]){
+        const qx = bx - dz2*sgn*TOWN.shoulder, qz = bz + dx2*sgn*TOWN.shoulder;
+        if(Math.abs(qx) > LIM || Math.abs(qz) > LIM) continue;
+        cross += Math.abs(heightAt(qx, qz) - base); cn++;
+      }
+    }
+    const meanCross = cn ? cross/cn : 0;
+    cands.push({ th, score: usable - Math.abs(off)*22 - meanCross*TOWN.crossPenalty,
+                 cross:+meanCross.toFixed(1) });
   }
-  const sdx = Math.cos(bestDir), sdz = -Math.sin(bestDir);
-  graded = carveStreet({ x0: anchor.x - sdx*TOWN.streetHalfLength,
-                         z0: anchor.z - sdz*TOWN.streetHalfLength,
-                         x1: anchor.x + sdx*TOWN.streetHalfLength,
-                         z1: anchor.z + sdz*TOWN.streetHalfLength, width: 6.5 },
-                       TOWN.grade, TOWN.maxCut);
+  cands.sort((a,b)=> b.score - a.score);
+
+  /* THE GROUND THE TOWN IS CUT OUT OF, kept so a bearing that fails can
+     be undone. Without this the second bearing's town would be laid out
+     on terrain still carrying the first bearing's road. */
+  const snapR = TOWN.streetHalfLength + TOWN.shoulder + TOWN.feather + 26;
+  const snap = (()=>{
+    const N = Wld.N;
+    const ix0 = Math.max(0, Math.floor(gxOf(anchor.x-snapR))), ix1 = Math.min(N-1, Math.ceil(gxOf(anchor.x+snapR)));
+    const iz0 = Math.max(0, Math.floor(gzOf(anchor.z-snapR))), iz1 = Math.min(N-1, Math.ceil(gzOf(anchor.z+snapR)));
+    const w = ix1-ix0+1, h2 = iz1-iz0+1, data = new Float32Array(w*h2);
+    for(let iz=iz0; iz<=iz1; iz++)
+      for(let ix=ix0; ix<=ix1; ix++) data[(iz-iz0)*w + (ix-ix0)] = Wld.H[iz*N+ix];
+    return { ix0, iz0, w, h2, data };
+  })();
+  const restore = ()=>{
+    const N = Wld.N;
+    for(let jz=0; jz<snap.h2; jz++)
+      for(let jx=0; jx<snap.w; jx++) Wld.H[(snap.iz0+jz)*N + snap.ix0+jx] = snap.data[jz*snap.w+jx];
+    recomputeSlope();
+  };
+
+  /* ---- ONE ATTEMPT AT A TOWN, ON ONE BEARING ----------------------
+     Everything below the street lives in here so it can be run more
+     than once. Each attempt gets its OWN rng sub-stream, salted by
+     which attempt it is, so re-running the best bearing at the end
+     reproduces it exactly rather than drawing fresh numbers. */
+  let bestTry = null;
+  const attemptTown = (ci)=>{
+    const out = [];
+    /* Its OWN sub-stream, salted by the attempt. The town used to draw
+       from one 'town' stream, so a second attempt carried on from where
+       the first left off and re-running the best bearing at the end
+       would have built a different town from the one that was scored. */
+    const rng = rngFor('town', ci);
+    const bestDir = cands[ci].th;
+    const sdx = Math.cos(bestDir), sdz = -Math.sin(bestDir);
+    const graded = carveStreet({ x0: anchor.x - sdx*TOWN.streetHalfLength,
+                                 z0: anchor.z - sdz*TOWN.streetHalfLength,
+                                 x1: anchor.x + sdx*TOWN.streetHalfLength,
+                                 z1: anchor.z + sdz*TOWN.streetHalfLength, width: 6.5 },
+                               TOWN.grade, TOWN.maxCut);
   /* From here on the town is laid out in the STREET's frame: along it,
      and offset to either side of it. */
   const perpX = -sdz, perpZ = sdx;
@@ -10102,24 +10263,42 @@ function genTown(){
     z: anchor.z + sdz*along + perpZ*side });
   const townYaw = (side)=> bestDir + (side > 0 ? Math.PI : 0) + Math.PI/2;
   const want = rng.irange(TOWN.houses[0], TOWN.houses[1]);
+  /* Why plots are turned down, so "the town is small on this seed" has
+     a reason attached to it rather than being a mystery. */
+  const rej = { offMap:0, wet:0, rough:0, onHospital:0, tooClose:0, unlevel:0, tried:0 };
   const plots = [];
   /* Walk out from the middle of the street in both directions, dropping
      a house on one side or the other as the gaps come up. */
   const reachA = Math.abs(graded.from), reachB = Math.abs(graded.to);
+    rej.reach = Math.round(reachA + reachB);
+  /* BOTH SIDES OF THE ROAD, AT EVERY STEP. This used to roll ONE side
+     per step, which is not how a street works and, worse, halved the
+     number of candidate plots -- and the count was then capped at
+     want+4 on top of that. Measured across 60 seeds: a mean of 4.4
+     plots for a wanted 7 houses, and a seed with 96m of usable road
+     that generated TWO plots and could therefore never have built more
+     than two houses however good its ground was. Houses facing each
+     other are 2*rowOffset = 27m apart, comfortably outside the 15m
+     neighbour rule, so a pair costs nothing. The cap is generous now
+     because the loop below stops at `want` anyway; spare plots are only
+     spare tries. */
+  const capPlots = want*3 + 6;
   for(const side of [-1, 1]){
     const reach = Math.min(TOWN.streetHalfLength, side < 0 ? reachA : reachB) - 6;
     let along = TOWN.gapAtEntrance + rng.range(0, 9);
-    while(along < reach && plots.length < want + 4){
-      const across = rng.chance(0.55) ? 1 : -1;     // which side of the road
-      plots.push({ along: side*along, side: across, kind:'house' });
+    while(along < reach && plots.length < capPlots){
+      /* Which side is offered FIRST is still a roll, so the street is
+         not a perfectly symmetrical double row. */
+      const first = rng.chance(0.5) ? 1 : -1;
+      plots.push({ along: side*along, side: first, kind:'house' });
+      if(plots.length < capPlots)
+        plots.push({ along: side*along, side: -first, kind:'house' });
       along += rng.range(TOWN.spacing[0], TOWN.spacing[1]);
     }
   }
+  rej.plots = plots.length;
   rng.shuffle(plots);
 
-  /* Why plots are turned down, so "the town is small on this seed" has
-     a reason attached to it rather than being a mystery. */
-  const rej = { offMap:0, wet:0, rough:0, tried:0 };
   const place = (p, kind)=>{
     const w = townPos(p.along, p.side * TOWN.rowOffset);
     const yaw = townYaw(p.side);
@@ -10145,13 +10324,27 @@ function genTown(){
        standing on the side of a hill. */
     if(g.relief > TOWN.plotRelief){ rej.rough++; return false; }
     // not on top of the hospital or a neighbour
-    if(Math.hypot(w.x-hos.x, w.z-hos.z) < 19) return false;
-    /* Neighbours keep a house's distance from each other; a shed is
-       meant to sit in somebody's yard, so it only has to miss the
-       building it belongs to. Applying the house spacing to sheds put
-       every one of them inside the rule that placed it. */
-    const near = kind === 'shed' ? 5.5 : 15;
-    for(const o of out) if(Math.hypot(o.x-w.x, o.z-w.z) < near) return false;
+    if(Math.hypot(w.x-hos.x, w.z-hos.z) < 19){ rej.onHospital++; return false; }
+    /* HOW FAR APART IS A FUNCTION OF HOW BIG THEY ARE, not a flat
+       number. A shed used to need 5.5m of clearance from anything --
+       less than the distance from a house's centre to its own back
+       wall, so sheds were placed INSIDE the house they belong to. It
+       went unnoticed while towns were three buildings; at six houses a
+       seed it showed up as eight overlaps across 47 seeds, and as
+       foundation pads cutting into each other (a building read 0.43m
+       below the ground at its own centre, against 0.14m before). Both
+       measure the same mistake. */
+    const span = (b)=> b.style && b.style.footprint
+      ? Math.max(b.style.footprint[0], b.style.footprint[1])*0.5 : 6.6;
+    const mine = Math.max(style.footprint[0], style.footprint[1])*0.5;
+    for(const o of out){
+      /* A shed sits in somebody's YARD -- close, but outside their
+         walls. Two houses keep a street's worth of distance. */
+      const need = (kind === 'shed' || o.kind === 'shed')
+        ? mine + span(o) + TOWN.yardGap
+        : Math.max(15, mine + span(o) + TOWN.yardGap);
+      if(Math.hypot(o.x-w.x, o.z-w.z) < need){ rej.tooClose++; return false; }
+    }
     rej.tried++;
     const spec = {
       kind, id: kind + '-' + out.length, x: w.x, z: w.z, y: g.mean, yaw,
@@ -10171,8 +10364,25 @@ function genTown(){
       clearR: Math.max(style.footprint[0], style.footprint[1])*0.5 + 5.5,
       searched:false, items:[], mesh:null, town:true,
     };
-    out.push(spec);
     carvePad(w.x, w.z, phx, phz, yaw, g.mean, g.relief);
+    /* ---- DID THE PAD ACTUALLY LEVEL IT? ---------------------------
+       The relief test above asks whether the ground COULD be levelled;
+       this asks whether it WAS. They are not the same question, because
+       carvePad refuses to touch a cell that is under water, and its
+       per-cell water test and padGround's bilinear one do not always
+       agree at a shoreline -- a footprint can sample entirely dry and
+       still overlap a cell the carve will not cut. One shed in 914
+       structures came out 0.45m into its own ground that way, with
+       3.23m of relief still under it after carving.
+
+       So the plot is measured again, and a plot the pad could not flatten
+       is given up on. The smoothing that was done is left behind: it
+       moved dry ground toward its own local mean over a footprint, which
+       is not a scar anyone can see, and nothing is built on it. */
+    const after = padGround(w.x, w.z, phx, phz, yaw);
+    if(after.relief > TOWN.padResidual){ rej.unlevel++; return false; }
+    spec.y = after.mean;
+    out.push(spec);
     return true;
   };
 
@@ -10205,9 +10415,33 @@ function genTown(){
     /* Behind the house, away from the road, which is where a shed goes. */
     const along = (host.x-anchor.x)*sdx + (host.z-anchor.z)*sdz + rng.range(-4, 4);
     const side  = (host.x-anchor.x)*perpX + (host.z-anchor.z)*perpZ;
-    place({ along, side: Math.sign(side || 1) * (Math.abs(side) + rng.range(6, 9))
+    /* Far enough back to clear the house's own back wall AND the
+       clearance rule above, or every shed is rejected by the rule that
+       is meant to place it. */
+    place({ along, side: Math.sign(side || 1) * (Math.abs(side) + rng.range(10, 14))
                           / TOWN.rowOffset }, 'shed');
   }
+
+    return { ci, out, graded, want, rej,
+             houses: out.filter(b=>b.kind === 'house').length };
+  };
+
+  /* ---- TRY THE BEARINGS UNTIL ONE OF THEM IS A TOWN ---------------
+     Stop at the first that reaches minHouses. If none does, put the
+     ground back and re-run whichever got closest, so the seed gets the
+     best town its land allows rather than the first one tried. */
+  for(let ci=0; ci<cands.length; ci++){
+    if(ci) restore();
+    const t = attemptTown(ci);
+    if(!bestTry || t.houses > bestTry.houses) bestTry = t;
+    if(t.houses >= TOWN.minHouses) break;
+  }
+  if(bestTry.ci !== cands.length-1 && bestTry.houses < TOWN.minHouses){
+    restore();
+    bestTry = attemptTown(bestTry.ci);
+  }
+  const out = bestTry.out, graded = bestTry.graded, want = bestTry.want, rej = bestTry.rej;
+  Wld.stats.townBearings = bestTry.ci + 1;
 
   /* The street itself, as a line the route layer can follow and the
      ground painter can darken. Two points is enough: it is straight. */
@@ -17323,7 +17557,7 @@ window.DR = {
   slopeAt, normalAt, cellHazard, cellWalkCost, snowDepthAt, snowDrag,
   snowLiftAt, groundTopAt, snowSinkAt,
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
-  buildWaterMesh, buildTerrainMesh,
+  buildWaterMesh, buildTerrainMesh, buildAllStructures, validateWorld, TOWN,
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
   admit, townDepth, checkArrival, updateShadowBudget, ShadowBudget,
