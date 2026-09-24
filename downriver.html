@@ -9131,23 +9131,41 @@ const People = {
     this.ensureBulbs();
     const was = this.bulbsIn;
     this.setBulbsIn(true);
-    /* Lit, and put somewhere they actually fall on the world, or the
-       renderer is free to decide they touch nothing. */
-    for(const b of this.bulbs){
-      b.intensity = 0.002;
-      b.position.set(camera.position.x, camera.position.y + 1.5, camera.position.z);
+    /* ---- THE THINGS THE LAMPS WILL LIGHT HAVE TO BE VISIBLE -------
+       renderer.compile() walks the scene and skips anything whose
+       `visible` is false. The player starts 800 metres from the town,
+       so every one of its buildings is culled at boot and none of their
+       materials got a with-lamps program -- which is why two earlier
+       attempts at this warm-up changed nothing at all. Measured: the
+       approach compiled 11 programs with the pool switching in and 0
+       with it pinned out, so it is the lamps and it is these meshes.
+
+       They are made visible for the compile and put back exactly as
+       they were. Nothing is drawn to the screen; the loading overlay is
+       still up. */
+    const hidden = [];
+    const show = (o)=>{ if(o && !o.visible){ hidden.push(o); o.visible = true; } };
+    for(const b of (Wld.townBuildings || [])) if(b.mesh){
+      show(b.mesh); b.mesh.traverse(show);
     }
+    if(Wld.hospital && Wld.hospital.mesh){
+      show(Wld.hospital.mesh); Wld.hospital.mesh.traverse(show);
+    }
+    for(const b of this.bulbs) b.intensity = 0.002;
     const mask = camera.layers.mask;
     try {
       camera.layers.enableAll();
       renderer.compile(scene, camera);
-      composer.render();
+      /* Through the composer too, as Gear.warmup does: it draws into a
+         different target with a different size and format. */
       composer.render();
     } catch(e){ this._warmError = String(e && e.message || e); }
     camera.layers.mask = mask;
+    for(const o of hidden) o.visible = false;
     for(const b of this.bulbs){ b.intensity = 0; b.position.set(0, -400, 0); }
     this.setBulbsIn(was);
     this._bulbsWarmed = true;
+    this._bulbsWarmedHidden = hidden.length;
   },
 
   update(dt){
