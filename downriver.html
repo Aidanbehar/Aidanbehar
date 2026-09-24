@@ -1335,6 +1335,31 @@ const CFG = {
        pixels per map, and both maps are now driven on demand instead of
        automatically. */
     shadowMap: 1024,
+    /* HOW WIDE THE SUN'S SHADOW CAMERA IS, in metres, outside and in.
+       At 1024 pixels a 140m box is 0.137m per texel and a house wall
+       is 0.20m thick -- so indoors every piece of furniture in the room
+       is smaller than one shadow texel and simply cannot cast. Standing
+       in a room and seeing the shadows come out wrong is not a bias
+       that needs tuning, it is a map with no resolution to spare. A
+       60m box over the same 1024 pixels is 0.059m per texel, which is
+       finer than a chair leg.
+
+       normalBias is in METRES, so it has to come down with the box or
+       the tighter map just moves every shadow half a metre.
+
+       30 rather than something tighter still, because the box is also
+       how far shadows REACH: shrink it to one room and the houses
+       across the street lose theirs the moment you step through a
+       door. 30 covers a house and its street frontage and is still
+       2.3x finer than outdoors. And the switch needs a moment's dwell
+       either way -- standing in a doorway `indoors` flickers with the
+       enclosure count, and a shadow set that flickered with it would
+       be worse than anything this fixes. */
+    sunSpan: 70,          // half-width outdoors
+    sunSpanIn: 30,        // ... and inside a building
+    sunNormalBias: 0.6,
+    sunNormalBiasIn: 0.26,
+    sunIndoorDwell: 0.45, // seconds the state must hold before it flips
     /* How far the player has to move, or the view turn, before a shadow
        map is worth redrawing -- and the longest either may go stale. */
     sunShadowMove: 3.0,      // metres
@@ -7075,11 +7100,11 @@ function buildSky(){
   sun.castShadow = true;
   sun.shadow.mapSize.set(CFG.QUALITY.shadowMap, CFG.QUALITY.shadowMap);
   sun.shadow.camera.near = 1; sun.shadow.camera.far = 260;
-  const S2 = 70;
+  const S2 = CFG.QUALITY.sunSpan;
   sun.shadow.camera.left = -S2; sun.shadow.camera.right = S2;
   sun.shadow.camera.top = S2; sun.shadow.camera.bottom = -S2;
   sun.shadow.bias = -0.0009;
-  sun.shadow.normalBias = 0.6;
+  sun.shadow.normalBias = CFG.QUALITY.sunNormalBias;
   sun.shadow.autoUpdate = false;     // driven by updateShadowBudget()
   scene.add(sun); scene.add(sun.target);
   World.sun = sun;
@@ -7384,9 +7409,12 @@ function updateRain(dt){
    load, these step down with it.
    ------------------------------------------------------------------- */
 const ShadowBudget = { sunT: 0, sunX: 1e9, sunZ: 1e9, sunDir: 0,
+                       indoor: false, indoorWant: false, indoorFor: 0,
+                       underRoof: false,
                        torchT: 0, yaw: 1e9, pitch: 1e9, x: 1e9, z: 1e9 };
 function updateShadowBudget(dt){
   const Q = CFG.QUALITY, B = ShadowBudget;
+  const moved = (b)=> Math.hypot(Player.pos.x - b.sunX, Player.pos.z - b.sunZ);
   /* Under load everything gets lazier together: the ladder's rung is
      the one dial for how hard the frame is being pushed. */
   const slack = 1 + RES.rung*1.6;
@@ -7395,11 +7423,44 @@ function updateShadowBudget(dt){
   const sun = World.sun;
   if(sun){
     B.sunT += dt;
-    const moved = Math.hypot(Player.pos.x - B.sunX, Player.pos.z - B.sunZ);
-    const turned = Math.abs(Sky.sunUp - B.sunDir);
-    if(!sun.shadow.map ||
-       moved > Q.sunShadowMove*slack ||
-       turned > 0.02 ||
+    /* ---- INDOORS THE SHADOW CAMERA IS A ROOM, NOT A VALLEY --------
+       See CFG.QUALITY.sunSpanIn. Crossing the threshold changes the
+       box and redraws the map the same frame: the budget below would
+       otherwise leave the first three metres of every room lit by a
+       map drawn outside it, which is the "shadows are wrong when you
+       first walk in" that was reported. */
+    /* WALKING UNDER A ROOF REDRAWS THE MAP, whatever the box is doing.
+       This is the half of it that matters most and the half that costs
+       nothing: what is over your head has just changed completely, and
+       the budget below would happily serve you a map drawn outside for
+       the first three metres of the room. `roof` and not `indoors`,
+       because roof is the thing that changed -- and because a lobby the
+       enclosure test scores as a porch still has a ceiling. */
+    const underRoof = Survival.roof >= 0.5;
+    if(underRoof !== B.underRoof){
+      B.underRoof = underRoof;
+      sun.shadow.needsUpdate = true;
+      B.sunT = 0; B.sunX = Player.pos.x; B.sunZ = Player.pos.z; B.sunDir = Sky.sunUp;
+    }
+    /* Hysteresis: the doorway is a place where `indoors` flickers. */
+    if(Survival.indoors === B.indoorWant) B.indoorFor += dt;
+    else { B.indoorWant = Survival.indoors; B.indoorFor = 0; }
+    const inside = (B.indoorFor >= Q.sunIndoorDwell) ? B.indoorWant : B.indoor;
+    if(inside !== B.indoor){
+      B.indoor = inside;
+      const S2 = inside ? Q.sunSpanIn : Q.sunSpan;
+      const c = sun.shadow.camera;
+      c.left = -S2; c.right = S2; c.top = S2; c.bottom = -S2;
+      c.updateProjectionMatrix();
+      sun.shadow.normalBias = inside ? Q.sunNormalBiasIn : Q.sunNormalBias;
+      sun.shadow.needsUpdate = true;
+      B.sunT = 0; B.sunX = Player.pos.x; B.sunZ = Player.pos.z; B.sunDir = Sky.sunUp;
+    }
+    else if(!sun.shadow.map ||
+       /* A tight box runs out sooner, so indoors it is refreshed over a
+          shorter walk -- a third of the box either way, as outside. */
+       moved(B) > (inside ? Q.sunShadowMove*0.4 : Q.sunShadowMove*slack) ||
+       Math.abs(Sky.sunUp - B.sunDir) > 0.02 ||
        B.sunT > Q.sunShadowEvery*slack){
       sun.shadow.needsUpdate = true;
       B.sunT = 0; B.sunX = Player.pos.x; B.sunZ = Player.pos.z; B.sunDir = Sky.sunUp;
@@ -7560,6 +7621,62 @@ function addBox(parent, w, h, d, mat, x, y, z, rotY){
 }
 
 /* ---------------------------------------------------------------------
+   A PRISM WITH A FLAT CONVEX CROSS-SECTION, extruded along x.
+
+   addBox cannot close a gable. The shape between the top of a wall and
+   the underside of a pitched roof is a pentagon, and the house used to
+   approximate it with five stacked boxes of shrinking length -- which
+   reached 4.2m of a 6.0m ridge and left a triangular hole at each end
+   of every house in the game, plus a 0.31m slot all round where the
+   eaves clear the wall tops. That is the gap between the roof and the
+   walls that was reported, and it is why weather got inside.
+
+   `pts` is the cross-section as [z, y] pairs. Winding is not the
+   caller's problem: the section is convex, so every face is turned to
+   point away from the solid's own centre.
+   ------------------------------------------------------------------- */
+function addPrism(parent, thickness, pts, mat, x, y, z){
+  const n = pts.length, t = thickness*0.5;
+  let cy = 0, cz = 0;
+  for(const q of pts){ cz += q[0]; cy += q[1]; }
+  cy /= n; cz /= n;
+  const v = [];
+  for(const sx of [-1, 1]) for(const q of pts) v.push([sx*t, q[1], q[0]]);
+  const tris = [];
+  for(let i=1;i<n-1;i++){ tris.push([0, i, i+1]); tris.push([n, n+i, n+i+1]); }
+  for(let i=0;i<n;i++){
+    const j = (i+1)%n;
+    tris.push([i, n+i, n+j]); tris.push([i, n+j, j]);
+  }
+  /* NOT INDEXED. Sharing the corners between the end caps and the sides
+     would let computeVertexNormals average across the edges, and a
+     gable with smoothed corners reads as a bag rather than a wall.
+     Every triangle gets its own three vertices, so every face is flat. */
+  const pos = [];
+  for(const tr of tris){
+    const P = [v[tr[0]], v[tr[1]], v[tr[2]]];
+    const ux = P[1][0]-P[0][0], uy = P[1][1]-P[0][1], uz = P[1][2]-P[0][2];
+    const vx = P[2][0]-P[0][0], vy = P[2][1]-P[0][1], vz = P[2][2]-P[0][2];
+    const nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx;
+    const mx = (P[0][0]+P[1][0]+P[2][0])/3, my = (P[0][1]+P[1][1]+P[2][1])/3,
+          mz = (P[0][2]+P[1][2]+P[2][2])/3;
+    /* Outward is away from the section's own centre. The solid is
+       convex, so that is exact and the caller never has to think about
+       winding order. */
+    const out2 = (nx*(mx-0) + ny*(my-cy) + nz*(mz-cz) < 0) ? [P[0],P[2],P[1]] : P;
+    for(const q of out2) pos.push(q[0], q[1], q[2]);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+
+/* ---------------------------------------------------------------------
    BUILDING COLLISION — ORIENTED BOXES, NOT WORLD-AXIS ONES
 
    Buildings are rotated by their own yaw, and their walls are long thin
@@ -7593,6 +7710,9 @@ function addBox(parent, w, h, d, mat, x, y, z, rotY){
 const _obbQuat = new THREE.Quaternion(),
       _obbScale = new THREE.Vector3(), _obbEuler = new THREE.Euler();
 const _obbCorner = new THREE.Vector3();
+/* One scratch vector for the odd world-space conversion, so nothing
+   allocates per frame. */
+const _v3 = new THREE.Vector3();
 /* The mesh's eight transformed corners, kept after the fit so the
    slicer below can cut the same solid the box was fitted to. */
 const _obbPts = (()=>{ const a=[]; for(let i=0;i<8;i++) a.push({x:0,y:0,z:0,u:0,v:0}); return a; })();
@@ -8633,6 +8753,10 @@ const People = {
   clear(){
     for(const p of this.list) if(p.obj && p.obj.parent) p.obj.parent.remove(p.obj);
     this.list.length = 0; this.waypoints.length = 0; this.active = false;
+    /* The bulbs outlive a world -- they are a pool, not scenery -- but
+       they must not be left switched into a scene that no longer has a
+       town in it. */
+    this.setBulbsIn(false);
   },
 
   /* A body, at about the size of one. Shoulders, a head, two arms and
@@ -8670,6 +8794,9 @@ const People = {
 
   build(){
     this.clear();
+    this.ensureBulbs();
+    for(const b of (Wld.townBuildings || [])) b.liveLight = null;
+    for(const bulb of this.bulbs) bulb.intensity = 0;
     const town = Wld.townBuildings || [];
     const rng = rngFor('people');
     /* THE STAFF ARE NOT THE TOWN'S. This whole function used to begin
@@ -8922,26 +9049,86 @@ const People = {
       if(on) cands.push({ b, d: Math.hypot(b.x-px, b.z-pz) });
     }
     cands.sort((a,b2)=> a.d - b2.d);
-    const budget = CFG.PEOPLE.liveLights;
-    for(let i=0;i<cands.length;i++){
-      const b = cands[i].b, want = i < budget && cands[i].d < 90;
-      if(!!b.liveLight === want) continue;
-      if(want){
-        const L = b.mesh.userData.lamps.find(q=>!q.window) || b.mesh.userData.lamps[0];
-        const bulb = new THREE.PointLight(0xffd9a0, 1.5, 11, 2.0);
-        bulb.position.set(L.x, L.y - 0.1, L.z);
-        b.mesh.add(bulb); b.liveLight = bulb;
-      } else {
-        b.mesh.remove(b.liveLight); b.liveLight.dispose && b.liveLight.dispose();
-        b.liveLight = null;
-      }
+    /* ---- THE BULBS ARE A FIXED POOL, NOT NEW LIGHTS ----------------
+       These used to be created and destroyed as the player walked in
+       and out of range: `b.mesh.add(bulb)` for the nearest few, remove
+       for the rest. Adding a light to a three.js scene changes the
+       light COUNT, and the light count is part of every material's
+       program key -- so each lamp coming on rebuilt every shader in
+       the world. Measured walking into town at dusk: the frame that
+       lit the first house compiled ELEVEN new programs and took 1670
+       times a steady frame, and it happened again for each of the next
+       few houses.
+
+       That is the same mistake the torch made. The bulbs are a fixed
+       pool now, switched into the scene ALL AT ONCE (see ensureBulbs
+       below) and assigned to houses by moving them and turning their
+       intensity up -- and neither a position nor an intensity is part
+       of a program key. */
+    const pool = this.bulbs;
+    const budget = Math.min(CFG.PEOPLE.liveLights, pool.length);
+    /* Cleared first. A bulb reassigned from one house to another would
+       otherwise leave the old house still holding a reference to it. */
+    for(const b of town) b.liveLight = null;
+    /* In, or out, together. */
+    this.setBulbsIn(cands.length > 0 && cands[0].d < 90);
+    let used = 0;
+    for(let i=0;i<cands.length && used<budget;i++){
+      const b = cands[i].b;
+      if(cands[i].d >= 90) break;                 // sorted, so the rest are further
+      const L = b.mesh.userData.lamps.find(q=>!q.window) || b.mesh.userData.lamps[0];
+      if(!L) continue;
+      const bulb = pool[used++];
+      _v3.set(L.x, L.y - 0.1, L.z).applyMatrix4(b.mesh.matrixWorld);
+      bulb.position.copy(_v3);
+      bulb.intensity = 1.5;
+      b.liveLight = bulb;
     }
-    // and a house that went dark loses its light whatever the distance
-    for(const b of town)
-      if(b.liveLight && !b.lampsOn){
-        b.mesh.remove(b.liveLight); b.liveLight = null;
-      }
-    Wld.stats.liveLights = town.filter(b=>b.liveLight).length;
+    /* The spare bulbs are parked: still in the scene, contributing
+       nothing. A house whose lamps went out is not in cands at all, so
+       it never gets one. */
+    for(let i=used;i<pool.length;i++) pool[i].intensity = 0;
+    Wld.stats.liveLights = used;
+  },
+
+  /* ---- THE BULBS, AND WHEN THEY ARE IN THE SCENE -------------------
+     Made once and kept, and put into the scene ALL AT ONCE or not at
+     all. The light count is part of every material's program key, so
+     the number of distinct counts the game ever shows is the number of
+     times it can stop to compile: adding lamps one at a time walked
+     through six counts and compiled at each. Two counts -- none and
+     all -- means one switch on the approach to town, and warmBulbs()
+     below compiles that variant before the first frame so even that
+     one is free.
+
+     They are not left in the scene permanently either. Six point
+     lights with the intensity turned down still run their shading in
+     every fragment of every frame, and the player is out in the forest
+     for most of a run. */
+  bulbs: [], bulbsIn: false,
+  ensureBulbs(){
+    while(this.bulbs.length < CFG.PEOPLE.liveLights){
+      const bulb = new THREE.PointLight(0xffd9a0, 0, 11, 2.0);
+      bulb.castShadow = false;
+      bulb.position.set(0, -400, 0);
+      this.bulbs.push(bulb);
+    }
+  },
+  setBulbsIn(want){
+    if(want === this.bulbsIn) return;
+    this.bulbsIn = want;
+    for(const b of this.bulbs){ if(want) scene.add(b); else scene.remove(b); }
+  },
+  /* Compile the with-lamps variant of every material at boot, the same
+     way and for the same reason the torch does. */
+  warmBulbs(){
+    this.ensureBulbs();
+    const was = this.bulbsIn;
+    this.setBulbsIn(true);
+    for(const b of this.bulbs) b.intensity = 0.001;
+    try { renderer.compile(scene, camera); } catch(e){ this._warmError = String(e); }
+    for(const b of this.bulbs) b.intensity = 0;
+    this.setBulbsIn(was);
   },
 
   update(dt){
@@ -8951,7 +9138,12 @@ const People = {
        minutes for nothing otherwise. */
     const px = Player.pos.x, pz = Player.pos.z;
     const S = Wld.street;
-    const near = Math.hypot(px - (S.x0+S.x1)/2, pz - (S.z0+S.z1)/2) < CFG.PEOPLE.simRange;
+    /* A hospital with staff and no street is not supposed to happen any
+       more -- G11 says so -- but the staff no longer depend on the town
+       existing, so this no longer assumes it does either. */
+    const near = S
+      ? Math.hypot(px - (S.x0+S.x1)/2, pz - (S.z0+S.z1)/2) < CFG.PEOPLE.simRange
+      : (Wld.hospital && Math.hypot(px - Wld.hospital.x, pz - Wld.hospital.z) < CFG.PEOPLE.simRange);
     const rng = rngFor('peopleTick', Math.floor(G.t*3));
     const phase = this.phaseOfDay();
     this.lights(px, pz);
@@ -10441,7 +10633,9 @@ function genTown(){
     bestTry = attemptTown(bestTry.ci);
   }
   const out = bestTry.out, graded = bestTry.graded, want = bestTry.want, rej = bestTry.rej;
-  Wld.stats.townBearings = bestTry.ci + 1;
+  /* WHICH bearing it settled on, 1-based: 1 means the one the hospital
+     faces, 8 means every other one was tried first. */
+  Wld.stats.townBearing = bestTry.ci + 1;
 
   /* The street itself, as a line the route layer can follow and the
      ground painter can darken. Two points is enough: it is straight. */
@@ -10508,27 +10702,47 @@ function buildHouse(spec){
   addBox(g, W, 0.24, D, MAT.timber, 0, 0.12, 0);
   addBox(g, 1.9, 0.14, 0.7, MAT.concrete, 0, 0.07, D/2 + 0.35);
 
+  /* ---- WHERE THE ROOF ACTUALLY IS ---------------------------------
+     The walls have to reach it, so its shape is worked out first and
+     the walls are built to meet it. This used to run the other way
+     round: the walls stopped at H, the roof was laid on afterwards at
+     H + 0.14 and pitched, and nothing filled the wedge between them.
+
+     The two slabs each run from the ridge at z = 0 down to the eave at
+     z = zEave, and their undersides sit 0.09/cos(pitch) below that
+     plane. eaveY is the roof's underside directly over the wall line,
+     which is where a wall has to stop; apexY is the same line at the
+     ridge. */
+  const pitch = 0.52, slab = (D/2)/Math.cos(pitch) + 0.55;
+  const zEave = Math.cos(pitch)*slab;
+  const underDrop = 0.09/Math.cos(pitch);
+  const apexY = H + 0.14 + Math.sin(pitch)*slab - underDrop;
+  const roofUnderAt = (z)=> apexY - Math.abs(z)*Math.tan(pitch);
+  const eaveY = roofUnderAt(D/2);          // the wall's real full height
+
   const doorW = 1.80;
   const segW = (W - doorW)/2;
-  addBox(g, segW, H, wall, MAT.timber, -(doorW/2 + segW/2), H/2, D/2);
-  addBox(g, segW, H, wall, MAT.timber,  (doorW/2 + segW/2), H/2, D/2);
-  addBox(g, doorW, H-2.15, wall, MAT.timber, 0, 2.15 + (H-2.15)/2, D/2);
-  addBox(g, W, H, wall, MAT.timber, 0, H/2, -D/2);
+  addBox(g, segW, eaveY, wall, MAT.timber, -(doorW/2 + segW/2), eaveY/2, D/2);
+  addBox(g, segW, eaveY, wall, MAT.timber,  (doorW/2 + segW/2), eaveY/2, D/2);
+  addBox(g, doorW, eaveY-2.15, wall, MAT.timber, 0, 2.15 + (eaveY-2.15)/2, D/2);
+  addBox(g, W, eaveY, wall, MAT.timber, 0, eaveY/2, -D/2);
 
   // side walls, with windows
   const panes = [];
   for(const sx of [-1, 1]){
     const nWin = clamp(st.windows, 0, 3);
-    if(!nWin){ addBox(g, wall, H, D, MAT.timber, sx*W/2, H/2, 0); continue; }
+    /* eaveY, not H: a side wall that stops at H leaves the same slot
+       under the eaves as the front one did. */
+    if(!nWin){ addBox(g, wall, eaveY, D, MAT.timber, sx*W/2, eaveY/2, 0); continue; }
     const winH = 1.0, winY = 1.5, halfGap = 0.55;
     const pitchZ = D/(nWin+1);
     let cursor = -D/2;
     for(let i=0;i<nWin;i++){
       const wz = -D/2 + pitchZ*(i+1);
       const len = (wz - halfGap) - cursor;
-      if(len > 0.05) addBox(g, wall, H, len, MAT.timber, sx*W/2, H/2, cursor + len/2);
+      if(len > 0.05) addBox(g, wall, eaveY, len, MAT.timber, sx*W/2, eaveY/2, cursor + len/2);
       addBox(g, wall, winY-winH/2, halfGap*2, MAT.timber, sx*W/2, (winY-winH/2)/2, wz);
-      const topH = H-(winY+winH/2);
+      const topH = eaveY-(winY+winH/2);
       addBox(g, wall, topH, halfGap*2, MAT.timber, sx*W/2, (winY+winH/2)+topH/2, wz);
       const pane = addBox(g, 0.05, winH, halfGap*2-0.08, MAT.glass, sx*W/2, winY, wz);
       pane.userData.noclip = true; pane.castShadow = false;
@@ -10541,21 +10755,39 @@ function buildHouse(spec){
       cursor = wz + halfGap;
     }
     const tail = D/2 - cursor;
-    if(tail > 0.05) addBox(g, wall, H, tail, MAT.timber, sx*W/2, H/2, cursor + tail/2);
+    if(tail > 0.05) addBox(g, wall, eaveY, tail, MAT.timber, sx*W/2, eaveY/2, cursor + tail/2);
   }
 
   // a pitched roof, overhanging
-  const pitch = 0.52, slab = (D/2)/Math.cos(pitch) + 0.55;
   for(const s2 of [-1, 1]){
     const r = addBox(g, W+0.9, 0.18, slab, MAT.roof, 0,
                      H + 0.14 + Math.sin(pitch)*slab*0.5, s2*Math.cos(pitch)*slab*0.5);
     r.rotation.x = s2*pitch;
   }
-  for(const sx of [-1, 1]) for(let i=0;i<5;i++){
-    const t = i/5;
-    addBox(g, 0.18, 0.36, (D+0.4)*(1-t), MAT.timber, sx*W/2, H+0.12+i*0.34, 0);
+  /* ---- THE GABLE ENDS ---------------------------------------------
+     One solid piece of wall each, from the top of the side wall up to
+     the underside of the roof, cut to the roof's own line. This was
+     five stacked boxes of shrinking length that reached 4.2m of a 6.0m
+     ridge and were narrower than the roof at every step: from inside a
+     house you could see the sky through both ends of it.
+
+     The section overlaps the wall below by a centimetre and reaches a
+     centimetre past the roof line, because two surfaces that meet
+     exactly are a seam that shows through at some angle or other. */
+  for(const sx of [-1, 1]){
+    const zb = D/2, y0 = eaveY - 0.01;
+    addPrism(g, wall, [
+      [-zb, 0], [zb, 0],
+      [zb, roofUnderAt(zb) - y0 + 0.015],
+      [0,  apexY - y0 + 0.015],
+      [-zb, roofUnderAt(zb) - y0 + 0.015],
+    ], MAT.timber, sx*(W/2 - wall*0.5 + 0.02), y0, 0);
   }
-  addBox(g, 0.62, 2.1, 0.62, MAT.concrete, W/2-0.9, H*0.5+1.2, -D/2+0.9);
+  /* The chimney has to come out of the roof, not stop inside it. */
+  {
+    const cz2 = -D/2 + 0.9, top = roofUnderAt(cz2) + 0.18/Math.cos(pitch) + 0.75;
+    addBox(g, 0.62, top - 1.2, 0.62, MAT.concrete, W/2-0.9, 1.2 + (top-1.2)/2, cz2);
+  }
 
   /* ---- THE INSIDE, WHICH IS SOMEBODY'S HOUSE -----------------------
      One room with a bed and a stove in it is a hut. This lays out a
@@ -11862,6 +12094,34 @@ function updatePlayer(dt){
    thing to stand under in rain and no help at all in wind.
    ------------------------------------------------------------------- */
 const _shelterDirs = (()=>{ const a=[]; for(let i=0;i<8;i++) a.push([Math.cos(i/8*TAU), Math.sin(i/8*TAU)]); return a; })();
+/* Does the segment from (x,z) running `far` metres along (ux,uz) cross
+   this oriented box, seen from above? A 2D slab test in the box's own
+   frame -- the same frame obbPush uses. */
+function segHitsOBB(x, z, ux, uz, far, b){
+  const dx = x - b.cx, dz = z - b.cz;
+  const px = dx*b.cos - dz*b.sin, pz = dx*b.sin + dz*b.cos;
+  const vx = ux*b.cos - uz*b.sin, vz = ux*b.sin + uz*b.cos;
+  let t0 = 0, t1 = far;
+  /* x slab, then z slab */
+  if(Math.abs(vx) < 1e-9){ if(px < -b.hx || px > b.hx) return false; }
+  else {
+    let a = (-b.hx - px)/vx, c = (b.hx - px)/vx;
+    if(a > c){ const t = a; a = c; c = t; }
+    if(a > t0) t0 = a;
+    if(c < t1) t1 = c;
+    if(t0 > t1) return false;
+  }
+  if(Math.abs(vz) < 1e-9){ if(pz < -b.hz || pz > b.hz) return false; }
+  else {
+    let a = (-b.hz - pz)/vz, c = (b.hz - pz)/vz;
+    if(a > c){ const t = a; a = c; c = t; }
+    if(a > t0) t0 = a;
+    if(c < t1) t1 = c;
+    if(t0 > t1) return false;
+  }
+  return true;
+}
+
 function shelterAt(x, z, feetY){
   let roof = 0, walls = 0;
   const head = feetY + 1.55;
@@ -11887,17 +12147,30 @@ function shelterAt(x, z, feetY){
        middle of the ward every wall is out of range, and the one
        building the whole game is about counted as a porch. */
     const far = clamp(st.reach, 5, 18);
+    /* ---- THE RAY IS TESTED AGAINST THE WALL, NOT SAMPLED ALONG ----
+       This used to march out in 0.6m steps and ask whether each point
+       was inside a wall box. A wall is 0.20m thick. A 0.6m step walks
+       straight over one whenever the wall happens to fall between two
+       samples, so whether a direction found a wall came down to where
+       the wall sat on the sampling lattice -- and a room the player was
+       standing in the middle of scored anything from three of eight to
+       eight of eight depending on its exact dimensions.
+
+       Measured over six points in each house of a town: only 80% of
+       positions INSIDE a house read as indoors, and the mean enclosure
+       was 0.72 where a closed room should be 1.00. It is not a near
+       miss either: `indoors` is roof AND walls > 0.55, so the fifth
+       point in a house was being told it was outdoors, with the warmth
+       model to match.
+
+       A segment-versus-box test answers it exactly, and does it in one
+       pass over the solids instead of thirty. */
     for(const [ux, uz] of _shelterDirs){
       let found = false;
-      for(let d=0.6; d<=far && !found; d+=0.6){
-        const px = x + ux*d, pz = z + uz*d;
-        for(const b of st.solids){
-          if(b.kind !== 'wall') continue;
-          if(b.y1 < feetY + 0.6 || b.y0 > feetY + 1.7) continue;
-          const dx = px-b.cx, dz = pz-b.cz;
-          const lx = dx*b.cos - dz*b.sin, lz = dx*b.sin + dz*b.cos;
-          if(Math.abs(lx) < b.hx && Math.abs(lz) < b.hz){ found = true; break; }
-        }
+      for(const b of st.solids){
+        if(b.kind !== 'wall') continue;
+        if(b.y1 < feetY + 0.6 || b.y0 > feetY + 1.7) continue;
+        if(segHitsOBB(x, z, ux, uz, far, b)){ found = true; break; }
       }
       if(found) hit++;
     }
@@ -16616,6 +16889,16 @@ const DEV = (()=>{
           + Math.round(Wld.town.r + CFG.FAUNA.townMargin) + 'm  you are '
           + (townDepth(Player.pos.x, Player.pos.z) > 0 ? 'INSIDE it' : 'outside it') : 'none'}`
         + `   lights ${Wld.stats.liveLights||0}  staff ${Wld.stats.staff||0}\n`
+      /* A town with nobody in it was a reported bug. This is the line
+         that would have shown it: houses, villagers, staff and the
+         hospital's own posts, with a flag on it if any of them is
+         zero. G11 guarantees the first, peopleCheck reports the rest. */
+      + `PEOPLE     ${(()=>{ const c = Wld.stats.peopleCheck;
+            if(!c) return 'not built';
+            return `${c.houses} houses  ${c.villagers} villagers  `
+                 + `${c.staff} staff on ${c.posts} posts`
+                 + (c.ok ? '' : '   *** EMPTY TOWN ***'); })()}`
+        + `   shadow ${World.sun ? (ShadowBudget.indoor ? 'indoor box' : 'outdoor box') : '-'}\n`
       + `\n`
       + `thirst ${S.thirst.toFixed(0).padStart(3)}  hunger ${S.hunger.toFixed(0).padStart(3)}  cold ${S.cold.toFixed(0).padStart(3)}  sick ${S.sick.toFixed(0)}\n`
       + `body   air ${S.airC.toFixed(1)}C  felt ${S.feltC.toFixed(1)}C  wet ${S.wet.toFixed(2)}  `
@@ -16838,6 +17121,112 @@ const DEV = (()=>{
        helps somebody who starts outside.
        The player has been resolved unconditionally every frame since
        the collision system was written. The people were not.
+
+     A TOWN ON EVERY SEED  (120 seeds generated, plus 60 taken all the
+     way through buildAllStructures and People.build)
+
+       The report was a seed with a lone hospital and nobody in it.
+       Reproduced: 5236457 turned down every plot it offered, genTown
+       returned nothing, and People.build's first line gave up on the
+       hospital's staff along with the town they have nothing to do
+       with.
+
+                                      before     after
+         houses per seed, median           3         6
+         seeds with no town at all      1/120     0/120
+         seeds with 2 houses or fewer  26/120     0/120
+         minimum houses on any seed        0         4
+         villagers with no home            -         0
+         seeds with no staff               -         0
+
+       Rejections, per 60 seeds, and what each fix did to them:
+         'rough' was 68% of all of them. carveStreet faded its grading
+         from the kerb outward, so a plot at rowOffset got half the
+         levelling and the back wall of the house almost none. Holding
+         the ground flat out to a shoulder took 'rough' from the
+         dominant cause to a marginal one.
+         The plot walker rolled ONE side of the road per step and capped
+         the list at want+4: mean 4.4 candidate plots for a wanted 7.
+         Both sides, every step: mean 9.7.
+
+       The first shoulder was a cliff. A fixed 18m feather closing an
+       unbounded cut is a 1.25 grade. Ground 21-44m off the road, 25
+       seeds, share too steep to walk:
+         before any of this  19.7%    fixed feather  25.5%
+         bank length set by the depth of the cut     18.0%
+         and the whole town band 17.7% -> 11.7%.
+
+       Placement, 47 seeds / ~900 structures:
+         overlapping buildings          4 -> 0   (sheds needed 5.5m of
+           clearance from anything, which is less than the distance from
+           a house's centre to its own back wall)
+         worst sunk into its own ground 0.14m -> 0.09m, floating 0, in
+           water 0
+         a plot is now measured again AFTER its pad is cut, because the
+           relief test asks whether the ground COULD be levelled and not
+           whether it WAS
+
+       G11 does not check the hospital staff, and the first version of
+       it did: validateWorld runs inside the generation loop, where the
+       hospital is still only a site and its mesh does not exist. The
+       check read zero posts on every seed, failed every seed, and burned
+       all fourteen attempts on each one. The attempt counter reading 15
+       instead of 1 is what caught it.
+
+     THE ROOF AND THE WALLS  (8 seeds, 53 enterable buildings, 320 rays
+     upward from each of 5 points inside each one)
+
+       rays that reached the sky   1.08% -> 0.00%
+       buildings with any hole     25/53 -> 0/53
+
+       Two holes, both in every house in the game. The roof's eaves
+       clear the wall tops by 0.31m, and nothing filled the gap. And
+       the gable ends were five stacked boxes of shrinking length that
+       reached 4.2m of a 6.0m ridge and were narrower than the roof at
+       every step -- from inside you could see daylight through both
+       ends of the house. addPrism builds the real shape instead, cut
+       to the roof's own line.
+
+     INSIDE READS AS INSIDE  (seed 42, the real player settled at six
+     points in each of the town's houses)
+
+                                      indoors   mean enclosure
+         before any of this work         80%         0.72
+         with the taller walls           69%         0.61
+         with the ray test              100%         0.99
+
+       shelterAt marched its enclosure rays out in 0.6m steps and asked
+       whether each point was inside a wall. A wall is 0.20m thick, so
+       the march walks straight over one whenever it falls between two
+       samples, and whether a direction found a wall came down to where
+       that wall sat on the sampling lattice. A closed room scored
+       anything from three of eight to eight of eight. `indoors` is
+       roof AND walls > 0.55, so one position in five INSIDE A HOUSE was
+       being told it was outdoors, with the warmth model to match -- and
+       that was true before any of this session's changes; moving the
+       walls only re-rolled the aliasing.
+
+       A segment-versus-box test answers it exactly, in one pass over
+       the solids instead of thirty samples.
+
+     SHADOWS WHEN YOU WALK IN  (seed 42, midday, walking into a house)
+
+       outside      140m box   0.137 m per shadow texel   normalBias 0.60
+       inside        60m box   0.059 m per shadow texel   normalBias 0.26
+       the switch takes 29 frames, which is the 0.45s dwell
+
+       At 1024 pixels a 140m box is 0.137m per texel and a house wall is
+       0.20m thick: indoors every piece of furniture in the room is
+       smaller than one shadow texel and cannot cast at all. And the map
+       was only redrawn every three metres of walking, so the first few
+       metres of a room were lit by a map drawn outside it. Crossing
+       under a roof now redraws it that frame -- keyed on `roof`, which
+       is what changed, rather than on `indoors` -- and the box tightens
+       once the player has been inside long enough to mean it. The dwell
+       is there because `indoors` flickers in a doorway and a shadow set
+       that flickered with it would be worse than the thing it fixes.
+
+       60 and not tighter because the box is also how far shadows REACH.
 
      WEATHER INDOORS  (seed 42, in a storm)
        precipitation opacity: 0.398 in the open, 0 at the hospital
@@ -17446,6 +17835,11 @@ async function startRun(seedInput){
   setProgress(0.97, 'checking the torch');
   await frameBreak();
   Gear.warmup();
+  /* And the same for the town's lamps: the walk into town at dusk adds
+     six point lights, and the count is part of every material's program
+     key. Compiling that variant here is the difference between arriving
+     at a town and stopping dead outside it. */
+  People.warmBulbs();
   setProgress(1.0, 'walk');
   await frameBreak();
 
@@ -17561,7 +17955,7 @@ window.DR = {
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
   admit, townDepth, checkArrival, updateShadowBudget, ShadowBudget,
-  gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders,
+  gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders, shelterAt,
   CollisionView, CreatureView, People, Fauna, BEASTS, resolveCollisions, pushOutOfTerrain,
   get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
 };
