@@ -69,6 +69,16 @@
 
   --ok:#34d399; --warn:#fbbf24; --danger:#f87171; --info:#60a5fa;
 
+  /* Categorical series colours, for charts that draw more than one thing at
+     once. Five slots and then a neutral: both columns were validated as a set
+     against this app's own chart surfaces rather than eyeballed, and five is
+     where the colour-blind separation floors stop holding. The dark row is
+     the same five hues stepped for the dark surface, not an automatic flip.
+     Identity never rests on the colour alone here — every line carries its
+     own name on the chart and appears in the table underneath. */
+  --cat-1:#3987e5; --cat-2:#d95926; --cat-3:#199e70; --cat-4:#c98500;
+  --cat-5:#d55181; --cat-other:#98a2c4;
+
   --r-sm:10px; --r-md:16px; --r-lg:22px; --r-xl:30px;
   --pad:clamp(14px,2.4vw,22px);
   --maxw:1180px;
@@ -96,6 +106,9 @@
   --row-hover:rgba(15,23,42,.05);
   --sev-1:#0f9d6b; --sev-2:#5f9c0a; --sev-3:#c07c05; --sev-4:#d2600f;
   --sev-5:#d2342c; --sev-6:#8b46c9;
+  /* the same five hues, stepped for the light surface — not an auto-flip */
+  --cat-1:#2a78d6; --cat-2:#eb6834; --cat-3:#1baf7a; --cat-4:#eda100;
+  --cat-5:#e87ba4; --cat-other:#6b7495;
   --sticky-bg:rgba(240,243,255,.95);
   --map-illegal:#d84a3d; --map-lowthc:#c0392b; --map-medical:#93dfa5; --map-rec:#1e7a43;
   --map-unknown:#aab2c0; --map-pattern:rgba(20,24,40,.45); --map-stroke:#ffffff;
@@ -717,6 +730,10 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 }
 .map-swatch i{position:absolute; inset:0; display:block}
 .map-legend-row b,.map-legend-note b{color:var(--text); font-weight:650}
+.sw-dot{
+  display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:7px;
+  vertical-align:-1px; border:1px solid var(--border-strong);
+}
 .map-legend-note{
   display:block; font-size:.81rem; color:var(--text-dim); line-height:1.5;
   padding-top:9px; margin-top:2px; border-top:1px dashed var(--border);
@@ -1965,6 +1982,7 @@ body.scrubbing .view.active{animation:none}
     <p class="card-note">Venous plasma in nanograms per millilitre, one-compartment model with first-order absorption and first-order elimination. The arterial concentration arriving at the brain from an inhaled product is several times higher and arrives in seconds — that spike is not drawn here and no venous curve can show it.<br><span class="scrub-hint"><span class="ico" data-icon="swipe"></span>Drag the dot along the curve — or focus the chart and use the arrow keys — to move “now”. Everything on the page follows it.</span></p>
     <div class="chart-host" id="nic-chart-ng"></div>
     <div class="chart-legend" id="nic-legend-ng"></div>
+    <div id="nic-breakdown"></div>
   </div>
 
   <div class="card" style="margin-bottom:18px">
@@ -3154,8 +3172,47 @@ function renderChart(host, cfg){
       g += '<path d="' + d + ' L' + X(s.points[s.points.length - 1][0]).toFixed(1) + ' ' + (P.t + ih) +
            ' L' + X(s.points[0][0]).toFixed(1) + ' ' + (P.t + ih) + ' Z" fill="url(#cg' + uid + '_' + si + ')"/>';
     }
+    /* Lines that cross each other get a surface-coloured under-stroke, so the
+       one on top reads as being on top instead of merging into a single
+       ambiguous tangle where they meet. */
+    if (s.halo)
+      g += '<path d="' + d + '" fill="none" stroke="var(--surface-solid)" stroke-width="' + ((s.width || 2.6) + 3.2) +
+           '" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/>';
     g += '<path d="' + d + '" fill="none" stroke="' + s.color + '" stroke-width="' + (s.width || 2.6) +
          '" stroke-linejoin="round" stroke-linecap="round"' + (s.dash ? ' stroke-dasharray="' + s.dash + '"' : '') + '/>';
+  });
+  /* Direct labels, drawn after every line so nothing is painted over them.
+     Identity should never rest on colour alone, and on a chart this small a
+     name beside the curve beats a swatch in a legend twenty pixels below. */
+  const placed = [];
+  (cfg.series || []).forEach(sr => {
+    if (!sr.label || !sr.points || sr.points.length < 2) return;
+    let pk = sr.points[0];
+    sr.points.forEach(pt => { if (pt[1] > pk[1]) pk = pt; });
+    if (pk[1] <= 0) return;
+    let lx = clamp(X(pk[0]), P.l + 6, P.l + iw - 6);
+    let ly = Y(pk[1]) - 9;
+    const anchor = lx > P.l + iw - 60 ? 'end' : lx < P.l + 60 ? 'start' : 'middle';
+    /* Stack colliding labels rather than printing them on top of each other.
+       The box is measured from the text, not guessed at a fixed width, because
+       "Cigarette" and "Vape" are very different sizes and the short one used
+       to land inside the long one. */
+    const wid = String(sr.label).length * (fs - 1) * 0.58 + 4;
+    const box = () => anchor === 'start' ? [lx, lx + wid]
+               : anchor === 'end' ? [lx - wid, lx]
+               : [lx - wid / 2, lx + wid / 2];
+    for (let guard = 0; guard < 10; guard++){
+      const [a0, a1] = box();
+      const hit = placed.some(q => a0 < q.x1 && a1 > q.x0 && Math.abs(q.y - ly) < 12.5);
+      if (!hit) break;
+      ly -= 12.5;
+    }
+    if (ly < P.t + 9) ly = P.t + 9;
+    const [bx0, bx1] = box();
+    placed.push({x0:bx0, x1:bx1, y:ly});
+    g += '<text x="' + lx.toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="' + anchor + '" font-size="' + (fs - 1) +
+         '" font-weight="700" fill="' + sr.color + '" stroke="var(--surface-solid)" stroke-width="3.4" paint-order="stroke"' +
+         ' stroke-linejoin="round">' + esc(sr.label) + '</text>';
   });
 
   /* "you are here" marker */
@@ -5598,36 +5655,36 @@ const NICOTINE = {
      The absorbed amounts are the mid-points of published ranges and every
      one of them varies more between people than between products. */
   PRODUCTS:[
-    {key:'cig', label:'Cigarette', sub:'~1 mg absorbed', icon:'cig', content:12, abs:1.0, ka:36, lag:0, fam:'smoked',
+    {key:'cig', label:'Cigarette', short:'Cigarette', sub:'~1 mg absorbed', icon:'cig', content:12, abs:1.0, ka:36, lag:0, fam:'smoked',
      note:'A cigarette rod holds 10-14 mg of nicotine and a smoker absorbs roughly 1 mg of it. The arterial spike reaching the brain is far sharper than this venous curve — that speed is most of why cigarettes are the most dependence-forming form of nicotine there is.'},
-    {key:'cigl', label:'Light cigarette', sub:'~0.8 mg', icon:'cig', content:10, abs:0.8, ka:36, lag:0, fam:'smoked',
+    {key:'cigl', label:'Light cigarette', short:'Light cig.', sub:'~0.8 mg', icon:'cig', content:10, abs:0.8, ka:36, lag:0, fam:'smoked',
      note:'The "light" label describes what a smoking machine draws through the filter vents, not what a person gets. Smokers compensate by drawing harder and covering the vents, so the real difference is smaller than the number suggests.'},
-    {key:'cigar', label:'Cigar', sub:'not inhaled', icon:'cig', content:100, abs:2.0, ka:4, lag:0, fam:'smoked',
+    {key:'cigar', label:'Cigar', short:'Cigar', sub:'not inhaled', icon:'cig', content:100, abs:2.0, ka:4, lag:0, fam:'smoked',
      note:'A large cigar can hold as much nicotine as a whole pack. Cigar smoke is alkaline enough to be absorbed across the mouth without inhaling, which is slower but far from harmless.'},
-    {key:'hookah', label:'Hookah session', sub:'~45 min', icon:'bong', content:null, abs:2.5, ka:3, lag:0, fam:'smoked',
+    {key:'hookah', label:'Hookah session', short:'Hookah', sub:'~45 min', icon:'bong', content:null, abs:2.5, ka:3, lag:0, fam:'smoked',
      note:'A session runs long enough to deliver several cigarettes’ worth of nicotine and a great deal more carbon monoxide. The water cools the smoke; it does not clean it.'},
-    {key:'vape', label:'Vape session', sub:'10-15 puffs', icon:'vape', content:null, abs:1.0, ka:24, lag:0, fam:'vapour',
+    {key:'vape', label:'Vape session', short:'Vape', sub:'10-15 puffs', icon:'vape', content:null, abs:1.0, ka:24, lag:0, fam:'vapour',
      note:'Nicotine-salt devices deliver close to cigarette-like blood levels; older freebase devices deliver less. This is the widest range of any entry here — experienced users get several times what a first-time user does from the same device.'},
-    {key:'vapepod', label:'A whole 5 % pod', sub:'over a session', icon:'vape', content:40, abs:4.0, ka:8, lag:0, fam:'vapour',
+    {key:'vapepod', label:'A whole 5 % pod', short:'5 % pod', sub:'over a session', icon:'vape', content:40, abs:4.0, ka:8, lag:0, fam:'vapour',
      note:'A 5 % pod holds about as much nicotine as a pack of cigarettes. Getting through one in a sitting is an unusually large nicotine dose by any historical standard.'},
-    {key:'pouch6', label:'Nicotine pouch 6 mg', sub:'30-60 min', icon:'pouch', content:6, abs:3.0, ka:5, lag:0, fam:'oral',
+    {key:'pouch6', label:'Nicotine pouch 6 mg', short:'Pouch 6 mg', sub:'30-60 min', icon:'pouch', content:6, abs:3.0, ka:5, lag:0, fam:'oral',
      note:'Tobacco-free pouches extract roughly half their label across the gum over half an hour or so. No combustion at all, which removes most of the harm of smoking and none of the dependence.'},
-    {key:'pouch3', label:'Nicotine pouch 3 mg', sub:'30-60 min', icon:'pouch', content:3, abs:1.5, ka:5, lag:0, fam:'oral'},
-    {key:'snus', label:'Snus portion', sub:'8 mg', icon:'pouch', content:8, abs:2.4, ka:4.5, lag:0, fam:'oral',
+    {key:'pouch3', label:'Nicotine pouch 3 mg', short:'Pouch 3 mg', sub:'30-60 min', icon:'pouch', content:3, abs:1.5, ka:5, lag:0, fam:'oral'},
+    {key:'snus', label:'Snus portion', short:'Snus', sub:'8 mg', icon:'pouch', content:8, abs:2.4, ka:4.5, lag:0, fam:'oral',
      note:'Moist tobacco held under the lip. Swedish-style snus is pasteurised rather than fermented, which is why its cancer risk profile differs so sharply from other smokeless tobacco.'},
-    {key:'gum2', label:'Nicotine gum 2 mg', sub:'~1 mg absorbed', icon:'capsule', content:2, abs:1.0, ka:6, lag:0, fam:'nrt',
+    {key:'gum2', label:'Nicotine gum 2 mg', short:'Gum 2 mg', sub:'~1 mg absorbed', icon:'capsule', content:2, abs:1.0, ka:6, lag:0, fam:'nrt',
      note:'Chew to release, then park it against the cheek. Chewing continuously swallows the nicotine instead, where stomach acid and the liver destroy most of it — the commonest reason gum "does not work".'},
-    {key:'gum4', label:'Nicotine gum 4 mg', sub:'~2 mg', icon:'capsule', content:4, abs:2.0, ka:6, lag:0, fam:'nrt'},
-    {key:'loz2', label:'Lozenge 2 mg', sub:'~1.2 mg', icon:'capsule', content:2, abs:1.2, ka:3.6, lag:0, fam:'nrt',
+    {key:'gum4', label:'Nicotine gum 4 mg', short:'Gum 4 mg', sub:'~2 mg', icon:'capsule', content:4, abs:2.0, ka:6, lag:0, fam:'nrt'},
+    {key:'loz2', label:'Lozenge 2 mg', short:'Lozenge 2 mg', sub:'~1.2 mg', icon:'capsule', content:2, abs:1.2, ka:3.6, lag:0, fam:'nrt',
      note:'Slightly more nicotine than the same-strength gum, because nothing is lost to chewing technique.'},
-    {key:'loz4', label:'Lozenge 4 mg', sub:'~2.4 mg', icon:'capsule', content:4, abs:2.4, ka:3.6, lag:0, fam:'nrt'},
-    {key:'spray', label:'Nasal spray', sub:'2 sprays', icon:'spray', content:1, abs:0.5, ka:28, lag:0, fam:'nrt',
+    {key:'loz4', label:'Lozenge 4 mg', short:'Lozenge 4 mg', sub:'~2.4 mg', icon:'capsule', content:4, abs:2.4, ka:3.6, lag:0, fam:'nrt'},
+    {key:'spray', label:'Nasal spray', short:'Nasal spray', sub:'2 sprays', icon:'spray', content:1, abs:0.5, ka:28, lag:0, fam:'nrt',
      note:'The fastest licensed nicotine replacement — close to a cigarette in speed, which makes it the most effective and the most unpleasant to start.'},
-    {key:'inhal', label:'Oral inhalator', sub:'1 cartridge', icon:'vape', content:10, abs:1.5, ka:5, lag:0, fam:'nrt',
+    {key:'inhal', label:'Oral inhalator', short:'Inhalator', sub:'1 cartridge', icon:'vape', content:10, abs:1.5, ka:5, lag:0, fam:'nrt',
      note:'Despite the name almost none of it reaches the lung; it is absorbed across the mouth and throat. It is slow, and its value is as much in the hand-to-mouth ritual as in the nicotine.'},
-    {key:'patch7', label:'Patch 7 mg/24 h', sub:'slow, steady', icon:'patch', content:7, abs:7, ka:0.05, lag:60, fam:'nrt'},
-    {key:'patch14', label:'Patch 14 mg/24 h', sub:'slow, steady', icon:'patch', content:14, abs:14, ka:0.05, lag:60, fam:'nrt'},
-    {key:'patch21', label:'Patch 21 mg/24 h', sub:'slow, steady', icon:'patch', content:21, abs:21, ka:0.05, lag:60, fam:'nrt',
+    {key:'patch7', label:'Patch 7 mg/24 h', short:'Patch 7 mg', sub:'slow, steady', icon:'patch', content:7, abs:7, ka:0.05, lag:60, fam:'nrt'},
+    {key:'patch14', label:'Patch 14 mg/24 h', short:'Patch 14 mg', sub:'slow, steady', icon:'patch', content:14, abs:14, ka:0.05, lag:60, fam:'nrt'},
+    {key:'patch21', label:'Patch 21 mg/24 h', short:'Patch 21 mg', sub:'slow, steady', icon:'patch', content:21, abs:21, ka:0.05, lag:60, fam:'nrt',
      note:'Modelled as a slow depot with a one-hour lag, peaking around seven hours in. The model does NOT know about taking the patch off, so an overnight removal is not represented — add a smaller patch instead if you take it off at night.'}
   ],
 
@@ -5872,9 +5929,15 @@ function renderNicotine(){
   const totalMg = s.doses.reduce((a, d) => a + d.mg, 0);
   const lastAgo = s.doses.reduce((m, d) => Math.min(m, d.when), Infinity);
 
-  /* run until nicotine is negligible; the patch drags this out on purpose */
-  let endMin = Math.max(nowMin + 120, 360);
-  while (endMin < 4320 && nicotineNgMl(nicotineAmountAt(items, endMin, ke), vdL) > 0.25) endMin += 30;
+  /* Run until nicotine is negligible. The floor is a share of the peak rather
+     than a fixed number, so a big session does not stretch the axis into a
+     flat tail and squeeze the part where the products differ from each other
+     into the first inch of the plot. The patch still drags it out, which it
+     should. */
+  const peakGuess = (() => { let m = 0; for (let t = 0; t <= 1440; t += 5) m = Math.max(m, nicotineAmountAt(items, t, ke)); return nicotineNgMl(m, vdL); })();
+  const floorNg = Math.max(0.25, peakGuess * 0.05);
+  let endMin = Math.max(nowMin + 120, 240);
+  while (endMin < 4320 && nicotineNgMl(nicotineAmountAt(items, endMin, ke), vdL) > floorNg) endMin += 30;
   endMin = Math.max(endMin, nowMin + 60);
 
   const step = endMin > 1200 ? 10 : endMin > 600 ? 5 : 2;
@@ -5931,6 +5994,41 @@ function renderNicotine(){
     body:'Combining a patch with cigarettes used to be warned against; the evidence now supports combination therapy — a patch for the baseline plus a faster form for breakthrough craving works better than either alone. This app adds the two curves straight up, which is what actually happens.'});
   renderBanners(document.getElementById('nic-banners'), banners);
 
+  /* Per-product decomposition. First-order kinetics are linear, so each
+     product's own curve is an exact share of the total rather than a visual
+     approximation - the lines below genuinely add up to the filled one. Five
+     get a colour each and anything past five folds into one neutral line,
+     which is where the validated palette runs out. Products are taken in
+     catalogue order, so a product keeps its colour for as long as it is on
+     the chart and removing one never repaints the others. */
+  const NIC_SLOTS = ['var(--cat-1)', 'var(--cat-2)', 'var(--cat-3)', 'var(--cat-4)', 'var(--cat-5)'];
+  const groups = [];
+  NICOTINE.PRODUCTS.forEach(pr => {
+    const mine = s.doses.filter(d => d.product === pr.key);
+    if (!mine.length) return;
+    const its = nicotineDoseItems(mine, originAgo);
+    const pts = nicotineSeries(its, ke, vdL, endMin, step);
+    let pk = 0, pkAt = 0;
+    pts.forEach(pt => { if (pt[1] > pk){ pk = pt[1]; pkAt = pt[0]; } });
+    groups.push({key:pr.key, label:pr.label, short:pr.short || pr.label, n:mine.length,
+                 mg:mine.reduce((a, d) => a + d.mg, 0), pts:pts, peak:pk, peakAt:pkAt,
+                 now:nicotineNgMl(nicotineAmountAt(its, nowMin, ke), vdL)});
+  });
+  const split = groups.length > 1;
+  const drawn = groups.slice(0, NIC_SLOTS.length).map((gp, i) => Object.assign({}, gp, {color:NIC_SLOTS[i]}));
+  if (groups.length > NIC_SLOTS.length){
+    const rest = groups.slice(NIC_SLOTS.length);
+    const merged = rest[0].pts.map((pt, i) => [pt[0], rest.reduce((a, r) => a + (r.pts[i] ? r.pts[i][1] : 0), 0)]);
+    let pk = 0, pkAt = 0;
+    merged.forEach(pt => { if (pt[1] > pk){ pk = pt[1]; pkAt = pt[0]; } });
+    drawn.push({key:'__other',
+                label:rest.length + ' other product' + (rest.length === 1 ? '' : 's'),
+                short:rest.length + ' other' + (rest.length === 1 ? '' : 's'),
+                n:rest.reduce((a, r) => a + r.n, 0), mg:rest.reduce((a, r) => a + r.mg, 0),
+                pts:merged, peak:pk, peakAt:pkAt, now:rest.reduce((a, r) => a + r.now, 0),
+                color:'var(--cat-other)'});
+  }
+
   /* concentration chart */
   const yMax = Math.max(10, Math.ceil(Math.max(peakNg, NICOTINE.SMOKER_BAND[1]) * 1.2 / 5) * 5);
   renderChart(document.getElementById('nic-chart-ng'), {
@@ -5941,16 +6039,42 @@ function renderNicotine(){
     thresholds:[{y:NICOTINE.SMOKER_BAND[1], label:'daily smoker, upper', color:'var(--warn)'},
                 {y:NICOTINE.SMOKER_BAND[0], label:'daily smoker, lower', color:'var(--info)'}],
     vlines:[{x:peakAt, label:'peak', color:'var(--accent-2)'}],
-    series:[{points:ngPts, color:'var(--accent)', fill:true, width:2.8}],
+    series:[{points:ngPts, color:'var(--accent)', fill:true, width:split ? 2.2 : 2.8}].concat(
+      split ? drawn.map(gp => ({points:gp.pts, color:gp.color, width:2, halo:true, label:gp.short})) : []),
     marker:{x:nowMin, y:nowNg, label:'now · ' + round(nowNg, 1) + ' ng/mL'},
     accent:'var(--accent)', drag:{key:'nic', maxMin:endMin},
     ariaLabel:'Plasma nicotine over time, currently ' + round(nowNg, 1) + ' nanograms per millilitre'
   });
-  renderLegend(document.getElementById('nic-legend-ng'), [
-    {label:'Plasma nicotine (ng/mL)', color:'var(--accent)'},
-    {label:'Modelled peak', color:'var(--accent-2)', dash:true},
-    {label:'Band a daily smoker sits in', color:'var(--warn)', dash:true}
-  ]);
+  renderLegend(document.getElementById('nic-legend-ng'),
+    [{label:split ? 'Everything together' : 'Plasma nicotine (ng/mL)', color:'var(--accent)'}]
+      .concat(split ? drawn.map(gp => ({label:gp.label, color:gp.color})) : [])
+      .concat([{label:'Modelled peak', color:'var(--accent-2)', dash:true},
+               {label:'Band a daily smoker sits in', color:'var(--warn)', dash:true}]));
+
+  /* The table is not decoration. Three of the five series colours sit under a
+     3:1 contrast ratio on the light surface, so the names have to be legible
+     somewhere that is not the chart - which is also the answer for anyone
+     reading this in greyscale or on paper. */
+  const bd = document.getElementById('nic-breakdown');
+  if (!split){
+    bd.innerHTML = '<p class="card-note" style="margin:10px 0 0">Add a second kind of product \u2014 a gum, a pouch, a patch \u2014 and each one gets its own line here, so you can see which part of the curve came from what.</p>';
+  } else {
+    bd.innerHTML = '<div class="table-wrap" style="margin-top:12px"><table></table></div>' +
+      '<div class="scroll-hint"><span class="ico" data-icon="swipe"></span>Scroll sideways for every column.</div>';
+    renderTable(bd.querySelector('table'),
+      [{label:'Product'}, {label:'How many', num:true}, {label:'Absorbed', num:true},
+       {label:'Its own peak', num:true}, {label:'Peak at', num:true}, {label:'Share of right now', num:true}],
+      drawn.map(gp => [
+        '<span class="sw-dot" style="background:' + gp.color + '"></span>' + esc(gp.label),
+        String(gp.n), round(gp.mg, 2) + ' mg', round(gp.peak, 1) + ' ng/mL', fmtDuration(gp.peakAt),
+        (nowNg > 0.01 ? Math.round(100 * gp.now / nowNg) : 0) + '&nbsp;%'
+      ]));
+    bd.insertAdjacentHTML('beforeend',
+      '<p class="card-note" style="margin:10px 0 0">The coloured lines add up to the filled one exactly \u2014 that is a real property of first-order kinetics, not a drawing convention. ' +
+      'Watch what the shapes do rather than how high they go: a cigarette is a spike that is half gone before a gum has finished arriving, and a patch barely has a shape at all. ' +
+      'The <a href="#" data-goto="learn" data-article="art-nicotine">speed, not the amount</a>, is what separates them.</p>');
+    paintIcons(bd);
+  }
 
   /* intensity chart, on the shared scale */
   renderChart(document.getElementById('nic-chart-fx'), {
