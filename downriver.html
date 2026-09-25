@@ -869,6 +869,12 @@ const CFG = {
        fixed 14-cell cap was tuned to one map's basin depths and goes
        vertical on deeper ones. 0.55 is well under the 0.70 the legs
        refuse, so a player who ends up in one can always climb out. */
+    cutMark: 0.75,      // metres the carve must take before a cell
+                         // counts as cut ground for the wall taming
+    breachStep: 2.6,     // metres of fall allowed between two cells of
+                         // ground the breacher cut. 2.6 over a 4m cell is
+                         // a gradient of 0.65, under HAZARD.slipSlope, so
+                         // every trench it digs can be walked back out of.
     breachGrade: 0.55,
     breachMaxFlare: 120,  // metres, the widest a trench may open out
     breachDrop: 7.0,     // floor for how far the spill saddle comes down
@@ -3589,6 +3595,133 @@ function basinBed(cells){
             && steepFrac <= CFG.HYDRO.lakeMaxSteepFrac };
 }
 
+/* ---- PUT THE WALLS BACK DOWN. --------------------------------------
+   THE STEEPNESS GUARD CANNOT SEE THE HYDROLOGY. genTerrain ends by
+   smoothing the map until less than maxCliffFrac of it is over the cliff
+   angle -- and then genHydrology breaches basins, floods lakes and carves
+   channels into the surface the guard just signed off on. Measured on
+   seed 1234: with breaching switched off, the worst step between any two
+   neighbouring cells in the entire map is 3.1 metres and NOTHING is over
+   eight. With it on there were 59,644 cells over eight metres and a worst
+   step of 108.7. Every wall in the world is made after the only thing
+   that was looking for walls had finished.
+
+   That is what the report was. A trench with sheer sides that you drop
+   into, its walls smeared into vertical streaks because the ground UVs
+   are world-planar and a vertical face has no horizontal extent to map a
+   texture across, with trees standing on the rim and growing out of the
+   face because the vegetation was scattered before the trench existed.
+
+   WIDENING THE BREACH FLARE DOES NOT FIX IT, and that is worth writing
+   down because it was tried twice. The flare lowers a disc to a lid that
+   rises to floor + 0.92*cut at radius WR -- but `cut` is measured at the
+   CHANNEL, so where the disc bites into a hillside the lid at its rim
+   sits far below the ground that is actually there, and sink() leaves
+   the cell one step outside the disc alone. The rim of the disc IS the
+   wall, and the horizontal terracing on those faces is a stack of disc
+   rims from consecutive channel steps. A wider disc does not remove the
+   step, it moves it outwards: measured, the flare change took seed 1234
+   from 45,312 wall cells to 59,644. It made it worse.
+
+   So limit the step directly, on the cells the hydrology cut and nowhere
+   else. Wld.CUT is marked by every stage that edits H after the guard:
+   the breacher, the lake fill, the bank cap and the channel carve. This
+   runs once, after the last of them, and before WLEV is derived from H --
+   so the water is levelled against the ground we finish with, not the
+   ground we started from.
+
+   Lower-only, so a channel can never be filled back in and the water
+   still runs downhill. A cell that gets lowered joins the mask, so the
+   taming walks outward from the damage exactly as far as it has to and
+   stops on its own the moment the step is legal. The mountains are never
+   marked, so they are never touched.
+
+   The sweeps alternate direction because a single raster pass carries a
+   correction one cell per pass, and a 160-metre wall at 2.6 metres a cell
+   is sixty-odd cells of propagation. Four sweeps in opposing orders move
+   it the width of the map in one pass instead. ---- */
+function tameCutWalls(){
+  const N = Wld.N, n2 = N*N, H = Wld.H, MK = Wld.CUT, HY = CFG.HYDRO;
+  if(!MK) return;
+  const lim = HY.breachStep, dia = lim*1.41421356;
+  /* A[i] is the ceiling the cut ground imposes on cell i: the height of
+     the nearest cut cell plus `lim` for every cell of distance from it.
+     Seeded ONLY at cut cells, so ground with no cut near it keeps its
+     ceiling at infinity and is never touched at all.
+
+     ITERATING THIS AGAINST MUTABLE NEIGHBOURS DOES NOT CONVERGE, which
+     is how the first version of this function was wrong: capping a cell
+     at (lowest neighbour + lim) when that neighbour has itself just been
+     lowered lets the two chase each other downhill for ever. Measured,
+     it performed 14.9 MILLION lowerings on a 1.33 million cell map and
+     still left a 150m wall standing -- it was excavating the whole cut
+     region toward the global minimum instead of ramping its rims.
+
+     Reading the seed heights and writing the ceiling into a separate
+     array removes the feedback: A is a min-convolution of the cut
+     surface with a cone of gradient `lim`, it has a fixed point by
+     construction, and two chamfer sweeps reach it exactly. */
+  const A = new Float32Array(n2).fill(Infinity);
+  /* SEEDED AT THE FOOT OF A WALL, NOT ON EVERY CUT CELL.
+     A seed says "nothing may rise faster than `lim` away from here", and
+     the breach flare marks every cell of a 120m-radius disc around every
+     cell of 240 channels -- which is most of the map. Seeding all of them
+     imposed a 0.65 gradient nearly everywhere and took the final cliff
+     fraction from 2.5% to 0.0%: it removed the mountains, measured, on
+     all six seeds. The game is made of those mountains.
+
+     A wall needs a foot to stand on, so the only cut cells that have to
+     constrain anything are the ones with a wall directly above them.
+     Everywhere else the cut ground is already lying at an angle the
+     terrain chose, and it gets to keep it. */
+  let seeds = 0;
+  for(let iz=1; iz<N-1; iz++) for(let ix=1; ix<N-1; ix++){
+    const i = iz*N+ix;
+    if(!MK[i]) continue;
+    const h = H[i];
+    if(H[i+1]-h > lim || H[i-1]-h > lim || H[i+N]-h > lim || H[i-N]-h > lim){
+      A[i] = h; seeds++;
+    }
+  }
+  Wld.stats.tameSeeds = seeds;
+  for(let iz=1; iz<N-1; iz++) for(let ix=1; ix<N-1; ix++){
+    const i = iz*N+ix; let v = A[i];
+    if(A[i-1]   + lim < v) v = A[i-1]   + lim;
+    if(A[i-N]   + lim < v) v = A[i-N]   + lim;
+    if(A[i-N-1] + dia < v) v = A[i-N-1] + dia;
+    if(A[i-N+1] + dia < v) v = A[i-N+1] + dia;
+    A[i] = v;
+  }
+  let touched = 0;
+  for(let iz=N-2; iz>0; iz--) for(let ix=N-2; ix>0; ix--){
+    const i = iz*N+ix; let v = A[i];
+    if(A[i+1]   + lim < v) v = A[i+1]   + lim;
+    if(A[i+N]   + lim < v) v = A[i+N]   + lim;
+    if(A[i+N+1] + dia < v) v = A[i+N+1] + dia;
+    if(A[i+N-1] + dia < v) v = A[i+N-1] + dia;
+    A[i] = v;
+    /* Lower-only: a channel is never filled back in, so the water still
+       runs downhill and the hydrology computed above still holds. */
+    if(H[i] > v){ H[i] = v; touched++; }
+  }
+  /* THE BREACHER CUTS ITS TRENCHES TO THE MAP EDGE, and the sweeps above
+     run 1..N-2, so without this the border ring keeps every wall the
+     outflow channels left against it. */
+  for(let ix=0; ix<N; ix++){
+    const t = ix, b = (N-1)*N+ix;
+    const tv = H[N+ix] + lim, bv = H[(N-2)*N+ix] + lim;
+    if(H[t] > tv){ H[t] = tv; touched++; }
+    if(H[b] > bv){ H[b] = bv; touched++; }
+  }
+  for(let iz=0; iz<N; iz++){
+    const l = iz*N, r = iz*N+N-1;
+    const lv = H[l+1] + lim, rv = H[r-1] + lim;
+    if(H[l] > lv){ H[l] = lv; touched++; }
+    if(H[r] > rv){ H[r] = rv; touched++; }
+  }
+  Wld.stats.tamedCells = touched;
+}
+
 function breachBasins(){
   const N = Wld.N, n2 = N*N, H = Wld.H, HY = CFG.HYDRO;
   const comp = new Int32Array(n2);
@@ -3615,7 +3748,14 @@ function breachBasins(){
      to seven points of extra cliff across the playable interior on two
      seeds. A step at the boundary is outside the world the player can
      walk to; a seventh of the interior turning to cliff is not. */
-  const sink = (i, to)=>{ const v = Math.max(to, floorLimit); if(H[i] > v) H[i] = v; };
+  /* Every cell this lowers is remembered. The steepness guard in
+     genTerrain has already been and gone by the time we run, so the
+     walls we leave are nobody's job but ours -- and to clean them up
+     without touching the mountains the game is made of, we have to know
+     which ground is ours. */
+  const MK = Wld.CUT = new Uint8Array(n2);
+  const sink = (i, to)=>{ const v = Math.max(to, floorLimit);
+    if(H[i] > v){ H[i] = v; MK[i] = 1; } };
   for(let pass=0; pass<HY.breachPasses; pass++){
     const filled = priorityFlood(H, N);
     comp.fill(-1);
@@ -3795,6 +3935,7 @@ function breachBasins(){
     }
     if(!breached) break;
   }
+
   Wld.stats.breached = totalBreached;
 }
 
@@ -4075,7 +4216,14 @@ function genHydrology(){
       if(v > bank[j]) bank[j] = v;
     }
   }
-  for(let i=0;i<n2;i++) H[i] -= bank[i];
+  /* Only ground the carve took a real bite out of is treated as cut.
+     Marking every cell the bank touches (bank > 0.001) seeds the cone
+     across essentially the whole map, and measured that took the final
+     cliff fraction from 2.5% to 0.1% -- it flattened the mountains the
+     game is made of, which is the one thing this must not do. */
+  for(let i=0;i<n2;i++) if(bank[i] > 0.001){ H[i] -= bank[i];
+    if(Wld.CUT && bank[i] > CFG.HYDRO.cutMark) Wld.CUT[i] = 1; }
+  tameCutWalls();
 
   /* ---- the water surface.
      Channels first: depth from flow, then ONE pass in DESCENDING order of
@@ -17967,6 +18115,7 @@ const DEV = (()=>{
       + `           scarcity ${P.scarcity.toFixed(2)} food ${P.foodScarcity.toFixed(2)} density ${P.density.toFixed(2)}\n`
       + `world      guarantees ${Wld.validation.pass ? 'ALL PASS' : 'FAIL ' + Wld.validation.fail.join(',')}\n`
       + `           attempts ${Wld.stats.attempts} cliff ${(Wld.stats.cliffFracFinal*100||0).toFixed(0)}% pond ${((Wld.stats.pondCells/(Wld.N*Wld.N))*100).toFixed(0)}%\n`
+      + `           breach trenches ${Wld.stats.breached||0}, walls tamed ${Wld.stats.tamedCells||0} cells from ${Wld.stats.tameSeeds||0} wall feet\n`
       /* ---- THE LARGE-WORLD DIAGNOSTICS ---------------------------
          Everything needed to tell whether the expansion is actually
          doing what it claims, without leaving the game. */
