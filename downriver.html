@@ -773,9 +773,24 @@ const CFG = {
 
   /* ---- hydrology ---------------------------------------------------- */
   HYDRO: {
-    streamAcc: 26,       // flow accumulation (cells) to be a stream
-    riverAcc: 210,       // ... to be a river
-    trunkAcc: 900,       // ... to be the trunk river
+    /* ---- THE DRAINAGE NETWORK AT TWENTY TIMES THE CATCHMENT ------
+       These are counts of upstream CELLS, so they are invariant to the
+       map's size at a fixed cell size: a stream draining one square
+       kilometre has the same accumulation on either map. What is NOT
+       invariant is how many cells drain through the bottom of the map.
+       The trunk on a 4608m world gathers twenty times the catchment,
+       so at the old trunkAcc of 900 the "trunk river" designation was
+       being met by ordinary side streams -- every creek in the world
+       drawn as the main river.
+
+       Raising trunkAcc restores what it meant (one main river) while
+       LOWERING streamAcc puts more of the small stuff on the map,
+       which is what makes a drainage network read as a network: many
+       headwater creeks, joining into streams, joining into several
+       medium rivers, joining into one trunk. */
+    streamAcc: 18,       // flow accumulation (cells) to be a stream
+    riverAcc: 260,       // ... to be a river
+    trunkAcc: 9000,      // ... to be the trunk river
     carveStream: 0.9,    // metres of channel cut
     carveRiver: 3.0,
     carveTrunk: 5.4,
@@ -954,29 +969,64 @@ const CFG = {
     trailSlopeCost: 90,
     trailValleyBonus: 26,// trails like valleys and riverbanks
     trailWaterCost: 150, // ... but not crossing water
-    trailCount: [3, 7],  // per seed
+    /* ---- A TRAIL NETWORK, NOT A HANDFUL OF TRAILS ----------------
+       Three to seven trails is a network on a one-kilometre map and a
+       scattering of lines on a four-and-a-half-kilometre one. */
+    trailCount: [9, 18], // per seed
     markerEvery: 34,     // metres between trail markers near civilisation
-    wornNear: 120,       // metres from the hospital where a trail is a road
-    wornFar: 620,        // ... and where it is barely a deer path
+    /* HOW WORN A TRAIL IS, BY HOW FAR IT IS FROM PEOPLE. These are
+       distances along the trail network from the hospital, and they
+       were 120 and 620 -- on a journey of 2500m that makes the entire
+       walk "barely a deer path" and deletes the single clearest signal
+       the game has that civilisation is getting closer. They have to
+       span the journey, because that is what they are describing. */
+    wornNear: 420,       // metres from the hospital where a trail is a road
+    wornFar: 2600,       // ... and where it is barely a deer path
   },
 
   /* ---- what gets built --------------------------------------------- */
   STRUCT: {
-    cabins:    [2, 5],
-    campsites: [3, 8],
-    ruins:     [1, 4],
+    /* ---- HOW MUCH IS OUT THERE ------------------------------------
+       Twenty times the ground. NOT twenty times the buildings: the
+       brief for the expansion is that remote wilderness stays sparse
+       and evidence of people thickens as you get closer to them, so
+       what scales is the COUNT, while placement is biased by distance
+       from civilisation (see structCivBias). Roughly six times as many
+       things over twenty times the area is a world that is emptier per
+       square kilometre than the old one, and much fuller to walk
+       through, which is the correct direction for both. */
+    cabins:    [8, 20],
+    campsites: [14, 36],
+    ruins:     [5, 16],
     /* At least one, always. The car stopped being scenery the moment
        you could sit in it, and a feature that six seeds in twenty do
        not have is a feature the player does not learn exists. */
-    car:       [1, 3],
-    minApart:  46,       // metres between any two structures
+    car:       [3, 8],
+    minApart:  80,       // metres between any two structures
     routeBias: 0.72,     // fraction placed on or near a route
+    /* HOW HARD PLACEMENT LEANS TOWARD CIVILISATION. 0 would scatter
+       everything evenly, which is a world with no progression in it;
+       1 would pile everything at the hospital's door. This is the
+       exponent on a normalised "how close to the hospital is this",
+       so the deep wilderness keeps a few lonely things in it and the
+       outskirts get most of them. */
+    civBias: 1.45,
+    /* ... except these, which are the opposite: a cabin forty minutes
+       from anywhere is the thing the player remembers. A fixed number
+       of structures are placed FAR from civilisation on purpose. */
+    remoteAtLeast: 5,
   },
   RESOURCE: {
-    berryPatches: [6, 26],   // scaled down hard on scarce seeds
+    /* Resources scale with the GROUND, not with the journey: a longer
+       walk is supposed to be hard because it is long and lonely, not
+       because the map secretly starves you. Twenty times the area gets
+       roughly twenty times the berries and water, so the density a
+       player actually experiences per kilometre walked is unchanged --
+       which is the only number that matters to someone walking. */
+    berryPatches: [90, 380],
     pickedClean:  [0.15, 0.6],
-    waterPoints:  [10, 40],
-    items:        [5, 18],
+    waterPoints:  [150, 560],
+    items:        [70, 240],
   },
 
   /* ---- hazards ------------------------------------------------------ */
@@ -1028,8 +1078,20 @@ const CFG = {
        the mind, and a test player left alone died of it before reaching
        stage 2. 6.5 puts a full bar at about 27 real minutes, which is a
        real threat over a long run and never the first thing to go wrong. */
-    thirstPerHour: 6.5,      // percent of the bar per in-fiction hour
-    hungerPerHour: 3.4,
+    /* AND THESE MOVE WITH THE CLOCK, for the same reason and by the
+       same ratio. 6.5 put a full thirst bar at about 27 real minutes,
+       which was a real threat across a 36-minute run and is simply
+       death on a 90-minute one -- the player would be drinking
+       continuously rather than travelling. 2.7 puts it near 65 minutes.
+
+       This is NOT the map being made kinder. The resource counts went
+       up with the area (see RESOURCE), so what a player meets per
+       kilometre walked is about what it always was; and the walk is
+       three to four times longer, so the TOTAL water a run needs is
+       substantially more than it used to be. The journey is harder
+       because it is long, which is the way round the brief asks for. */
+    thirstPerHour: 2.7,      // percent of the bar per in-fiction hour
+    hungerPerHour: 1.45,
     sprintThirstMult: 2.2,
     heatThirstMult: 1.35,
     thirstWeakAt: 62,        // where speed and stamina start to go
@@ -1119,8 +1181,22 @@ const CFG = {
   },
   WEATHER: {
     changeMinutes: [4, 14],  // real minutes between weather decisions
-    fogBase: 0.0062,         // FogExp2 density, clear day
-    fogThick: 0.031,
+    /* ---- YOU HAVE TO BE ABLE TO SEE THE COUNTRY --------------------
+       0.0062 puts a surface 500m away at 99.99% fog: on a one-kilometre
+       map that is atmosphere, and on a four-and-a-half-kilometre one it
+       is a wall three hundred metres from your face that makes the
+       whole expansion invisible. A mountain you are supposed to see and
+       walk toward for twenty minutes has to be VISIBLE from twenty
+       minutes away.
+
+       0.0026 puts 500m at 81% fog and 1200m at fully fogged -- still a
+       forest you cannot see across, still every bit as close and
+       oppressive under the trees where the trees are what stops you
+       seeing, but from a ridge the country opens up. The thick-weather
+       value is barely touched, because a storm closing in to nothing is
+       the point of a storm. */
+    fogBase: 0.0026,         // FogExp2 density, clear day
+    fogThick: 0.028,
     rainFogMult: 1.5,
     nightFogMult: 1.22,
   },
@@ -1138,10 +1214,29 @@ const CFG = {
        happened in a forest with nothing wrong with it. */
     /* How much the sight of the town slows the decline, and over what
        distance. See the note in update(). */
-    civCalmRange: 240,   // metres from the hospital where it starts
-    civCalmClose: 25,    // ... and where it is at its strongest
+    /* The town is visible from a great deal further away on a map this
+       size, and the relief of seeing it should start when you see it. */
+    civCalmRange: 700,   // metres from the hospital where it starts
+    civCalmClose: 40,    // ... and where it is at its strongest
     civCalmAt: 0.25,     // the multiplier on the decline, at the doors
-    baseRate: 0.018,
+    /* ---- AND THE CLOCK HAS TO FIT THE WALK ----------------------
+       0.018 gave about 36 minutes from waking to collapse. The journey
+       is a 2500m MINIMUM now and typically further; at the 2.55 m/s
+       walk, and slower than that in practice for slope, snow and
+       looking for things, a straight 2500m is already twenty minutes of
+       nothing but walking, and a real run with searching and backtracking
+       is thirty-five to fifty-five. A 36-minute clock against that is a
+       game the player cannot finish, and "cannot finish" is not the same
+       feeling as "only just finished".
+
+       0.0072 puts the median near 90 minutes, the fast seeds near 50 and
+       the slow ones near 175. The horror does not get thinner for it --
+       the stages are reached at the same FRACTIONS of the run, so the
+       player still crosses into stage 3 around the same place in their
+       own journey. What changes is that there is room between the
+       events, which the brief for the bigger world asks for by name:
+       long quiet stretches, and uncertainty in them. */
+    baseRate: 0.0072,
     stageAt: [0, 0.16, 0.36, 0.60, 0.84],   // progress -> stage boundary
     leakChance: 0.13,        // a draw reaching one stage above current
     leakChanceLate: 0.07,    // ... from stage 3 on, where it matters less
@@ -1430,7 +1525,26 @@ const CFG = {
        of the place. The streamer keeps whatever is inside this, so the
        cost is the square of it -- 240 is 2.6x the trees, which the
        instance caps below were raised to hold. */
-    treeRadius: 240,         // metres of trees kept instanced around you
+    /* ---- HOW FAR THE REAL TREES GO --------------------------------
+       Trees are instanced in a disc around the player, so the count
+       goes with the SQUARE of this. 240m was right under a fog that
+       stopped you at 300m. The clear-day fog now reaches past 900m, and
+       covering that with real trunks would be (900/240)^2 = fourteen
+       times as many: about a hundred thousand instances, which is not a
+       trade worth making for trees that are four pixels wide.
+
+       340 is where an individual tree stops being an individual tree.
+       Past it the forest is carried by the whole-world ground bake,
+       which paints canopy colour over the terrain -- which is what
+       distant forest actually looks like from a ridge: a texture, not a
+       collection of trunks.
+
+       This leaves a real gap and it is worth naming: there is no tree
+       LOD, so the boundary is a density edge rather than a fade. Under
+       fog and canopy it is hard to catch; on an open ridge on a clear
+       day it is findable if you look for it. Billboarded far trees are
+       the fix and they are not in this pass. */
+    treeRadius: 340,         // metres of trees kept instanced around you
     colliderRadius: 42,      // ... and how close one needs to be to block
     grassRadius: 34,
     maxPixelRatio: 1.5,
@@ -1784,6 +1898,22 @@ function rollPersonality(){
      valley running to the outlet, and this decides what the high ground
      on either side of it looks like. See genTerrain(). */
   p.terrain = r.weighted([[26,'alpine'],[30,'rolling'],[20,'ravines'],[12,'plateau'],[12,'basin']]);
+  /* ---- A SECOND COUNTRY IN THE SAME WORLD --------------------------
+     One style stretched across four and a half kilometres is four and a
+     half kilometres of the same idea, and the walk is long enough now
+     that the player would notice. So a seed gets a second style and a
+     low-frequency mask that decides which parts of the map are which:
+     alpine shoulders giving way to a rolling basin, a plateau standing
+     over a field of ravines. The valley underneath is still the same
+     valley -- the premise of the game does not change -- but the high
+     ground either side of it stops being one note held for an hour.
+
+     The two can come up the same, and that is a legitimate seed: a
+     world that is alpine end to end. It is simply no longer ALL of
+     them. */
+  p.terrain2 = r.weighted([[24,'alpine'],[26,'rolling'],[20,'ravines'],[15,'plateau'],[15,'basin']]);
+  p.regionScale = r.range(0.85, 1.9);    // how big the two countries are
+  p.regionMix = r.range(0.34, 0.66);     // where the line between them falls
   p.relief  = r.range(0.90, 1.08);          // was 0.60-1.18
   p.cliffy  = r.range(0.40, 0.72);          // was 0.25-1.00
   p.wetness = r.range(0.85, 1.20);          // was 0.45-1.60
@@ -3025,9 +3155,23 @@ function genTerrain(salt){
   Wld.N = N; Wld.size = SZ; Wld.cell = SZ/(N-1);
   const H = new Float32Array(N*N);
   const s = (hashString('terrain') ^ Math.imul(G.seed, 0x9E3779B1) ^ Math.imul(salt, 0x7feb352d)) >>> 0;
-  const st = P.terrain;
+  const st = P.terrain, st2 = P.terrain2 || P.terrain;
   const relief = CFG.WORLD.RELIEF * P.relief;
   const T = CFG.TERRAIN;
+  /* ---- HOLDING THE SIZE OF THINGS -----------------------------------
+     Every frequency below is in WORLD-WIDTHS, which was fine while there
+     was only one world width. Grow the map to four and a half times its
+     old size with the same numbers and every hill, every crease and
+     every grain of the ground grows with it: a 4.6km map made of exactly
+     the features a 1km map had, each one 4.5 times too big, and the
+     player walking through a single enormous smooth landform.
+
+     FS puts the detail back at the size it was. RS is the square root of
+     it, for the things that SHOULD get bigger with the world but not by
+     all of it -- see the ridges below. */
+  const FS = SZ / 1024;
+  const RS = Math.sqrt(FS);
+
   // the outlet, as a point on the unit square's rim in u/v space
   const oa = P.outletAngle;
   const oc = Math.cos(oa), os_ = Math.sin(oa);
@@ -3038,11 +3182,21 @@ function genTerrain(salt){
   for(let iz=0; iz<N; iz++){
     for(let ix=0; ix<N; ix++){
       const u = ix/(N-1) - 0.5, v = iz/(N-1) - 0.5;   // -0.5..0.5
-      let nx = u*T.baseFreq, nz = v*T.baseFreq;
+      let nx = u*T.baseFreq*FS, nz = v*T.baseFreq*FS;
       const [wx, wz] = warp2(nx, nz, T.warp, s);
 
       const hills = fbm2(wx*3.1, wz*3.1, T.octaves, s, 2.03, T.gain);
-      const ridge = ridged2(u*T.ridgeFreq*3.4 + 5.2, v*T.ridgeFreq*3.4 - 1.7, T.ridgeOctaves, s+77, 2.0, T.gain);
+      /* Ridges scale by the SQUARE ROOT of the world, not by all of it.
+         Holding them at their old metre size would have given a 4.6km
+         map the same 350m ridges a 1km map had -- more of them, none of
+         them bigger. Half-scaling makes them about 750m across: a thing
+         you see from a long way off and walk toward for a while, which
+         is what a mountain is supposed to be. */
+      const ridge = ridged2(u*T.ridgeFreq*3.4*RS + 5.2, v*T.ridgeFreq*3.4*RS - 1.7, T.ridgeOctaves, s+77, 2.0, T.gain);
+      /* And `broad` is left in world-widths on purpose: it is the
+         REGION term, and at 4608m its wavelength is nearly three
+         kilometres. That is what makes one end of the map high country
+         and the other a basin. */
       const broad = fbm2(u*1.6 - 3.3, v*1.6 + 9.1, 3, s+303);
       const fine  = fbm2(wx*T.fineFreq, wz*T.fineFreq, T.fineOctaves, s+505, 2.03, T.gain);
 
@@ -3060,8 +3214,16 @@ function genTerrain(salt){
       const across = (u*(-oz) + v*ox) * 2;     // distance from the outlet axis
       const trough = Math.pow(clamp(Math.abs(across),0,1), 1.5);
       const valley = hills*0.30 + broad*0.24 + ridge*0.18 + trough*0.60 + fine*0.05;
+      /* WHICH COUNTRY THIS CELL IS IN. A very low frequency field --
+         one or two features across the whole map -- warped by the same
+         warp the ground uses so the boundary wanders instead of running
+         straight. Where it is near the middle the two styles are mixed,
+         which is what makes the join a transition and not a seam. */
+      const region = smoothstep(P.regionMix-0.16, P.regionMix+0.16,
+        fbm2(u*P.regionScale + 17.3, v*P.regionScale - 4.9, 2, s+1313));
+      const flavourOf = (style)=>{
       let flavour;
-      switch(st){
+      switch(style){
         case 'alpine':
           // ridges dominate; the valleys between them are where everything
           // else in the game happens
@@ -3099,6 +3261,16 @@ function genTerrain(salt){
           flavour = valley;
           break;
       }
+      return flavour;
+      };
+      /* Two styles, mixed by where in the map this is. Both are computed
+         from the SAME hills/ridge/broad/fine already in hand, so the
+         second country costs a switch and a lerp rather than a second
+         pass of noise. When the seed rolls the same style twice this is
+         a no-op and the world is one country, which is a legitimate
+         seed and simply no longer every seed. */
+      const flavour = (st === st2) ? flavourOf(st)
+        : lerp(flavourOf(st), flavourOf(st2), region);
       /* The valley always dominates. At this weight a seed reads as
          "the valley, with alpine shoulders" rather than as an alpine
          map, which is the whole point of the separation. */
@@ -4070,6 +4242,49 @@ function genHydrology(){
   Wld.stats.cliffFracFinal = +(over/n2).toFixed(3);
   Wld.stats.rejectedBasins = rejectedBasins;
   Wld.stats.pondCells = pondCells;
+  /* ---- WHAT THE DRAINAGE NETWORK ACTUALLY CAME OUT AS --------------
+     Reported rather than assumed, because the accumulation thresholds
+     are the single easiest thing to get wrong at a new map size: they
+     count upstream CELLS, and a map with twenty times the catchment
+     puts twenty times the flow through its trunk. These are the numbers
+     that say whether a seed got one main river with a network feeding
+     it, or twenty rivers, or none. */
+  {
+    const HY = CFG.HYDRO;
+    let wet=0, trunk=0, river=0, stream=0, falls=0, lo=Infinity, hi=-Infinity;
+    for(let i=0;i<n2;i++){
+      if(H[i]<lo) lo=H[i]; if(H[i]>hi) hi=H[i];
+      if(WLEV[i] > H[i]-0.05) wet++;
+      const a = ACC[i];
+      if(a >= HY.trunkAcc) trunk++;
+      else if(a >= HY.riverAcc) river++;
+      else if(a >= HY.streamAcc) stream++;
+      /* A CASCADE is a watercourse that drops hard over one cell: the
+         places the terrain makes a waterfall without anybody drawing
+         one. Counted on the channel cells only, so a steep dry
+         hillside is not a waterfall. */
+      if(a >= HY.streamAcc && DIR[i] >= 0){
+        const d = H[i] - H[DIR[i]];
+        if(d > Wld.cell*0.85) falls++;
+      }
+    }
+    Wld.stats.wetCells = wet;
+    Wld.stats.reliefM = Math.round(hi-lo);
+    Wld.stats.trunkLength = Math.round(trunk*Wld.cell);
+    Wld.stats.riverCells = river;
+    Wld.stats.streamCells = stream;
+    Wld.stats.cascades = falls;
+    /* HOW MANY SEPARATE FEEDERS the trunk has: cells that are a river
+       in their own right and whose downstream neighbour is the trunk.
+       That is the junction count, which is what "tributaries" means. */
+    let trib = 0;
+    for(let i=0;i<n2;i++){
+      if(ACC[i] < HY.riverAcc || ACC[i] >= HY.trunkAcc) continue;
+      const d = DIR[i];
+      if(d >= 0 && ACC[d] >= HY.trunkAcc) trib++;
+    }
+    Wld.stats.tributaries = trib;
+  }
   Wld.stats.pondRegions = pondRegions;
   Wld.stats.biggestPond = biggestPond;
 }
@@ -4494,14 +4709,47 @@ function genRoutes(){
       head = i;
     }
     if(head < 0) continue;
+    /* ---- WHERE THIS TRAIL IS GOING ---------------------------------
+       Every trail used to run to the hospital. On a one-kilometre map
+       with three to seven of them that is a network; on four and a half
+       kilometres with eighteen it is a star, with eighteen lines
+       converging on one point and no junctions anywhere else.
+
+       So after the first few, a trail's goal is a point on a trail that
+       already exists. That makes branches that leave and rejoin, forks
+       that offer a choice, and stretches shared by two paths -- and it
+       costs nothing in navigability, because the trail it joins leads
+       to the hospital, so it still does. The whole network still drains
+       toward town, which is the guarantee that matters; it just stops
+       looking like spokes on a wheel.
+
+       Branch trails also path much faster, because their goal is far
+       closer than the far side of the map. */
+    let goal = hos.i;
+    if(t >= 3 && trails.length){
+      const parent = trails[rng.irange(0, trails.length-1)];
+      /* Not the last cell -- that IS the hospital. Somewhere along it. */
+      const at = rng.irange(Math.floor(parent.length*0.12), Math.floor(parent.length*0.88));
+      if(parent[at] !== undefined) goal = parent[at];
+    }
     /* A share of the grid, not a constant from the small map: a trail
        that runs most of the way across a 5km world expands far more than
        160,000 cells, and the cap returning null reads as "no trail" --
        so the big world would have quietly had almost none. */
-    const path = astar(head, hos.i, trailCost, astarBudget(2.5));
+    const path = astar(head, goal, trailCost, astarBudget(2.5));
     if(!path || path.length < 8) continue;
-    // wornness from network distance to the hospital, walked from the end
+    /* Wornness is distance along the network FROM THE HOSPITAL, walked
+       back from the end of this path. For a branch the end is a cell on
+       its parent, which already carries a wornness -- so the branch
+       starts as worn as the trail it leaves and thins out from there,
+       which is what a side path off a main trail actually looks like. */
     let dist = 0;
+    if(goal !== hos.i && WORN[goal] > 0){
+      /* invert the wornness curve to recover how far from town the
+         junction is, so the branch continues the parent's fade rather
+         than restarting it. */
+      dist = R.wornNear + (1 - WORN[goal])*(R.wornFar - R.wornNear);
+    }
     for(let k=path.length-1; k>=0; k--){
       const i = path[k];
       if(k < path.length-1){
@@ -4900,9 +5148,12 @@ function genStructures(){
 
   /* Why sites are turned down, kept because "there is no cabin on this
      seed" is otherwise a mystery with five possible causes. */
-  const rej = { fit:0, clear:0, close:0, wet:0, relief:0, lost:{} };
-  const place = (kind, count)=>{
+  const rej = { fit:0, clear:0, close:0, wet:0, relief:0, remote:0, lost:{} };
+  const place = (kind, count, remote)=>{
     for(let k=0;k<count;k++){
+      /* The last few of each kind are placed with the distance bias
+         switched off, which is what puts things in the far country. */
+      const forceRemote = !!remote && k >= count - Math.ceil(S.remoteAtLeast/3);
       let spot = null, roughSpot = null;
       /* Drawn once per building rather than once per attempt, so that a
          seed's buildings do not change orientation because an unrelated
@@ -4921,6 +5172,25 @@ function genStructures(){
         }
         if(!inGrid(ix,iz)) continue;
         const i = iz*N+ix;
+        /* ---- HUMAN TRACES THICKEN TOWARD PEOPLE -------------------
+           On a one-kilometre map everything was within earshot of
+           everything and an even scatter read fine. Over four and a
+           half kilometres an even scatter is a world with no
+           progression in it: the same density of cabins beside the
+           town and forty minutes out in the mountains, which tells the
+           player nothing about which way civilisation is.
+
+           So a site out in the deep wilderness has to survive a roll
+           against how far out it is. The bias is an exponent, not a
+           cutoff, so the remote country keeps a few lonely things in
+           it -- and remoteAtLeast then guarantees a handful placed OUT
+           there on purpose, because a cabin an hour from anywhere is
+           the thing a player actually remembers. */
+        if(!forceRemote){
+          const dh = Math.hypot(wxOf(ix)-Wld.hospital.x, wzOf(iz)-Wld.hospital.z);
+          const far = clamp(dh / (playHalf()*1.6), 0, 1);
+          if(rng() < Math.pow(far, 1/S.civBias) * 0.82){ rej.remote++; continue; }
+        }
         if(!structureFits(ix, iz, kind==='cabin'?3:2)){ rej.fit++; continue; }
         if(Wld.CLEAR[i] < 0.18){ rej.clear++; continue; }  // needs a gap in the trees
         const x = wxOf(ix), z = wzOf(iz);
@@ -4978,9 +5248,13 @@ function genStructures(){
     }
   };
   const sc = P.scarcity;
-  place('cabin',    Math.max(1, Math.round(rng.irange(S.cabins[0], S.cabins[1]) * clamp(sc,0.5,1.4))));
+  /* Cabins and ruins are the two that carry the far country: a remote
+     cabin and a ruin nobody has been near are discoveries. Campsites
+     and cars belong to people who drove or walked in, so they stay
+     biased toward the roads and the town. */
+  place('cabin',    Math.max(1, Math.round(rng.irange(S.cabins[0], S.cabins[1]) * clamp(sc,0.5,1.4))), true);
   place('campsite', Math.max(1, Math.round(rng.irange(S.campsites[0], S.campsites[1]) * clamp(sc,0.5,1.4))));
-  place('ruin',     rng.irange(S.ruins[0], S.ruins[1]));
+  place('ruin',     rng.irange(S.ruins[0], S.ruins[1]), true);
   place('car',      rng.irange(S.car[0], S.car[1]));
   Wld.structures = out;
   Wld.stats.structReject = rej;
@@ -5589,6 +5863,20 @@ function validateWorld(){
       fail('G7', `start ${Math.round(straight)}m from the hospital, minimum ${W.minCivDist}m`);
     if(metres < W.minCivPath)
       fail('G7', `${Math.round(metres)}m walk, minimum ${W.minCivPath}m`);
+    /* ---- AND THE WALK HAS TO BE A WALK THROUGH SOMETHING ----------
+       A distance floor on its own can be met by standing the player
+       further away across open ground, which is the cheap way to make a
+       journey long and the way that makes it boring. This asks the
+       other question: how much longer is the route than the crow's
+       flight? A ratio near 1.0 is a straight line over a flat field. A
+       real landscape forces detours -- a ridge to go round, a river to
+       find a crossing on, a valley that runs the wrong way -- and a
+       seed whose ground does not do that to the player is not a seed
+       with a landscape in it, however far apart the two ends are. */
+    const detour = straight > 1 ? metres/straight : 1;
+    res.detail.pathDetour = +detour.toFixed(2);
+    if(detour < W.minPathDetour)
+      fail('G7', `route is only ${detour.toFixed(2)}x the straight line, minimum ${W.minPathDetour}x`);
     let roadIn = 0;
     const er = Math.ceil(W.civExclusion/Wld.cell);
     for(let dz=-er; dz<=er; dz++) for(let dx=-er; dx<=er; dx++){
@@ -7079,7 +7367,7 @@ const Veg = {
 
   build(){
     this.species = P.species.slice();
-    const cap = 7000;        // enough to fill treeRadius at full density
+    const cap = 14000;       // enough to fill treeRadius at full density
     for(const sp of this.species){
       const crown = windify(new THREE.MeshStandardMaterial({
         // the hue lives here; the mask supplies variation and the cutout
@@ -17212,6 +17500,26 @@ const DEV = (()=>{
       + `           scarcity ${P.scarcity.toFixed(2)} food ${P.foodScarcity.toFixed(2)} density ${P.density.toFixed(2)}\n`
       + `world      guarantees ${Wld.validation.pass ? 'ALL PASS' : 'FAIL ' + Wld.validation.fail.join(',')}\n`
       + `           attempts ${Wld.stats.attempts} cliff ${(Wld.stats.cliffFracFinal*100||0).toFixed(0)}% pond ${((Wld.stats.pondCells/(Wld.N*Wld.N))*100).toFixed(0)}%\n`
+      /* ---- THE LARGE-WORLD DIAGNOSTICS ---------------------------
+         Everything needed to tell whether the expansion is actually
+         doing what it claims, without leaving the game. */
+      + `scale      ${Math.round(Wld.size)}m across  playable ${Math.round(2*playHalf())}m  `
+        + `grid ${Wld.N}x${Wld.N} @ ${Wld.cell.toFixed(1)}m  ${((Wld.N*Wld.N)/1e6).toFixed(2)}M cells\n`
+      + `           ${P.terrain}${P.terrain2 && P.terrain2!==P.terrain ? ' + '+P.terrain2 : ''}`
+        + `  relief ${Math.round(Wld.stats.reliefM||0)}m  gen ${Wld.stats.genMs}ms\n`
+      + `journey    straight ${Wld.validation.detail.civDistance||'-'}m  `
+        + `walked ${Wld.validation.detail.pathMetres||'-'}m  `
+        + `detour ${Wld.validation.detail.pathDetour||'-'}x  `
+        + `you ${Math.round(Math.hypot(Player.pos.x-(Wld.hospital?Wld.hospital.x:0), Player.pos.z-(Wld.hospital?Wld.hospital.z:0)))}m out\n`
+      + `water      trunk ${Math.round(Wld.stats.trunkLength||0)}m  `
+        + `tributaries ${Wld.stats.tributaries||0}  `
+        + `wet ${((Wld.stats.wetCells||0)/(Wld.N*Wld.N)*100).toFixed(1)}%  `
+        + `falls ${Wld.stats.cascades||0}\n`
+      + `routes     trails ${(Wld.trails||[]).length}  road ${Math.round(Wld.stats.roadMetres||0)}m  `
+        + `structures ${(Wld.structures||[]).length}  landmarks ${Wld.stats.landmarks||0}\n`
+      + `ground     chunks live ${Wld.stats.terrainLive||0} cached ${Wld.stats.terrainCached||0}`
+        + `  near ${Math.round((Wld.stats.terrainLive||0)*CFG.QUALITY.terrainChunk/CFG.QUALITY.terrainDetail*CFG.QUALITY.terrainChunk/CFG.QUALITY.terrainDetail*2/1000)}k tris`
+        + `  far ${Math.round((Wld.stats.terrainFarTris||0)/1000)}k tris\n`
       + `veg        ${JSON.stringify(Veg.counts)}\n`
       + `audio      ${Audio.recipeCount} recipes  ${Audio.ready?'ready':'off'}\n`
       + `collision  boxes ${STRUCT_COLLIDERS.reduce((n,s)=>n+s.solids.length,0)} in `
