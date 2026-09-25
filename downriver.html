@@ -12047,6 +12047,22 @@ function initInput(){
 
 function onKeyDown(e){
   if(e.code === 'Backquote' || e.code === 'F1'){ e.preventDefault(); DEV.toggle(); return; }
+  /* ---- SPACE IS A FLIGHT CONTROL, NOT A BUTTON PRESS ---------------
+     An HTML button keeps keyboard focus after it is clicked, and a
+     focused button ACTIVATES ON SPACE. So the sequence that turns
+     flight on -- click the button in the dev panel, close the panel,
+     press SPACE to climb -- pressed the button again and turned flight
+     straight back off. The first key anyone would reach for was the one
+     that broke it.
+
+     Two halves to the fix: the panel drops focus after every click (see
+     button()), and Space never reaches the page while the game has it.
+     Space also scrolls a page by default, which is the same bug wearing
+     a different hat. */
+  if(e.code === 'Space' && G.started && !UI.mapOpen){
+    e.preventDefault();
+    if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
   if(!G.started || G.over) return;
   switch(e.code){
     case 'KeyF': Gear.toggleTorch(); break;
@@ -12414,7 +12430,9 @@ function updatePlayer(dt){
      the speed dial does, and lies about nothing else. */
   if(CFG.DEBUG.fly){
     const m = CFG.DEBUG.speedMult || 1;
-    const sp = (Keys.ShiftLeft || Keys.ShiftRight ? C.sprint*2.2 : C.walk*2.2) * m;
+    /* ShiftLEFT only for the boost -- ShiftRight is the alternate
+       descend key, and one modifier cannot mean two things at once. */
+    const sp = (Keys.ShiftLeft ? C.sprint*3.4 : C.walk*3.4) * m;
     let fx2 = 0, fz2 = 0;
     if(Keys.KeyW || Keys.ArrowUp) fz2 += 1;
     if(Keys.KeyS || Keys.ArrowDown) fz2 -= 1;
@@ -12427,8 +12445,11 @@ function updatePlayer(dt){
     let vx = hx*cp*fz2 + rx*fx2;
     let vz = hz*cp*fz2 + rz*fx2;
     let vy = sp2*fz2;
+    /* SPACE up, Z down. Not Ctrl: Ctrl+W closes the browser tab, and W
+       is the key you hold to fly forwards, so "descend while moving"
+       would have shut the game. Z is bound to nothing else. */
     if(Keys.Space) vy += 1;
-    if(Keys.ControlLeft || Keys.ControlRight) vy -= 1;
+    if(Keys.KeyZ || Keys.ShiftRight) vy -= 1;
     const len = Math.hypot(vx, vy, vz);
     if(len > 0.0001){
       vx/=len; vy/=len; vz/=len;
@@ -12449,6 +12470,13 @@ function updatePlayer(dt){
     p.sprinting = false;
     p.stamina = Math.min(C.staminaMax, p.stamina + 30*dt);
     p.snow = 0; p.snowDrag = 0;
+    /* Said on screen, because a mode you cannot tell is on is a mode
+       that looks broken the moment it does not do what you expected. */
+    if(!p._flyNoted || G.t - p._flyNoted > 6){
+      p._flyNoted = G.t;
+      UI.say('[dev] FLYING  ' + Math.round(p.pos.y - heightAt(p.pos.x, p.pos.z))
+        + 'm up   W A S D fly  SPACE up  Z down  SHIFT faster', 6);
+    }
     return;
   }
 
@@ -16962,7 +16990,11 @@ const DEV = (()=>{
   }
   function button(parent, label, fn){
     const b = el('button', null, label);
-    b.onclick = (e)=>{ e.preventDefault(); fn(); };
+    /* blur() after every click: a button that keeps focus goes on
+       answering the keyboard long after the panel is closed, and SPACE
+       activating a stale dev button is how flight appeared not to work
+       at all. */
+    b.onclick = (e)=>{ e.preventDefault(); fn(); b.blur(); };
     parent.appendChild(b);
     return b;
   }
@@ -17206,10 +17238,12 @@ const DEV = (()=>{
       + 'have killed you is announced on screen, so a dev run cannot '
       + 'quietly look survivable when it was not.  '
       + 'FLIGHT is gravity off and solids ignored — W A S D fly along the '
-      + 'way you are looking, SPACE up, CTRL down, SHIFT faster, and the '
-      + 'speed multiplier applies. You cannot go more than 2m below the '
-      + 'ground or past the edge of the world. Turning it off sets you '
-      + 'back down on the surface rather than dropping you onto it.'));
+      + 'way you are looking, SPACE up, Z down, LEFT SHIFT faster, and '
+      + 'the speed multiplier applies on top. You cannot go more than 2m '
+      + 'below the ground or past the edge of the world, and turning it '
+      + 'off sets you back down on the surface rather than dropping you. '
+      + 'Not Ctrl for down: Ctrl+W closes the browser tab and W is how '
+      + 'you fly forwards.'));
 
     const sSpd = section('walking speed  (dev only)');
     const sSpeed = slider(sSpd, 'speed multiplier', 1, 16, 0.5,
@@ -17882,6 +17916,9 @@ const DEV = (()=>{
 
        Opening the panel now decides it, and closing it hands the
        question back to whether the pointer is locked. */
+    /* And nothing in the panel keeps the keyboard once it is shut. */
+    if(!D.open && document.activeElement && document.activeElement.blur)
+      document.activeElement.blur();
     G.paused = !D.open && !pointerLocked && G.started;
     UI.pauseNote(!D.open && !pointerLocked && G.started && !G.over);
   };
