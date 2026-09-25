@@ -864,6 +864,13 @@ const CFG = {
     breachPasses: 12,
     breachFloor: 30,     // metres below the land's own lowest point that
                          // nothing may ever be cut past
+    /* How steeply a breach trench's walls may run, and how far it is
+       allowed to open out to hold that. See breachBasins(): the old
+       fixed 14-cell cap was tuned to one map's basin depths and goes
+       vertical on deeper ones. 0.55 is well under the 0.70 the legs
+       refuse, so a player who ends up in one can always climb out. */
+    breachGrade: 0.55,
+    breachMaxFlare: 120,  // metres, the widest a trench may open out
     breachDrop: 7.0,     // floor for how far the spill saddle comes down
     breachFrac: 0.80,    // ... but mostly it comes down this much of the
                          // basin's own depth, so one pass drains a big one
@@ -3729,7 +3736,28 @@ function breachBasins(){
            crevasse on seed 3190231 and made it WORSE -- 22.9% of bank
            cells over the cliff angle became 31.1% -- which is how we
            know the crevasse is not made here. See the water mesh.) */
-        const WR = clamp(Math.ceil(cut/1.4), 1, 14);
+        /* THE CAP WAS SATURATING, AND A SATURATED CAP IS A CLIFF.
+           14 cells is 56 metres, and 56 metres of flare on the ~40m
+           basins a one-kilometre map produced is the 35 degrees the note
+           above claims. The expanded world has 207-235m of relief over
+           twenty times the area, so its basins are far deeper: a 60m cut
+           still gets 56m of flare, which is a gradient of 1.07. That is
+           not a gorge, it is a slot with vertical sides -- reported as
+           a deep straight trench with trees standing on the rim and
+           growing out of the walls.
+
+           So the flare is derived from the gradient it is trying to hold
+           rather than from a cell count that was right at one map size.
+           breachGrade is comfortably under the slope the legs refuse, so
+           the trench is always something a player can climb out of.
+
+           (The note above records that widening this was tried against
+           the crevasse on seed 3190231 and made it worse. That was a
+           different fault -- the water mesh emitting vertical sheets --
+           and the measurement there was on channel banks, not on breach
+           trenches. It is not evidence against this.) */
+        const flareM = Math.min(HY.breachMaxFlare, cut / HY.breachGrade);
+        const WR = clamp(Math.ceil(flareM / Wld.cell), 1, 40);
         for(let wz=-WR; wz<=WR; wz++) for(let wx=-WR; wx<=WR; wx++){
           const nx=cx+wx, nz=cz+wz;
           if(nx<0||nz<0||nx>=N||nz>=N) continue;
@@ -10038,11 +10066,38 @@ const People = {
         p.obj.position.set(p.x, y, p.z);
         p.obj.rotation.set(0, p.yaw, 0);
       }
-      // a walk cycle, and a little breathing when standing
+      /* ---- THE LEGS ARE DRIVEN BY THE GROUND, NOT BY THE CLOCK ----
+         This advanced the stride by `dt * p.speed`, where p.speed is the
+         person's NOMINAL walking speed -- a constant rolled once when
+         they were made. It is what they would do on open ground, and it
+         has nothing to do with what they are doing now.
+
+         So somebody edging round a desk in the hospital corridor, taking
+         the angled sidesteps stepToward falls back on when the straight
+         line is blocked, plays a full-speed walk cycle while covering
+         almost no ground. That is walking on the spot, and it is what
+         "the NPCs are glitchy" turned out to be.
+
+         Measured over forty simulated seconds: staff were in the walk
+         state for 1900 frames and covered 9.1m -- 0.29 m/s against a
+         configured 0.7 to 1.05. Villagers out on the open street managed
+         0.94 m/s, which is why it looks wrong in the hospital and fine
+         in the town.
+
+         The phase now advances by DISTANCE ACTUALLY COVERED. At full
+         speed it is arithmetically identical to before (4.4 radians per
+         metre either way), so nobody walking normally changes at all;
+         somebody barely moving now barely moves their legs. It is what
+         the player's own footstep cadence has always done. */
       const L = p.obj.userData.limbs;
       if(L){
-        if(p.state === 'walk'){
-          p.phase += dt*p.speed*4.4;
+        const moved = Math.hypot(p.x - (p._ax === undefined ? p.x : p._ax),
+                                 p.z - (p._az === undefined ? p.z : p._az));
+        p._ax = p.x; p._az = p.z;
+        /* A threshold rather than zero: a person who is stopped should
+           settle to standing, not freeze mid-stride with one leg out. */
+        if(p.state === 'walk' && moved > dt*0.12){
+          p.phase += moved * 4.4;
           const sw = Math.sin(p.phase)*0.55;
           L.legL.rotation.x = sw; L.legR.rotation.x = -sw;
           L.armL.rotation.x = -sw*0.7; L.armR.rotation.x = sw*0.7;
