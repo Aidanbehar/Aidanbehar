@@ -660,10 +660,22 @@ const CFG = {
      the fog never lets you resolve a 3m triangle at range. Physics always
      reads the N grid, so what you walk on and what you see agree. */
   WORLD: {
-    SIZE: 1024,          // metres, centred on the origin: -512..512
-    N: 257,              // heightfield samples per side (2^k+1, for the
-                         // diamond-square-ish corner handling)
-    MESH: 320,           // terrain mesh segments per side
+    /* ---- THE SCALE OF THE THING --------------------------------
+       4608 metres across, sampled every 4 metres. The cell size is the
+       number that matters and it has NOT changed: the ground underfoot
+       has exactly the detail it always had, there is simply twenty
+       times more of it. 1,329,409 cells against 66,049.
+
+       Growing SIZE while leaving N alone would have been the easy patch
+       and the wrong one -- an 18m cell cannot hold a streambank, a
+       ledge, or anything else the player walks on. Growing N with it is
+       what costs, and what the two-part terrain renderer and the
+       reworked A* are for.
+
+       The PLAYABLE span is 2 * PLAY_FRAC * SIZE = 4147m. */
+    SIZE: 4608,          // metres, centred on the origin: -2304..2304
+    N: 1153,             // heightfield samples per side, 4m apart
+    MESH: 320,           // (legacy; the ground is chunked -- see Terra)
     /* RELIEF vs SIZE is the ratio that decides whether the map is a
        landscape or a set of walls. At 210m over a 1024m map the alpine
        style put 300m of ridge across a 260m half-wavelength — a 49 degree
@@ -695,9 +707,24 @@ const CFG = {
        ground nothing is ever placed on. See playHalf(). */
     PLAY_FRAC: 0.45,
     hospitalInset: 70,   // metres the hospital keeps INSIDE the playable edge
-    minCivDist: 600,     // metres, straight line from the start to the hospital
-    minCivPath: 720,     // ... and along ground you can actually walk
-    civExclusion: 420,   // no road may come nearer the start than this
+    /* ---- HOW LONG THE WALK IS -----------------------------------
+       The whole game is the walk out of the wilderness, and these are
+       the floors it is held to. They are checked by G7 on every seed
+       and a seed that cannot meet them is generated again.
+
+       The straight line is the easy half. minCivPath is the one that
+       makes the journey a journey: the route has to be a good deal
+       longer than the crow's flight, which is what happens when ground
+       is real -- ridges to go round, rivers to find a crossing on,
+       valleys that run the wrong way. A seed whose walk is barely
+       longer than its straight line is a seed with no landscape in it.
+
+       These are FLOORS, not targets. Seeds run well past them and are
+       supposed to; the variation is the point. */
+    minCivDist: 2000,    // metres, straight line from the start to the hospital
+    minCivPath: 2500,    // ... and along ground you can actually walk
+    minPathDetour: 1.18, // ... and it must be at least this much longer
+    civExclusion: 1200,  // no road may come nearer the start than this
     RELIEF: 150,         // metres from the lowest point to the highest
     SEA: 6,              // ponds/lakes fill to this above local basin floor
     EDGE_FADE: 0.13,     // fraction of the map used to lift the rim, so the
@@ -1337,14 +1364,19 @@ const CFG = {
        density a surface 700m out is already better than 99.9% fogged,
        so 768 is comfortable.
 
-       terrainFarSegs is the whole world in one mesh: at 5120m and 320
-       segments that is a 16m triangle and 205k of them, which is what
-       the ENTIRE terrain used to cost at 1024m. It buys every mountain
-       in the world being visible from every ridge. */
+       The far mesh is sized in METRES PER TRIANGLE, not in segments.
+       A segment count is a constant tied to one world size, and this
+       one caught it immediately: 320 segments is a 16m triangle at
+       5120m, which is right, and a 3.2m triangle at 1024m, which is the
+       entire cost of the old terrain spent on the part of the world you
+       cannot resolve. Measured at 1024m before this: 204,800 far
+       triangles under an 81,920-triangle near ring. Per-triangle, the
+       far mesh is 6.5k triangles at 1024m and 162k at 5120m, which is
+       what it should have been both times. */
     terrainChunk: 256,   // metres per near chunk
     terrainDetail: 4,    // metres per near triangle -- the grid's own cell
     terrainNear: 768,    // metres of near ground around the player
-    terrainFarSegs: 320, // segments across the whole world, for the far mesh
+    terrainFarStep: 18,  // metres per far triangle, whatever the world is
     terrainFarDrop: 1.2, // metres the far mesh sits below the true surface
     terrainCache: 96,    // chunks kept after you walk away from them
     /* ---- WHAT THE SHADOWS COST -------------------------------------
@@ -6321,7 +6353,8 @@ const Terra = {
     scene.add(this.group);
 
     /* ---- the whole world, coarse, once ---------------------------- */
-    const SZ = Wld.size, fs = Q.terrainFarSegs;
+    const SZ = Wld.size;
+    const fs = Math.max(24, Math.round(SZ / Q.terrainFarStep));
     const farGeo = (()=>{
       const step = SZ/fs, vw = fs+1, count = vw*vw;
       const pos = new Float32Array(count*3), nrm = new Float32Array(count*3),
