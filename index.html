@@ -192,6 +192,10 @@ header.app{
 .toolbar{margin-left:auto; display:flex; gap:8px; flex-wrap:wrap}
 
 /* small ghost buttons in the toolbar */
+/* An author `display` beats the user agent's [hidden] rule, so every element
+   that sets one needs this or `hidden` silently does nothing. It was doing
+   nothing for the "Cancel edit" buttons in two sections. */
+[hidden]{display:none !important}
 .btn{
   appearance:none; cursor:pointer; font:inherit; font-size:.84rem; font-weight:560;
   color:var(--text); background:var(--surface); border:1px solid var(--border);
@@ -814,6 +818,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 [data-accent="d8"]     {--accent:#f5a524; --accent-2:#fcd34d}
 [data-accent="smoked"] {--accent:#2dd4bf; --accent-2:#5eead4}
 [data-accent="caffeine"]{--accent:#e08a4b; --accent-2:#f2c48b}
+[data-accent="nic"]    {--accent:#ef6f8a; --accent-2:#f9b3c2}
 [data-accent="learn"]  {--accent:#a78bfa; --accent-2:#f0abfc}
 [data-accent="laws"]   {--accent:#6366f1; --accent-2:#a5b4fc}
 [data-accent="home"]   {--accent:#7aa2ff; --accent-2:#a78bfa}
@@ -982,8 +987,9 @@ body.scrubbing .view.active{animation:none}
     <button class="tab" role="tab" id="tab-d8"      aria-controls="view-d8"      aria-selected="false" data-view="d8"      style="--tab-accent:#f5a524;--tab-accent-2:#fcd34d"><span class="ico" data-icon="gummy"></span><span class="tl">Delta-8 edibles</span><span class="kbd">4</span></button>
     <button class="tab" role="tab" id="tab-smoked"  aria-controls="view-smoked"  aria-selected="false" data-view="smoked"  style="--tab-accent:#2dd4bf;--tab-accent-2:#5eead4"><span class="ico" data-icon="joint"></span><span class="tl">Smoked / inhaled</span><span class="kbd">5</span></button>
     <button class="tab" role="tab" id="tab-caffeine" aria-controls="view-caffeine" aria-selected="false" data-view="caffeine" style="--tab-accent:#e08a4b;--tab-accent-2:#f2c48b"><span class="ico" data-icon="coffee"></span><span class="tl">Caffeine</span><span class="kbd">6</span></button>
-    <button class="tab" role="tab" id="tab-learn"   aria-controls="view-learn"   aria-selected="false" data-view="learn"   style="--tab-accent:#a78bfa;--tab-accent-2:#f0abfc"><span class="ico" data-icon="book"></span><span class="tl">Learn</span><span class="kbd">7</span></button>
-    <button class="tab" role="tab" id="tab-laws" aria-controls="view-laws" aria-selected="false" data-view="laws" style="--tab-accent:#6366f1;--tab-accent-2:#a5b4fc"><span class="ico" data-icon="scale"></span><span class="tl">Laws</span><span class="kbd">8</span></button>
+    <button class="tab" role="tab" id="tab-nic"     aria-controls="view-nic"     aria-selected="false" data-view="nic"     style="--tab-accent:#ef6f8a;--tab-accent-2:#f9b3c2"><span class="ico" data-icon="cig"></span><span class="tl">Nicotine</span><span class="kbd">7</span></button>
+    <button class="tab" role="tab" id="tab-learn"   aria-controls="view-learn"   aria-selected="false" data-view="learn"   style="--tab-accent:#a78bfa;--tab-accent-2:#f0abfc"><span class="ico" data-icon="book"></span><span class="tl">Learn</span><span class="kbd">8</span></button>
+    <button class="tab" role="tab" id="tab-laws" aria-controls="view-laws" aria-selected="false" data-view="laws" style="--tab-accent:#6366f1;--tab-accent-2:#a5b4fc"><span class="ico" data-icon="scale"></span><span class="tl">Laws</span><span class="kbd">9</span></button>
   </div>
   <p class="mini-warn"><span class="ico" data-icon="alert"></span>Illustrative estimates only — never use them to judge fitness to drive.</p>
 </nav>
@@ -1092,7 +1098,7 @@ body.scrubbing .view.active{animation:none}
       <div>
         <h4 style="margin-bottom:6px">Keyboard</h4>
         <p style="font-size:.85rem;color:var(--text-dim);margin:0">
-          <span class="badge neutral"><span class="bdot"></span>1–8</span> switch section ·
+          <span class="badge neutral"><span class="bdot"></span>1–9</span> switch section ·
           <span class="badge neutral"><span class="bdot"></span>T</span> theme ·
           <span class="badge neutral"><span class="bdot"></span>P</span> print ·
           <span class="badge neutral"><span class="bdot"></span>E</span> export.
@@ -1866,6 +1872,152 @@ body.scrubbing .view.active{animation:none}
   </div>
 </section>
 
+
+<!-- ======================================================================
+     VIEW: NICOTINE
+     The one section where the interesting question is not how strong it is
+     but why it is so hard to stop — so the model carries a metabolite curve
+     and a dependence panel alongside the usual concentration curve.
+     ==================================================================== -->
+<section class="view" id="view-nic" role="tabpanel" aria-labelledby="tab-nic" data-accent="nic" tabindex="-1">
+  <div class="view-head">
+    <div class="art"><span class="ico" data-icon="cig"></span></div>
+    <div>
+      <h2>Nicotine</h2>
+      <p class="sub">Nicotine is cleared by <span class="term" data-tip="CYP2A6 performs most nicotine metabolism. Reduced-activity variants are common, and much more so in people of East Asian ancestry; slow metabolisers smoke fewer cigarettes and quit more successfully.">CYP2A6</span> with a half-life of about <strong>two hours</strong> — short enough to put a daily user into withdrawal several times before lunch. Its metabolite <span class="term" data-tip="Cotinine: pharmacologically near-inert, formed from about three quarters of absorbed nicotine, with a half-life near 16 hours. It is what a nicotine test actually measures.">cotinine</span> lasts eight times longer, and that gap is most of what makes this substance different from the others here.</p>
+    </div>
+  </div>
+
+  <div id="nic-banners"></div>
+
+  <div class="grid g-input" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="cig"></span><h3>What you used</h3></div>
+      <p class="card-note">Add each item separately. Nicotine itself is gone within hours; the point of adding a whole day is what it does to the metabolite curve further down.</p>
+
+      <div class="field">
+        <span class="lab">Product <span class="hint">sets the amount and the speed</span></span>
+        <div class="pills" id="nic-products" role="group" aria-label="Nicotine products"></div>
+      </div>
+      <p class="card-note" id="nic-product-note"></p>
+
+      <div class="inline-3">
+        <div class="field">
+          <label class="lab" for="nic-mg">Nicotine absorbed</label>
+          <div class="with-unit">
+            <input type="number" id="nic-mg" min="0.05" max="60" step="0.05" value="1" inputmode="decimal">
+            <span class="unit">mg</span>
+          </div>
+        </div>
+        <div class="field">
+          <label class="lab" for="nic-when">Finished</label>
+          <div class="with-unit">
+            <input type="number" id="nic-when" min="0" max="2880" step="5" value="10" inputmode="decimal">
+            <span class="unit">min ago</span>
+          </div>
+        </div>
+        <div class="field" style="display:flex;align-items:flex-end">
+          <button class="btn primary" id="nic-add" type="button" style="width:100%;justify-content:center"><span class="ico" data-icon="plus"></span><span id="nic-add-label">Add</span></button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn" id="nic-cancel" type="button" hidden>Cancel edit</button>
+        <button class="btn" id="nic-day" type="button"><span class="ico" data-icon="clock"></span>Fill a smoking day</button>
+        <button class="btn" id="nic-clear" type="button"><span class="ico" data-icon="reset"></span>Clear all</button>
+        <span id="nic-editing" style="font-size:.82rem;color:var(--text-faint)"></span>
+      </div>
+      <div class="spacer"></div>
+      <div class="drink-list" id="nic-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="person"></span><h3>You</h3></div>
+      <p class="card-note">Tolerance is deeper here than for anything else in this app, and it is the reason the same cigarette is overwhelming for one person and barely noticeable for another.</p>
+
+      <div class="field">
+        <label class="lab" for="nic-weight">Body weight</label>
+        <div class="with-unit">
+          <input type="number" id="nic-weight" data-unit-field="weight" min="30" max="250" step="0.5" value="75" inputmode="decimal">
+          <button type="button" class="unit unit-btn" data-unit-toggle="weight" data-unit-label="weight" title="Switch between kilograms and pounds">kg</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="lab">Metabolism <span class="hint">sets the half-life</span></span>
+        <div class="pills" id="nic-clearance" role="group" aria-label="Nicotine clearance"></div>
+      </div>
+      <p class="card-note" id="nic-clearance-note"></p>
+
+      <div class="field">
+        <span class="lab">Tolerance <span class="hint">divides the effective concentration</span></span>
+        <div class="pills" id="nic-tol" role="group" aria-label="Nicotine tolerance"></div>
+      </div>
+
+      <div class="gauge-wrap" id="nic-gauge"></div>
+      <div class="gauge-readout" id="nic-readout"></div>
+    </div>
+  </div>
+
+  <div class="stat-row" id="nic-stats" style="margin-bottom:18px"></div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="chart"></span><h3>Nicotine in your blood</h3></div>
+    <p class="card-note">Venous plasma in nanograms per millilitre, one-compartment model with first-order absorption and first-order elimination. The arterial concentration arriving at the brain from an inhaled product is several times higher and arrives in seconds — that spike is not drawn here and no venous curve can show it.<br><span class="scrub-hint"><span class="ico" data-icon="swipe"></span>Drag the dot along the curve — or focus the chart and use the arrow keys — to move “now”. Everything on the page follows it.</span></p>
+    <div class="chart-host" id="nic-chart-ng"></div>
+    <div class="chart-legend" id="nic-legend-ng"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="gauge"></span><h3>Effect intensity over time</h3></div>
+    <p class="card-note">The same curve mapped onto the app's shared six-step scale, weighted towards the two effects people actually use nicotine for. It is flat on top because craving relief saturates almost immediately — which is exactly why smokers titrate in puffs rather than in cigarettes.<br><span class="scrub-hint"><span class="ico" data-icon="swipe"></span>Drag the dot along the curve — or focus the chart and use the arrow keys — to move “now”. Everything on the page follows it.</span></p>
+    <div class="chart-host" id="nic-chart-fx"></div>
+    <div class="chart-legend" id="nic-legend-fx"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="molecule"></span><h3>Cotinine — what a test measures</h3></div>
+    <p class="card-note" id="nic-cot-note"></p>
+    <div class="chart-host" id="nic-chart-cot"></div>
+    <div class="chart-legend" id="nic-legend-cot"></div>
+  </div>
+
+  <div class="grid g2" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="clock"></span><h3>The dependence cycle</h3></div>
+      <div id="nic-dependence"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="brain"></span><h3>Effect breakdown right now</h3></div>
+      <p class="card-note" id="nic-effects-note"></p>
+      <div class="effects" id="nic-effects"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="hourglass"></span><h3>Withdrawal, if you stop</h3></div>
+    <div id="nic-withdrawal"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="table"></span><h3>Product reference</h3></div>
+    <p class="card-note" id="nic-ref-note"></p>
+    <div class="table-wrap"><table id="nic-ref-table"></table></div>
+    <div class="scroll-hint"><span class="ico" data-icon="swipe"></span>Scroll sideways for every column.</div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="compare"></span><h3>Speed, and why it decides everything</h3></div>
+    <p class="card-note">Same drug, same receptors, four very different liabilities — and the column that predicts them is time to peak, not milligrams.</p>
+    <div class="table-wrap"><table id="nic-speed-table"></table></div>
+    <div class="scroll-hint"><span class="ico" data-icon="swipe"></span>Scroll sideways for every column.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="ico" data-icon="book"></span><h3>Five things worth knowing</h3></div>
+    <div id="nic-tips"></div>
+  </div>
+</section>
+
 <!-- ======================================================================
      VIEW: LEARN
      ==================================================================== -->
@@ -1880,7 +2032,7 @@ body.scrubbing .view.active{animation:none}
 
   <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="ico" data-icon="compass"></span><h3>Start here</h3></div>
-    <p class="card-note" style="margin-bottom:12px">Eighteen articles: four on alcohol, nine on cannabis, one on caffeine, and four on this app's own honesty — what is standard science, what is my own estimate, and what the percentages do and do not mean.</p>
+    <p class="card-note" style="margin-bottom:12px">Twenty articles: four on alcohol, nine on cannabis, one on caffeine, two on nicotine, and four on this app's own honesty — what is standard science, what is my own estimate, and what the percentages do and do not mean.</p>
     <div class="pills" id="learn-index" role="group" aria-label="Article index"></div>
   </div>
 
@@ -2200,6 +2352,53 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
     </div>
   </div>
 
+  <!-- ---- NICOTINE ---- -->
+  <h3 style="margin:22px 0 10px;color:var(--text-faint);font-size:.78rem;letter-spacing:.1em;text-transform:uppercase">Nicotine</h3>
+
+  <div class="acc" id="art-nicotine">
+    <button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="cig"></span></span>Nicotine: why the derivative matters more than the dose<span class="chev ico" data-icon="chevron"></span></button>
+    <div class="acc-body article">
+      <p>Every other section of this app is organised around the question "how much is in me and what does that feel like". For nicotine that is the less interesting question. A 21&nbsp;mg patch delivers more nicotine over a day than a pack of cigarettes does, and nobody has ever become addicted to a patch. The amount is not what separates them.</p>
+      <p>What separates them is the shape of the rise. Inhaled nicotine crosses the alveolar membrane into arterial blood and reaches the brain in ten to twenty seconds — faster than an intravenous injection into an arm vein, because that route has to go the long way round through the heart and lungs first. A patch produces a plateau that takes six or seven hours to build. Both end up at similar venous concentrations; only one of them teaches you anything.</p>
+      <p>The reason is that reinforcement learning needs attribution. A concentration spike that arrives seconds after an action can be attributed to that action, and the dopaminergic systems that encode "do that again" are built to make exactly that association. A slow rise cannot be attributed to anything in particular. It blunts withdrawal without reinforcing the behaviour that produced it — which is the entire design principle behind replacement therapy, and the reason the <em>time to peak</em> column in the product table matters more than the <em>absorbed</em> column beside it.</p>
+
+      <h4>What the curve in this app cannot show you</h4>
+      <p>The nicotine chart draws <strong>venous</strong> plasma, because that is what a one-compartment model produces and what almost all published pharmacokinetic data measures. The arterial spike that actually does the reinforcing is several times higher and lasts a fraction as long, and it is invisible on that curve. This is not a small caveat: it is the single most important thing about the drug, and the model cannot represent it.</p>
+      <p>So read the nicotine curve as the answer to "how much is still around", and read the <em>time to peak</em> numbers as the answer to "how habit-forming is this route". They are different questions and only one of them is drawn.</p>
+
+      <h4>Two hours is short enough to run your day</h4>
+      <p>The half-life is about two hours. That is the fact underneath everything else. Half of a cigarette's nicotine is gone by the time you have had lunch, three quarters by mid-afternoon; the pharmacological floor arrives four or five times in a waking day, and each arrival is answered by the thing that caused it. Compare that with the drug next door in this app: caffeine's five-hour half-life means the morning cup is still doing something at dinner, so the cycle turns once a day rather than five times.</p>
+      <p>Overnight is the only long gap, and it is why the first one of the day is the one people describe as actually doing something. Eight hours is four half-lives, so about six per cent of the nicotine survives — and separately, nicotinic receptors that spent the day desensitised recover while you sleep. The first dose lands on a resensitised, unoccupied system; everything after it lands on a system that is partly saturated and partly desensitised. This app does <em>not</em> model that: the tolerance divisor is one fixed number. Treat the explanation as true and the curve as not knowing about it.</p>
+
+      <h4>Separating the drug from the smoke</h4>
+      <p>Nicotine is why people smoke; it is not why smoking kills them. Lung cancer, COPD and the bulk of the cardiovascular damage come from combustion products — tar, carbon monoxide, particulates, a long list of identified carcinogens — none of which nicotine produces. That is the basis for assessing smokeless and vapour products as substantially less harmful than cigarettes, and it is a real and important finding.</p>
+      <p>It is also routinely overstated in both directions. Nicotine on its own raises heart rate and blood pressure and constricts blood vessels; there is good evidence it impairs adolescent brain development, which is the reason behind age restrictions rather than a rhetorical one; and it is by a distance the most dependence-forming drug most people will ever encounter. A product can be the better choice for someone who already smokes and a bad idea for someone who does not. Both of those are true at the same time, and most arguments about vaping are an attempt to make one of them go away.</p>
+    </div>
+  </div>
+
+  <div class="acc" id="art-cotinine">
+    <button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="molecule"></span></span>Cotinine, and a curve that checks its own arithmetic<span class="chev ico" data-icon="chevron"></span></button>
+    <div class="acc-body article">
+      <p>About three quarters of absorbed nicotine is converted, mostly by the same CYP2A6 that clears it, into <strong>cotinine</strong> — a metabolite that is close to pharmacologically inert and has a half-life of roughly sixteen hours. Eight times nicotine's. That ratio is why every nicotine test measures cotinine rather than nicotine: nicotine is gone by morning and tells you about the last few hours, while cotinine integrates days of exposure into a single number.</p>
+      <p>The cotinine curve in the nicotine section is not a fit. It is integrated forward from the nicotine curve:</p>
+      <div class="formula">dA_cot/dt = fm · ke_nic · A_nic(t) − ke_cot · A_cot
+
+<span class="cm">// fm     = 0.75          fraction of nicotine converted to cotinine</span>
+<span class="cm">// ke_cot = ln(2)/16 h    cotinine elimination</span>
+<span class="cm">// Vd_cot = 0.8 L/kg      cotinine volume of distribution</span>
+<span class="cm">// integrated on a 5-minute grid; no fitted constants anywhere in it</span></div>
+      <p>Everything in that expression is a published number. Nothing in it was chosen to make the output look right — which means the output is a test rather than a restatement of an assumption, and it is worth actually running.</p>
+
+      <h4>The test</h4>
+      <p>Take a pack a day: twenty cigarettes at about 1&nbsp;mg absorbed each, so 20&nbsp;mg of nicotine a day, of which 15&nbsp;mg becomes cotinine. At steady state the amount in the body is the input rate divided by the elimination rate constant — 0.625&nbsp;mg/h ÷ 0.0433/h ≈ 14.4&nbsp;mg — and dividing by a 70&nbsp;kg person's 56&nbsp;L gives about <strong>260&nbsp;ng/mL</strong>.</p>
+      <p>Measured cotinine in established daily smokers runs roughly 200 to 400&nbsp;ng/mL. The model lands in the middle of that from constants none of which were chosen with it in mind. And a single day of smoking in the app reaches about 165&nbsp;ng/mL rather than 260, which is also right: 24 hours is one and a half cotinine half-lives, so accumulation should have reached 1 − 0.5<sup>1.5</sup> = 65&nbsp;% of steady state, and 0.65 × 260 ≈ 169.</p>
+      <p>Two independent checks, both passed, from unfitted inputs. That is the reason to trust the cotinine curve slightly more than the nicotine curve above it — the nicotine curve has a volume of distribution in it that I fitted to measured peaks, and this one does not have a fitted constant anywhere. It is the only curve in this app I would describe that way, and it is worth saying plainly which ones are not like it.</p>
+
+      <h4>What the number means if someone tests you</h4>
+      <p>The usual cut-point separating users from non-users is around 10&nbsp;ng/mL, with passive exposure producing values in the low single digits and light or occasional use landing somewhere between. None of which makes this app a test. It does not know what you actually absorbed, your CYP2A6 activity, or the twenty per cent of nicotine that goes down other metabolic routes. It is a demonstration of why the metabolite is the thing worth measuring, not a substitute for measuring it.</p>
+    </div>
+  </div>
+
   <!-- ---- HONESTY ---- -->
   <h3 style="margin:22px 0 10px;color:var(--text-faint);font-size:.78rem;letter-spacing:.1em;text-transform:uppercase">About these numbers</h3>
 
@@ -2471,6 +2670,22 @@ const PROVENANCE = [
    why:'Calibrated so one 95 mg coffee reads Moderate, 200 mg Strong and 400 mg Very Strong for a naive user. My numbers.'},
   {v:'sleep EC50 1.5 mg/L, n 1.6', k:'CAFFEINE.SLEEP_EC50_MG_PER_L', where:'Caffeine sleep panel', type:'tuned',
    why:'Set so 400 mg six hours before bed lands near the substantial disruption that trial measured (>1 h of sleep lost). The shape is mine; the finding it is anchored to is not.'},
+  {v:'half-life 2 h (1\u20134 h range)', k:'NICOTINE.HALF_LIFE_H', where:'Nicotine elimination', type:'standard',
+   why:'Standard published terminal half-life for nicotine, cleared mainly by CYP2A6. The four metabolism options are all inside the published 1\u20134 h spread and each has a documented cause.'},
+  {v:'Vd 1.8 L/kg', k:'NICOTINE.VD_L_PER_KG', where:'Nicotine concentrations', type:'standard',
+   why:'Taken from inside the published 1\u20133 L/kg range rather than fitted. It reproduces two measured things \u2014 a 21 mg patch settling near 20 ng/mL against a measured 17\u201323, and a pack a day sitting in the low thirties against a measured typical 15\u201330. It does NOT reproduce the single-cigarette peak, which comes out near 8 ng/mL against a measured 10\u201315: a one-compartment model has no distribution phase, and no choice of volume fixes that.'},
+  {v:'EC50 6 ng/mL, n 1.5', k:'NICOTINE.EC50_NG_PER_ML', where:'Nicotine intensity on the shared scale', type:'tuned',
+   why:'Calibrated so one cigarette reads Strong with no tolerance and Mild for a heavy smoker, and a 6 mg pouch reads Extremely Strong for a first-timer. My numbers, chosen to reproduce an ordering nobody disputes.'},
+  {v:'k\u2090 36/h cigarette, 24 vape, 5 pouch, 6 gum, 0.05 patch', k:'NICOTINE.PRODUCTS', where:'Nicotine absorption rates', type:'tuned',
+   why:'Each chosen so the closed form tmax = ln(k\u2090/ke)/(k\u2090\u2212ke) lands on that product\u2019s published time to peak \u2014 about 8 min for a cigarette, 30\u201345 for oral products, 7 h for a patch. The published times are not mine; the rates that reproduce them are.'},
+  {v:'absorbed 1 mg/cigarette, 3 mg/6 mg pouch, 1 mg/2 mg gum', k:'NICOTINE.PRODUCTS', where:'Nicotine amounts', type:'standard',
+   why:'Mid-points of published ranges. Every one of them varies more between people using the same product than between products.'},
+  {v:'75 % conversion, 16 h half-life, Vd 0.8 L/kg', k:'NICOTINE.COTININE_FRACTION', where:'Cotinine curve', type:'standard',
+   why:'All three are published values and none is fitted. The check on them is that a pack a day at 1 mg absorbed per cigarette settles near 260 ng/mL, which is where measured smokers sit \u2014 and that one day of smoking reaches 65 % of it, which is what a 16-hour half-life predicts.'},
+  {v:'craving EC50 4 ng/mL; nausea EC50 30, n 3.0', k:'NICOTINE.EFFECTS', where:'Nicotine effect bars', type:'tuned',
+   why:'Craving relief is deliberately the lowest and shallowest, because it saturates at levels two or three puffs reach \u2014 which is the observed behaviour this ordering has to reproduce. Nausea is high and steep and damped hard by tolerance. My numbers, chosen to reproduce a known ordering.'},
+  {v:'tolerance \u00d71.0 to \u00d74.0; naive exponent 1.6', k:'NICOTINE_TOLERANCE', where:'Nicotine tolerance', type:'tuned',
+   why:'Same divide-the-dose convention as every other section. The separate, steeper exponent on nausea and dizziness encodes a real observation \u2014 tolerance to the unpleasant effects builds within days \u2014 with a number I invented.'},
   {v:'400 mg/day; 200 in pregnancy', k:'CAFFEINE.DAILY_LIMIT_MG', where:'Caffeine banners', type:'standard',
    why:'FDA cites 400 mg a day as not generally associated with negative effects in healthy adults; guidance in pregnancy is generally under 200 mg.'},
   {v:'1.0 / 1.25 / 1.6 / 2.1', k:'CAFFEINE_TOLERANCE', where:'Caffeine effective dose', type:'tuned',
@@ -2770,7 +2985,14 @@ const ICONS = {
   sigma:'<path d="M17.2 5H6.8l6 7-6 7h10.4"/>',
   chevron:'<path d="M9.4 5.4 16 12l-6.6 6.6"/>',
   arrow:'<path d="M4.6 12h13.6M13.2 7 18.2 12 13.2 17"/>',
-  swipe:'<path d="M3.6 12h5.2M6.2 9.4 3.6 12l2.6 2.6"/><path d="M20.4 12h-5.2M17.8 9.4 20.4 12l-2.6 2.6"/>'
+  swipe:'<path d="M3.6 12h5.2M6.2 9.4 3.6 12l2.6 2.6"/><path d="M20.4 12h-5.2M17.8 9.4 20.4 12l-2.6 2.6"/>',
+  /* --- nicotine --- */
+  cig:'<rect x="2.6" y="13.4" width="13.8" height="3.6" rx="1.2"/><path d="M12.6 13.4v3.6" opacity=".55"/><rect x="16.4" y="13.4" width="4.6" height="3.6" rx="1.2" fill="currentColor" stroke="none" opacity=".85"/><path class="smoke-curl" d="M6.4 9.8c1-.9.2-2 1.2-2.9"/><path class="smoke-curl" d="M10 8.4c1-.9.2-2 1.2-2.9"/>',
+  pouch:'<rect x="4.2" y="7.4" width="15.6" height="9.2" rx="4.6"/><path d="M8.4 7.4v9.2M15.6 7.4v9.2" opacity=".45"/>',
+  patch:'<rect x="4.4" y="4.4" width="15.2" height="15.2" rx="4.4"/><path d="M8.4 8.4h7.2M8.4 12h7.2M8.4 15.6h4.6" opacity=".6"/>',
+  spray:'<path d="M9 8.8h6v10.4a1.8 1.8 0 0 1-1.8 1.8h-2.4A1.8 1.8 0 0 1 9 19.2z"/><path d="M10.4 8.8V5.6h3.2v3.2"/><path d="M17.2 4.4h2M17.2 7h2M16.4 2.2l1.6 1M16.4 8.4l1.6-1" opacity=".7"/>',
+  heart:'<path d="M12 20.4S3.6 15.2 3.6 9.6A4.6 4.6 0 0 1 12 6.8a4.6 4.6 0 0 1 8.4 2.8c0 5.6-8.4 10.8-8.4 10.8z"/>',
+  lungs:'<path d="M12 3.4v9"/><path d="M9.6 8.4C8 8.4 4.4 11 4.4 15v3.6a2 2 0 0 0 2.6 1.9l2.6-.9a2 2 0 0 0 1.4-1.9V10.4a2 2 0 0 0-2-2z"/><path d="M14.4 8.4c1.6 0 5.2 2.6 5.2 6.6v3.6a2 2 0 0 1-2.6 1.9l-2.6-.9a2 2 0 0 1-1.4-1.9V10.4a2 2 0 0 1 2-2z"/>'
 };
 function icon(name){ return SVG_OPEN + (ICONS[name] || ICONS.molecule) + '</svg>'; }
 function paintIcons(root){
@@ -2988,7 +3210,18 @@ function scrubTo(key, minutes){
     const origin = st.doses.reduce((mx, d) => Math.max(mx, d.when), 0);
     const delta = m - origin;
     st.doses.forEach(d => { d.when = Math.max(0, d.when + delta); d.at = minutesAgoToStamp(d.when); });
+    /* Scrubbing is time travel: the doses move back, so the bedtime
+       appointment moves with them and keeps its place on the chart. What
+       changes is how long you have LEFT before it, which is the point. */
+    st.bedAt = caffeineBedAt() - delta * 60000;
     saveState(); renderCaffeine();
+  } else if (key === 'nic'){
+    const st = state.nic;
+    if (!st.doses.length) return;
+    const origin = st.doses.reduce((mx, d) => Math.max(mx, d.when), 0);
+    const delta = m - origin;
+    st.doses.forEach(d => { d.when = Math.max(0, d.when + delta); d.at = minutesAgoToStamp(d.when); });
+    saveState(); renderNicotine();
   } else {
     const map = {d9:[renderTHC, 900], d8:[renderD8, 900], sm:[renderSmoked, 300]};
     const entry = map[key];
@@ -3166,7 +3399,9 @@ const DEFAULT_STATE = {
       weightKg:75, bf:'', sex:'male', tol:'none', first:false, takenAt:0},
   sm:{method:'joint', amount:0.15, potency:20, depth:'normal', elapsed:15,
       weightKg:75, bf:'', sex:'male', tol:'none', first:false, takenAt:0},
-  caf:{doses:[], nextId:1, weightKg:75, clearance:'typical', tol:'moderate', bedHours:8,
+  nic:{doses:[], nextId:1, weightKg:75, clearance:'typical', tol:'none',
+       draft:{product:'cig', mg:1, when:10, name:'Cigarette', icon:'cig'}},
+  caf:{doses:[], nextId:1, weightKg:75, clearance:'typical', tol:'moderate', bedHours:8, bedAt:null,
        draft:{mg:95, when:30, name:'Drip coffee', icon:'coffee', route:'oral', hold:0}},
   laws:{st:'CA', map:{mode:'mj-state', sel:'CA', selCounty:null}},
   conv:{cat:'volume', unit:'ml', value:'473', drinkVol:'355', drinkUnit:'ml', drinkAbv:'5'}
@@ -3214,6 +3449,25 @@ function backfillStamps(){
   state.caf.doses.forEach(d => { if (!d.at) d.at = now - (d.when || 0) * 60000; });
   ['d9', 'd8', 'sm'].forEach(k => { if (!state[k].takenAt) state[k].takenAt = now - (state[k].elapsed || 0) * 60000; });
 }
+/* Bedtime is a fixed point in the evening, not an offset from wherever the
+   scrub dot happens to be. Storing it as an instant is what keeps the line
+   still while "now" moves — under the old offset the marker slid along with
+   the dot, so the one number worth knowing (how much is left at bedtime)
+   changed every time you dragged. */
+function caffeineBedAt(){
+  const s = state.caf;
+  if (!s.bedAt) s.bedAt = Date.now() + clamp(s.bedHours == null ? 8 : s.bedHours, 0, 24) * 3600000;
+  return s.bedAt;
+}
+function caffeineBedInMin(){ return (caffeineBedAt() - Date.now()) / 60000; }
+function fmtClock(ts){
+  const d = new Date(ts);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+/* "in 3h 20m" / "20m ago", for a signed number of minutes. */
+function fmtWhen(min){
+  return min >= 0 ? 'in ' + fmtDuration(min) : fmtDuration(-min) + ' ago';
+}
 function asOfLine(){
   const d = new Date();
   return '<span style="opacity:.75">As of <strong>' +
@@ -3228,6 +3482,17 @@ function syncElapsedInputs(){
     el.value = state[key].elapsed;
     if (rng && rng !== document.activeElement) rng.value = clamp(state[key].elapsed, +rng.min, +rng.max);
   });
+  syncBedInput();
+}
+/* Hours-until-bedtime is derived from the instant, so it counts down as the
+   evening arrives and as the scrub dot is dragged towards it. */
+function syncBedInput(){
+  const bn = document.getElementById('caf-bed'), br = document.getElementById('caf-bed-range');
+  if (!bn || bn === document.activeElement) return;
+  const h = Math.max(0, Math.round(caffeineBedInMin() / 30) / 2);
+  state.caf.bedHours = h;
+  bn.value = h;
+  if (br && br !== document.activeElement) br.value = clamp(h, +br.min, +br.max);
 }
 
 let saveTimer = null;
@@ -4983,6 +5248,7 @@ function renderCaffeineList(){
 
 function renderCaffeine(){
   syncClock();
+  syncBedInput();
   const s = state.caf;
   const weightKg = clamp(s.weightKg || 75, 30, 250);
   const vdL = weightKg * CAFFEINE.VD_L_PER_KG;
@@ -5025,7 +5291,7 @@ function renderCaffeine(){
      whole difference between first- and zero-order elimination. */
   let endMin = Math.max(nowMin + 60, 60);
   while (endMin < 2160 && caffeineConcAt(items, endMin, vdL, ke) > 0.12) endMin += 30;
-  endMin = Math.max(endMin, nowMin + 120, clamp(s.bedHours, 0, 24) * 60 + nowMin + 30);
+  endMin = Math.max(endMin, nowMin + 120, nowMin + caffeineBedInMin() + 30);
 
   const step = endMin > 900 ? 5 : 2;
   const concPts = caffeineSeries(items, vdL, ke, endMin, step);
@@ -5037,9 +5303,12 @@ function renderCaffeine(){
   const peakPct = caffeineIntensity(peakConc, s.tol);
   const fxPts = concPts.map(pt => [pt[0], caffeineIntensity(pt[1], s.tol)]);
 
-  /* bedtime */
-  const bedMin = nowMin + clamp(s.bedHours || 0, 0, 24) * 60;
-  const bedConc = caffeineConcAt(items, bedMin, vdL, ke);
+  /* bedtime, as a fixed point on the x-axis rather than an offset from the
+     scrub dot — see caffeineBedAt() */
+  const bedInMin = caffeineBedInMin();
+  const bedMin = nowMin + bedInMin;
+  const bedPassed = bedInMin < 0;
+  const bedConc = caffeineConcAt(items, Math.max(0, bedMin), vdL, ke);
   const sleepHit = hill(bedConc, CAFFEINE.SLEEP_EC50_MG_PER_L, CAFFEINE.SLEEP_HILL_N) * 100;
 
   renderGaugeWithLabel(gaugeEl, readEl, {
@@ -5058,7 +5327,7 @@ function renderCaffeine(){
     stat('Peak', round(peakConc, 2) + ' <small>mg/L</small>', ps.text) +
     (mucosalMg > 0.5 ? stat('Across the mucosa', Math.round(mucosalMg) + ' <small>of ' + Math.round(totalMg) + ' mg</small>',
        Math.round(100 * mucosalMg / Math.max(totalMg, 1)) + ' % absorbed directly; the rest is swallowed') : '') +
-    stat('At bedtime', round(bedConc, 2) + ' <small>mg/L</small>', 'In ' + fmtDuration(bedMin - nowMin) + ' — ' + Math.round(100 * bedConc / Math.max(peakConc, 0.0001)) + ' % of today’s peak');
+    stat('At bedtime', round(bedConc, 2) + ' <small>mg/L</small>', fmtClock(caffeineBedAt()) + ', ' + fmtWhen(bedInMin) + ' — ' + Math.round(100 * bedConc / Math.max(peakConc, 0.0001)) + ' % of today’s peak');
 
   /* banners */
   const banners = [];
@@ -5082,7 +5351,7 @@ function renderCaffeine(){
     xTicks:niceTicks(endMin / 60, 6).map(h => ({v:h * 60, label:h + 'h'})),
     yTicks:niceTicks(yMax, 5).map(v => ({v:v, label:String(round(v, 1))})),
     vlines:[{x:peakAt, label:'peak', color:'var(--accent-2)'}].concat(
-      bedMin <= endMin ? [{x:bedMin, label:'bedtime', color:'var(--info)'}] : []),
+      bedMin >= 0 && bedMin <= endMin ? [{x:bedMin, label:'bedtime ' + fmtClock(caffeineBedAt()), color:'var(--info)'}] : []),
     series:[{points:concPts, color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:nowMin, y:nowConc, label:'now · ' + round(nowConc, 2) + ' mg/L'},
     accent:'var(--accent)', drag:{key:'caf', maxMin:endMin},
@@ -5102,7 +5371,7 @@ function renderCaffeine(){
     yTicks:[0, 20, 40, 60, 80, 100].map(v => ({v:v, label:v + ' %'})),
     thresholds:[{y:70, label:'Very Strong', color:severityColor(72)}, {y:30, label:'Moderate', color:severityColor(32)}],
     vlines:[{x:peakAt, label:'peak', color:'var(--accent-2)'}].concat(
-      bedMin <= endMin ? [{x:bedMin, label:'bedtime', color:'var(--info)'}] : []),
+      bedMin >= 0 && bedMin <= endMin ? [{x:bedMin, label:'bedtime ' + fmtClock(caffeineBedAt()), color:'var(--info)'}] : []),
     series:[{points:fxPts, color:'var(--accent-2)', fill:true, width:2.8}],
     marker:{x:nowMin, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
     accent:'var(--accent-2)', drag:{key:'caf', maxMin:endMin},
@@ -5115,9 +5384,10 @@ function renderCaffeine(){
 
   document.getElementById('caf-peak-note').innerHTML = '<strong>' + ps.text + '.</strong> Closed form for a single dose: tmax = ln(ka/ke)/(ka&minus;ke).';
   const lastSafe = (() => {
-    /* when would the concentration at bedtime fall below the sleep midpoint? */
-    for (let t = nowMin; t <= endMin; t += 5){
-      if (caffeineConcAt(items, bedMin > t ? bedMin : t, vdL, ke) <= CAFFEINE.SLEEP_EC50_MG_PER_L) return t;
+    /* how late could bedtime be before the concentration at it falls under
+       the sleep mid-point? */
+    for (let t = Math.max(nowMin, bedMin); t <= endMin; t += 5){
+      if (caffeineConcAt(items, t, vdL, ke) <= CAFFEINE.SLEEP_EC50_MG_PER_L) return t;
     }
     return null;
   })();
@@ -5127,14 +5397,15 @@ function renderCaffeine(){
     '<span class="ev" style="color:' + severityColor(sleepHit) + '">' + Math.round(sleepHit) + ' % · ' + intensityLabel(sleepHit) + '</span>' +
     '<span class="bar"><span class="fill" data-w="' + clamp(sleepHit, 0, 100) + '" style="background:linear-gradient(90deg,' +
       severityColor(sleepHit * 0.55) + ',' + severityColor(sleepHit) + ')"></span></span>' +
-    '<span class="et">' + round(bedConc, 2) + '&nbsp;mg/L still circulating in ' + fmtDuration(bedMin - nowMin) + '.</span>' +
+    '<span class="et">' + round(bedConc, 2) + '&nbsp;mg/L ' + (bedPassed ? 'was still circulating at ' : 'still circulating at ') +
+      fmtClock(caffeineBedAt()) + ', ' + fmtWhen(bedInMin) + '.</span>' +
     '</div></div>' +
     '<p class="card-note" style="margin-top:12px">' +
     (bedConc <= CAFFEINE.SLEEP_EC50_MG_PER_L
       ? 'That is below the mid-point of the modelled sleep effect. Nothing here says you will sleep <em>well</em> — only that caffeine is unlikely to be the reason you do not.'
       : 'To get under that mid-point you would need about ' +
-        (lastSafe == null ? 'longer than this model runs' : fmtDuration(Math.max(0, lastSafe - nowMin)) + ' more') +
-        ' before sleeping. People habitually underestimate this, because falling asleep and sleeping well are different things.') +
+        (lastSafe == null ? 'longer than this model runs' : fmtDuration(Math.max(0, lastSafe - bedMin)) + ' later') +
+        ' than that. People habitually underestimate this, because falling asleep and sleeping well are different things.') +
     ' With a ' + halfLife + '-hour half-life, a dose is still a quarter present after ' + fmtDuration(halfLife * 120) + '.</p>';
   requestAnimationFrame(() => {
     document.querySelectorAll('#caf-sleep .fill').forEach(f => { f.style.width = f.dataset.w + '%'; });
@@ -5270,8 +5541,668 @@ function initCaffeine(){
 
   const w = bindNumber('caf-weight', v => { s.weightKg = readWeightKg(v); saveState(); renderCaffeine(); });
   w.value = round(kgToDisplay(s.weightKg), 1);
-  const bed = bindPair('caf-bed', 'caf-bed-range', v => { s.bedHours = clamp(v || 0, 0, 24); saveState(); renderCaffeine(); });
+  const bed = bindPair('caf-bed', 'caf-bed-range', v => {
+    s.bedHours = clamp(v || 0, 0, 24);
+    s.bedAt = Date.now() + s.bedHours * 3600000;   // the field sets the instant
+    saveState(); renderCaffeine();
+  });
   bed.n.value = s.bedHours; bed.r.value = clamp(s.bedHours, 0, 18);
+}
+
+
+/* ---------------------------------------------------------------------------
+   §10c  NICOTINE MODULE  —  renderNicotine()
+   The only substance here whose interesting question is not "how strong is
+   this" but "why can I not stop". The pharmacokinetics are the ordinary
+   one-compartment kind; what makes nicotine different is the two-hour
+   half-life, which is short enough to put a daily user into withdrawal
+   several times before lunch, and the metabolite that outlives it by a day.
+   ------------------------------------------------------------------------ */
+const NICOTINE = {
+  /* STANDARD: nicotine is cleared mostly by hepatic CYP2A6, first-order.
+     Terminal half-life is about 2 h in adults (published range 1-4 h). */
+  HALF_LIFE_H:2.0,
+  /* Volume of distribution. Published values for nicotine span roughly
+     1-3 L/kg, with 2.6 the figure usually quoted for Vss. This module takes
+     1.8 L/kg from inside that published range rather than fitting a number,
+     and it is chosen because it reproduces two independently measured things:
+     a 21 mg patch settles near 20 ng/mL against a measured 17-23, and a pack
+     a day sits in the low thirties against a measured typical 15-30.
+     What it does NOT reproduce is the single-cigarette peak. The model gives
+     about 8 ng/mL where the measured venous rise is 10-15, and no value can
+     fix that, because a one-compartment model has no distribution phase:
+     nicotine really needs two or three compartments, and the first minutes
+     after a puff are exactly where that matters. Read single-dose peaks as
+     somewhat low and everything at steady state as about right. */
+  VD_L_PER_KG:1.8,
+  /* Cotinine — the major metabolite and the standard biomarker of exposure.
+     These three are STANDARD published values rather than fitted ones, and
+     the check on them is that they reproduce a known answer: a pack a day at
+     1 mg absorbed per cigarette settles near 260 ng/mL, which is where
+     measured smokers actually sit. */
+  COTININE_FRACTION:0.75,        // ~70-80 % of nicotine becomes cotinine
+  COTININE_HALF_LIFE_H:16,       // published range 10-27 h
+  COTININE_VD_L_PER_KG:0.8,
+  COTININE_CUTOFF_NG_ML:10,      // common smoker / non-smoker cut-point
+  COTININE_SMOKER_NG_ML:200,     // where established daily smokers sit
+
+  /* Typical plasma band for a daily smoker through the day, ng/mL. Drawn on
+     the concentration chart as a reference, not as a target. */
+  SMOKER_BAND:[10, 37],
+
+  /* Products. `content` is the nicotine in the product; `abs` is what the
+     model puts into the body; `ka` is the first-order absorption rate in
+     per-hour units and `lag` a delay in minutes before absorption starts.
+     The ka values are HAND-TUNED, each chosen so that the closed-form
+     tmax = ln(ka/ke)/(ka-ke) lands on that product's published time to peak.
+     The absorbed amounts are the mid-points of published ranges and every
+     one of them varies more between people than between products. */
+  PRODUCTS:[
+    {key:'cig', label:'Cigarette', sub:'~1 mg absorbed', icon:'cig', content:12, abs:1.0, ka:36, lag:0, fam:'smoked',
+     note:'A cigarette rod holds 10-14 mg of nicotine and a smoker absorbs roughly 1 mg of it. The arterial spike reaching the brain is far sharper than this venous curve — that speed is most of why cigarettes are the most dependence-forming form of nicotine there is.'},
+    {key:'cigl', label:'Light cigarette', sub:'~0.8 mg', icon:'cig', content:10, abs:0.8, ka:36, lag:0, fam:'smoked',
+     note:'The "light" label describes what a smoking machine draws through the filter vents, not what a person gets. Smokers compensate by drawing harder and covering the vents, so the real difference is smaller than the number suggests.'},
+    {key:'cigar', label:'Cigar', sub:'not inhaled', icon:'cig', content:100, abs:2.0, ka:4, lag:0, fam:'smoked',
+     note:'A large cigar can hold as much nicotine as a whole pack. Cigar smoke is alkaline enough to be absorbed across the mouth without inhaling, which is slower but far from harmless.'},
+    {key:'hookah', label:'Hookah session', sub:'~45 min', icon:'bong', content:null, abs:2.5, ka:3, lag:0, fam:'smoked',
+     note:'A session runs long enough to deliver several cigarettes’ worth of nicotine and a great deal more carbon monoxide. The water cools the smoke; it does not clean it.'},
+    {key:'vape', label:'Vape session', sub:'10-15 puffs', icon:'vape', content:null, abs:1.0, ka:24, lag:0, fam:'vapour',
+     note:'Nicotine-salt devices deliver close to cigarette-like blood levels; older freebase devices deliver less. This is the widest range of any entry here — experienced users get several times what a first-time user does from the same device.'},
+    {key:'vapepod', label:'A whole 5 % pod', sub:'over a session', icon:'vape', content:40, abs:4.0, ka:8, lag:0, fam:'vapour',
+     note:'A 5 % pod holds about as much nicotine as a pack of cigarettes. Getting through one in a sitting is an unusually large nicotine dose by any historical standard.'},
+    {key:'pouch6', label:'Nicotine pouch 6 mg', sub:'30-60 min', icon:'pouch', content:6, abs:3.0, ka:5, lag:0, fam:'oral',
+     note:'Tobacco-free pouches extract roughly half their label across the gum over half an hour or so. No combustion at all, which removes most of the harm of smoking and none of the dependence.'},
+    {key:'pouch3', label:'Nicotine pouch 3 mg', sub:'30-60 min', icon:'pouch', content:3, abs:1.5, ka:5, lag:0, fam:'oral'},
+    {key:'snus', label:'Snus portion', sub:'8 mg', icon:'pouch', content:8, abs:2.4, ka:4.5, lag:0, fam:'oral',
+     note:'Moist tobacco held under the lip. Swedish-style snus is pasteurised rather than fermented, which is why its cancer risk profile differs so sharply from other smokeless tobacco.'},
+    {key:'gum2', label:'Nicotine gum 2 mg', sub:'~1 mg absorbed', icon:'capsule', content:2, abs:1.0, ka:6, lag:0, fam:'nrt',
+     note:'Chew to release, then park it against the cheek. Chewing continuously swallows the nicotine instead, where stomach acid and the liver destroy most of it — the commonest reason gum "does not work".'},
+    {key:'gum4', label:'Nicotine gum 4 mg', sub:'~2 mg', icon:'capsule', content:4, abs:2.0, ka:6, lag:0, fam:'nrt'},
+    {key:'loz2', label:'Lozenge 2 mg', sub:'~1.2 mg', icon:'capsule', content:2, abs:1.2, ka:3.6, lag:0, fam:'nrt',
+     note:'Slightly more nicotine than the same-strength gum, because nothing is lost to chewing technique.'},
+    {key:'loz4', label:'Lozenge 4 mg', sub:'~2.4 mg', icon:'capsule', content:4, abs:2.4, ka:3.6, lag:0, fam:'nrt'},
+    {key:'spray', label:'Nasal spray', sub:'2 sprays', icon:'spray', content:1, abs:0.5, ka:28, lag:0, fam:'nrt',
+     note:'The fastest licensed nicotine replacement — close to a cigarette in speed, which makes it the most effective and the most unpleasant to start.'},
+    {key:'inhal', label:'Oral inhalator', sub:'1 cartridge', icon:'vape', content:10, abs:1.5, ka:5, lag:0, fam:'nrt',
+     note:'Despite the name almost none of it reaches the lung; it is absorbed across the mouth and throat. It is slow, and its value is as much in the hand-to-mouth ritual as in the nicotine.'},
+    {key:'patch7', label:'Patch 7 mg/24 h', sub:'slow, steady', icon:'patch', content:7, abs:7, ka:0.05, lag:60, fam:'nrt'},
+    {key:'patch14', label:'Patch 14 mg/24 h', sub:'slow, steady', icon:'patch', content:14, abs:14, ka:0.05, lag:60, fam:'nrt'},
+    {key:'patch21', label:'Patch 21 mg/24 h', sub:'slow, steady', icon:'patch', content:21, abs:21, ka:0.05, lag:60, fam:'nrt',
+     note:'Modelled as a slow depot with a one-hour lag, peaking around seven hours in. The model does NOT know about taking the patch off, so an overnight removal is not represented — add a smaller patch instead if you take it off at night.'}
+  ],
+
+  /* HAND-TUNED: the plasma concentration at half the modelled maximum.
+     Calibrated against three points that are not free parameters - one
+     cigarette reads Strong for someone with no tolerance, the same cigarette
+     reads Mild for a heavy smoker, and a 6 mg pouch on a first-timer reads
+     Extremely Strong, which is what a 6 mg pouch does to a first-timer. */
+  EC50_NG_PER_ML:6,
+  HILL_N:1.5,
+  /* HAND-TUNED per-effect Hill curves on plasma nicotine in ng/mL. Craving
+     relief is deliberately the shallowest and lowest: it saturates at levels
+     a couple of puffs reach, which is why smokers titrate so precisely and
+     why a whole cigarette is not twice as satisfying as half of one.
+     `naive` marks the effects tolerance destroys fastest. */
+  EFFECTS:[
+    {name:'Craving relief', ec50:4,  n:1.6, w:1.00,
+     note:'The shallowest curve here on purpose: it saturates at a level two or three puffs already reach. This is the effect that runs the whole cycle.'},
+    {name:'Alertness & concentration', ec50:7, n:1.4, w:0.95},
+    {name:'Head rush / buzz', ec50:9, n:2.2, w:1.00, naive:true,
+     note:'Depends far more on how FAST the concentration rises than on how high it gets, and this model only knows the level. Treat it as an ordering between products, not a measurement.'},
+    {name:'Heart rate & blood pressure', ec50:11, n:1.5, w:0.90,
+     note:'Nicotine is a sympathomimetic: it raises heart rate by 10-20 bpm and constricts blood vessels. This part is nicotine itself, not the smoke.'},
+    {name:'Appetite suppression', ec50:12, n:1.6, w:0.80},
+    {name:'Dizziness & light-headedness', ec50:22, n:2.6, w:0.90, naive:true},
+    {name:'Nausea', ec50:30, n:3.0, w:1.00, naive:true,
+     note:'Steep, high mid-point, and almost entirely a first-timer effect — tolerance to nausea builds within days, long before tolerance to anything people want.'}
+  ],
+
+  /* HAND-TUNED. Tolerance to the unwanted effects builds far faster than to
+     the wanted ones, so nausea and dizziness are damped by a steeper power of
+     the same factor rather than by the factor itself. */
+  NAIVE_EXPONENT:1.6,
+
+  /* Withdrawal, from the clinical literature rather than from this model. */
+  WITHDRAWAL:[
+    ['First craving', '30 min – 2 h after the last dose for a daily smoker'],
+    ['Irritability, restlessness, poor concentration', 'Builds over the first day'],
+    ['Peak of physical withdrawal', 'Days 2–3'],
+    ['Most physical symptoms gone', '2–4 weeks'],
+    ['Appetite and weight changes', 'Weeks to months'],
+    ['Cue-triggered craving', 'Can recur for months or years, briefly']
+  ]
+};
+
+/* HAND-TUNED: the same divide-the-dose convention every other section uses.
+   Nicotine tolerance is unusually deep — a heavy smoker gets a fraction of
+   the subjective effect a first-timer gets from an identical dose. */
+const NICOTINE_TOLERANCE = [
+  {key:'none',       label:'Never / long quit', sub:'×1.0',  factor:1.0},
+  {key:'occasional', label:'Occasional',        sub:'×1.5',  factor:1.5},
+  {key:'light',      label:'Daily, light',      sub:'×2.2',  factor:2.2},
+  {key:'daily',      label:'Daily, 11–20', sub:'×3.0',  factor:3.0},
+  {key:'heavy',      label:'Heavy, 20+',        sub:'×4.0',  factor:4.0}
+];
+function nicotineToleranceFactor(key){
+  const t = NICOTINE_TOLERANCE.find(x => x.key === key);
+  return t ? t.factor : 1;
+}
+
+/* CYP2A6 activity, expressed as a half-life in hours. All four are within the
+   published 1-4 h spread and each has a documented cause. */
+const NICOTINE_CLEARANCE = [
+  {key:'fast',    label:'Fast', sub:'~1.5 h', halfLife:1.5,
+   note:'Fast CYP2A6 metabolisers clear nicotine quickly, feel withdrawal sooner, and on average smoke more and find quitting harder. Pregnancy raises nicotine clearance by roughly 60 %, landing in this band.'},
+  {key:'typical', label:'Typical adult', sub:'~2 h', halfLife:2,
+   note:'The usual quoted figure. It is short: half of a cigarette’s nicotine is gone two hours later, which is why the interval between cigarettes is measured in hours rather than in days.'},
+  {key:'menthol', label:'Menthol smoker', sub:'~2.4 h', halfLife:2.4,
+   note:'Menthol inhibits nicotine metabolism modestly, so nicotine lingers a little longer. The larger effect of menthol is on the smoke itself — it anaesthetises the throat, which makes deeper inhalation easier.'},
+  {key:'slow',    label:'Slow CYP2A6', sub:'~3 h', halfLife:3,
+   note:'Reduced-activity CYP2A6 variants are common, and much more so in people of East Asian ancestry. Slow metabolisers hold nicotine longer, smoke fewer cigarettes and quit more successfully — one of the clearest gene-behaviour links in the field.'}
+];
+function nicotineHalfLife(key){
+  const c = NICOTINE_CLEARANCE.find(x => x.key === key);
+  return c ? c.halfLife : NICOTINE.HALF_LIFE_H;
+}
+function nicProduct(key){ return NICOTINE.PRODUCTS.find(p => p.key === key) || NICOTINE.PRODUCTS[0]; }
+
+/* --- pharmacokinetics -----------------------------------------------------
+   Amounts first, concentrations second. Cotinine is formed from the amount of
+   nicotine ELIMINATED, so keeping the model in milligrams means the fitted
+   nicotine volume above cannot leak into the cotinine curve, which uses real
+   published constants and has to stay honest. */
+function nicotineAmountSingle(absMg, tHours, ke, ka){
+  if (tHours <= 0) return 0;
+  /* guard the ka == ke singularity with the limiting form */
+  if (Math.abs(ka - ke) < 1e-6) return absMg * ke * tHours * Math.exp(-ke * tHours);
+  return absMg * (ka / (ka - ke)) * (Math.exp(-ke * tHours) - Math.exp(-ka * tHours));
+}
+/* `items` are {t: minutes since the first dose, mg: absorbed, ka, lag}. */
+function nicotineDoseItems(doses, originAgo){
+  return doses.map(d => {
+    const p = nicProduct(d.product);
+    return {t:originAgo - d.when + (p.lag || 0), mg:d.mg, ka:p.ka, key:d.product};
+  });
+}
+function nicotineAmountAt(items, tMin, ke){
+  let a = 0;
+  for (let i = 0; i < items.length; i++){
+    if (tMin >= items[i].t) a += nicotineAmountSingle(items[i].mg, (tMin - items[i].t) / 60, ke, items[i].ka);
+  }
+  return a;
+}
+function nicotineNgMl(amountMg, vdL){ return (amountMg / vdL) * 1000; }   // mg/L -> ng/mL
+function nicotineSeries(items, ke, vdL, endMin, stepMin){
+  const pts = [];
+  for (let t = 0; t <= endMin; t += stepMin) pts.push([t, nicotineNgMl(nicotineAmountAt(items, t, ke), vdL)]);
+  return pts;
+}
+/* Same analytic derivative + bisection the caffeine and alcohol modules use. */
+function nicotineTmaxMin(items, ke){
+  if (!items.length) return 0;
+  const lastT = items.reduce((m, i) => Math.max(m, i.t), 0);
+  if (items.length === 1 && Math.abs(items[0].ka - ke) > 1e-6)
+    return items[0].t + (Math.log(items[0].ka / ke) / (items[0].ka - ke)) * 60;
+  const deriv = tMin => items.reduce((sum, i) => {
+    if (tMin < i.t) return sum;
+    const h = (tMin - i.t) / 60;
+    if (Math.abs(i.ka - ke) < 1e-6) return sum + i.mg * ke * Math.exp(-ke * h) * (1 - ke * h);
+    return sum + i.mg * (i.ka / (i.ka - ke)) * (i.ka * Math.exp(-i.ka * h) - ke * Math.exp(-ke * h));
+  }, 0);
+  if (deriv(lastT) <= 0) return lastT;
+  let lo = lastT, hi = lastT + 900;
+  for (let k = 0; k < 60; k++){ const mid = (lo + hi) / 2; if (deriv(mid) > 0) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
+/* Cotinine has no closed form worth writing here, because it is fed by the
+   nicotine curve rather than by a dose. It is integrated forward instead:
+   dA_cot/dt = fm * ke_nic * A_nic(t) - ke_cot * A_cot. A five-minute step is
+   far finer than a 16-hour half-life needs. */
+function nicotineCotinineSeries(items, keNic, endMin, vdCotL, stepMin){
+  const keCot = Math.LN2 / NICOTINE.COTININE_HALF_LIFE_H;
+  const h = stepMin / 60;
+  const pts = [];
+  let aCot = 0;
+  for (let t = 0; t <= endMin; t += stepMin){
+    pts.push([t, nicotineNgMl(aCot, vdCotL)]);
+    const aNic = nicotineAmountAt(items, t + stepMin / 2, keNic);
+    aCot += (NICOTINE.COTININE_FRACTION * keNic * aNic - keCot * aCot) * h;
+    if (aCot < 0) aCot = 0;
+  }
+  return pts;
+}
+/* Effective concentration after tolerance, and the separate, steeper damping
+   the first-timer-only effects get. */
+function nicotineEffective(ngMl, tolKey){ return ngMl / nicotineToleranceFactor(tolKey); }
+function nicotineNaiveFactor(tolKey){
+  return 1 / Math.pow(nicotineToleranceFactor(tolKey), NICOTINE.NAIVE_EXPONENT);
+}
+function nicotineIntensity(ngMl, tolKey){
+  /* One Hill on the tolerance-adjusted concentration, exactly as the caffeine
+     module does, so the shared six-step scale means the same thing here. */
+  return clamp(100 * hill(nicotineEffective(ngMl, tolKey), NICOTINE.EC50_NG_PER_ML, NICOTINE.HILL_N), 0, 100);
+}
+function nicotineEffectValues(ngMl, tolKey){
+  const eff = nicotineEffective(ngMl, tolKey), nf = nicotineNaiveFactor(tolKey);
+  return NICOTINE.EFFECTS.map(e => ({
+    name:e.name,
+    value:clamp(100 * hill(eff, e.ec50, e.n) * e.w * (e.naive ? nf : 1), 0, 100),
+    note:e.note
+  }));
+}
+
+/* --- rendering ----------------------------------------------------------- */
+let nicEditingId = null;
+function nicExitEdit(){
+  nicEditingId = null;
+  document.getElementById('nic-add-label').textContent = 'Add';
+  document.getElementById('nic-cancel').hidden = true;
+  document.getElementById('nic-editing').textContent = '';
+  renderNicotine();
+}
+function nicSetDraftFromProduct(key){
+  const p = nicProduct(key), s = state.nic;
+  s.draft.product = p.key; s.draft.mg = p.abs; s.draft.name = p.label; s.draft.icon = p.icon;
+  const mg = document.getElementById('nic-mg');
+  if (mg) mg.value = p.abs;
+  document.getElementById('nic-product-note').innerHTML =
+    (p.note || 'Absorbed amounts here are mid-points of published ranges; every one of them varies more between people than between products.') +
+    ' Modelled as <strong>' + round(p.abs, 2) + '&nbsp;mg absorbed</strong>' +
+    (p.content ? ' of ' + p.content + '&nbsp;mg in the product' : '') +
+    ', absorption rate k<sub>a</sub> = ' + p.ka + '/h' + (p.lag ? ' after a ' + p.lag + '-minute lag' : '') +
+    '. <span class="tuned">hand-tuned</span>';
+  buildPills(document.getElementById('nic-products'),
+    NICOTINE.PRODUCTS.map(x => ({key:x.key, label:x.label, sub:x.sub, icon:x.icon})), s.draft.product, nicSetDraftFromProduct);
+  saveState();
+}
+function renderNicotineList(){
+  const host = document.getElementById('nic-list'), s = state.nic;
+  if (!s.doses.length){
+    host.innerHTML = '<div class="empty-note">Nothing added yet. Pick a product, set how long ago, then <strong>Add</strong> — or use <strong>Fill a smoking day</strong> to see what accumulation looks like.</div>';
+    return;
+  }
+  host.innerHTML = s.doses.slice().sort((a, b) => a.when - b.when).map(d => {
+    const p = nicProduct(d.product);
+    return '<div class="drink-row" data-id="' + d.id + '">' +
+      '<span class="dico ico" data-icon="' + (d.icon || 'cig') + '"></span>' +
+      '<div><div class="dname">' + esc(d.name || p.label) + '</div>' +
+      '<div class="dmeta">' + round(d.mg, 2) + ' mg absorbed &middot; ' + fmtDuration(d.when) + ' ago</div></div>' +
+      '<div class="dacts">' +
+        '<button class="btn tiny" type="button" data-act="edit" title="Edit"><span class="ico" data-icon="edit"></span></button>' +
+        '<button class="btn tiny danger" type="button" data-act="del" title="Delete"><span class="ico" data-icon="trash"></span></button>' +
+      '</div></div>';
+  }).join('');
+  paintIcons(host);
+}
+
+function renderNicotine(){
+  syncClock();
+  const s = state.nic;
+  const weightKg = clamp(s.weightKg || 75, 30, 250);
+  const vdL = weightKg * NICOTINE.VD_L_PER_KG;
+  const vdCotL = weightKg * NICOTINE.COTININE_VD_L_PER_KG;
+  const halfLife = nicotineHalfLife(s.clearance);
+  const ke = Math.LN2 / halfLife;
+  const clearance = NICOTINE_CLEARANCE.find(c => c.key === s.clearance) || NICOTINE_CLEARANCE[1];
+
+  document.getElementById('nic-clearance-note').innerHTML = clearance.note;
+  renderNicotineList();
+
+  const gaugeEl = document.getElementById('nic-gauge'), readEl = document.getElementById('nic-readout');
+  if (!s.doses.length){
+    renderBanners(document.getElementById('nic-banners'), [{level:'info', icon:'plus', title:'Nothing added yet',
+      body:'Add one cigarette to see the shape, or press <strong>Fill a smoking day</strong> to watch cotinine accumulate across twenty of them — which is the part of nicotine that does not clear overnight.'}]);
+    renderGaugeWithLabel(gaugeEl, readEl, {fraction:0, value:'0.0', valueSuffix:'ng/mL', label:intensityLabel(0),
+      color:severityColor(0), sub:'Add a dose to begin.<br>' + asOfLine()});
+    document.getElementById('nic-stats').innerHTML = '';
+    document.getElementById('nic-dependence').innerHTML = '<div class="empty-note">Nothing to model yet.</div>';
+    renderEffectBars(document.getElementById('nic-effects'), NICOTINE.EFFECTS.map(e => ({name:e.name, value:0, note:e.note})));
+    ['nic-chart-ng', 'nic-chart-fx', 'nic-chart-cot'].forEach(id => { document.getElementById(id).innerHTML = ''; });
+    document.getElementById('nic-cot-note').textContent = 'Add a dose to see the metabolite build up.';
+    renderNicotineReference();
+    document.getElementById('nic-withdrawal').innerHTML = NIC_WITHDRAWAL_HTML();
+    document.getElementById('nic-tips').innerHTML = NIC_TIPS;
+    paintIcons(document.getElementById('nic-tips'));
+    return;
+  }
+
+  const originAgo = s.doses.reduce((m, d) => Math.max(m, d.when), 0);
+  const items = nicotineDoseItems(s.doses, originAgo);
+  const nowMin = originAgo;
+  const totalMg = s.doses.reduce((a, d) => a + d.mg, 0);
+  const lastAgo = s.doses.reduce((m, d) => Math.min(m, d.when), Infinity);
+
+  /* run until nicotine is negligible; the patch drags this out on purpose */
+  let endMin = Math.max(nowMin + 120, 360);
+  while (endMin < 4320 && nicotineNgMl(nicotineAmountAt(items, endMin, ke), vdL) > 0.25) endMin += 30;
+  endMin = Math.max(endMin, nowMin + 60);
+
+  const step = endMin > 1200 ? 10 : endMin > 600 ? 5 : 2;
+  const ngPts = nicotineSeries(items, ke, vdL, endMin, step);
+  const nowNg = nicotineNgMl(nicotineAmountAt(items, nowMin, ke), vdL);
+  const tmax = nicotineTmaxMin(items, ke);
+  let peakNg = 0, peakAt = 0;
+  ngPts.forEach(pt => { if (pt[1] > peakNg){ peakNg = pt[1]; peakAt = pt[0]; } });
+  const nowPct = nicotineIntensity(nowNg, s.tol);
+  const peakPct = nicotineIntensity(peakNg, s.tol);
+  const fxPts = ngPts.map(pt => [pt[0], nicotineIntensity(pt[1], s.tol)]);
+
+  /* cotinine runs on its own, much longer axis */
+  const cotEnd = clamp(Math.max(endMin, nowMin + 3600), 720, 5760);
+  const cotStep = 10;
+  const cotPts = nicotineCotinineSeries(items, ke, cotEnd, vdCotL, cotStep);
+  const cotNow = cotPts.reduce((best, pt) => Math.abs(pt[0] - nowMin) < Math.abs(best[0] - nowMin) ? pt : best, cotPts[0])[1];
+  let cotPeak = 0, cotPeakAt = 0;
+  cotPts.forEach(pt => { if (pt[1] > cotPeak){ cotPeak = pt[1]; cotPeakAt = pt[0]; } });
+
+  renderGaugeWithLabel(gaugeEl, readEl, {
+    fraction:nowPct / 100, value:round(nowNg, 1), valueSuffix:'ng/mL',
+    label:intensityLabel(nowPct), color:severityColor(nowPct),
+    ariaLabel:'Estimated plasma nicotine ' + round(nowNg, 1) + ' nanograms per millilitre, ' + intensityLabel(nowPct),
+    sub:'Nicotine intensity <strong>' + Math.round(nowPct) + '&nbsp;% · ' + intensityLabel(nowPct) +
+        '</strong> on the shared scale. Modelled peak for this session: <strong>' + round(peakNg, 1) + '&nbsp;ng/mL</strong>.<br>' + asOfLine()
+  });
+
+  const ps = peakStatus(nowMin, tmax, {noun:'Peak concentration'});
+  const tf = nicotineToleranceFactor(s.tol);
+  document.getElementById('nic-stats').innerHTML =
+    stat('Absorbed today', round(totalMg, 2) + ' <small>mg</small>', s.doses.length + ' item' + (s.doses.length === 1 ? '' : 's')) +
+    stat('In your blood now', round(nowNg, 1) + ' <small>ng/mL</small>', Math.round(nowPct) + ' % · ' + intensityLabel(nowPct)) +
+    stat('Half-life', halfLife + ' <small>h</small>', 'Short enough to matter before lunch') +
+    stat('Peak', round(peakNg, 1) + ' <small>ng/mL</small>', ps.text) +
+    stat('Cotinine now', Math.round(cotNow) + ' <small>ng/mL</small>', nicCotinineBand(cotNow)) +
+    stat('Effective dose', '÷ ' + round(tf, 1), 'Tolerance divisor on every effect below');
+
+  /* banners */
+  const banners = [];
+  if (totalMg >= 40) banners.push({level:'crit', icon:'alert', title:'A very large amount of nicotine',
+    body:'Past about 40&nbsp;mg absorbed in a day you are well beyond anything a smoker reaches. Nausea, vomiting, sweating, a racing heart and tremor are the early signs of nicotine poisoning. If those are happening, stop and get medical advice — do not wait to see whether it passes.'});
+  else if (totalMg >= 25) banners.push({level:'warn', icon:'alert', title:'More than a heavy smoker absorbs in a day',
+    body:'Twenty cigarettes deliver roughly 20&nbsp;mg. Above that the sympathetic effects — heart rate, blood pressure, tremor — keep climbing after the wanted effects have flattened out.'});
+  if (peakNg >= 45) banners.push({level:'warn', icon:'heart', title:'High peak concentration',
+    body:'The model puts the peak at <strong>' + round(peakNg, 1) + '&nbsp;ng/mL</strong>, above the band a daily smoker sits in. Nicotine raises heart rate and constricts blood vessels at these levels regardless of how used to it you are — tolerance to the cardiovascular effects is much weaker than tolerance to the pleasant ones.'});
+  if (s.tol === 'none' && peakNg >= 15) banners.push({level:'warn', icon:'alert', title:'That is a large dose for someone with no tolerance',
+    body:'Nausea, dizziness, sweating and vomiting are the ordinary first-time response to a full cigarette or a strong pouch, not a sign of anything unusual. The effects below already account for it.'});
+  if (cotPeak >= NICOTINE.COTININE_SMOKER_NG_ML) banners.push({level:'info', icon:'molecule', title:'Cotinine reaches the established-smoker band',
+    body:'Peak modelled cotinine is <strong>' + Math.round(cotPeak) + '&nbsp;ng/mL</strong>. With a sixteen-hour half-life it does not clear overnight, which is why a daily smoker wakes with yesterday still in their blood — and why the metabolite, not nicotine, is what a test looks for.'});
+  const patchAndSmoke = s.doses.some(d => nicProduct(d.product).fam === 'nrt' && String(d.product).indexOf('patch') === 0) &&
+                        s.doses.some(d => nicProduct(d.product).fam === 'smoked');
+  if (patchAndSmoke) banners.push({level:'info', icon:'shield', title:'Patch plus smoking',
+    body:'Combining a patch with cigarettes used to be warned against; the evidence now supports combination therapy — a patch for the baseline plus a faster form for breakthrough craving works better than either alone. This app adds the two curves straight up, which is what actually happens.'});
+  renderBanners(document.getElementById('nic-banners'), banners);
+
+  /* concentration chart */
+  const yMax = Math.max(10, Math.ceil(Math.max(peakNg, NICOTINE.SMOKER_BAND[1]) * 1.2 / 5) * 5);
+  renderChart(document.getElementById('nic-chart-ng'), {
+    xMax:endMin, yMax:yMax,
+    xLabel:'Hours since the first dose', yLabel:'Plasma nicotine (ng/mL)', yLabelShort:'ng/mL',
+    xTicks:niceTicks(endMin / 60, 6).map(h => ({v:h * 60, label:h + 'h'})),
+    yTicks:niceTicks(yMax, 5).map(v => ({v:v, label:String(round(v, 0))})),
+    thresholds:[{y:NICOTINE.SMOKER_BAND[1], label:'daily smoker, upper', color:'var(--warn)'},
+                {y:NICOTINE.SMOKER_BAND[0], label:'daily smoker, lower', color:'var(--info)'}],
+    vlines:[{x:peakAt, label:'peak', color:'var(--accent-2)'}],
+    series:[{points:ngPts, color:'var(--accent)', fill:true, width:2.8}],
+    marker:{x:nowMin, y:nowNg, label:'now · ' + round(nowNg, 1) + ' ng/mL'},
+    accent:'var(--accent)', drag:{key:'nic', maxMin:endMin},
+    ariaLabel:'Plasma nicotine over time, currently ' + round(nowNg, 1) + ' nanograms per millilitre'
+  });
+  renderLegend(document.getElementById('nic-legend-ng'), [
+    {label:'Plasma nicotine (ng/mL)', color:'var(--accent)'},
+    {label:'Modelled peak', color:'var(--accent-2)', dash:true},
+    {label:'Band a daily smoker sits in', color:'var(--warn)', dash:true}
+  ]);
+
+  /* intensity chart, on the shared scale */
+  renderChart(document.getElementById('nic-chart-fx'), {
+    xMax:endMin, yMax:100,
+    xLabel:'Hours since the first dose', yLabel:'Modelled intensity (% of curve maximum)', yLabelShort:'Intensity (% of max)',
+    xTicks:niceTicks(endMin / 60, 6).map(h => ({v:h * 60, label:h + 'h'})),
+    yTicks:[0, 20, 40, 60, 80, 100].map(v => ({v:v, label:v + ' %'})),
+    thresholds:[{y:70, label:'Very Strong', color:severityColor(72)}, {y:30, label:'Moderate', color:severityColor(32)}],
+    vlines:[{x:peakAt, label:'peak', color:'var(--accent-2)'}],
+    series:[{points:fxPts, color:'var(--accent-2)', fill:true, width:2.8}],
+    marker:{x:nowMin, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
+    accent:'var(--accent-2)', drag:{key:'nic', maxMin:endMin},
+    ariaLabel:'Nicotine effect intensity over time, currently ' + Math.round(nowPct) + ' percent'
+  });
+  renderLegend(document.getElementById('nic-legend-fx'), [
+    {label:'Nicotine intensity (shared scale)', color:'var(--accent-2)'},
+    {label:'Modelled peak', color:'var(--accent-2)', dash:true}
+  ]);
+
+  /* cotinine chart */
+  const cotMax = Math.max(40, Math.ceil(Math.max(cotPeak, NICOTINE.COTININE_SMOKER_NG_ML) * 1.2 / 25) * 25);
+  renderChart(document.getElementById('nic-chart-cot'), {
+    xMax:cotEnd, yMax:cotMax,
+    xLabel:'Hours since the first dose', yLabel:'Plasma cotinine (ng/mL)', yLabelShort:'ng/mL',
+    xTicks:niceTicks(cotEnd / 60, 6).map(h => ({v:h * 60, label:h + 'h'})),
+    yTicks:niceTicks(cotMax, 5).map(v => ({v:v, label:String(round(v, 0))})),
+    thresholds:[{y:NICOTINE.COTININE_SMOKER_NG_ML, label:'established smoker', color:'var(--warn)'},
+                {y:NICOTINE.COTININE_CUTOFF_NG_ML, label:'test cut-point', color:'var(--info)'}],
+    vlines:[{x:cotPeakAt, label:'cotinine peak', color:'var(--accent-2)'}],
+    series:[{points:cotPts, color:'var(--info)', fill:true, width:2.8}],
+    marker:{x:Math.min(nowMin, cotEnd), y:cotNow, label:'now · ' + Math.round(cotNow) + ' ng/mL'},
+    accent:'var(--info)', drag:{key:'nic', maxMin:cotEnd},
+    ariaLabel:'Plasma cotinine over time, currently ' + Math.round(cotNow) + ' nanograms per millilitre'
+  });
+  renderLegend(document.getElementById('nic-legend-cot'), [
+    {label:'Plasma cotinine (ng/mL)', color:'var(--info)'},
+    {label:'Established daily smoker', color:'var(--warn)', dash:true},
+    {label:'Smoker / non-smoker cut-point', color:'var(--info)', dash:true}
+  ]);
+  document.getElementById('nic-cot-note').innerHTML =
+    'Cotinine now: <strong>' + Math.round(cotNow) + '&nbsp;ng/mL</strong> — ' + nicCotinineBand(cotNow) + '. ' +
+    'Peak <strong>' + Math.round(cotPeak) + '&nbsp;ng/mL</strong> at ' + fmtDuration(cotPeakAt) + '. ' +
+    'Integrated forward from the nicotine curve with published constants: ' +
+    Math.round(NICOTINE.COTININE_FRACTION * 100) + '&nbsp;% conversion, a ' + NICOTINE.COTININE_HALF_LIFE_H +
+    '-hour half-life and a volume of ' + NICOTINE.COTININE_VD_L_PER_KG + '&nbsp;L/kg \u2014 not one fitted number anywhere in it. ' +
+    'Two checks it passes: a pack a day settles near 260&nbsp;ng/mL, where measured smokers sit; and a single day reaches about 65&nbsp;% of that, ' +
+    'which is exactly what one and a half cotinine half-lives predicts. ' +
+    '<a href="#" data-goto="learn" data-article="art-cotinine">The arithmetic, in full</a>.';
+
+  /* dependence */
+  const effects = nicotineEffectValues(nowNg, s.tol);
+  const craving = effects[0].value;
+  const cravingEc50 = NICOTINE.EFFECTS[0].ec50;
+  let nextCraving = null;
+  for (let t = nowMin; t <= endMin; t += 5){
+    if (nicotineEffective(nicotineNgMl(nicotineAmountAt(items, t, ke), vdL), s.tol) <= cravingEc50){ nextCraving = t; break; }
+  }
+  document.getElementById('nic-dependence').innerHTML =
+    '<dl class="map-stat" style="margin-bottom:12px">' +
+    '<dt>Last dose</dt><dd>' + (lastAgo === Infinity ? '—' : fmtDuration(lastAgo) + ' ago') + '</dd>' +
+    '<dt>Craving relief now</dt><dd>' + Math.round(craving) + '&nbsp;% · ' + intensityLabel(craving) + '</dd>' +
+    '<dt>Falls past half-maximum</dt><dd>' + (nextCraving == null
+        ? 'not within the modelled window'
+        : nextCraving <= nowMin ? 'already past it'
+        : 'in ' + fmtDuration(nextCraving - nowMin)) + '</dd>' +
+    '<dt>Nicotine half-life</dt><dd>' + halfLife + ' h — half of any dose is gone that fast</dd>' +
+    '</dl>' +
+    '<p class="card-note" style="margin:0 0 6px"><strong>What is left, if you add nothing:</strong></p>' +
+    '<dl class="map-stat" style="margin-bottom:12px">' +
+    [2, 4, 8].map(h => {
+      const ng = nicotineNgMl(nicotineAmountAt(items, nowMin + h * 60, ke), vdL);
+      const pc = nicotineIntensity(ng, s.tol);
+      return '<dt>In ' + h + ' hours</dt><dd>' + round(ng, 1) + '&nbsp;ng/mL — ' +
+             Math.round(pc) + '&nbsp;% \u00b7 ' + intensityLabel(pc) + '</dd>';
+    }).join('') +
+    '</dl>' +
+    '<p class="card-note">That third row is the whole mechanism. A two-hour half-life means the pharmacological floor arrives several times a day, ' +
+    'every day, and each arrival is answered by the thing that caused it. This is pharmacology only: craving is at least as much about cue and habit ' +
+    'as about concentration, and none of that is modelled here.</p>';
+
+  renderEffectBars(document.getElementById('nic-effects'), effects);
+  document.getElementById('nic-effects-note').innerHTML =
+    'Tolerance divides the concentration by <strong>×' + round(tf, 1) + '</strong> before any of these curves are evaluated. ' +
+    'Nausea, dizziness and the head rush are damped further — by ×' + round(1 / nicotineNaiveFactor(s.tol), 1) +
+    ' — because tolerance to the unpleasant effects builds within days, long before tolerance to anything anyone wants. <span class="tuned">hand-tuned</span>';
+
+  renderNicotineReference();
+  document.getElementById('nic-withdrawal').innerHTML = NIC_WITHDRAWAL_HTML();
+  document.getElementById('nic-tips').innerHTML = NIC_TIPS;
+  paintIcons(document.getElementById('nic-tips'));
+  requestAnimationFrame(() => {
+    document.querySelectorAll('#nic-effects .fill').forEach(f => { f.style.width = f.dataset.w + '%'; });
+  });
+}
+
+function nicCotinineBand(ng){
+  if (ng < 1) return 'below anything a test would flag';
+  if (ng < NICOTINE.COTININE_CUTOFF_NG_ML) return 'under the usual ' + NICOTINE.COTININE_CUTOFF_NG_ML + ' ng/mL cut-point';
+  if (ng < 50) return 'light or occasional use';
+  if (ng < NICOTINE.COTININE_SMOKER_NG_ML) return 'regular use';
+  if (ng < 400) return 'established daily smoker';
+  return 'heavy daily use';
+}
+function NIC_WITHDRAWAL_HTML(){
+  return '<dl class="map-stat">' +
+    NICOTINE.WITHDRAWAL.map(w => '<dt>' + w[0] + '</dt><dd>' + w[1] + '</dd>').join('') +
+    '</dl><p class="card-note" style="margin-top:10px">This table is from the clinical literature, not from the model above — no part of this app estimates withdrawal. ' +
+    'It is here because the timeline is the single most useful thing to know: the worst of it is measured in days, not months, and people routinely ' +
+    'abandon an attempt during the two days it was always going to be hardest.</p>';
+}
+
+function renderNicotineReference(){
+  const REF_KG = 70, vdL = REF_KG * NICOTINE.VD_L_PER_KG, ke = Math.LN2 / NICOTINE.HALF_LIFE_H;
+  const rows = NICOTINE.PRODUCTS.map(p => {
+    const items = [{t:p.lag || 0, mg:p.abs, ka:p.ka}];
+    const tmax = nicotineTmaxMin(items, ke);
+    const peak = nicotineNgMl(nicotineAmountAt(items, tmax, ke), vdL);
+    const pct = nicotineIntensity(peak, 'none');
+    return [esc(p.label), p.content == null ? 'varies' : p.content + ' mg', round(p.abs, 2) + ' mg',
+            fmtDuration(tmax), round(peak, 1), badgeFor(pct)];
+  });
+  renderTable(document.getElementById('nic-ref-table'),
+    [{label:'Product'}, {label:'Nicotine in it', num:true}, {label:'Modelled absorbed', num:true},
+     {label:'Time to peak', num:true}, {label:'Peak ng/mL', num:true}, {label:'Intensity'}],
+    rows);
+  document.getElementById('nic-ref-note').innerHTML =
+    'Reference person: ' + REF_KG + '&nbsp;kg, ' + NICOTINE.HALF_LIFE_H + '-hour half-life, no tolerance, one item on an empty system. ' +
+    'Peak is venous plasma; the arterial concentration reaching the brain from an inhaled product is several times higher and several times faster, ' +
+    'and that difference — not the milligrams — is what separates a cigarette from a patch. ' +
+    'Effective volume of distribution ' + NICOTINE.VD_L_PER_KG + '&nbsp;L/kg. <span class="tuned">hand-tuned</span>';
+
+  /* speed comparison across the families */
+  const fam = k => NICOTINE.PRODUCTS.filter(p => p.fam === k);
+  const famPeak = ps => {
+    const p = ps[0], items = [{t:p.lag || 0, mg:p.abs, ka:p.ka}];
+    const tm = nicotineTmaxMin(items, ke);
+    return {tm:tm, ng:nicotineNgMl(nicotineAmountAt(items, tm, ke), vdL)};
+  };
+  const famRow = (label, key, dep) => {
+    const f = famPeak(fam(key));
+    return [label, fmtDuration(f.tm), round(f.ng, 1), dep];
+  };
+  renderTable(document.getElementById('nic-speed-table'),
+    [{label:'Family'}, {label:'Time to peak', num:true}, {label:'Peak ng/mL', num:true}, {label:'Dependence liability'}],
+    [famRow('Smoked', 'smoked', 'Highest. Arterial bolus in seconds, which is the single strongest predictor of how habit-forming a route is.'),
+     famRow('Vapour', 'vapour', 'High, and close to smoked for nicotine-salt devices. Lower for older freebase hardware.'),
+     famRow('Oral (pouch, snus)', 'oral', 'Moderate. No combustion and a slower rise, but the doses are large and the habit is continuous.'),
+     famRow('Replacement therapy', 'nrt', 'Lowest by design. Slow delivery is the point: enough nicotine to blunt withdrawal, too slow to reinforce.')]);
+}
+
+const NIC_TIPS =
+  '<div class="acc"><button class="acc-head" type="button" aria-expanded="false"><span class="ico" data-icon="clock"></span>' +
+  '<span>Why the first one of the day is the strongest</span><span class="ico chev" data-icon="chevron"></span></button>' +
+  '<div class="acc-body">Two things happen overnight. Nicotine itself is almost entirely gone — eight hours is four half-lives, which leaves about six per cent of it — and the receptors that were desensitised all day recover while you sleep. Nicotinic receptors upregulate in smokers and spend much of the day desensitised rather than active; a night of abstinence resensitises them.' +
+  '<p style="margin:10px 0 0">So the first cigarette lands on a resensitised system with nothing already occupying it, and every one after it lands on a system that is partly saturated and partly desensitised. That is why the first is the one people describe as actually doing something, and why the rest are mostly maintenance. This app does not model overnight resensitisation — the tolerance divisor is a single fixed number — so treat that as an explanation rather than as something the curve above knows about.</p></div></div>' +
+
+  '<div class="acc"><button class="acc-head" type="button" aria-expanded="false"><span class="ico" data-icon="chart"></span>' +
+  '<span>Rate matters more than amount</span><span class="ico chev" data-icon="chevron"></span></button>' +
+  '<div class="acc-body">A 21 mg patch puts more nicotine into you over a day than a pack of cigarettes does, and nobody has ever become addicted to a patch. The difference is entirely in the derivative. A cigarette produces an arterial spike that reaches the brain in ten to twenty seconds; a patch produces a plateau that takes hours to build.' +
+  '<p style="margin:10px 0 0">Fast rises are what reinforce behaviour, because the brain can associate them with the act that caused them. A slow rise cannot be attributed to anything in particular, so it blunts withdrawal without teaching you to repeat it. This is the entire design principle behind replacement therapy, and it is why the "time to peak" column in the reference table matters more than the "absorbed" one.</p></div></div>' +
+
+  '<div class="acc"><button class="acc-head" type="button" aria-expanded="false"><span class="ico" data-icon="alert"></span>' +
+  '<span>The 60 mg lethal dose is a myth — and nicotine poisoning is still real</span><span class="ico chev" data-icon="chevron"></span></button>' +
+  '<div class="acc-body">The figure of 60 mg, or 0.5–1 mg/kg, appears in toxicology references everywhere. Its source is a handful of nineteenth-century self-experiments that would not pass any modern standard, and it has been traced back and challenged in the literature: the actual lethal dose in adults is most likely in the region of 500 to 1000 mg. A smoker absorbs about 20 mg a day and survives it indefinitely, which by itself should have retired the 60 mg number decades ago.' +
+  '<p style="margin:10px 0 0">None of which makes concentrated nicotine safe. Children have died from swallowing e-liquid, and a small child is a fraction of an adult’s weight. Pouches left within reach, spilled refill liquid and swallowed gum are the real-world hazards, and they are hazards regardless of where the adult threshold sits. If a child has swallowed nicotine in any form, call poison control immediately rather than looking up a number.</p></div></div>' +
+
+  '<div class="acc"><button class="acc-head" type="button" aria-expanded="false"><span class="ico" data-icon="molecule"></span>' +
+  '<span>Cotinine: the molecule that tells on you</span><span class="ico chev" data-icon="chevron"></span></button>' +
+  '<div class="acc-body">About three quarters of nicotine is converted to cotinine, which is pharmacologically almost inert and has a half-life of roughly sixteen hours — eight times nicotine’s. That combination makes it the standard biomarker: nicotine is gone by morning, cotinine is not, so a test measures cotinine and a single value describes days of exposure rather than hours.' +
+  '<p style="margin:10px 0 0">The usual cut-point is around 10 ng/mL for distinguishing a user from a non-user, with established daily smokers sitting between roughly 200 and 400. The curve above is integrated forward from the nicotine curve using published conversion, half-life and volume figures, with no fitting — and the reason to trust it slightly more than the nicotine curve is that it reproduces that measured smoker band from constants that were not chosen to make it do so.</p></div></div>' +
+
+  '<div class="acc"><button class="acc-head" type="button" aria-expanded="false"><span class="ico" data-icon="lungs"></span>' +
+  '<span>What nicotine does, and what the smoke does</span><span class="ico chev" data-icon="chevron"></span></button>' +
+  '<div class="acc-body">Nicotine is the reason people smoke; it is not the reason smoking kills them. Lung cancer, COPD and most of the cardiovascular damage come from combustion products — tar, carbon monoxide, particulates, dozens of identified carcinogens — none of which nicotine produces on its own. That is why smokeless and vapour products are consistently assessed as substantially less harmful than cigarettes.' +
+  '<p style="margin:10px 0 0">Substantially less harmful is not harmless, and the distinction gets lost in both directions. Nicotine itself raises heart rate and blood pressure, constricts blood vessels, and there is good evidence it impairs adolescent brain development, which is the basis for age restrictions rather than a rhetorical flourish. It is also, by a distance, the most dependence-forming drug most people ever encounter. A product can be the better option for someone already smoking and a bad idea for someone who is not, and both of those are true at once.</p></div></div>';
+
+function initNicotine(){
+  const s = state.nic;
+  nicSetDraftFromProduct(s.draft.product || 'cig');
+
+  buildPills(document.getElementById('nic-clearance'), NICOTINE_CLEARANCE.map(c => ({key:c.key, label:c.label, sub:c.sub})), s.clearance,
+    k => { s.clearance = k; saveState(); renderNicotine(); });
+  buildPills(document.getElementById('nic-tol'), NICOTINE_TOLERANCE.map(t => ({key:t.key, label:t.label, sub:t.sub})), s.tol,
+    k => { s.tol = k; saveState(); renderNicotine(); });
+
+  const mg = document.getElementById('nic-mg'), when = document.getElementById('nic-when');
+  mg.value = s.draft.mg; when.value = s.draft.when;
+  mg.addEventListener('input', () => { s.draft.mg = Math.max(0, parseFloat(mg.value) || 0); saveState(); });
+  when.addEventListener('input', () => { s.draft.when = Math.max(0, parseFloat(when.value) || 0); saveState(); });
+
+  document.getElementById('nic-add').addEventListener('click', () => {
+    const v = Math.max(0, parseFloat(mg.value) || 0);
+    const w = Math.max(0, parseFloat(when.value) || 0);
+    if (v <= 0) return;
+    if (nicEditingId != null){
+      const d = s.doses.find(x => x.id === nicEditingId);
+      if (d){ d.mg = v; d.when = w; d.at = minutesAgoToStamp(w);
+              d.name = s.draft.name; d.icon = s.draft.icon; d.product = s.draft.product; }
+      nicExitEdit();
+    } else {
+      s.doses.push({id:s.nextId++, name:s.draft.name || 'Cigarette', icon:s.draft.icon || 'cig',
+                    product:s.draft.product || 'cig', mg:v, when:w, at:minutesAgoToStamp(w)});
+    }
+    saveState(); renderNicotine();
+  });
+  document.getElementById('nic-cancel').addEventListener('click', nicExitEdit);
+  document.getElementById('nic-clear').addEventListener('click', () => {
+    if (!s.doses.length) return;
+    s.doses = []; nicExitEdit(); saveState(); renderNicotine();
+  });
+  /* A pack spread across a waking day. Cotinine accumulation is invisible with
+     one cigarette and obvious with twenty, and typing twenty of them in is not
+     a reasonable thing to ask of anyone. */
+  document.getElementById('nic-day').addEventListener('click', () => {
+    s.doses = [];
+    /* Someone who gets through a pack has the tolerance of someone who gets
+       through a pack. Filling the day and leaving tolerance at "never" would
+       draw a curve nobody has ever had. */
+    s.tol = 'heavy';
+    buildPills(document.getElementById('nic-tol'), NICOTINE_TOLERANCE.map(t => ({key:t.key, label:t.label, sub:t.sub})), s.tol,
+      k => { s.tol = k; saveState(); renderNicotine(); });
+    const p = nicProduct('cig');
+    for (let i = 0; i < 20; i++){
+      const w = Math.round(45 * i + 10);                 // one every 45 min, last 10 min ago
+      s.doses.push({id:s.nextId++, name:p.label, icon:p.icon, product:p.key, mg:p.abs, when:w, at:minutesAgoToStamp(w)});
+    }
+    nicEditingId = null;
+    saveState(); renderNicotine();
+  });
+  document.getElementById('nic-list').addEventListener('click', ev => {
+    const btn = ev.target.closest('button[data-act]');
+    if (!btn) return;
+    const id = parseInt(btn.closest('.drink-row').dataset.id, 10);
+    if (btn.dataset.act === 'del'){
+      s.doses = s.doses.filter(d => d.id !== id);
+      if (nicEditingId === id) nicExitEdit();
+      saveState(); renderNicotine();
+    } else {
+      const d = s.doses.find(x => x.id === id);
+      if (!d) return;
+      nicEditingId = id;
+      s.draft.product = d.product; s.draft.mg = d.mg; s.draft.when = d.when; s.draft.name = d.name; s.draft.icon = d.icon;
+      nicSetDraftFromProduct(d.product);
+      mg.value = d.mg; when.value = d.when;
+      document.getElementById('nic-add-label').textContent = 'Save changes';
+      document.getElementById('nic-cancel').hidden = false;
+      document.getElementById('nic-editing').textContent = 'Editing "' + (d.name || '') + '"';
+    }
+  });
+
+  const w = bindNumber('nic-weight', v => { s.weightKg = readWeightKg(v); saveState(); renderNicotine(); });
+  w.value = round(kgToDisplay(s.weightKg), 1);
 }
 
 /* ---------------------------------------------------------------------------
@@ -5556,11 +6487,14 @@ const HOME_CARDS = [
   {view:'caffeine', accent:'caffeine', icon:'coffee', title:'Caffeine',
    body:'The counterexample: caffeine really is first-order, so it has a genuine half-life and the exponential model that is wrong for alcohol is right here. Unlimited doses, half-life modifiers that matter (smoking halves it, oral contraceptives double it), a plasma curve and an effects curve, and a sleep panel.',
    go:'Open the caffeine estimator'},
+  {view:'nic', accent:'nic', icon:'cig', title:'Nicotine',
+   body:'Eighteen products from cigarettes to patches, each with its own absorption rate fitted to a published time-to-peak, plus a cotinine curve integrated forward from the nicotine one on unfitted published constants — and a dependence panel that shows why a two-hour half-life is the whole problem.',
+   go:'Open the nicotine estimator'},
   {view:'laws', accent:'laws', icon:'scale', title:'Laws by state',
    body:'Where each substance stands in all 50 states and DC — legal age, possession, home cultivation, public use, and the impaired-driving standards this app estimates against. Delta-8 is flagged throughout as the least settled area, with a federal change landing in weeks.',
    go:'Open the state laws'},
   {view:'learn', accent:'learn', icon:'book', title:'Learn',
-   body:'Eighteen articles: zero-order ethanol kinetics, first-pass metabolism and 11-hydroxy-THC, the Hill equation, receptor downregulation, the exact implemented formulas, an itemised list of every constant I invented, and verified sources.',
+   body:'Twenty articles: zero-order ethanol kinetics, first-pass metabolism and 11-hydroxy-THC, the Hill equation, receptor downregulation, why nicotine\u2019s derivative matters more than its dose, a metabolite curve that checks its own arithmetic, the exact implemented formulas, an itemised list of every constant I invented, and verified sources.',
    go:'Read the articles'}
 ];
 function renderDashboard(){
@@ -6926,6 +7860,14 @@ function renderLawsBody(){
     'Unregulated as a substance for adults in every state — no age limit, no possession limit, no driving standard. The only meaningful rules are federal food-labelling ones, plus scattered state proposals on energy-drink sales to minors that have largely not become law. Bulk caffeine powder is the one product with a genuine safety history behind it.',
     ['No legal age', 'No possession limit', 'No impaired-driving standard']);
 
+  html += row('Nicotine & tobacco', lawChip('legal', 'Legal at 21'),
+    'The federal minimum age for every tobacco and nicotine product — cigarettes, cigars, vapes, pouches and replacement therapy sold outside a pharmacy — has been <strong>21 nationwide since December 2019</strong>, with no state exceptions. Flavoured cigarettes other than menthol have been federally prohibited since 2009; menthol has not. ' +
+    'Almost everything else is state and local: flavoured-vape restrictions, statewide flavoured-tobacco bans, indoor-smoking rules, where pouches may be sold, and excise taxes that differ by an order of magnitude between states. This app does not carry that state-by-state detail, so it is marked <em>verify</em> rather than guessed at.',
+    ['Legal age <b>21</b> (federal, all states)',
+     'Flavour and vape rules <b>vary by state and city</b>',
+     'No impaired-driving standard',
+     'State detail here: <b>verify</b>']);
+
   html += row('Impaired driving — THC', lawChip(thc.chip, thc.label), thc.text,
     ['Alcohol per se <b>' + bac.toFixed(2) + ' %</b>',
      'THC standard <b>' + (L.thc === 'zero' ? 'zero tolerance' : L.thc === 'impair' ? 'impairment-based' : L.thc === 'verify' ? 'verify' : L.thc.replace('perse:', '').replace('infer:', '') + ' ng/mL') + '</b>',
@@ -6965,6 +7907,7 @@ const RENDERERS = {
   d8:     renderD8,
   smoked: renderSmoked,
   caffeine: renderCaffeine,
+  nic:    renderNicotine,
   learn:  renderLearn,
   laws:   renderLaws
 };
@@ -7140,19 +8083,51 @@ function buildExport(){
       const items = caffeineDoseItems(st.doses, origin);
       const total = st.doses.reduce((a, d) => a + d.mg, 0);
       const nowConc = caffeineConcAt(items, origin, vdL, ke);
-      const bedMin = origin + clamp(st.bedHours, 0, 24) * 60;
+      const bedMin = origin + caffeineBedInMin();
       const bedConc = caffeineConcAt(items, bedMin, vdL, ke);
       const pct = caffeineIntensity(nowConc, st.tol);
       L.push('');
       L.push('Total today: ' + Math.round(total) + ' mg  (FDA cites 400 mg/day for healthy adults)');
       L.push('In blood now: ' + round(nowConc, 2) + ' mg/L \u2014 ' + Math.round(pct) + ' % \u2014 ' + intensityLabel(pct));
-      L.push('At bedtime in ' + fmtDuration(bedMin - origin) + ': ' + round(bedConc, 2) + ' mg/L');
+      L.push('At bedtime (' + fmtClock(caffeineBedAt()) + ', ' + fmtWhen(bedMin - origin) + '): ' + round(bedConc, 2) + ' mg/L');
       L.push('Modelled sleep disruption: ' + Math.round(hill(bedConc, CAFFEINE.SLEEP_EC50_MG_PER_L, CAFFEINE.SLEEP_HILL_N) * 100) + ' %');
+    }
+  } else if (currentView === 'nic'){
+    const st = state.nic;
+    const kg = clamp(st.weightKg, 30, 250);
+    const vdL = kg * NICOTINE.VD_L_PER_KG, vdCotL = kg * NICOTINE.COTININE_VD_L_PER_KG;
+    const hl = nicotineHalfLife(st.clearance), ke = Math.LN2 / hl;
+    L.push('SECTION: Nicotine');
+    L.push('Body: ' + round(kg, 1) + ' kg, half-life ' + hl + ' h (' + st.clearance + '), tolerance "' + st.tol +
+           '" (divisor ' + round(nicotineToleranceFactor(st.tol), 1) + ')');
+    L.push('');
+    if (!st.doses.length) L.push('Nothing entered.');
+    else {
+      L.push('Items:');
+      st.doses.slice().sort((a, b) => b.when - a.when).forEach(d =>
+        L.push('  \u00b7 ' + (d.name || d.product) + ' \u2014 ' + round(d.mg, 2) + ' mg absorbed, ' + d.when + ' min ago'));
+      const origin = st.doses.reduce((m, d) => Math.max(m, d.when), 0);
+      const items = nicotineDoseItems(st.doses, origin);
+      const total = st.doses.reduce((a, d) => a + d.mg, 0);
+      const nowNg = nicotineNgMl(nicotineAmountAt(items, origin, ke), vdL);
+      const pct = nicotineIntensity(nowNg, st.tol);
+      const cotEnd = clamp(Math.max(origin + 3600, 720), 720, 5760);
+      const cot = nicotineCotinineSeries(items, ke, cotEnd, vdCotL, 10);
+      const cotNow = cot.reduce((b, pt) => Math.abs(pt[0] - origin) < Math.abs(b[0] - origin) ? pt : b, cot[0])[1];
+      L.push('');
+      L.push('Absorbed today: ' + round(total, 2) + ' mg  (a pack of cigarettes is about 20 mg)');
+      L.push('In blood now: ' + round(nowNg, 1) + ' ng/mL \u2014 ' + Math.round(pct) + ' % \u2014 ' + intensityLabel(pct));
+      L.push('Cotinine now: ' + Math.round(cotNow) + ' ng/mL \u2014 ' + nicCotinineBand(cotNow));
+      L.push('Time to peak: ' + fmtDuration(nicotineTmaxMin(items, ke)) + ' from the first item');
+      L.push('');
+      L.push('Nicotine concentrations use an EFFECTIVE volume of distribution of ' + NICOTINE.VD_L_PER_KG + ' L/kg,');
+      L.push('fitted to measured venous peaks rather than taken from a textbook. The cotinine');
+      L.push('figure uses published constants only and is the more defensible of the two.');
     }
   } else {
     L.push('SECTION: ' + (currentView === 'learn' ? 'Learn' : 'Dashboard'));
     L.push('');
-    L.push('No estimate to export from this section. Open one of the five');
+    L.push('No estimate to export from this section. Open one of the six');
     L.push('estimators and export from there.');
   }
   L.push('');
@@ -7213,6 +8188,7 @@ function boot(){
   initD8();
   initSmoked();
   initCaffeine();
+  initNicotine();
   initLaws();
   initMaps();
   initConverter();
@@ -7307,12 +8283,12 @@ function boot(){
   });
 
   /* keyboard shortcuts — ignored while typing */
-  const VIEW_KEYS = ['home', 'alcohol', 'd9', 'd8', 'smoked', 'caffeine', 'learn', 'laws'];
+  const VIEW_KEYS = ['home', 'alcohol', 'd9', 'd8', 'smoked', 'caffeine', 'nic', 'learn', 'laws'];
   document.addEventListener('keydown', ev => {
     const t = ev.target;
     if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    if (ev.key >= '1' && ev.key <= '8'){ switchView(VIEW_KEYS[parseInt(ev.key, 10) - 1]); return; }
+    if (ev.key >= '1' && ev.key <= '9'){ switchView(VIEW_KEYS[parseInt(ev.key, 10) - 1]); return; }
     const k = ev.key.toLowerCase();
     if (k === 't') document.getElementById('btn-theme').click();
     else if (k === 'p'){ ev.preventDefault(); window.print(); }
