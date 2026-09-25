@@ -1515,6 +1515,12 @@ const CFG = {
        triangles under an 81,920-triangle near ring. Per-triangle, the
        far mesh is 6.5k triangles at 1024m and 162k at 5120m, which is
        what it should have been both times. */
+    /* Where a lit window stops being a light and becomes a pane of
+       glass. See MAT.lampWin: the emissive is an impostor for a lamp
+       that cannot carry at range, and an impostor that is still running
+       when you are standing in the room is just a yellow sticker. */
+    winGlowNear: 7,      // metres: no glow at all inside this
+    winGlowFar: 34,      // ... and full strength beyond this
     terrainChunk: 256,   // metres per near chunk
     terrainDetail: 4,    // metres per near triangle -- the grid's own cell
     terrainNear: 768,    // metres of near ground around the player
@@ -6547,8 +6553,44 @@ function buildMaterials(onStep){
      from the treeline. */
   MAT.lampWin = new THREE.MeshStandardMaterial({
     color:0x1b2124, roughness:0.10, metalness:0.05,
-    transparent:true, opacity:0.62,
-    emissive:new THREE.Color(0xffc98a), emissiveIntensity:0.85 });
+    transparent:true, opacity:0.34,
+    emissive:new THREE.Color(0xffc98a), emissiveIntensity:1.35 });
+  /* ---- THE GLOW IS A DISTANCE TRICK, SO IT ONLY WORKS AT DISTANCE --
+     A pane of glass does not emit light. The emissive term here is an
+     impostor for something real: at two hundred metres in a black
+     forest the lamp inside the room cannot carry, its PointLight is
+     long out of budget, and without the fake the town is invisible from
+     the treeline.
+
+     Up close the fake is the problem. Standing IN the room, an emissive
+     pane is a flat cream rectangle painted on the wall -- it swamps the
+     glass, you cannot see out, and it reads as a sticker rather than a
+     window. Reported, twice, and making the material transparent did
+     not fix it because transparency is not what was wrong: an emissive
+     term is ADDED after the blend, so 0.85 of warm cream sits on top of
+     whatever you can see through the glass, and in a dark room that is
+     everything.
+
+     So the glow fades out as you approach. Beyond farFade it is at full
+     strength and doing the job it exists for; inside nearFade it is
+     gone entirely and the window is plain glass with a lit room on one
+     side of it -- which is what a window actually is. In between it
+     crosses over, which is also roughly what happens in life as a
+     window stops being a light and starts being a pane.
+
+     One material, one shader patch: the fade is per fragment off the
+     view distance, so every window in the town gets it without cloning
+     a material per house. */
+  MAT.lampWin.onBeforeCompile = (sh)=>{
+    sh.uniforms.uWinNear = { value: CFG.QUALITY.winGlowNear };
+    sh.uniforms.uWinFar  = { value: CFG.QUALITY.winGlowFar };
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float uWinNear, uWinFar;`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        totalEmissiveRadiance *= smoothstep(uWinNear, uWinFar, length(vViewPosition));`);
+  };
+  MAT.lampWin.customProgramCacheKey = ()=> 'lampwin-distance-glow';
   MAT.lampOff = new THREE.MeshStandardMaterial({ color:0x1a1713, roughness:0.95 });
   MAT.rock = snowify(
     new THREE.MeshStandardMaterial({ color:0x8a8b85, roughness:0.96 }), 1.0);
