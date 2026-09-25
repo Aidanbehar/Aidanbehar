@@ -1840,6 +1840,8 @@ body.scrubbing .view.active{animation:none}
           <span class="unit">h</span>
         </div>
         <input type="range" id="caf-bed-range" min="0" max="18" step="0.5" value="8" aria-label="Hours until bedtime slider">
+        <p class="card-note" id="caf-bed-note" style="margin:8px 0 0" aria-live="polite"></p>
+        <button class="btn tiny" type="button" id="caf-bed-reset" style="margin-top:8px" hidden><span>Move it to <span id="caf-bed-reset-h">8</span>&nbsp;h from now</span></button>
       </div>
 
       <div class="gauge-wrap" id="caf-gauge"></div>
@@ -3539,18 +3541,11 @@ function syncElapsedInputs(){
     el.value = state[key].elapsed;
     if (rng && rng !== document.activeElement) rng.value = clamp(state[key].elapsed, +rng.min, +rng.max);
   });
-  syncBedInput();
 }
-/* Hours-until-bedtime is derived from the instant, so it counts down as the
-   evening arrives and as the scrub dot is dragged towards it. */
-function syncBedInput(){
-  const bn = document.getElementById('caf-bed'), br = document.getElementById('caf-bed-range');
-  if (!bn || bn === document.activeElement) return;
-  const h = Math.max(0, Math.round(caffeineBedInMin() / 30) / 2);
-  state.caf.bedHours = h;
-  bn.value = h;
-  if (br && br !== document.activeElement) br.value = clamp(h, +br.min, +br.max);
-}
+/* The field is a setter, not a readout. An earlier build rewrote it with the
+   live countdown, so typing 8 and then dragging the chart left it reading 2 —
+   a number the user never entered, changing under them. What you type stays;
+   the consequence is shown separately, next to it. */
 
 let saveTimer = null;
 function saveState(){
@@ -5305,7 +5300,6 @@ function renderCaffeineList(){
 
 function renderCaffeine(){
   syncClock();
-  syncBedInput();
   const s = state.caf;
   const weightKg = clamp(s.weightKg || 75, 30, 250);
   const vdL = weightKg * CAFFEINE.VD_L_PER_KG;
@@ -5365,7 +5359,10 @@ function renderCaffeine(){
   const bedInMin = caffeineBedInMin();
   const bedMin = nowMin + bedInMin;
   const bedPassed = bedInMin < 0;
-  const bedConc = caffeineConcAt(items, Math.max(0, bedMin), vdL, ke);
+  /* Before the first dose there is nothing to be circulating, and clamping to
+     t = 0 used to report the concentration at the origin instead of zero. */
+  const bedConc = bedMin < 0 ? 0 : caffeineConcAt(items, bedMin, vdL, ke);
+  syncBedNote(bedInMin);
   const sleepHit = hill(bedConc, CAFFEINE.SLEEP_EC50_MG_PER_L, CAFFEINE.SLEEP_HILL_N) * 100;
 
   renderGaugeWithLabel(gaugeEl, readEl, {
@@ -5600,10 +5597,14 @@ function initCaffeine(){
   w.value = round(kgToDisplay(s.weightKg), 1);
   const bed = bindPair('caf-bed', 'caf-bed-range', v => {
     s.bedHours = clamp(v || 0, 0, 24);
-    s.bedAt = Date.now() + s.bedHours * 3600000;   // the field sets the instant
+    s.bedAt = Date.now() + s.bedHours * 3600000;   // the field anchors the instant
     saveState(); renderCaffeine();
   });
   bed.n.value = s.bedHours; bed.r.value = clamp(s.bedHours, 0, 18);
+  document.getElementById('caf-bed-reset').addEventListener('click', () => {
+    s.bedAt = Date.now() + clamp(s.bedHours == null ? 8 : s.bedHours, 0, 24) * 3600000;
+    saveState(); renderCaffeine();
+  });
 }
 
 
@@ -7505,6 +7506,26 @@ function syncMapPopHeight(){
   const beside = window.matchMedia('(min-width:980px)').matches;
   pop.style.maxHeight = beside ? Math.max(240, Math.round(host.getBoundingClientRect().height)) + 'px' : '';
 }
+/* Says where the line actually is, in words, so the input never has to lie
+   about it. Offers to re-anchor only once bedtime is behind you, which is the
+   one case where retyping the same number would not fire a change event. */
+function syncBedNote(bedInMin){
+  const note = document.getElementById('caf-bed-note');
+  const btn = document.getElementById('caf-bed-reset');
+  if (!note) return;
+  const at = fmtClock(caffeineBedAt());
+  if (bedInMin >= 0){
+    note.innerHTML = 'The line on the charts sits at <strong>' + at + '</strong> — ' + fmtDuration(bedInMin) + ' from now.';
+  } else {
+    note.innerHTML = '<strong style="color:var(--warn)">' + at + ' has already passed</strong> (' +
+      fmtDuration(-bedInMin) + ' ago), so the line sits behind the marker.';
+  }
+  if (btn){
+    btn.hidden = bedInMin >= 0;
+    const h = document.getElementById('caf-bed-reset-h');
+    if (h) h.textContent = round(clamp(state.caf.bedHours == null ? 8 : state.caf.bedHours, 0, 24), 1);
+  }
+}
 const MAP_POP_HINT = {
   'mj-state':  'Pick a state for its legalisation history, market and use statistics.',
   'cbd-state': 'Pick a state for its CBD rules, product limits and any low-THC programme.',
@@ -8291,6 +8312,11 @@ function boot(){
   loadState();
   backfillStamps();
   migrateRMode();
+  /* A bedtime saved yesterday is not a bedtime. Coming back to the page with
+     the instant already behind us re-anchors it from the hours that were set,
+     rather than leaving a line stranded to the left of the first dose. */
+  if (state.caf && state.caf.bedAt && state.caf.bedAt <= Date.now())
+    state.caf.bedAt = Date.now() + clamp(state.caf.bedHours == null ? 8 : state.caf.bedHours, 0, 24) * 3600000;
   syncClock();
   /* No saved preference yet: follow the system rather than forcing dark. */
   if (!state.ui.themeChosen){
