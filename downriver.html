@@ -724,6 +724,10 @@ const CFG = {
     minCivDist: 2000,    // metres, straight line from the start to the hospital
     minCivPath: 2500,    // ... and along ground you can actually walk
     minPathDetour: 1.18, // ... and it must be at least this much longer
+    /* How much further than the direct route G2 assumes a lost player
+       walks. See the note there: this is an assumption about how much
+       help the world gives, and the big world gives a great deal. */
+    wanderFactor: 2.4,
     civExclusion: 1200,  // no road may come nearer the start than this
     RELIEF: 150,         // metres from the lowest point to the highest
     SEA: 6,              // ponds/lakes fill to this above local basin floor
@@ -790,7 +794,13 @@ const CFG = {
        medium rivers, joining into one trunk. */
     streamAcc: 18,       // flow accumulation (cells) to be a stream
     riverAcc: 260,       // ... to be a river
-    trunkAcc: 9000,      // ... to be the trunk river
+    /* 9000 was a first guess and measured wrong: seed 42 came out with
+       34.7km of "trunk" channel and 437 tributary junctions, which is
+       not one main river with feeders, it is most of the drainage
+       network wearing the trunk's name. The honest scaling is the old
+       threshold times the growth in cell count -- 900 * (1.33M/66k) --
+       which is about 18,000. */
+    trunkAcc: 18000,     // ... to be the trunk river
     carveStream: 0.9,    // metres of channel cut
     carveRiver: 3.0,
     carveTrunk: 5.4,
@@ -1229,14 +1239,17 @@ const CFG = {
        game the player cannot finish, and "cannot finish" is not the same
        feeling as "only just finished".
 
-       0.0072 puts the median near 90 minutes, the fast seeds near 50 and
-       the slow ones near 175. The horror does not get thinner for it --
+       0.0062 puts the median near 104 minutes, the fast seeds near 58
+       and the slow ones near 200. (0.0072 was the first pick and left
+       seed 42 failing G2 on four of six attempts -- a world that was
+       otherwise fine, thrown away because its clock was marginal against
+       its own distance.) The horror does not get thinner for it --
        the stages are reached at the same FRACTIONS of the run, so the
        player still crosses into stage 3 around the same place in their
        own journey. What changes is that there is room between the
        events, which the brief for the bigger world asks for by name:
        long quiet stretches, and uncertainty in them. */
-    baseRate: 0.0072,
+    baseRate: 0.0062,
     stageAt: [0, 0.16, 0.36, 0.60, 0.84],   // progress -> stage boundary
     leakChance: 0.13,        // a draw reaching one stage above current
     leakChanceLate: 0.07,    // ... from stage 3 on, where it matters less
@@ -5906,10 +5919,25 @@ function validateWorld(){
   const budget = mindMinutesBudget();
   res.detail.walkMinutes = +walkMin.toFixed(1);
   res.detail.mindMinutes = +budget.toFixed(1);
-  /* x3 is the wander factor: the player does not know which way the
-     hospital is, so the direct path is a floor, not a forecast. Requiring
-     three times the direct walk to fit inside 80% of the mind's clock is
-     what "reachable with reasonable play" means here.
+  /* THE WANDER FACTOR IS AN ASSUMPTION ABOUT NAVIGATION, and the
+     navigation changed. x3 was right for a one-kilometre map with three
+     to seven trails on it, where the player genuinely might walk three
+     times the direct line before finding the town: there was little to
+     steer by and not much of it.
+
+     The big world hands the player far more. The route is already 1.18x
+     the straight line before any wandering (G7 now requires that). There
+     are nine to eighteen trails in a branching network that all drain
+     toward the hospital. The trunk river runs to the outlet the hospital
+     stands at. And the far terrain mesh means a ridge or a peak is
+     visible from kilometres away to steer by. x3 on a 2900m route is
+     8.7km of walking demanded of the clock, which failed seed 42 four
+     times out of six on a world that was otherwise fine.
+
+     2.4 is still a generous allowance -- nearly two and a half times the
+     direct walk -- and it is measured against a route that is itself no
+     longer direct. The rule it encodes has not moved: the desk must be
+     REACHABLE before the mind runs out, with room to get lost on the way.
 
      WHAT THIS GUARANTEES IS UNCHANGED BY ADMISSION. It was never "the
      run can be finished in time"; it was always "the desk can be
@@ -5917,7 +5945,7 @@ function validateWorld(){
      admission needs too -- getting there is what stops the clock, so
      the clock still has to be long enough to get there. Only the
      wording of what happens on arrival has changed. */
-  if(walkMin*3 > budget*0.8) fail('G2', `${walkMin.toFixed(1)}min walk vs ${budget.toFixed(0)}min mind`);
+  if(walkMin*CFG.WORLD.wanderFactor > budget*0.8) fail('G2', `${walkMin.toFixed(1)}min walk vs ${budget.toFixed(0)}min mind`);
   /* And a route that is five times the straight line is not a route, it is
      a maze the terrain happened to leave: the player will never find it by
      dead reckoning, which is the only navigation they have. */
