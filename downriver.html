@@ -690,7 +690,11 @@ const CFG = {
        with an exception in it is a preference. */
     rimStep: 5.0,        // the biggest step allowed between cells in the
                          // outer band, which is the map's frame
-    hospitalInset: 70,   // metres the hospital keeps from the playable edge
+    /* The playable map, as a fraction of SIZE from the centre. Outside
+       it is the frame: the rim band, the outflow trenches, and the
+       ground nothing is ever placed on. See playHalf(). */
+    PLAY_FRAC: 0.45,
+    hospitalInset: 70,   // metres the hospital keeps INSIDE the playable edge
     minCivDist: 600,     // metres, straight line from the start to the hospital
     minCivPath: 720,     // ... and along ground you can actually walk
     civExclusion: 420,   // no road may come nearer the start than this
@@ -1323,6 +1327,26 @@ const CFG = {
   QUALITY: {
     texSize: 512,
     macroSize: 2048,     // the baked whole-world ground map, texels per side
+    /* ---- HOW THE GROUND IS DRAWN AT FIVE KILOMETRES ----------------
+       See Terra. The near ground is a ring of chunks at the resolution
+       the heightfield holds; the far ground is one coarse mesh of the
+       whole world behind them.
+
+       terrainNear has to reach past anything the fog lets you resolve,
+       or the seam onto the far mesh is visible. At the clear-day fog
+       density a surface 700m out is already better than 99.9% fogged,
+       so 768 is comfortable.
+
+       terrainFarSegs is the whole world in one mesh: at 5120m and 320
+       segments that is a 16m triangle and 205k of them, which is what
+       the ENTIRE terrain used to cost at 1024m. It buys every mountain
+       in the world being visible from every ridge. */
+    terrainChunk: 256,   // metres per near chunk
+    terrainDetail: 4,    // metres per near triangle -- the grid's own cell
+    terrainNear: 768,    // metres of near ground around the player
+    terrainFarSegs: 320, // segments across the whole world, for the far mesh
+    terrainFarDrop: 1.2, // metres the far mesh sits below the true surface
+    terrainCache: 96,    // chunks kept after you walk away from them
     /* ---- WHAT THE SHADOWS COST -------------------------------------
        Two shadow-casting lights, each re-rendering the WHOLE scene into
        a depth map every frame, is the single most expensive thing this
@@ -2811,6 +2835,27 @@ const Wld = {
 
 /* ---- grid <-> world helpers. One place, because getting these subtly
    wrong is the classic way to spend an evening. ---- */
+/* ---- WHERE THE PLAYABLE MAP ENDS -----------------------------------
+   Every system that asks "is this too near the edge of the world?" has
+   to get the same answer, and for a long time two of them did not.
+
+   placeHospital kept the hospital inside `half - hospitalInset`, a flat
+   70m. placeStart measured how much room a bearing had against
+   `Wld.size*0.45`. At the old 1024m map those are 442m and 461m, so the
+   hospital was always inside the zone the start search would look in and
+   the disagreement never showed. They diverge as the map grows, because
+   one is a constant and the other is a fraction: at 3072m the hospital
+   is allowed out to 1466m while the start search stops at 1382m. A
+   hospital placed in that 84m band makes every bearing measure ZERO room
+   and placeStart returns "no legal start" -- on every attempt, on every
+   seed. Measured: 1024m and 2048m generated fine; 3072m and 4096m failed
+   G0 fifteen attempts out of fifteen, on terrain that was 96% walkable
+   with under 3% cliff. The world was not too steep. It was unreachable
+   by arithmetic.
+
+   So there is one number now. playHalf() is the edge of the playable
+   map, and everything inside the generator measures against it. */
+function playHalf(){ return Wld.size * CFG.WORLD.PLAY_FRAC; }
 function gxOf(x){ return (x + Wld.size*0.5) / Wld.cell; }
 function gzOf(z){ return (z + Wld.size*0.5) / Wld.cell; }
 function wxOf(gx){ return gx*Wld.cell - Wld.size*0.5; }
@@ -4072,11 +4117,39 @@ function cellWalkCost(i){
    ENTERING cell i, or Infinity. The heuristic is straight-line distance
    times the cheapest possible per-cell cost, which keeps it admissible so
    the path it returns really is the cheapest one. */
-function astar(startI, goalI, cost, maxExpand=260000){
+/* ---- A*'s SCRATCH, KEPT RATHER THAN REMADE -------------------------
+   Three arrays the size of the grid, allocated on every single call. At
+   the old 66k-cell map that was 0.6MB a call and nobody noticed. The
+   world is 25 times that now and there are a dozen calls per generation
+   attempt, each of which would allocate and throw away 15MB: the garbage
+   collector, not the search, would have been the cost of routing.
+
+   They are cleared rather than reallocated. `fill` over a typed array is
+   memset-fast and does not touch the allocator. */
+const _AS = { n2: 0, g: null, came: null, closed: null };
+function astarScratch(n2){
+  if(_AS.n2 !== n2){
+    _AS.n2 = n2;
+    _AS.g = new Float32Array(n2);
+    _AS.came = new Int32Array(n2);
+    _AS.closed = new Uint8Array(n2);
+  }
+  _AS.g.fill(Infinity); _AS.came.fill(-1); _AS.closed.fill(0);
+  return _AS;
+}
+/* HOW HARD THE SEARCH IS ALLOWED TO TRY, as a share of the grid rather
+   than a number from when the grid was 66k cells. A cap of 260,000 on a
+   1.6-million-cell world is a search that gives up a sixth of the way
+   across the map, and it does it by returning null -- which reads as
+   "there is no route" and fails the seed. */
+function astarBudget(mul = 4){
+  return Math.max(260000, Math.round(Wld.N*Wld.N*mul));
+}
+function astar(startI, goalI, cost, maxExpand){
   const N = Wld.N, n2 = N*N;
-  const gScore = new Float32Array(n2).fill(Infinity);
-  const came = new Int32Array(n2).fill(-1);
-  const closed = new Uint8Array(n2);
+  if(maxExpand === undefined) maxExpand = astarBudget(4);
+  const S = astarScratch(n2);
+  const gScore = S.g, came = S.came, closed = S.closed;
   const gx = goalI % N, gz = (goalI/N)|0;
   const h = (i)=>{ const x=i%N, z=(i/N)|0; return Math.hypot(x-gx, z-gz); };
   const open = new MinHeap();
@@ -4193,9 +4266,11 @@ function placeHospital(){
            and the player's arrival, in the band where the outflow
            trenches are cut. */
         {
-          const inset = CFG.WORLD.hospitalInset;
-          const half = Wld.size*0.5;
-          if(Math.abs(wxOf(ix)) > half - inset || Math.abs(wzOf(iz)) > half - inset) continue;
+          /* The PLAYABLE half, not the geometric one -- see playHalf().
+             Measuring this against size*0.5 put the hospital outside the
+             zone placeStart searches and failed every large seed. */
+          const lim = playHalf() - CFG.WORLD.hospitalInset;
+          if(Math.abs(wxOf(ix)) > lim || Math.abs(wzOf(iz)) > lim) continue;
         }
         if(Wld.WLEV[i] > Wld.H[i]) continue;                 // not in the river
         let maxS = 0;
@@ -4387,7 +4462,11 @@ function genRoutes(){
       head = i;
     }
     if(head < 0) continue;
-    const path = astar(head, hos.i, trailCost, 160000);
+    /* A share of the grid, not a constant from the small map: a trail
+       that runs most of the way across a 5km world expands far more than
+       160,000 cells, and the cap returning null reads as "no trail" --
+       so the big world would have quietly had almost none. */
+    const path = astar(head, hos.i, trailCost, astarBudget(2.5));
     if(!path || path.length < 8) continue;
     // wornness from network distance to the hospital, walked from the end
     let dist = 0;
@@ -5321,7 +5400,7 @@ function startClearRadius(relax = 0){
 function placeStart(relax = 0){
   const N = Wld.N;
   const hos = Wld.hospital;
-  const LIM = Wld.size*0.45;
+  const LIM = playHalf();
   // straight inland from the hospital, then the seed's bearing off that
   const inland = Math.atan2(-hos.z, -hos.x);
   const MIN = CFG.WORLD.minCivDist;
@@ -5777,6 +5856,9 @@ function generateWorld(onProgress){
      let go of it here, before the arrays underneath it change. */
   if(typeof CollisionView !== 'undefined') CollisionView.reset();
   if(typeof CreatureView !== 'undefined') CreatureView.reset();
+  /* The ground chunks belong to the world being replaced, and every one
+     of them holds a copy of its heights. */
+  if(typeof Terra !== 'undefined') Terra.reset();
   const t0 = performance.now();
   let attempt = 0, result = null;
   const log = [];
@@ -6134,60 +6216,222 @@ function bakeGroundMacro(size){
    the triangles, so lighting matches the surface the physics uses even
    where the mesh is coarser than the data.
    ------------------------------------------------------------------- */
-function buildTerrainMesh(){
-  const SEG = CFG.WORLD.MESH, SZ = Wld.size;
-  const geo = new THREE.PlaneGeometry(SZ, SZ, SEG, SEG);
-  geo.rotateX(-Math.PI/2);
-  const pos = geo.attributes.position;
-  const nrm = new Float32Array(pos.count*3);
+/* ---------------------------------------------------------------------
+   TERRAIN GEOMETRY FOR A WORLD YOU CANNOT DRAW ALL OF
+
+   The terrain used to be one PlaneGeometry over the whole map: 320
+   segments across 1024m, so a 3.2m triangle, 205k of them, in a single
+   draw call with nothing to cull. That is a perfectly good way to draw a
+   one-kilometre world and an impossible way to draw a five-kilometre
+   one -- the same triangle size over 5120m is 1600 segments, 5.1 MILLION
+   triangles, all of them submitted every frame including the 95% of them
+   behind the player.
+
+   So the ground is built in two parts.
+
+   THE NEAR GROUND is a ring of chunks around the player, each at the
+   resolution the heightfield actually holds, built when the player first
+   comes near them and cached afterwards. Crossing a chunk boundary costs
+   one row of chunks, not a rebuild of everything. Each chunk is its own
+   mesh, so the frustum culls them for free -- which is the other half of
+   the win, because half the ring is always behind you.
+
+   THE FAR GROUND is one low-resolution mesh of the ENTIRE world, built
+   once. It is what makes a mountain twelve hundred metres away a
+   mountain you can see and walk toward, and it is what stops the player
+   ever seeing the edge of the world. It sits slightly below the true
+   surface so the near chunks always win where they overlap; beyond them
+   it is the only thing there, and a metre of droop at that range is not
+   a thing anyone can see.
+
+   Both sample the same heightAt() the player's feet do, so what you walk
+   on and what you see still agree -- which was true of the old single
+   mesh and is the one property this must not lose.
+   ------------------------------------------------------------------- */
+function terrainChunkGeo(cx, cz, chunk, segs){
+  const SZ = Wld.size;
+  const x0 = cx*chunk, z0 = cz*chunk, step = chunk/segs;
+  const vw = segs+1, count = vw*vw;
+  const pos = new Float32Array(count*3);
+  const nrm = new Float32Array(count*3);
+  const uv  = new Float32Array(count*2);
+  const snowA = new Float32Array(count*2);
   const n = new THREE.Vector3();
-  for(let i=0;i<pos.count;i++){
-    const x = pos.getX(i), z = pos.getZ(i);
-    pos.setY(i, heightAt(x, z));
+  const win = P.winter && Wld.SNOW;
+  const powder = Wld.powderWorst || 1;
+  for(let j=0;j<vw;j++) for(let i=0;i<vw;i++){
+    const k = j*vw+i;
+    const x = x0 + i*step, z = z0 + j*step;
+    pos[k*3] = x; pos[k*3+1] = heightAt(x, z); pos[k*3+2] = z;
     normalAt(x, z, n);
-    nrm[i*3] = n.x; nrm[i*3+1] = n.y; nrm[i*3+2] = n.z;
-  }
-  pos.needsUpdate = true;
-  geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
-
-  /* ---- HOW MUCH SNOW LIES HERE -------------------------------------
-     Computed per vertex on the CPU, once, because the answer never
-     changes and the three things it depends on are all already in hand.
-     Snow is not a coat of paint over the world: it LIES, which means it
-     collects where it can and slides off where it cannot.
-
-       flat ground keeps it, steep ground sheds it — the single biggest
-         thing that makes snow read as snow rather than as white paint,
-         because it is what puts the rock back into a snowy hillside
-       height gains it, valley floors lose it, with the line lower the
-         harder the winter is
-       and it is broken up by the same noise the ground is, so a slope
-         has drifts and bare patches instead of one flat tone
-
-     On a summer seed every one of these is zero and the shader branch
-     costs nothing. */
-  /* THE COVER COMES FROM THE DEPTH FIELD, not from a second opinion.
-     The first version worked this out again here, from altitude and
-     slope, and gated it on a snow LINE — so a winter valley floor was
-     bare ground with a white band somewhere up the hill, which is not
-     what a winter forest looks like. It is white from the water's edge
-     up, and the only bare ground is what is too steep to hold it.
-
-     Two channels now: how much cover (x), and how deep (y), both read
-     from the one field the physics also reads, so what the player sees
-     and what the player wades through cannot disagree. */
-  const snowA = new Float32Array(pos.count*2);
-  if(P.winter && Wld.SNOW){
-    for(let i=0;i<pos.count;i++){
-      const d = snowDepthAt(pos.getX(i), pos.getZ(i));
-      // a couple of centimetres already covers the ground completely
-      snowA[i*2]   = clamp(d/0.035, 0, 1);
-      snowA[i*2+1] = clamp(d/(Wld.powderWorst || 1), 0, 1);
+    nrm[k*3] = n.x; nrm[k*3+1] = n.y; nrm[k*3+2] = n.z;
+    /* The macro ground bake is one texture across the WHOLE world, so a
+       chunk's uv is its place in the world and not its place in itself.
+       PlaneGeometry rotated -90 about x puts v the other way up, which
+       is why this is 0.5 - z/SZ and not 0.5 + z/SZ. */
+    uv[k*2] = 0.5 + x/SZ; uv[k*2+1] = 0.5 - z/SZ;
+    if(win){
+      const d = snowDepthAt(x, z);
+      snowA[k*2] = clamp(d/0.035, 0, 1);
+      snowA[k*2+1] = clamp(d/powder, 0, 1);
     }
   }
-  geo.setAttribute('aSnow', new THREE.BufferAttribute(snowA, 2));
-  geo.computeBoundingSphere();
+  const idx = (count > 65535) ? new Uint32Array(segs*segs*6) : new Uint16Array(segs*segs*6);
+  let t = 0;
+  for(let j=0;j<segs;j++) for(let i=0;i<segs;i++){
+    const a = j*vw+i, b = a+1, c = a+vw, d = c+1;
+    idx[t++]=a; idx[t++]=c; idx[t++]=b;
+    idx[t++]=b; idx[t++]=c; idx[t++]=d;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('aSnow', new THREE.BufferAttribute(snowA, 2));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  g.computeBoundingSphere();
+  return g;
+}
 
+const Terra = {
+  chunk: 0, segs: 0, ring: 0, group: null, far: null,
+  cache: new Map(), live: new Map(), lastCx: 1e9, lastCz: 1e9,
+  built: 0, evicted: 0,
+
+  reset(){
+    for(const m of this.cache.values()){ if(m.parent) m.parent.remove(m); m.geometry.dispose(); }
+    this.cache.clear(); this.live.clear();
+    this.lastCx = this.lastCz = 1e9;
+    this.built = this.evicted = 0;
+    if(this.far){ scene.remove(this.far); this.far.geometry.dispose(); this.far = null; }
+    if(this.group){ scene.remove(this.group); this.group = null; }
+  },
+
+  build(){
+    const Q = CFG.QUALITY;
+    this.reset();
+    this.chunk = Q.terrainChunk;
+    this.segs  = Math.max(4, Math.round(this.chunk / Q.terrainDetail));
+    /* Far enough that the ring's edge is well past anything the fog
+       lets you resolve, so the seam onto the far mesh is never a thing
+       you can see. */
+    this.ring = Math.ceil(Q.terrainNear / this.chunk);
+    this.group = new THREE.Group();
+    this.group.name = 'terrain';
+    scene.add(this.group);
+
+    /* ---- the whole world, coarse, once ---------------------------- */
+    const SZ = Wld.size, fs = Q.terrainFarSegs;
+    const farGeo = (()=>{
+      const step = SZ/fs, vw = fs+1, count = vw*vw;
+      const pos = new Float32Array(count*3), nrm = new Float32Array(count*3),
+            uv = new Float32Array(count*2), sn = new Float32Array(count*2);
+      const n = new THREE.Vector3();
+      const win = P.winter && Wld.SNOW, powder = Wld.powderWorst || 1;
+      for(let j=0;j<vw;j++) for(let i=0;i<vw;i++){
+        const k=j*vw+i, x=-SZ*0.5+i*step, z=-SZ*0.5+j*step;
+        pos[k*3]=x; pos[k*3+1]=heightAt(x,z)-Q.terrainFarDrop; pos[k*3+2]=z;
+        normalAt(x,z,n); nrm[k*3]=n.x; nrm[k*3+1]=n.y; nrm[k*3+2]=n.z;
+        uv[k*2]=0.5+x/SZ; uv[k*2+1]=0.5-z/SZ;
+        if(win){ const d=snowDepthAt(x,z);
+          sn[k*2]=clamp(d/0.035,0,1); sn[k*2+1]=clamp(d/powder,0,1); }
+      }
+      const idx = new Uint32Array(fs*fs*6); let t=0;
+      for(let j=0;j<fs;j++) for(let i=0;i<fs;i++){
+        const a=j*vw+i, b=a+1, c=a+vw, d=c+1;
+        idx[t++]=a; idx[t++]=c; idx[t++]=b; idx[t++]=b; idx[t++]=c; idx[t++]=d;
+      }
+      const G = new THREE.BufferGeometry();
+      G.setAttribute('position', new THREE.BufferAttribute(pos,3));
+      G.setAttribute('normal', new THREE.BufferAttribute(nrm,3));
+      G.setAttribute('uv', new THREE.BufferAttribute(uv,2));
+      G.setAttribute('aSnow', new THREE.BufferAttribute(sn,2));
+      G.setIndex(new THREE.BufferAttribute(idx,1));
+      G.computeBoundingSphere();
+      return G;
+    })();
+    this.far = new THREE.Mesh(farGeo, MAT.terrain);
+    this.far.receiveShadow = false;   // nothing at that range casts into it
+    this.far.castShadow = false;
+    this.far.name = 'terrain-far';
+    this.far.renderOrder = -1;
+    scene.add(this.far);
+    Wld.stats.terrainFarTris = fs*fs*2;
+    this.update(Player.pos.x, Player.pos.z, true);
+  },
+
+  chunkAt(cx, cz){
+    const key = cx + ',' + cz;
+    let m = this.cache.get(key);
+    if(m){ m.userData.used = G.t; return m; }
+    m = new THREE.Mesh(terrainChunkGeo(cx, cz, this.chunk, this.segs), MAT.terrain);
+    m.receiveShadow = true; m.castShadow = false;
+    m.name = 'terrain-chunk';
+    m.userData.used = G.t;
+    this.cache.set(key, m);
+    this.built++;
+    return m;
+  },
+
+  update(px, pz, force){
+    if(!this.group) return;
+    const C = this.chunk;
+    const cx = Math.floor(px/C), cz = Math.floor(pz/C);
+    if(!force && cx === this.lastCx && cz === this.lastCz) return;
+    this.lastCx = cx; this.lastCz = cz;
+    const R = this.ring, half = Wld.size*0.5;
+    const want = new Map();
+    for(let j=-R; j<=R; j++) for(let i=-R; i<=R; i++){
+      const ax = cx+i, az = cz+j;
+      if((ax+1)*C < -half || ax*C > half || (az+1)*C < -half || az*C > half) continue;
+      want.set(ax+','+az, [ax, az]);
+    }
+    for(const [key, m] of this.live){
+      if(!want.has(key)){ this.group.remove(m); this.live.delete(key); }
+    }
+    for(const [key, [ax, az]] of want){
+      if(this.live.has(key)) continue;
+      const m = this.chunkAt(ax, az);
+      this.group.add(m);
+      this.live.set(key, m);
+    }
+    /* Cached chunks are kept so walking back is free, but not forever:
+       a fully explored five-kilometre world is four hundred of them. */
+    const cap = CFG.QUALITY.terrainCache;
+    if(this.cache.size > cap){
+      const rows = [...this.cache.entries()]
+        .filter(([k])=> !this.live.has(k))
+        .sort((a,b)=> a[1].userData.used - b[1].userData.used);
+      for(const [k, m] of rows){
+        if(this.cache.size <= cap) break;
+        m.geometry.dispose(); this.cache.delete(k); this.evicted++;
+      }
+    }
+    Wld.stats.terrainLive = this.live.size;
+    Wld.stats.terrainCached = this.cache.size;
+  },
+};
+
+function buildTerrainMesh(){
+  /* The material is built here, once, and every chunk shares it -- which
+     matters more than it looks: the material is part of a shader
+     program's cache key, so one material is one program however many
+     chunks there are. */
+  /* ---- HOW MUCH SNOW LIES HERE -------------------------------------
+     Worked out per vertex on the CPU, in terrainChunkGeo, because the
+     answer never changes and the things it depends on are already in
+     hand. Snow is not a coat of paint over the world: it LIES, which
+     means it collects where it can and slides off where it cannot.
+
+       flat ground keeps it, steep ground sheds it -- the single biggest
+         thing that makes snow read as snow rather than as white paint
+       height gains it, valley floors lose it
+       and it is broken up by the same noise the ground is
+
+     Two channels: how much cover (x), and how deep (y), both read from
+     the one field the physics also reads, so what the player sees and
+     what the player wades through cannot disagree. On a summer seed
+     both are zero and the shader branch costs nothing. */
   const macro = TexLib.tex(bakeGroundMacro(CFG.QUALITY.macroSize), { srgb:true, repeat:[1,1], aniso:16 });
   macro.wrapS = macro.wrapT = THREE.ClampToEdgeWrapping;
   const m = new THREE.MeshStandardMaterial({
@@ -6262,13 +6506,13 @@ function buildTerrainMesh(){
   m.customProgramCacheKey = ()=> 'terrain-detail-snow';
   MAT.terrain = m;
 
-  const mesh = new THREE.Mesh(geo, m);
-  mesh.receiveShadow = true;
-  mesh.castShadow = false;
-  mesh.name = 'terrain';
-  scene.add(mesh);
-  World.terrain = mesh;
-  return mesh;
+  /* And now the ground itself: a ring of chunks around the player and
+     one coarse mesh of the whole world behind them. */
+  Terra.build();
+  /* World.terrain is what the rest of the file reaches for when it wants
+     "the ground" as an object -- the chunk group is that now. */
+  World.terrain = Terra.group;
+  return Terra.group;
 }
 
 /* ---------------------------------------------------------------------
@@ -9790,7 +10034,7 @@ const Fauna = {
      well away from the town, and not in the player's lap. */
   findSpot(rng, awayFrom, minD, maxD){
     const F = CFG.FAUNA;
-    const LIM = Wld.size*0.45;
+    const LIM = playHalf();
     for(let tries = 0; tries < 200; tries++){
       const a = rng()*TAU, d = minD + rng()*(maxD - minD);
       const x = awayFrom.x + Math.cos(a)*d, z = awayFrom.z + Math.sin(a)*d;
@@ -10047,7 +10291,7 @@ const Fauna = {
               const a = away + r.range(-0.85, 0.85);
               const dd = r.range(F.fleeClear*0.9, F.fleeClear*1.5);
               const fx = b.x + Math.sin(a)*dd, fz = b.z + Math.cos(a)*dd;
-              const LIM = Wld.size*0.45;
+              const LIM = playHalf();
               if(Math.abs(fx) > LIM || Math.abs(fz) > LIM) continue;
               if(slopeAt(fx, fz) > CFG.HAZARD.slipSlope) continue;
               if(waterDepthAt(fx, fz) > 0.25) continue;
@@ -15021,8 +15265,8 @@ function buildEventLibrary(){
       Wld.falseMap = Wld.falseMap || [];
       Wld.falseMap.push({
         kind: Math.random()<0.5 ? 'trail' : 'building',
-        x: clamp(Player.pos.x + Math.cos(a)*d, -Wld.size*0.45, Wld.size*0.45),
-        z: clamp(Player.pos.z + Math.sin(a)*d, -Wld.size*0.45, Wld.size*0.45),
+        x: clamp(Player.pos.x + Math.cos(a)*d, -playHalf(), playHalf()),
+        z: clamp(Player.pos.z + Math.sin(a)*d, -playHalf(), playHalf()),
         until: G.t + lerp(120, 900, I()),
         ang: Math.random()*TAU,
       });
@@ -17803,6 +18047,10 @@ function animate(){
   Mind.applyPost();
   UI.update(dt);
   adaptResolution(dt, DEV.fps);
+  /* The ground follows the player. Cheap: it returns immediately unless
+     the player has crossed into a different chunk, and when they have it
+     builds one row of them rather than a world. */
+  Terra.update(Player.pos.x, Player.pos.z);
   updateShadowBudget(dt);
   composer.render();
 }
@@ -18001,7 +18249,7 @@ window.DR = {
   slopeAt, normalAt, cellHazard, cellWalkCost, snowDepthAt, snowDrag,
   snowLiftAt, groundTopAt, snowSinkAt,
   generateWorld, rollPersonality, hashString, rngFor, astar, pathMetres,
-  buildWaterMesh, buildTerrainMesh, buildAllStructures, validateWorld, TOWN,
+  buildWaterMesh, buildTerrainMesh, buildAllStructures, validateWorld, TOWN, Terra, playHalf,
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
   admit, townDepth, checkArrival, updateShadowBudget, ShadowBudget,
