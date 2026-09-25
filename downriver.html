@@ -792,15 +792,49 @@ const CFG = {
        which is what makes a drainage network read as a network: many
        headwater creeks, joining into streams, joining into several
        medium rivers, joining into one trunk. */
+    /* ---- WHICH THRESHOLDS SCALE WITH THE MAP AND WHICH DO NOT ----
+       This is the distinction that cost two wrong guesses, so it is
+       written down. These are all counts of upstream CELLS, and at a
+       fixed cell size a cell count IS a catchment area. So:
+
+       A threshold that says HOW BIG A WATERCOURSE PHYSICALLY IS must
+       not scale. Water that is fast enough to drown you, wide enough to
+       hear, too fast to freeze, big enough to be called a river when
+       the player drinks from it -- all of those are properties of
+       discharge, discharge follows catchment area, and a given area is
+       a given number of cells whatever the map's total is. fastAcc,
+       bigRiverAcc, creekAcc, smallRiverAcc, freezeStillAcc,
+       freezeFastAcc, springAccMin, waterAcc and pondCatchment are all
+       of this kind and are all left alone.
+
+       A threshold that says WHICH WATERCOURSE IS THE IMPORTANT ONE ON
+       THIS MAP is the opposite: it is about hierarchy, not size, and it
+       has to move with the map or it stops meaning anything. On a map
+       with twenty times the catchment, the old trunkAcc was met by
+       ordinary creeks.
+
+       I got this wrong twice. 900 -> 9000 was a guess. 9000 -> 18000
+       was "scale by cell count", which preserves the FRACTION of the
+       map (1.36% both times) and therefore preserved exactly the thing
+       it was meant to fix. So it was measured instead, by sweeping the
+       threshold and counting STEMS -- qualifying cells with no
+       qualifying cell draining into them, which is the number of
+       separate trunk branches:
+
+            18,000  29.3km  22 stems      120,000   6.3km   2 stems
+            40,000  16.5km  10 stems      200,000   6.3km   1 stem
+            80,000  10.1km   5 stems      320,000   4.1km   1 stem
+
+       200,000 is one trunk river 6.3km long on a map whose diagonal is
+       6.5km: the main stem, end to end. 320,000 is also one stem but
+       cuts 2km off its head, so the upper river stops being the trunk
+       halfway down the map. */
     streamAcc: 18,       // flow accumulation (cells) to be a stream
-    riverAcc: 260,       // ... to be a river
-    /* 9000 was a first guess and measured wrong: seed 42 came out with
-       34.7km of "trunk" channel and 437 tributary junctions, which is
-       not one main river with feeders, it is most of the drainage
-       network wearing the trunk's name. The honest scaling is the old
-       threshold times the growth in cell count -- 900 * (1.33M/66k) --
-       which is about 18,000. */
-    trunkAcc: 18000,     // ... to be the trunk river
+    /* And the middle tier with it -- at 12,000 a seed gets roughly
+       thirty medium rivers feeding the one trunk, which is the
+       "tributaries joining other tributaries" shape. */
+    riverAcc: 12000,     // ... to be a river
+    trunkAcc: 200000,    // ... to be the trunk river (measured; see above)
     carveStream: 0.9,    // metres of channel cut
     carveRiver: 3.0,
     carveTrunk: 5.4,
