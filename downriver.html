@@ -1562,7 +1562,19 @@ const CFG = {
   COMFORT: { level: 1.0 },
 
   DEBUG: { freezeClock:false, freezeMind:false, showPhantoms:false, logRolls:true,
-           noFog:false, forceClear:false, forceStage:-1 },
+           noFog:false, forceClear:false, forceStage:-1,
+           /* ---- WALKING THE BIG WORLD IN LESS THAN AN HOUR ---------
+              A multiplier on foot speed, for crossing four and a half
+              kilometres while testing something at the other end of it.
+              It multiplies BOTH walk and sprint, and nothing else: the
+              survival rates, the mind's clock and the creatures are all
+              untouched, so a run at 8x is not a shorter run -- it is the
+              same run with the walking taken out. That is what makes it
+              useful for finding things and useless for judging pace.
+              1 in normal play, and the panel says so in red when it is
+              not, because a fast player is the single easiest way to
+              misread every other number on the panel. */
+           speedMult: 1 },
 };
 
 /* The single mutable game state object. Everything reads the clock and the
@@ -12317,6 +12329,9 @@ function updatePlayer(dt){
   const wantSprint = (Keys.ShiftLeft || Keys.ShiftRight) && wants && p.stamina > 1 && !p.swimming;
   p.sprinting = wantSprint && p.stamina > C.staminaFloor*0.35;
   let speed = p.sprinting ? C.sprint : C.walk;
+  /* The dev dial, applied before everything that makes you slower, so
+     wading, snow and weakness all still cost what they cost. */
+  if(CFG.DEBUG.speedMult !== 1) speed *= CFG.DEBUG.speedMult;
   speed *= Survival.speedFactor();
   const depth = waterDepthAt(p.pos.x, p.pos.z);
   p.inWater = depth;
@@ -16934,6 +16949,42 @@ const DEV = (()=>{
     button(g2, 'give compass',()=>{ Gear.hasCompass = true; });
     button(g2, 'give map',   ()=>{ Gear.hasMap = true; Gear.mapPieces = 4; });
 
+    /* ---- HOW FAST YOU WALK ------------------------------------------
+       Crossing four and a half kilometres to check something at the far
+       end of it is a quarter of an hour of holding W. This multiplies
+       foot speed and nothing else -- the survival rates, the mind's
+       clock, the weather and the creatures all run at their own pace --
+       so a run at 8x is the same run with the walking taken out, which
+       is what makes it good for reaching things and useless for judging
+       how a journey feels. */
+    const sSpd = section('walking speed  (dev only)');
+    const sSpeed = slider(sSpd, 'speed multiplier', 1, 16, 0.5,
+      ()=>CFG.DEBUG.speedMult, v=>{ CFG.DEBUG.speedMult = v; });
+    const gSp = el('div','grid three'); sSpd.appendChild(gSp);
+    const setSpeed = (m)=>{ CFG.DEBUG.speedMult = m; sSpeed.sync(); };
+    button(gSp, 'normal  1x', ()=> setSpeed(1));
+    button(gSp, 'brisk  2x',  ()=> setSpeed(2));
+    button(gSp, 'quick  4x',  ()=> setSpeed(4));
+    button(gSp, 'fast  8x',   ()=> setSpeed(8));
+    button(gSp, 'silly  16x', ()=> setSpeed(16));
+    /* Straight to the end of the journey, on foot, at whatever the dial
+       says: the one thing the speed dial is really for. */
+    button(gSp, 'face the hospital', ()=>{
+      if(!Wld.hospital) return;
+      Player.yaw = Math.atan2(Wld.hospital.x - Player.pos.x,
+                              Wld.hospital.z - Player.pos.z);
+      flash('hospital is ' + Math.round(Math.hypot(Wld.hospital.x-Player.pos.x,
+             Wld.hospital.z-Player.pos.z)) + 'm that way');
+    });
+    D._syncSpeed = ()=> sSpeed.sync();
+    sSpd.appendChild(el('div', null,
+      'Multiplies walking and sprinting only. Everything else — thirst, '
+      + 'hunger, cold, the mind, the weather, the creatures — keeps its '
+      + 'own clock, so this changes how far you can get in a run and not '
+      + 'how long the run is. The state line turns red while it is above '
+      + '1, because a fast player is the easiest way to misread every '
+      + 'other number on this panel.'));
+
     // ---- time and weather ----
     const s3 = section('time & weather');
     const sHour = slider(s3, 'hour', 0, 23.9, 0.1, ()=>G.hours, v=>{ G.hours = v; });
@@ -17503,6 +17554,9 @@ const DEV = (()=>{
       /* ---- THE LARGE-WORLD DIAGNOSTICS ---------------------------
          Everything needed to tell whether the expansion is actually
          doing what it claims, without leaving the game. */
+      + (CFG.DEBUG.speedMult !== 1
+          ? `*** WALKING SPEED ${CFG.DEBUG.speedMult}x -- pace, distance covered and `
+            + `anything measured against the clock are NOT REAL ***\n` : '')
       + `scale      ${Math.round(Wld.size)}m across  playable ${Math.round(2*playHalf())}m  `
         + `grid ${Wld.N}x${Wld.N} @ ${Wld.cell.toFixed(1)}m  ${((Wld.N*Wld.N)/1e6).toFixed(2)}M cells\n`
       + `           ${P.terrain}${P.terrain2 && P.terrain2!==P.terrain ? ' + '+P.terrain2 : ''}`
@@ -17530,6 +17584,7 @@ const DEV = (()=>{
     if(D._syncFauna) D._syncFauna();
     if(D._syncCV) D._syncCV();
     if(D._syncSurv) D._syncSurv();
+    if(D._syncSpeed) D._syncSpeed();
     if(D._syncHour) D._syncHour();
   }
 
