@@ -19074,6 +19074,22 @@ async function startRun(seedInput){
 
   const s = Wld.start;
   Player.pos.set(s.x, heightAt(s.x, s.z), s.z);
+  /* ---- AND THE GROUND UNDER THEM, BEFORE THE FIRST FRAME -----------
+     Terra.build() runs inside buildTerrainMesh(), which happens BEFORE
+     this line -- so the ring of near chunks was centred on wherever the
+     player happened to be at that moment, which is the origin or a
+     previous run's position, not the start. On a 4608m world the start
+     can be two kilometres from the origin and the ring is 768m, so the
+     player began the run standing outside it entirely, with nothing
+     under them but the whole-world far mesh -- which is deliberately
+     drawn 1.2m BELOW the true surface so the near chunks always win
+     where they overlap.
+
+     The frame loop would rebuild the ring on its first tick, so this
+     healed itself immediately and was easy to miss. "Immediately" is
+     still one rendered frame of standing on ground a metre lower than
+     the ground you are on. */
+  Terra.update(s.x, s.z, true);
   Player.vel.set(0,0,0);
   Player.lastSafe.copy(Player.pos);
   /* Face the player somewhere that is NOT the hospital. Waking up
