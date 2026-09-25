@@ -12477,6 +12477,11 @@ function updatePlayer(dt){
       UI.say('[dev] FLYING  ' + Math.round(p.pos.y - heightAt(p.pos.x, p.pos.z))
         + 'm up   W A S D fly  SPACE up  Z down  SHIFT faster', 6);
     }
+    /* THE EYE HAS TO COME TOO. Returning straight out of here is what
+       made flight look completely dead: the body moved and the camera,
+       which is updated at the bottom of this function, never ran. */
+    updateCamera(p, dt);
+    Veg.update(p.pos.x, p.pos.z);
     return;
   }
 
@@ -12792,7 +12797,29 @@ function updatePlayer(dt){
   // ---- the camera ----
   p.speed = Math.hypot(p.vel.x, p.vel.z);
   p.moving = p.speed > 0.25;
-  const bobTarget = p.moving ? (p.sprinting ? 1.0 : 0.55) : 0;
+  updateCamera(p, dt);
+
+  Veg.update(p.pos.x, p.pos.z);
+  Mind.noteMovement(dt, wants, p.sprinting, heading);
+}
+
+/* ---------------------------------------------------------------------
+   THE EYE FOLLOWS THE BODY
+
+   Split out of updatePlayer for one reason: it used to live at the
+   BOTTOM of it, and flight returned early from the top. So the body flew
+   and the camera stayed exactly where it was -- no error, no warning,
+   simply a view that did not move. Turning flight off let the ordinary
+   path run again and the camera snapped to wherever the body had got to,
+   which is the reported "I press space, nothing happens, I switch flight
+   off and I am suddenly in the sky".
+
+   Anything that moves the player has to call this, which is now hard to
+   get wrong because there is only one place it lives.
+   ------------------------------------------------------------------- */
+function updateCamera(p, dt){
+  const C = CFG.PLAYER;
+  const bobTarget = p.moving && !CFG.DEBUG.fly ? (p.sprinting ? 1.0 : 0.55) : 0;
   p.bobAmt = lerp(p.bobAmt, bobTarget, clamp(dt*5,0,1));
   p.bob += dt * (p.sprinting ? 12.5 : 8.0) * (p.moving ? 1 : 0);
   const bobY = Math.sin(p.bob)*0.035*p.bobAmt;
@@ -12804,7 +12831,14 @@ function updatePlayer(dt){
      a saddle. Costs one height sample and means the player can never be
      shown the inside of a hill. */
   const camX = p.pos.x + bobX*Math.cos(p.yaw), camZ = p.pos.z - bobX*Math.sin(p.yaw);
-  const camFloor = heightAt(camX, camZ) + 0.22;
+  /* FLYING, THE GROUND IS NOT A FLOOR. Both of the clamps below exist to
+     stop the eye ending up inside a hill while walking. Applied to a
+     player who is deliberately above or inside the terrain they would
+     hold the camera down at head height over the ground -- which is the
+     same bug as the early return, arriving by a different road. */
+  const flying = CFG.DEBUG.fly;
+  const eyeY = p.pos.y + C.eye*(p.resting?0.62:1);
+  const camFloor = flying ? -Infinity : heightAt(camX, camZ) + 0.22;
   /* ---- AND IT KEEPS ITS DISTANCE FROM THE SIDES TOO ---------------
      Clamping the eye above the ground UNDER it is not enough in a
      narrow place. Standing at the bottom of a cut channel the ground
@@ -12819,7 +12853,7 @@ function updatePlayer(dt){
      lookups and it makes looking through a hillside impossible. */
   let cx2 = camX, cz2 = camZ;
   const eyeNow = Math.max(eyeY + bobY, camFloor);
-  {
+  if(!flying){
     const probe = 0.34;                 // comfortably past the near plane
     for(let q = 0; q < 4; q++){
       const a = q*Math.PI*0.5 + (p.camYaw == null ? p.yaw : p.camYaw);
@@ -12831,7 +12865,7 @@ function updatePlayer(dt){
       }
     }
   }
-  camera.position.set(cx2, Math.max(eyeNow, heightAt(cx2, cz2) + 0.22), cz2);
+  camera.position.set(cx2, flying ? eyeNow : Math.max(eyeNow, heightAt(cx2, cz2) + 0.22), cz2);
   /* ---- THE HEAD THAT ANSWERS LATE ---------------------------------
      At the late stages the camera follows the player's look input a
      few frames behind and then overshoots it slightly, so turning to
@@ -12864,9 +12898,6 @@ function updatePlayer(dt){
     camera.rotation.set(p.camPitch, p.camYaw,
       Math.sin(p.bob*0.5)*0.008*p.bobAmt + Echo.roll());
   }
-
-  Veg.update(p.pos.x, p.pos.z);
-  Mind.noteMovement(dt, wants, p.sprinting, heading);
 }
 
 /* =====================================================================
