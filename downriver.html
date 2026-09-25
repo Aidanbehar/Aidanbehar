@@ -18036,6 +18036,26 @@ const DEV = (()=>{
        The player has been resolved unconditionally every frame since
        the collision system was written. The people were not.
 
+     THE DEV TOGGLES  (seed 42)
+
+       Tested in BOTH directions, because a toggle that does nothing
+       looks exactly like a toggle that works if only the "on" case is
+       ever run.
+
+         immunity OFF   direct death kills, a 99m fall kills, twelve
+                        creature strikes kill        -- all three
+         immunity ON    none of the three kills, and zero wounds taken
+         under immunity thirst +0.347, mind +0.0011, clock +0.095 over
+                        ten simulated seconds: the simulation is still
+                        running, which is the whole point of stopping
+                        the damage rather than the model
+
+         flight         16.8m climbed in 3s and 16.8m flown flat, which
+                        is 5.6 m/s and matches walk*2.2; holds altitude
+                        at 19.9m with falling false; diving bottoms out
+                        at exactly -2.00m below the terrain, which is
+                        the guard doing what it says
+
      THE GROUND YOU STAND ON  (seed 42, ray-cast onto the real mesh and
      compared with what the feet read, sampled INSIDE cells)
 
