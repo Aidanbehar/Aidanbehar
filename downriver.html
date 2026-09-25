@@ -17842,6 +17842,61 @@ const DEV = (()=>{
        The player has been resolved unconditionally every frame since
        the collision system was written. The people were not.
 
+     THE EXPANDED WORLD  (8 seeds at 4608m, generated end to end)
+
+       8 of 8 pass every guarantee. Attempts: median 1, worst 4.
+       Generation: median 8.1s, worst 30s.
+
+                        asked for        measured
+         straight line  ~2000m min       3189 / 3618 / 3819  (min/med/max)
+         walked route   2500-3000m min   4307 / 5293 / 6453
+         detour         > straight       1.23x to 1.71x
+         trunk river    one of them      3.7km to 7.6km
+         variation      preserved        7 distinct style pairs of 8 seeds
+
+       The walked route is the number the expansion was for, and the
+       median is 5.3km against a 720m median before. The detour spread
+       is the other half of it: a route 1.71x its own straight line is a
+       route going round things.
+
+       WHAT THE MEASUREMENTS CAUGHT, in order, each of which would have
+       shipped as a silent fault:
+
+       G0 on every large seed. placeHospital measured the edge of the
+         world against size/2 - 70m and placeStart measured it against
+         size*0.45. Compatible at 1024m (442 vs 461), divergent above
+         it: at 3072m the hospital lands in the 84m band between them,
+         every bearing measures zero room, and the seed is rejected --
+         fifteen attempts of fifteen, on terrain 96% walkable. One
+         playHalf() now, and it was a live bug at 1024m that simply
+         could not fire.
+
+       The far terrain mesh at 3.2m triangles. terrainFarSegs was a
+         segment count, so the "far" mesh was finer than it needed to be
+         at small sizes: 204,800 triangles at 1024m, the entire cost of
+         the old terrain, spent on ground that cannot be resolved. Sized
+         per triangle now: 6.5k at 1024m, 162k at 4608m.
+
+       G2's wander factor. x3 was an assumption about how lost a player
+         gets, written for a 1km map with 3-7 trails and little to steer
+         by. Against a 2914m route it demands 8.7km of walking from the
+         mind's clock and threw away four good worlds out of six. 2.4,
+         against a route that is already 1.18x direct, with 9-18 trails
+         draining to town and ridges visible for kilometres.
+
+       The trunk river was twenty-two rivers. Guessed twice. The second
+         guess -- "scale trunkAcc by cell count" -- preserved the
+         FRACTION of the map (1.36% before and after) and therefore
+         preserved the exact property it was meant to fix. Swept and
+         counted stems instead: 18,000 gives 22 stems over 29.3km;
+         200,000 gives ONE stem 6.3km long on a 6.5km diagonal.
+
+       And the rule underneath that last one, because it is not obvious:
+       an accumulation threshold describing how big a watercourse
+       PHYSICALLY is must not scale with the map, since a cell count at
+       a fixed cell size IS a catchment area. Only the two describing
+       which river matters on this map had any business moving.
+
      A TOWN ON EVERY SEED  (120 seeds generated, plus 60 taken all the
      way through buildAllStructures and People.build)
 
