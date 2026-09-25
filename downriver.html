@@ -1610,6 +1610,26 @@ const CFG = {
 
   DEBUG: { freezeClock:false, freezeMind:false, showPhantoms:false, logRolls:true,
            noFog:false, forceClear:false, forceStage:-1,
+           /* ---- NOTHING CAN HURT YOU -------------------------------
+              Immunity from everything that ends or damages a run:
+              wounds, falls, drowning, and death by thirst, hunger or
+              cold. It stops the DAMAGE, not the simulation -- the bars
+              still fill, the mind still declines, the creatures still
+              hunt and still reach you. You simply do not die of any of
+              it, and nothing takes a wound off you.
+
+              That distinction is deliberate: an immunity that also
+              froze the survival model would make the panel's numbers
+              meaningless, and those numbers are the reason to be in
+              the dev panel at all. */
+           invuln: false,
+           /* ---- AND NOTHING HOLDS YOU DOWN ------------------------
+              Gravity off, terrain and solids passed through, SPACE up
+              and CTRL down. For looking at a four-kilometre world from
+              above it, and for getting inside the geometry to see what
+              it is actually doing. */
+           fly: false,
+           flyLift: 9.0,        // metres per second, before speedMult
            /* ---- WALKING THE BIG WORLD IN LESS THAN AN HOUR ---------
               A multiplier on foot speed, for crossing four and a half
               kilometres while testing something at the other end of it.
@@ -12380,6 +12400,58 @@ function updatePlayer(dt){
     return;
   }
 
+  /* ---- FLIGHT ------------------------------------------------------
+     Straight out in front of everything else, because it replaces all
+     of it: no gravity, no ground, no solids, no water. WASD moves along
+     the way the camera is LOOKING rather than along the ground, which
+     is what makes it useful for getting up over a ridge or down inside
+     a ravine to see what the geometry is really doing. SPACE lifts,
+     CTRL drops, SHIFT is still the accelerator, and the dev speed
+     multiplier applies to all of it.
+
+     Survival keeps running underneath: the bars fill, the mind
+     declines, the weather happens. Flight moves the body, the same way
+     the speed dial does, and lies about nothing else. */
+  if(CFG.DEBUG.fly){
+    const m = CFG.DEBUG.speedMult || 1;
+    const sp = (Keys.ShiftLeft || Keys.ShiftRight ? C.sprint*2.2 : C.walk*2.2) * m;
+    let fx2 = 0, fz2 = 0;
+    if(Keys.KeyW || Keys.ArrowUp) fz2 += 1;
+    if(Keys.KeyS || Keys.ArrowDown) fz2 -= 1;
+    if(Keys.KeyA || Keys.ArrowLeft) fx2 -= 1;
+    if(Keys.KeyD || Keys.ArrowRight) fx2 += 1;
+    /* Along the look vector, pitch included, so nose-down means down. */
+    const cp = Math.cos(p.pitch), sp2 = Math.sin(p.pitch);
+    const hx = -Math.sin(p.yaw), hz = -Math.cos(p.yaw);
+    const rx =  Math.cos(p.yaw), rz = -Math.sin(p.yaw);
+    let vx = hx*cp*fz2 + rx*fx2;
+    let vz = hz*cp*fz2 + rz*fx2;
+    let vy = sp2*fz2;
+    if(Keys.Space) vy += 1;
+    if(Keys.ControlLeft || Keys.ControlRight) vy -= 1;
+    const len = Math.hypot(vx, vy, vz);
+    if(len > 0.0001){
+      vx/=len; vy/=len; vz/=len;
+      p.pos.x += vx*sp*dt;
+      p.pos.y += vy*sp*dt;
+      p.pos.z += vz*sp*dt;
+    }
+    /* Never below the ground and never off the world: flying under the
+       terrain shows you the inside of it, which is occasionally what you
+       want and permanently disorienting when it is not asked for. */
+    p.pos.y = Math.max(p.pos.y, heightAt(p.pos.x, p.pos.z) - 2);
+    const lim = Wld.size*0.5 - 4;
+    p.pos.x = clamp(p.pos.x, -lim, lim);
+    p.pos.z = clamp(p.pos.z, -lim, lim);
+    p.vel.set(0,0,0); p.vy = 0; p.falling = false;
+    p.swimming = false; p.inWater = 0; p.submerged = 0; p.breathHeld = 0;
+    p.moving = len > 0.0001; p.speed = p.moving ? sp : 0;
+    p.sprinting = false;
+    p.stamina = Math.min(C.staminaMax, p.stamina + 30*dt);
+    p.snow = 0; p.snowDrag = 0;
+    return;
+  }
+
   // ---- what the keys are asking for, in world space ----
   let ix = 0, iz = 0;
   if(Keys.KeyW || Keys.ArrowUp) iz -= 1;
@@ -13077,6 +13149,10 @@ const Survival = {
   wounds: 0,
   hurt(power, chill, shock, from){
     if(G.over) return;
+    /* The blow still LANDS -- the creature reached you, and the dev
+       panel's fauna readout should still show that it did. It simply
+       costs nothing. */
+    if(CFG.DEBUG.invuln){ Mind.shock(shock*0.25); return; }
     this.wounds++;
     Player.stamina = Math.max(0, Player.stamina - power);
     this.cold = clamp(this.cold + chill, 0, 100);
@@ -13092,6 +13168,7 @@ const Survival = {
 
   landed(drop){
     const H = CFG.HAZARD;
+    if(CFG.DEBUG.invuln) return;
     if(drop >= H.fallLethal){ this.die('a fall'); return; }
     if(drop >= H.fallHurt){
       const k = (drop - H.fallHurt)/(H.fallLethal - H.fallHurt);
@@ -13150,6 +13227,19 @@ const Survival = {
   },
   die(cause){
     if(G.over) return;
+    /* The last line of the immunity, and the one that catches
+       everything the others do not: drowning, and the slow deaths from
+       thirst, hunger and cold all arrive here. Said out loud rather
+       than swallowed, so a dev run cannot quietly look survivable when
+       it was not. */
+    if(CFG.DEBUG.invuln){
+      if(this._lastSpared !== cause || G.t - (this._sparedAt||-99) > 20){
+        this._lastSpared = cause; this._sparedAt = G.t;
+        UI.say('[dev] that would have killed you: ' + cause, 3.2);
+      }
+      this.dying = 0;
+      return;
+    }
     Player.dead = true;
     G.over = true; G.won = false; G.deaths = cause;
     UI.end(false, cause);
@@ -17066,6 +17156,61 @@ const DEV = (()=>{
        so a run at 8x is the same run with the walking taken out, which
        is what makes it good for reaching things and useless for judging
        how a journey feels. */
+    /* ---- THE TWO THAT TAKE THE GAME OFF THE PLAYER ------------------
+       Immunity and flight. Both are loud on the state line while they
+       are on, for the same reason the speed dial is: a run where
+       nothing can kill you and gravity does not apply is not a run, and
+       every number on this panel should be read knowing that. */
+    const sGod = section('immunity and flight  (dev only)');
+    const gGd = el('div','grid'); sGod.appendChild(gGd);
+    const bInv = button(gGd, '', ()=>{
+      CFG.DEBUG.invuln = !CFG.DEBUG.invuln;
+      if(CFG.DEBUG.invuln){ Survival.dying = 0; }
+      D._syncGod();
+    });
+    const bFly = button(gGd, '', ()=>{
+      CFG.DEBUG.fly = !CFG.DEBUG.fly;
+      if(!CFG.DEBUG.fly){
+        /* Put the body back on the ground rather than dropping it from
+           wherever it was: a four-hundred-metre fall the instant flight
+           is switched off is not a useful way to end a test. */
+        Player.pos.y = Math.max(Player.pos.y, surfaceAt(Player.pos.x, Player.pos.z, Player.pos.y, CFG.PLAYER.radius));
+        Player.vy = 0; Player.falling = false;
+      }
+      D._syncGod();
+    });
+    button(gGd, 'both off', ()=>{
+      CFG.DEBUG.invuln = false;
+      if(CFG.DEBUG.fly){
+        Player.pos.y = Math.max(Player.pos.y, surfaceAt(Player.pos.x, Player.pos.z, Player.pos.y, CFG.PLAYER.radius));
+        Player.vy = 0; Player.falling = false;
+      }
+      CFG.DEBUG.fly = false;
+      D._syncGod();
+    });
+    const sLift = slider(sGod, 'flight speed multiplier', 1, 16, 0.5,
+      ()=>CFG.DEBUG.speedMult, v=>{ CFG.DEBUG.speedMult = v; if(D._syncSpeed) D._syncSpeed(); });
+    D._syncGod = ()=>{
+      bInv.textContent = CFG.DEBUG.invuln ? 'immunity: ON' : 'immunity: off';
+      bFly.textContent = CFG.DEBUG.fly ? 'flight: ON' : 'flight: off';
+      bInv.style.color = CFG.DEBUG.invuln ? '#ff8b6b' : '';
+      bFly.style.color = CFG.DEBUG.fly ? '#ff8b6b' : '';
+      sLift.sync();
+    };
+    D._syncGod();
+    sGod.appendChild(el('div', null,
+      'IMMUNITY stops the damage, not the simulation: thirst, hunger, '
+      + 'cold and the mind all still run and still fill their bars, the '
+      + 'creatures still hunt and still reach you. You simply do not die '
+      + 'of any of it and nothing takes a wound off you. Whatever WOULD '
+      + 'have killed you is announced on screen, so a dev run cannot '
+      + 'quietly look survivable when it was not.  '
+      + 'FLIGHT is gravity off and solids ignored — W A S D fly along the '
+      + 'way you are looking, SPACE up, CTRL down, SHIFT faster, and the '
+      + 'speed multiplier applies. You cannot go more than 2m below the '
+      + 'ground or past the edge of the world. Turning it off sets you '
+      + 'back down on the surface rather than dropping you onto it.'));
+
     const sSpd = section('walking speed  (dev only)');
     const sSpeed = slider(sSpd, 'speed multiplier', 1, 16, 0.5,
       ()=>CFG.DEBUG.speedMult, v=>{ CFG.DEBUG.speedMult = v; });
@@ -17663,9 +17808,10 @@ const DEV = (()=>{
       /* ---- THE LARGE-WORLD DIAGNOSTICS ---------------------------
          Everything needed to tell whether the expansion is actually
          doing what it claims, without leaving the game. */
-      + (CFG.DEBUG.speedMult !== 1
-          ? `*** WALKING SPEED ${CFG.DEBUG.speedMult}x -- pace, distance covered and `
-            + `anything measured against the clock are NOT REAL ***\n` : '')
+      + (CFG.DEBUG.invuln || CFG.DEBUG.fly || CFG.DEBUG.speedMult !== 1
+          ? `*** DEV: ${[CFG.DEBUG.invuln?'IMMUNE':null, CFG.DEBUG.fly?'FLYING':null,
+                CFG.DEBUG.speedMult!==1?CFG.DEBUG.speedMult+'x SPEED':null]
+                .filter(Boolean).join('  ')} -- this is not a real run ***\n` : '')
       + `scale      ${Math.round(Wld.size)}m across  playable ${Math.round(2*playHalf())}m  `
         + `grid ${Wld.N}x${Wld.N} @ ${Wld.cell.toFixed(1)}m  ${((Wld.N*Wld.N)/1e6).toFixed(2)}M cells\n`
       + `           ${P.terrain}${P.terrain2 && P.terrain2!==P.terrain ? ' + '+P.terrain2 : ''}`
@@ -17694,6 +17840,7 @@ const DEV = (()=>{
     if(D._syncCV) D._syncCV();
     if(D._syncSurv) D._syncSurv();
     if(D._syncSpeed) D._syncSpeed();
+    if(D._syncGod) D._syncGod();
     if(D._syncHour) D._syncHour();
   }
 
