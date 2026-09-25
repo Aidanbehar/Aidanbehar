@@ -18104,6 +18104,37 @@ const DEV = (()=>{
        The player has been resolved unconditionally every frame since
        the collision system was written. The people were not.
 
+     FLIGHT, AND THE HALF THAT WAS NEVER MEASURED  (seed 42)
+
+                        body      camera     gap
+       start            44.49     46.14      1.65
+       after SPACE      79.60     81.26      1.66
+       after W          78.22     79.88      1.66
+       flight off       43.30     44.96      1.66
+
+       Body climbed 35.11m and the camera climbed 35.12m. The constant
+       1.65-1.66m gap is the eye height, and it staying constant is the
+       actual proof: the camera is locked to the body rather than
+       happening to move at the same time.
+
+       It was reported twice as "flight does not work" and twice
+       measured as working, because every test read Player.pos and none
+       read camera.position. The body always flew. The camera is set at
+       the BOTTOM of updatePlayer and the flight branch returned from
+       the TOP, so the view never moved -- and switching flight off let
+       the ordinary path run and snapped the camera to wherever the body
+       had got to, which is exactly how it was described.
+
+       A test that checks the model and not the view cannot tell a
+       working camera from a dead one, and "the position is right" is
+       not the same claim as "the game does the thing".
+
+       Two ground clamps INSIDE the camera code had to go with it --
+       camFloor and the final max against heightAt+0.22 -- or the first
+       fix would only have moved the bug: the camera would have run and
+       then been pinned at head height over the terrain, which reads as
+       equally broken.
+
      THE DEV TOGGLES  (seed 42)
 
        Tested in BOTH directions, because a toggle that does nothing
