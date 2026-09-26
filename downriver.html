@@ -437,9 +437,30 @@ button:active{ transform:translateY(1px); }
      THE TOWN, WHICH IS NEW AND NEEDS ALL OF IT
        * the town itself .... how big was it, how big is it now, and why
                               is it the only one within a day's walk?
-       * the houses ......... three quarters of them can be entered and
-                              the rest are boarded. Who boarded them, and
-                              when did the others stop being boarded?
+       * the houses ......... most can be walked into; about one in five
+                              is boarded from the OUTSIDE and still fully
+                              furnished within. Who boards a house from
+                              the outside and leaves the beds made?
+       * the boards ......... they come off with your hands in four
+                              seconds. Whoever put them up was not trying
+                              very hard, or was in a hurry.
+       * the paint .......... three kinds of siding on one street, and
+                              the painted ones are all faded to about the
+                              same age. They were done at once, and not
+                              since.
+       * the shutters ....... one of a pair is often missing. Always one,
+                              never both.
+       * the yards .......... a woodpile stacked dry under the eave, a
+                              line still strung, a mailbox. Kept, then
+                              stopped being kept.
+       * the smoke .......... rises from the chimneys of the lit houses
+                              after dark. Somebody is burning something.
+       * SLEEPING IN THEM ... you can lie down in a stranger's bed and
+                              the night passes. If the owner comes home
+                              they stand in the bedroom doorway, say
+                              nothing, and leave. They do not come back
+                              that night. Nothing explains this and
+                              nothing should.
        * what is inside ..... a bed, a table and two chairs, a dresser, a
                               stove. Laid out as if somebody left in the
                               morning. Nobody has said whose they are.
@@ -10120,7 +10141,7 @@ const People = {
                 : (hour >= P2.dusk && hour < P2.allIn) ? 'homeward' : 'abed';
     for(const p of this.list){
       if(p.role !== 'villager' || !p.home) continue;
-      if(p.stayOutUntil != null && hour < p.stayOutUntil) continue;
+      if(p.stayOutUntil != null && G.t < p.stayOutUntil) continue;
       if(phase === 'abed'){
         if(p.state === 'asleep') continue;
         p.state = 'asleep'; p.hidden = false; p.target = null;
@@ -10388,7 +10409,7 @@ const People = {
          arriving at half past eight watches the street empty. */
       /* Somebody who found a stranger in their bed is out of the house
          for the rest of the night, and the schedule does not argue. */
-      if(p.stayOutUntil != null && G.hours < p.stayOutUntil){
+      if(p.stayOutUntil != null && G.t < p.stayOutUntil){
         // fall through to the plain idle/walk behaviour below
       } else if(p.role === 'villager' && p.home){
         if(phase === 'abed' && p.state !== 'asleep' && p.state !== 'goinghome'){
@@ -12473,6 +12494,11 @@ function buildHouse(spec){
       if(lw > 0.05) put(lw, H, wall, MAT.timber, -W/2 + lw/2, H/2, crossZ);
       if(rw > 0.05) put(rw, H, wall, MAT.timber,  W/2 - rw/2, H/2, crossZ);
       put(dw*2, H-2.1, wall, MAT.timber, doorAt, 2.1 + (H-2.1)/2, crossZ);
+      /* Where that doorway actually is, for anything that needs to
+         stand in it. Guessing the middle of the cross wall puts a body
+         inside the timber on every house whose doorway rolled to the
+         other side. */
+      g.userData.bedroomDoor = new THREE.Vector3(doorAt, 0, crossZ + 0.55);
     }
     /* And the wall between the two back rooms, when there are two. */
     const backDepth = (D/2 + crossZ);
@@ -15209,14 +15235,19 @@ const Sleep = {
     const M = p2.home.mesh;
     M.updateMatrixWorld(true);
     const D2 = p2.home.style.footprint[1];
-    const w = new THREE.Vector3(0, 0, -D2*0.06 + 0.9).applyMatrix4(M.matrixWorld);
+    const local = M.userData.bedroomDoor
+                || new THREE.Vector3(0, 0, -D2*0.06 + 0.55);
+    const w = local.clone().applyMatrix4(M.matrixWorld);
     p2.x = w.x; p2.z = w.z;
     p2.obj.position.set(w.x, heightAt(w.x, w.z), w.z);
     p2.obj.rotation.set(0, Math.atan2(Player.pos.x - w.x, Player.pos.z - w.z), 0);
     p2.hidden = false; p2.obj.visible = true;
     p2.state = 'idle'; p2.timer = 6;
-    /* Out of the house, and not back until tomorrow. */
-    p2.stayOutUntil = G.hours + 6;
+    /* Out of the house, and not back tonight. IN REAL SECONDS, not in
+       hours of the clock: G.hours wraps at midnight, so "hour 29.2" is
+       a time that never arrives and the villager would have stayed out
+       for the rest of the run. G.t only goes up. */
+    p2.stayOutUntil = G.t + 6 / (24/(CFG.TIME.dayRealMinutes*60));
     p2.bed = null;
   },
 };
@@ -19179,8 +19210,13 @@ const DEV = (()=>{
     Player.vel.set(0,0,0);
     Veg.dirty = true;
   }
+  /* The audit pane does not exist until the panel has been built, and
+     these routines can be driven from outside it (the harness calls
+     runSleepAudit directly). Losing the text is fine; throwing in the
+     middle of a 150-world sweep and discarding the result is not. */
   function flash(text){
-    auditEl.textContent = text;
+    if(auditEl) auditEl.textContent = text;
+    else if(typeof console !== 'undefined') console.log(text);
   }
 
   /* Force every event to fire, then report. An event that refuses
@@ -19309,6 +19345,11 @@ const DEV = (()=>{
       }
       G.seedText = savedText;
       generateWorld();
+      /* Kept so the numbers can be read back without scraping the
+         panel's own text. */
+      D.lastSleepAudit = { seeds:made, failWithout, failWith, sleepMinutes,
+                           worst, daysToCollapse: days >= 400 ? null : days,
+                           nightHours:+night.toFixed(2), dayHours:+dayH.toFixed(2) };
       flash(
         `SLEEPING ONCE vs G2, ${made}/${n} seeds generated\n`
         + `  fail G2 on walking alone ...... ${failWithout}\n`
@@ -19485,6 +19526,47 @@ const DEV = (()=>{
      and reading the result, not by reading the code. Each one has a
      button in this panel or a line in the notes that reproduces it. If
      a system is not in this list, this file does not claim it works.
+
+     TOWN HOUSES  (seeds 1234, 42, 7777; "COLLISION VIEW" for the rest)
+       meshes DRAWN per house, before the merge ...... 111.2 and 106.0
+       ... after the merge, before the new detail ....  20.4 and  18.8
+       ... after the merge, with the new detail ......  24.7 (157 source
+           boxes merged into 8 materials, 81 invisible collider proxies,
+           76 decorative boxes dropped)
+       collider solids per house, before the merge ...  83.4 and 80.5
+       ... after the merge, unchanged ................  83.4 and 80.5
+       ... with the yard and the new detail ..........  95.5
+       same seed builds byte-identical house geometry twice: yes, on
+         every seed tried, and still yes with every rare variant forced
+         on at once
+       with porch, dormer, lean-to, shutters, boards, fence, woodpile,
+         clothesline, barrel and mailbox ALL forced to 1.0 on a
+         five-house street: 0 houses with anything blocking the walk from
+         the street, through the doorway, to the middle of the front room
+       ... and 0 with anything blocking the spot beside the bed
+       a shut door DOES block that walk, which is correct: you open it
+       boards DO block it until forced, which is the point of them
+       forcing the boards: 4 board colliders before, 0 after, the meshes
+         gone from the scene and the flag cleared
+       13.8 material-swapping window panes per house (front, sides and
+         the dormer when it rolls), all on People's lit/unlit list
+
+     SLEEP  (seed 1234, a town bed, lying down at 22:00)
+       a full night: 64 real seconds, wakes at 06:27
+       thirst  8.00 -> 30.33, and the per-hour formula says 30.28
+       hunger  6.00 -> 17.99, and the formula says 17.96
+         (both a hair over because the last quarter-hour is played live)
+       agitation 0.40 -> 0, mind progress rose, stage may advance
+       the clock is released and the sleeping flag cleared on waking
+       villager's bed: woke at 23:22 with `villager`, the owner standing
+         in the bedroom doorway, their bed reference cleared, out of the
+         house until hour 29.2
+       outside town with the risk forced on: townDepth 0, woke at 22:02
+         with `creature`
+       in town: townDepth > 0, nothing comes
+       NOT MEASURED: what any of it looks like. The fade, the smoke
+         column and the moss have been run without errors and their
+         geometry checked, and nobody has looked at them.
 
      THE WORLD  (150 generated seeds, "validate 120 seeds" x2)
        150/150 pass all six hard guarantees
@@ -20389,7 +20471,11 @@ function stepWorld(dt){
      charge the player twice for the same night. */
   if(!G.clockHeld){ Survival.update(dt); Mind.update(dt); }
   Gear.update(dt);
-  Director.tick(dt);
+  /* While they are under, the only things they hear are the ones Sleep
+     chooses -- auditory, from the stage they are already at. Letting the
+     director run as well would put a shape at the treeline for a player
+     whose eyes are shut, which is a scare nobody can be given. */
+  if(!G.clockHeld) Director.tick(dt);
   Phantoms.update(dt);
   Echo.update(dt);
   Hush.update(dt);
