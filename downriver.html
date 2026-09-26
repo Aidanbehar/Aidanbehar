@@ -1236,6 +1236,33 @@ const CFG = {
     dawn: 6.1, sunrise: 6.8, sunset: 19.4, dusk: 20.3,   // in-fiction hours
     startHours: [6.4, 12.1, 18.6, 22.5],                 // the four openings
   },
+  /* ---- SLEEP ------------------------------------------------------
+     Skipping a night costs about a real minute and buys the hours to
+     morning. It is not a rest button: the mind still declines while
+     you are under, only more slowly, so a player who sleeps every
+     night still loses to the illness -- just later. See Sleep. */
+  SLEEP: {
+    realSeconds: 60,     // how long the minute actually lasts
+    wakeHour: 6.5,       // ... and the hour it ends at, just after dawn
+    earliestHour: 19.0,  // offered from dusk ...
+    latestHour: 4.0,     // ... through the small hours (wraps midnight)
+    fadeSeconds: 2.0,    // to near black, and back
+    /* The mind's rate while asleep, as a fraction of the waking rate,
+       and WITHOUT the night multiplier -- which is the whole of why
+       sleeping through a night is better than walking through one. */
+    mindRate: 0.35,
+    /* The last of the night is played at normal speed so the player
+       actually sees dawn arrive rather than being handed it. */
+    realTailHours: 0.25,
+    /* Low, auditory-only, and from the stage the player is already at.
+       Never labelled as a dream, because nothing in this game tells the
+       player which of the things they heard were real. */
+    events: [2, 4],      // how many across the night
+    /* Outside town, per skipped hour, the chance something finds you. */
+    wakeRisk: 0.055,
+    creatureAt: [14, 26],// metres it is standing away when you wake
+  },
+
   WEATHER: {
     changeMinutes: [4, 14],  // real minutes between weather decisions
     /* ---- YOU HAVE TO BE ABLE TO SEE THE COUNTRY --------------------
@@ -1454,6 +1481,40 @@ const CFG = {
      system so that "how dangerous is this forest" is one block a reader
      can find, and so the dev panel can turn the whole thing off and
      prove the rest of the game does not depend on it. */
+  /* ---- HOUSES -----------------------------------------------------
+     What a town house can roll. Every one of these is drawn from the
+     house's own seed, so a given house is the same house every time it
+     is built -- which is what keeps a phantom copy identical to the
+     real thing. */
+  HOUSE: {
+    /* Roof pitch, in radians. The wall/gable/roof fit is computed from
+       whatever this rolls, so the range can move without breaking the
+       join. 0.38 is a shallow cottage, 0.62 a steep alpine pitch. */
+    pitch: [0.38, 0.62],
+    sidingWeights: { boards: 3, shingles: 2, painted: 3 },
+    /* Faded paint. Low saturation on purpose: a town of bright houses
+       reads as a toy, and these have been standing a long time. */
+    paintHues: [0.09, 0.14, 0.32, 0.55, 0.60, 0.02],
+    paintSat: [0.06, 0.20], paintLight: [0.30, 0.52],
+    porchChance: 0.45,
+    porchDepth: [1.5, 2.3],
+    shutterChance: 0.40,
+    shutterMissing: 0.25,   // ... and one of the pair is gone
+    leanToChance: 0.22,
+    dormerChance: 0.12,     // rare: a half storey with a window in it
+    frontWindows: [1, 2],   // beside the door, which is what the street sees
+    /* Yard. Placed on the plot, behind the building line, never across
+       the door or the street. */
+    fenceChance: 0.55, woodpileChance: 0.5, clotheslineChance: 0.3,
+    barrelChance: 0.4, mailboxChance: 0.45,
+    yardClear: 2.2,         // metres kept clear of the door's own path
+    /* Weathering. */
+    stainChance: 0.7, mossChance: 0.55, missingShingleChance: 0.35,
+    gutterChance: 0.6,
+    /* Chimney smoke, when somebody is home and it is dark. */
+    smokePuffs: 14, smokeRise: 2.6, smokeLife: 5.5,
+  },
+
   FAUNA: {
     on: true,
     /* ONE OF EACH IS THE FLOOR. The old roll was a flat count with the
@@ -2376,7 +2437,11 @@ const TexLib = (()=>{
   }
 
   /* ---------- timber: planks and logs ---------- */
-  function timber({ tint=[96,74,52], seed=11, logs=false, decay=0.4 }={}){
+  /* `paint` turns the same boards into painted clapboard. The grain and
+     the joints are still computed and still show, because thin paint on
+     sawn timber never hides either, and `decay` decides how much of the
+     paint the weather has taken back off again. */
+  function timber({ tint=[96,74,52], seed=11, logs=false, decay=0.4, paint=null }={}){
     const c=cvs(S), ctx=c.getContext('2d',{willReadFrequently:true});
     const hgt=cvs(S), hx=hgt.getContext('2d',{willReadFrequently:true});
     const img=ctx.createImageData(S,S), d=img.data;
@@ -2396,9 +2461,18 @@ const TexLib = (()=>{
       const round = logs ? (1 - Math.pow(Math.abs(bf*2-1), 1.8))*0.5 + 0.5 : 1;
       const rot = smoothstep(0.55, 0.95, fbm2(u*4.0-seed, v*4.0+seed, 3, seed+77)) * decay;
       let k = (0.62 + grainF*0.45) * round * (1-joint*0.55) * (1-knotM*0.35) * (1-rot*0.42);
-      d[i]  = clamp(tint[0]*k, 0,255);
-      d[i+1]= clamp(tint[1]*k, 0,255);
-      d[i+2]= clamp(tint[2]*k, 0,255);
+      if(paint){
+        /* Where the weather has had it, the board comes back through. */
+        const peel = smoothstep(0.52, 0.94, fbm2(u*3.1+seed*0.7, v*3.4-seed*0.3, 3, seed+301))*decay;
+        const pk = (0.88 + grainF*0.16) * (1-joint*0.50) * (1-knotM*0.12);
+        d[i]  = clamp(lerp(paint[0]*pk, tint[0]*k, peel), 0,255);
+        d[i+1]= clamp(lerp(paint[1]*pk, tint[1]*k, peel), 0,255);
+        d[i+2]= clamp(lerp(paint[2]*pk, tint[2]*k, peel), 0,255);
+      } else {
+        d[i]  = clamp(tint[0]*k, 0,255);
+        d[i+1]= clamp(tint[1]*k, 0,255);
+        d[i+2]= clamp(tint[2]*k, 0,255);
+      }
       d[i+3]= 255;
       const hv = clamp((round*0.6 + grainF*0.22 - joint*0.5 - knotM*0.2 - rot*0.2)*255, 0,255);
       hd[i]=hd[i+1]=hd[i+2]=hv; hd[i+3]=255;
@@ -6753,6 +6827,35 @@ function buildMaterials(onStep){
   const cc = TexLib.concrete({ tint:[112,112,108], seed: 23 + (G.seed % 503), stain: 0.4 + st.decay*0.4 });
   MAT.concrete = TexLib.mat(cc, { repeat:[3.2,3.2], bump:1.8, rough:0.94 });
 
+  /* ---- WHAT THE TOWN'S WALLS ARE MADE OF --------------------------
+     Three sidings, so a street is not nine copies of one house: sawn
+     boards (MAT.timber, above), shakes, and painted clapboard.
+
+     The painted ones are a SHARED PALETTE rather than one material per
+     house. A material carries two baked canvases, and baking one per
+     house put nine more texture bakes into a generation that is
+     already seconds long -- while four shared across a nine-house
+     street already reads as "these were painted at different times by
+     different people", which is the whole point. Each house picks one
+     from its own seed, so which house is which colour is still fixed. */
+  {
+    const sg = TexLib.roofing({ tint: st.wallTone, seed: 71 + (G.seed % 457),
+                                metal: false, decay: st.decay*0.8 });
+    MAT.shingleWall = TexLib.mat(sg, { repeat:[2.6,2.2], bump:2.0, rough:0.95 });
+    MAT.painted = [];
+    const HS = CFG.HOUSE;
+    for(let i=0;i<4;i++){
+      const pr = rngFor('paint', i);
+      const hue = HS.paintHues[pr.irange(0, HS.paintHues.length-1)];
+      const col = new THREE.Color().setHSL(hue, pr.range(HS.paintSat[0], HS.paintSat[1]),
+                                                pr.range(HS.paintLight[0], HS.paintLight[1]));
+      const pt = TexLib.timber({ tint: st.wallTone, seed: 131 + i*37 + (G.seed % 211),
+                                 decay: st.decay,
+                                 paint: [col.r*255, col.g*255, col.b*255] });
+      MAT.painted.push(TexLib.mat(pt, { repeat:[2.0,2.0], bump:1.9, rough:0.88 }));
+    }
+  }
+
   MAT.glass = new THREE.MeshStandardMaterial({
     color:0x141a1c, roughness:0.12, metalness:0.05, transparent:true, opacity:0.55 });
   MAT.dark = new THREE.MeshStandardMaterial({ color:0x07090a, roughness:1 });
@@ -7458,6 +7561,68 @@ function mergeGeos(list){
   out.setAttribute('uv',       new THREE.BufferAttribute(uv,2));
   out.setIndex(new THREE.BufferAttribute(idx,1));
   return out;
+}
+
+/* ---------------------------------------------------------------------
+   ONE BUILDING, A HANDFUL OF DRAW CALLS
+
+   A house is built as a hundred-odd little boxes because that is the
+   honest way to describe a house, and it is the wrong way to draw one:
+   measured before this existed, a town house was 111 meshes and a
+   nine-house street was most of a thousand draw calls for scenery that
+   never moves.
+
+   So the boxes are merged, per material, into one mesh each -- and the
+   two things that CANNOT be merged are left alone:
+
+     * the window and lamp panes, because People swaps their material
+       between lit and unlit at dusk and a merged pane cannot be swapped
+       on its own. They are marked userData.keepMesh.
+     * the door leaf, because it swings, and Doors refits its collider
+       from the mesh every frame it moves.
+
+   Collision is the subtle part. structSolids() fits colliders by walking
+   the group's meshes, so merging everything into one mesh would fit ONE
+   box around the whole house and wall the player out of it. Instead each
+   solid box stays in the group as an INVISIBLE proxy: it is not drawn
+   (three.js prunes an invisible subtree before it reaches a render list)
+   but it is still traversed, so every wall, every chair and every
+   doorway collides exactly as it did. The decorative noclip boxes have
+   no such job and are simply dropped once their geometry has been
+   copied into the merge.
+   ------------------------------------------------------------------- */
+function mergeStatic(group){
+  group.updateMatrixWorld(true);
+  const byMat = new Map();
+  let merged = 0, proxies = 0, dropped = 0;
+  for(const child of group.children.slice()){
+    if(!child.isMesh) continue;
+    if(child.userData.keepMesh) continue;            // swaps its own material
+    if(child === group.userData.door) continue;      // swings
+    if(child.children.length) continue;              // carries riders with it
+    if(!child.geometry || !child.geometry.index) continue;
+    const geo = child.geometry.clone();
+    child.updateMatrix();
+    geo.applyMatrix4(child.matrix);
+    let slot = byMat.get(child.material.uuid);
+    if(!slot) byMat.set(child.material.uuid, slot = { mat: child.material, list: [] });
+    slot.list.push(geo);
+    merged++;
+    if(child.userData.noclip){ group.remove(child); dropped++; }
+    else { child.visible = false; child.userData.colliderOnly = true; proxies++; }
+  }
+  for(const { mat, list } of byMat.values()){
+    const m = new THREE.Mesh(mergeGeos(list), mat);
+    m.castShadow = true; m.receiveShadow = true;
+    /* The proxies own collision. Without this the merged shell would be
+       fitted as one more box on top of them. */
+    m.userData.noclip = true;
+    m.userData.merged = true;
+    group.add(m);
+    for(const gg of list) gg.dispose();
+  }
+  group.userData.mergeStats = { from: merged, into: byMat.size, proxies, dropped };
+  return group;
 }
 
 /* ---------------------------------------------------------------------
@@ -11765,6 +11930,8 @@ function buildHouse(spec){
       addBox(g, wall, topH, halfGap*2, MAT.timber, sx*W/2, (winY+winH/2)+topH/2, wz);
       const pane = addBox(g, 0.05, winH, halfGap*2-0.08, MAT.glass, sx*W/2, winY, wz);
       pane.userData.noclip = true; pane.castShadow = false;
+      /* Kept out of the merge: People swaps this material at dusk. */
+      pane.userData.keepMesh = true;
       /* THE WINDOW IS WHAT YOU SEE FROM THE STREET. A lamp pane on the
          ceiling is invisible from outside -- measured from the end of
          the street, a town with four lit houses in it was black. The
@@ -11990,6 +12157,7 @@ function buildHouse(spec){
         shade.userData.noclip = true; shade.castShadow = false;
         const pane = addBox(g, 0.26, 0.05, 0.26, MAT.lamp, x, y, z);
         pane.userData.noclip = true; pane.castShadow = false;
+        pane.userData.keepMesh = true;                 // swapped lit/unlit
         lamps.push({ x, y, z, pane });
       };
       lampAt(tx, H - 0.40, tz);
@@ -12052,7 +12220,8 @@ function buildHouse(spec){
     door.rotation.y = -g.userData.doorOpen;
   }
   g.userData.entry = new THREE.Vector3(0, 0, D/2 + 1.2);
-  return g;
+  /* A hundred boxes is how a house is described, not how it is drawn. */
+  return mergeStatic(g);
 }
 
 function buildShed(spec){
@@ -19431,6 +19600,7 @@ window.DR = {
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
   admit, townDepth, checkArrival, updateShadowBudget, ShadowBudget,
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders, shelterAt,
+  buildHouse, structSolids, Hold, pickTarget,
   CollisionView, CreatureView, People, Fauna, BEASTS, resolveCollisions, pushOutOfTerrain,
   get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
 };
