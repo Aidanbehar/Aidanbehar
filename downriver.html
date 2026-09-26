@@ -1368,6 +1368,26 @@ const CFG = {
     mulRain: 1.16, mulFog: 1.14, mulClear: 0.93,
     mulThirst: 1.5, mulHunger: 1.22, mulCold: 1.3, mulSick: 1.55,
     mulExhausted: 1.28,
+    /* ---- WHAT ADMISSION ACTUALLY STOPS -----------------------------
+       Reaching the desk froze `progress` and nothing else, so the stage
+       the player arrived at went on happening to them: the intensity
+       wave kept running between that stage's floor and ceiling, the
+       director kept drawing from it, and the phantoms already standing
+       in the world stayed standing. Measured, a player admitted at
+       stage 4 was still being shown stage 4.
+
+       Being safe should feel like being safe. Over settleSeconds the
+       intensity, the agitation and the spike are taken to nothing, the
+       director stops drawing, and whatever is already out there fades.
+       It is a wind-down and not a cut, because a hard switch at the
+       desk would read as a level ending. */
+    settleSeconds: 26,
+    /* How long a phantom hospital stands, and how close to its front you
+       have to get for it to resolve. The reach is measured from the
+       building's own depth, so it is "at the door" whatever size the
+       hospital is. */
+    fakeHospitalLife: 600,
+    fakeHospitalReach: 4.0,
     calmDrink: -0.030,       // one-off progress credit for good behaviour
     calmEat: -0.022, calmRest: -0.05, calmShelter: -0.012,
     /* Pauses: the mind having a good stretch. Stage 0-1 only at full
@@ -5867,6 +5887,19 @@ function genResources(){
   for(let tries=0; tries<wantBerries*45 && berries.length<wantBerries; tries++){
     const ix = rng.irange(4, N-5), iz = rng.irange(4, N-5);
     const i = iz*N+ix;
+    /* NOT INSIDE A BUILDING. The scatter tested the canopy, the water
+       and the slope and never asked whether there was a house standing
+       on the cell -- so a berry patch could be, and was, placed on the
+       floor of the hospital. Reported as dirt spawning in a hospital,
+       and that is exactly what it looks like: a clump of ground cover
+       on a concrete floor in a dark room.
+
+       Wld.BLOCK is the mask markBuildings() leaves behind, and it is
+       already built by the time this runs -- carveFoundations and
+       markBuildings both come before genResources. The router has been
+       reading it to walk round buildings since it existed; this scatter
+       simply never did. */
+    if(Wld.BLOCK && Wld.BLOCK[i]) continue;
     if(Wld.CLEAR[i] < 0.30 || Wld.CLEAR[i] > 0.97) continue;
     if(Wld.WLEV[i] > Wld.H[i]-0.3) continue;
     if(Wld.SLOPE[i] > 0.42) continue;
@@ -15315,7 +15348,7 @@ const Hold = {
    walking calmly in one direction drains all of them.
    ===================================================================== */
 const Mind = {
-  progress: 0, stage: 0, intensity: 0, agitation: 0,
+  progress: 0, stage: 0, intensity: 0, agitation: 0, settle: 0,
   dread: 0,              // raised by anything real that is hunting you
   pressure: 0, wave: 0, spike: 0, spikeUntil: 0,
   pauseUntil: -1, pauseRollAt: 0,
@@ -15331,6 +15364,7 @@ const Mind = {
 
   reset(){
     this.progress = 0; this.stage = 0; this.intensity = 0; this.agitation = 0;
+    this.settle = 0;
     this.clarity = 0; this.clearUntil = 0; this.lastClear = -1e9;
     this.spike = 0; this.spikeUntil = 0; this.pauseUntil = -1; this.pauseRollAt = 0;
     this.compassReversed = false; this.lastLeak = -99;
@@ -15630,6 +15664,27 @@ const Mind = {
     // per-frame coin flip, so it lasts long enough to get someone lost
     if(this.compassReversed && G.t > this.reverseUntil) this.compassReversed = false;
 
+    /* ---- AND THEN IT STOPS ------------------------------------
+       Everything above computed the stage the player arrived at. This
+       takes it away. `settle` runs 0 -> 1 over settleSeconds from the
+       moment of admission and scales the whole presentation down with
+       it: the intensity that drives the post stack, the agitation, the
+       spike, and the compass. floorOf() reads settle too, so the
+       degradation floors come off at the same rate.
+
+       progress is left where it is. The player is not well -- they are
+       somewhere that somebody is looking after them, and the stage they
+       walked in at is still the stage they walked in at if anything
+       ever lets go of them again. */
+    if(G.admitted){
+      this.settle = clamp((G.t - G.admittedAt)/Math.max(0.001, M.settleSeconds), 0, 1);
+      const k = 1 - this.settle;
+      this.intensity *= k;
+      this.agitation *= k;
+      this.spike = Math.max(0, this.spike - dt*1.6);
+      this.compassReversed = false;
+    } else this.settle = 0;
+
     // the dev panel can pin either of these; nothing else may
     if(this.forceI != null) this.intensity = this.forceI;
     if(this.forceA != null) this.agitation = this.forceA;
@@ -15675,7 +15730,9 @@ const Mind = {
       const a = cuts[lo], b = cuts[hi] != null ? cuts[hi] : 1;
       f = b > a ? clamp((this.progress - a)/(b - a), 0, 1) : 0;
     }
-    return lerp(tbl[lo], tbl[hi], f);
+    /* The degradation floors come off with the settle, so admission
+       actually clears the screen rather than only stopping the clock. */
+    return lerp(tbl[lo], tbl[hi], f) * (1 - (this.settle || 0));
   },
 
   /* ---- THE CLEAR MOMENT -------------------------------------------
@@ -17012,6 +17069,12 @@ const Director = (()=>{
   }
 
   function tick(dt){
+    /* ADMITTED MEANS NOTHING ELSE IS DRAWN. Freezing Mind.progress left
+       the director drawing from the stage the player arrived at, so
+       somebody safe at the desk was still being shown stage 4. The
+       cooldowns are not advanced either -- there is nothing to cool
+       down from. */
+    if(G.admitted) return;
     if(G.over || !G.started) return;
     state.sinceEvent += dt;
     /* ---- THE TOWN IS QUIETER, BUT IT IS NOT SAFE ------------------
@@ -17361,15 +17424,48 @@ function buildEventLibrary(){
     fire:()=>{ Gear.flickerFake = lerp(1.6, 7, I()); return true; }});
 
   /* ---------------- STAGE 4 — critical ---------------- */
+  /* ---- THE FAKE HOSPITAL, WHICH HAD FOUR WAYS TO COME TO NOTHING ---
+     Measured by force-firing it forty times: it always built, and the
+     building it built was between 83 and 189 metres away, in a uniformly
+     random direction, with a seven-minute life and no relationship to
+     the spot its own ok() had approved. So:
+
+     1. ok() and fire() each ran their own findSpot. fire() could land
+        somewhere ok() never looked at, and could fail outright after
+        ok() had already told the director this event was available.
+        The spot ok() finds is kept and fire() uses that one.
+     2. NO `inFront`. Every other structural event biases toward where
+        the player is looking; this one drew a uniform bearing, so five
+        times in six the largest lie in the game was built behind the
+        player and they walked away from it without ever seeing it.
+     3. arm() overwrote whatever was already armed. A second firing left
+        the first building standing in the world as scenery that could
+        never resolve, which is the "it does not do anything" case.
+     4. A flat 420s life, whatever the player was doing. Walking 190m
+        takes most of that, so a player who saw it, believed it, and
+        set off toward it could watch it evaporate on the way. The life
+        is refreshed while they are closing on it, so it waits for
+        somebody who is actually coming.
+
+     The trigger is the DOOR now, not a radius round the middle. The
+     hospital is over twenty metres across, so a 17m circle from its
+     centre sits inside its own walls: the player reached the building,
+     stood at the front of it, and nothing happened until they pushed
+     further in. */
   add({ id:'fakeHospital', stage:4, flavour:'structural', p:1.6, weightQuiet:2.2,
     ok:()=>{
+      if(FakeHospital.armed) return false;
       if(Math.hypot(Player.pos.x-Wld.hospital.x, Player.pos.z-Wld.hospital.z) < 220) return false;
-      return !!findSpot({ minD:80, maxD:190, flat:0.16, clearance:0.5, tries:26 });
+      FakeHospital.pending = FakeHospital.look();
+      return !!FakeHospital.pending;
     },
     fire:()=>{
-      const spot = findSpot({ minD:80, maxD:190, flat:0.16, clearance:0.5, tries:40 });
-      if(!spot) return false;
-      const ph = phantomStructure('hospital', spot, { life: 420, approach: 0, label:'hospital' });
+      const spot = FakeHospital.pending || FakeHospital.look();
+      FakeHospital.pending = null;
+      if(!spot || FakeHospital.armed) return false;
+      const ph = phantomStructure('hospital', spot,
+                                  { life: CFG.MIND.fakeHospitalLife, approach: 0,
+                                    label:'hospital' });
       ph.fakeHospital = true;
       FakeHospital.arm(ph, spot);
       return true;
@@ -17725,14 +17821,42 @@ const FakeWaterBed = {
    fails in one of two ways, both of which cost time and intensity and
    neither of which kills. */
 const FakeHospital = {
-  active: null, spot: null, armed: false,
-  arm(ph, spot){ this.active = ph; this.spot = spot; this.armed = true; },
+  active: null, spot: null, armed: false, pending: null, lastD: 1e9,
+
+  /* WHERE TO PUT IT. In front of the player by preference, because a
+     hospital built behind their back is a lie nobody is told -- but
+     only by PREFERENCE. Requiring the forward arc outright means the
+     event simply never happens when the ground the player is facing is
+     steep, wet or wooded: measured on a forward-only search, it fired
+     0 times out of 25. So the arc is tried first and a full search is
+     the fallback, which cannot fire less often than the old uniform
+     search did. */
+  look(){
+    const near = { minD:55, maxD:150, flat:0.16, clearance:0.5 };
+    return findSpot({ ...near, inFront:1.9, tries:30 })
+        || findSpot({ ...near, inFront:3.1, tries:26 })
+        || findSpot({ minD:70, maxD:190, flat:0.16, clearance:0.5, tries:34 });
+  },
+
+  arm(ph, spot){ this.active = ph; this.spot = spot; this.armed = true; this.lastD = 1e9; },
   update(dt){
     if(!this.armed || !this.active) return;
     if(this.active.dying){ this.armed = false; this.active = null; return; }
     const d = Math.hypot(Player.pos.x - this.spot.x, Player.pos.z - this.spot.z);
-    if(d > 17) return;
+    /* IT WAITS FOR SOMEBODY WHO IS COMING. While the player is closing
+       on it the clock on its life is pushed back, so the one thing that
+       must not happen -- the building they are walking toward fading
+       out in front of them -- cannot. It still expires for a player who
+       turned away and forgot about it. */
+    if(d < this.lastD - 0.5){
+      this.lastD = d;
+      this.active.born = Math.max(this.active.born, G.t - this.active.life*0.5);
+    }
+    /* The door, not a circle round the middle: this building is wider
+       than the radius that used to be tested. */
+    if(d > HOSPITAL.D*0.5 + CFG.MIND.fakeHospitalReach) return;
     this.armed = false;
+    this.lastD = 1e9;
     const mode = rngFor('fakehosp', Math.floor(G.t)).chance(0.5) ? 'fade' : 'wake';
     if(mode === 'fade'){
       this.active.dying = true; this.active.dieAt = G.t;
@@ -19527,6 +19651,36 @@ const DEV = (()=>{
      button in this panel or a line in the notes that reproduces it. If
      a system is not in this list, this file does not claim it works.
 
+     ADMISSION ACTUALLY STOPS IT  (seed 1234, admitted at stage 4 with
+     intensity pinned at 0.85 and agitation at 0.5, then 30 real seconds)
+       intensity           0.850 -> 0
+       agitation           0.500 -> 0
+       grain floor         0.100 -> 0
+       events fired while admitted ....... 0
+       phantoms left standing ............ 0
+       progress held at the admitted value: yes (0.90, unchanged)
+       the stage is NOT rolled back: still 4. They are somewhere safe,
+         not well.
+
+     THE FAKE HOSPITAL  (seed 1234, force-fired from a legal spot)
+       before: 40/40 built, but at a uniform bearing 83-189m away, from
+         a spot its own ok() had never approved, with a flat 420s life
+       after:  25/25 built, 100% of them inside the forward arc
+       a second firing while one is armed: refused
+       resolves at 12.5m from its centre, which is 4m in front of its
+         own doors (it used to fire at 17m, eight metres short of the
+         building, while the player was still walking toward it)
+       the life is refreshed while the player closes on it, so walking
+         in from 60m resolves rather than watching it fade: confirmed
+
+     NOTHING GROWS ON A CONCRETE FLOOR  (5 seeds)
+       berry patches inside a building, before ... 1 (seed 1234, on the
+         hospital floor -- reported as dirt spawning in a hospital)
+       ... after ................................. 0 on all five seeds
+       terrain above the hospital's floor slab: 0 samples of 1426 per
+         seed, worst case 0.21-0.30m BELOW it. The dirt was never the
+         ground coming through; it was a plant.
+
      TOWN HOUSES  (seeds 1234, 42, 7777; "COLLISION VIEW" for the rest)
        meshes DRAWN per house, before the merge ...... 111.2 and 106.0
        ... after the merge, before the new detail ....  20.4 and  18.8
@@ -20443,6 +20597,18 @@ function admit(h){
   G.admittedStage = Mind.stage;
   G.admittedCollapsing = (Mind.collapse || 0) > 0;
   Mind.collapse = 0;
+  /* ---- AND EVERYTHING ALREADY HAPPENING TO THEM STOPS -------------
+     Freezing the clock was never enough on its own: a phantom standing
+     in the trees when the player reached the desk went on standing
+     there, the fake hospital stayed armed, and the echo and the hush
+     kept bending the sound. All of it is let go of here, and the
+     phantoms are faded rather than deleted so nothing pops. */
+  for(const ph of Phantoms.list) if(!ph.dying){ ph.dying = true; ph.dieAt = G.t; }
+  FakeHospital.armed = false; FakeHospital.active = null; FakeHospital.spot = null;
+  FakeWaterBed.until = 0;
+  Echo.until = 0; Echo.rollUntil = 0; Echo.desatUntil = 0; Echo.leanUntil = 0;
+  Hush.until = 0;
+  Mind.agitation = 0;
   UI.say('Somebody takes your arm. You are inside, and you are expected.', 6);
   if(typeof Audio !== 'undefined') Audio.play('doorMove', { gain: 0.5 });
 }
