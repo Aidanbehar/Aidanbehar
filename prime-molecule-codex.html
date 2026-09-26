@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;font:14px system-ui,-apple-system,sans-serif;background:#faf9f7}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>Prime Molecule Codex</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#e7ecf1;
+  --surface:#ffffff;
+  --surface-2:#f4f7fa;
+  --ink:#131b25;
+  --ink-2:#43546a;
+  --muted:#6d7f93;
+  --line:#d2dbe5;
+  --line-strong:#b4c2d1;
+  --chem:#0c6a5f;
+  --chem-soft:#dcefeb;
+  --num:#a24e16;
+  --num-soft:#f7e7d8;
+  --warn:#9c1f1f;
+  --warn-soft:#f9e4e4;
+  --ring:rgba(12,106,95,.28);
+  --rule:rgba(19,27,37,.055);
+  --serif:'Spectral',Georgia,'Times New Roman',serif;
+  --sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c1117;
+    --surface:#151d27;
+    --surface-2:#1b2530;
+    --ink:#e7eef6;
+    --ink-2:#b2c1d1;
+    --muted:#8395a8;
+    --line:#26313d;
+    --line-strong:#3a4856;
+    --chem:#60d5c2;
+    --chem-soft:#10302c;
+    --num:#e6a469;
+    --num-soft:#32241a;
+    --warn:#f08c8c;
+    --warn-soft:#391e1e;
+    --ring:rgba(96,213,194,.26);
+    --rule:rgba(231,238,246,.05);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c1117;
+  --surface:#151d27;
+  --surface-2:#1b2530;
+  --ink:#e7eef6;
+  --ink-2:#b2c1d1;
+  --muted:#8395a8;
+  --line:#26313d;
+  --line-strong:#3a4856;
+  --chem:#60d5c2;
+  --chem-soft:#10302c;
+  --num:#e6a469;
+  --num-soft:#32241a;
+  --warn:#f08c8c;
+  --warn-soft:#391e1e;
+  --ring:rgba(96,213,194,.26);
+  --rule:rgba(231,238,246,.05);
+  color-scheme:dark;
+}
+
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+*{box-sizing:border-box}
+.page{max-width:1080px;margin-inline:auto;padding-inline:20px;padding-block:28px 64px}
+
+/* ---------- masthead ---------- */
+.masthead{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-end;justify-content:space-between;
+  border-bottom:1px solid var(--line-strong);padding-bottom:20px}
+.brand{display:flex;gap:14px;align-items:flex-start;min-width:0;flex:1 1 420px}
+.mark{flex:none;color:var(--chem);margin-top:4px}
+h1{font-family:var(--serif);font-weight:600;font-size:clamp(26px,4.6vw,36px);line-height:1.1;margin:0;
+  letter-spacing:-.01em;text-wrap:balance}
+.tagline{margin:6px 0 0;color:var(--ink-2);font-size:14.5px;max-width:60ch}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:3px;background:var(--surface);
+  padding:3px;gap:3px}
+.seg button{font:inherit;font-size:13.5px;font-weight:500;letter-spacing:.02em;border:0;border-radius:2px;
+  background:transparent;color:var(--ink-2);padding:8px 18px;cursor:pointer;white-space:nowrap}
+.seg button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+.seg button:focus-visible{outline:2px solid var(--chem);outline-offset:2px}
+
+/* ---------- layout ---------- */
+.grid{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,.96fr);gap:18px;margin-top:26px}
+@media (max-width:880px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:20px}
+.card.raised{box-shadow:0 1px 2px rgba(10,20,30,.05),0 8px 24px -18px rgba(10,20,30,.4)}
+.eyebrow{font-size:11.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+  margin:0 0 10px}
+
+/* ---------- typeset formula field ---------- */
+.formula-field{
+  font-family:var(--serif);font-size:clamp(30px,6.4vw,44px);line-height:1.35;
+  color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--line-strong);border-bottom:2px solid var(--chem);
+  border-radius:3px 3px 0 0;padding:.42em .5em;min-height:2.2em;
+  overflow-x:auto;overflow-y:hidden;white-space:nowrap;
+  caret-color:var(--chem);outline:none}
+.formula-field:focus{box-shadow:0 0 0 3px var(--ring)}
+.formula-field:empty::before{content:attr(data-placeholder);color:var(--muted);font-style:italic}
+.formula-field .t-el{color:var(--chem);font-weight:500}
+.formula-field sub{color:var(--num);font-size:.56em;vertical-align:-.28em;font-weight:500;letter-spacing:.01em}
+.formula-field .t-coef{color:var(--num);font-weight:500}
+.formula-field .t-op{color:var(--ink-2)}
+
+.field-note{font-size:13px;margin-top:9px;min-height:1.4em;color:var(--muted)}
+.field-note.bad{color:var(--warn)}
+.field-note strong{color:var(--ink);font-weight:600}
+
+/* ---------- keypad ---------- */
+.keypad{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.key{font-family:var(--serif);font-size:16px;line-height:1;padding:9px 11px;min-width:40px;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:2px;color:var(--ink);cursor:pointer}
+.key:hover{border-color:var(--chem);color:var(--chem)}
+.key:focus-visible{outline:2px solid var(--chem);outline-offset:1px}
+.key.util{font-family:var(--sans);font-size:12.5px;color:var(--ink-2);min-width:auto;padding:10px 12px}
+.key .kz{font-family:var(--sans);font-size:9.5px;color:var(--muted);margin-left:3px;vertical-align:super}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font-family:var(--serif);font-size:14.5px;padding:6px 11px;border-radius:99px;cursor:pointer;
+  background:transparent;border:1px solid var(--line-strong);color:var(--ink-2)}
+.chip:hover{border-color:var(--chem);color:var(--chem)}
+.chip sub{font-size:.62em;vertical-align:-.25em}
+.chip .cn{font-family:var(--sans);font-size:11px;color:var(--muted);margin-left:6px}
+.sub-label{font-size:12px;color:var(--muted);margin:16px 0 0;letter-spacing:.02em}
+
+/* ---------- result ---------- */
+.result{display:flex;flex-direction:column;gap:2px}
+.id-value{font-family:var(--serif);font-weight:600;font-size:clamp(30px,5.6vw,44px);line-height:1.15;
+  letter-spacing:.005em;font-variant-numeric:tabular-nums;word-break:break-word;color:var(--ink)}
+.id-value.invalid{color:var(--warn);font-size:clamp(20px,3.6vw,26px)}
+.id-meta{font-size:12.5px;color:var(--muted);margin-top:4px}
+.product{font-family:var(--serif);font-size:20px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);
+  overflow-x:auto;white-space:nowrap;padding-bottom:2px}
+.product .pp{color:var(--chem);font-weight:500}
+.product sup{color:var(--num);font-size:.6em;vertical-align:.5em;font-weight:500}
+.product .times{color:var(--muted);margin:0 .32em}
+.product .lhs{color:var(--ink-2);margin-right:.3em}
+
+.btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.btn{font-family:var(--sans);font-size:13px;font-weight:500;padding:9px 14px;border-radius:2px;cursor:pointer;
+  border:1px solid var(--line-strong);background:var(--surface-2);color:var(--ink)}
+.btn:hover{border-color:var(--chem);color:var(--chem)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.btn.primary:hover{opacity:.88;color:var(--bg)}
+.btn:focus-visible{outline:2px solid var(--chem);outline-offset:2px}
+
+/* ---------- tables ---------- */
+.tablewrap{overflow-x:auto;margin-top:18px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{font-family:var(--sans);font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);text-align:left;padding:0 10px 7px 0;border-bottom:1px solid var(--line-strong);white-space:nowrap}
+td{padding:8px 10px 8px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;color:var(--ink-2)}
+tr:last-child td{border-bottom:0}
+td.sym{font-family:var(--serif);font-size:17px;color:var(--chem);font-weight:500}
+td.name{color:var(--muted);font-size:13px}
+td.prime{font-family:var(--serif);font-size:16px;color:var(--chem)}
+td.pow{font-family:var(--serif);font-size:16px;color:var(--ink)}
+td.pow sup{color:var(--num);font-size:.62em;vertical-align:.5em}
+td.count{color:var(--num);font-weight:600}
+
+/* ---------- paper section ---------- */
+.paper{margin-top:30px;background:var(--surface);border:1px solid var(--line);border-radius:3px;
+  background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 31px,var(--rule) 31px,var(--rule) 32px);
+  background-position:0 0}
+.paper-head{padding:20px 22px 0}
+.paper h2{font-family:var(--serif);font-size:23px;font-weight:600;margin:0;letter-spacing:-.005em}
+.paper-head p{color:var(--ink-2);font-size:14px;margin:6px 0 0;max-width:62ch}
+ol.steps{list-style:none;margin:16px 0 0;padding:0 22px 24px;counter-reset:step}
+ol.steps>li{counter-increment:step;display:grid;grid-template-columns:34px minmax(0,1fr);gap:14px;
+  padding:16px 0;border-top:1px solid var(--line)}
+ol.steps>li::before{content:counter(step);font-family:var(--serif);font-size:15px;font-weight:600;color:var(--bg);
+  background:var(--ink);width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  margin-top:1px}
+.step-t{font-weight:600;font-size:14.5px;margin:2px 0 0;color:var(--ink)}
+.step-b{font-size:13.8px;color:var(--ink-2);margin:4px 0 0}
+.work{font-family:var(--serif);font-size:17px;color:var(--ink);margin-top:10px;display:flex;flex-direction:column;gap:5px}
+.work .line{overflow-x:auto;white-space:nowrap;padding-bottom:1px}
+.work .hl{color:var(--num);font-weight:600}
+.work .pp{color:var(--chem);font-weight:500}
+.work sup{color:var(--num);font-size:.62em;vertical-align:.5em}
+.work sub{color:var(--num);font-size:.62em;vertical-align:-.25em}
+.work .eq{color:var(--muted);margin:0 .3em}
+.strip{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 2px;align-items:center}
+.pz{font-family:var(--serif);font-size:15px;padding:3px 8px;border-radius:2px;background:var(--surface-2);
+  border:1px solid var(--line);color:var(--muted);font-variant-numeric:tabular-nums}
+.pz.on{background:var(--chem-soft);border-color:var(--chem);color:var(--chem);font-weight:600}
+.pz.off{text-decoration:line-through;opacity:.62}
+.pz .ord{font-family:var(--sans);font-size:9.5px;color:var(--muted);margin-left:4px;vertical-align:super}
+.ladder{display:flex;flex-direction:column;gap:7px;margin-top:10px;max-height:340px;overflow:auto}
+.rung{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:baseline}
+.rung .div{font-family:var(--serif);font-size:15px;color:var(--chem);white-space:nowrap;font-weight:500}
+.rung .chain{font-family:var(--serif);font-size:16px;color:var(--ink-2);overflow-x:auto;white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.rung .chain .arrow{color:var(--muted);margin:0 .38em}
+.rung .chain b{color:var(--ink);font-weight:500}
+.callout{margin-top:12px;padding:11px 13px;border-left:2px solid var(--chem);background:var(--chem-soft);
+  font-size:13.5px;color:var(--ink);border-radius:0 2px 2px 0}
+.callout.bad{border-left-color:var(--warn);background:var(--warn-soft)}
+.f{font-family:var(--serif)}
+.f sub{font-size:.62em;vertical-align:-.25em;color:var(--num)}
+.f .t-el{color:var(--chem);font-weight:500}
+
+/* ---------- decode input ---------- */
+.id-field{width:100%;font-family:var(--serif);font-size:clamp(26px,5.4vw,38px);line-height:1.4;
+  font-variant-numeric:tabular-nums;color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--line-strong);border-bottom:2px solid var(--num);border-radius:3px 3px 0 0;
+  padding:.4em .5em;outline:none;letter-spacing:.01em}
+.id-field:focus{box-shadow:0 0 0 3px var(--ring)}
+.id-field::placeholder{color:var(--muted);font-style:italic}
+.formula-out{font-family:var(--serif);font-size:clamp(32px,6.2vw,46px);line-height:1.25;color:var(--ink);
+  overflow-x:auto;white-space:nowrap}
+.formula-out .t-el{color:var(--chem);font-weight:500}
+.formula-out sub{color:var(--num);font-size:.56em;vertical-align:-.28em;font-weight:500}
+.formula-out.invalid{color:var(--warn);font-size:clamp(19px,3.4vw,24px);white-space:normal;line-height:1.45}
+
+/* ---------- reference ---------- */
+.reference{margin-top:30px}
+.ref-head{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center}
+.search{font:inherit;font-size:13.5px;padding:8px 11px;border:1px solid var(--line-strong);border-radius:2px;
+  background:var(--surface-2);color:var(--ink);min-width:200px;outline:none}
+.search:focus{box-shadow:0 0 0 3px var(--ring)}
+.ref-grid{margin-top:14px;max-height:270px;overflow:auto;border:1px solid var(--line);border-radius:2px;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr))}
+.ref-cell{display:grid;grid-template-columns:30px 1fr auto;gap:8px;align-items:baseline;padding:7px 10px;
+  border-bottom:1px solid var(--line);font-size:13px}
+.ref-cell .z{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.ref-cell .s{font-family:var(--serif);font-size:15px;color:var(--chem);font-weight:500}
+.ref-cell .s em{font-style:normal;color:var(--muted);font-size:11.5px;font-family:var(--sans);margin-left:5px}
+.ref-cell .p{font-family:var(--serif);font-size:15px;color:var(--num);font-variant-numeric:tabular-nums}
+
+footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--line-strong);color:var(--muted);font-size:13px;
+  max-width:70ch}
+footer b{color:var(--ink-2);font-weight:600}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(22px + env(safe-area-inset-bottom,0px));
+  background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:3px;font-size:13px;z-index:20;
+  box-shadow:0 8px 28px -12px rgba(0,0,0,.6)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div class="brand">
+      <svg class="mark" width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
+        <line x1="8" y1="21" x2="15" y2="8" stroke="currentColor" stroke-width="1.3"/>
+        <line x1="15" y1="8" x2="23" y2="19" stroke="currentColor" stroke-width="1.3"/>
+        <line x1="8" y1="21" x2="23" y2="19" stroke="currentColor" stroke-width="1.3"/>
+        <circle cx="15" cy="8" r="4" fill="currentColor"/>
+        <circle cx="8" cy="21" r="3.1" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="23" cy="19" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+      <div>
+        <h1>Prime Molecule Codex</h1>
+        <p class="tagline">Turn any chemical formula into a single whole number &mdash; and turn that number back into the formula it came from. Nothing is ever lost, and no two molecules collide.</p>
+      </div>
+    </div>
+    <div class="seg" role="tablist" aria-label="Direction">
+      <button id="tabEncode" role="tab" aria-selected="true" aria-controls="panelEncode">Formula &rarr; Number</button>
+      <button id="tabDecode" role="tab" aria-selected="false" aria-controls="panelDecode">Number &rarr; Formula</button>
+    </div>
+  </header>
+
+  <!-- ============ ENCODE ============ -->
+  <section id="panelEncode" role="tabpanel" aria-labelledby="tabEncode">
+    <div class="grid">
+      <div class="card">
+        <p class="eyebrow">Write the formula</p>
+        <div id="formulaBox" class="formula-field" contenteditable="true" spellcheck="false"
+             role="textbox" aria-label="Chemical formula" data-placeholder="H2O"></div>
+        <div class="field-note" id="encodeNote"></div>
+
+        <p class="sub-label">Tap to insert &mdash; subscripts happen on their own as you type digits</p>
+        <div class="keypad" id="keypad"></div>
+        <p class="sub-label">Try one</p>
+        <div class="chips" id="examples"></div>
+      </div>
+
+      <div class="card raised">
+        <p class="eyebrow">Molecule ID</p>
+        <div class="result">
+          <div class="id-value" id="idValue">&mdash;</div>
+          <div class="id-meta" id="idMeta"></div>
+        </div>
+        <div class="product" id="productLine"></div>
+        <div class="btnrow">
+          <button class="btn primary" id="copyId">Copy the number</button>
+          <button class="btn" id="toDecoder">Decode it back &rarr;</button>
+        </div>
+        <div class="tablewrap">
+          <table id="encodeLedger">
+            <thead><tr><th>Atom</th><th>Z</th><th>p(Z)</th><th>Count</th><th>Contributes</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <section class="paper">
+      <div class="paper-head">
+        <h2>Doing it on paper</h2>
+        <p>The same five moves, worked out on whatever formula is in the box. No calculator needed for small molecules &mdash; only a periodic table and a list of primes.</p>
+      </div>
+      <ol class="steps" id="encodeSteps"></ol>
+    </section>
+  </section>
+
+  <!-- ============ DECODE ============ -->
+  <section id="panelDecode" role="tabpanel" aria-labelledby="tabDecode" hidden>
+    <div class="grid">
+      <div class="card">
+        <p class="eyebrow">Enter the number</p>
+        <input class="id-field" id="idInput" inputmode="numeric" autocomplete="off" spellcheck="false"
+               aria-label="Molecule ID number" placeholder="205504">
+        <div class="field-note" id="decodeNote"></div>
+        <p class="sub-label">Try one</p>
+        <div class="chips" id="idExamples"></div>
+        <p class="step-b" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
+          Any whole number from 2 up is either a molecule or nothing at all. It is a molecule exactly when it
+          divides all the way down to 1 using primes no larger than 647 &mdash; the prime that belongs to
+          oganesson, the last element on the table. One bigger prime factor anywhere and the number names nothing.</p>
+      </div>
+
+      <div class="card raised">
+        <p class="eyebrow">The molecule inside</p>
+        <div class="formula-out" id="formulaOut">&mdash;</div>
+        <div class="id-meta" id="formulaMeta"></div>
+        <div class="product" id="factorLine"></div>
+        <div class="btnrow">
+          <button class="btn" id="toEncoder">&larr; Open in the encoder</button>
+        </div>
+        <div class="tablewrap">
+          <table id="decodeLedger">
+            <thead><tr><th>Prime</th><th>Position</th><th>Atom</th><th>Power</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <section class="paper">
+      <div class="paper-head">
+        <h2>Doing it on paper</h2>
+        <p>Decoding is plain long division. Keep dividing by the smallest prime that fits, tally how many times each one goes in, and stop when you reach 1.</p>
+      </div>
+      <ol class="steps" id="decodeSteps"></ol>
+    </section>
+  </section>
+
+  <section class="card reference">
+    <div class="ref-head">
+      <div>
+        <p class="eyebrow" style="margin:0">The lookup table</p>
+        <p style="margin:4px 0 0;color:var(--ink-2);font-size:13.5px">Atomic number Z, and the Z-th prime that stands in for it.</p>
+      </div>
+      <input class="search" id="refSearch" placeholder="Find an element or a prime" aria-label="Search the lookup table" autocomplete="off">
+    </div>
+    <div class="ref-grid" id="refGrid"></div>
+  </section>
+
+  <footer>
+    <b>Why it can't go wrong:</b> the fundamental theorem of arithmetic says every whole number above 1 breaks into primes in exactly one way. Pin each element to its own prime and a formula becomes a number that can always be read back &mdash; the trick Kurt G&ouml;del used in 1931 to make arithmetic talk about itself. The numbers grow fast: one caffeine molecule needs twenty digits.
+  </footer>
+</div>
+
+<script>
+/* ================= data ================= */
+var RAW = "H Hydrogen,He Helium,Li Lithium,Be Beryllium,B Boron,C Carbon,N Nitrogen,O Oxygen,F Fluorine,Ne Neon,Na Sodium,Mg Magnesium,Al Aluminum,Si Silicon,P Phosphorus,S Sulfur,Cl Chlorine,Ar Argon,K Potassium,Ca Calcium,Sc Scandium,Ti Titanium,V Vanadium,Cr Chromium,Mn Manganese,Fe Iron,Co Cobalt,Ni Nickel,Cu Copper,Zn Zinc,Ga Gallium,Ge Germanium,As Arsenic,Se Selenium,Br Bromine,Kr Krypton,Rb Rubidium,Sr Strontium,Y Yttrium,Zr Zirconium,Nb Niobium,Mo Molybdenum,Tc Technetium,Ru Ruthenium,Rh Rhodium,Pd Palladium,Ag Silver,Cd Cadmium,In Indium,Sn Tin,Sb Antimony,Te Tellurium,I Iodine,Xe Xenon,Cs Cesium,Ba Barium,La Lanthanum,Ce Cerium,Pr Praseodymium,Nd Neodymium,Pm Promethium,Sm Samarium,Eu Europium,Gd Gadolinium,Tb Terbium,Dy Dysprosium,Ho Holmium,Er Erbium,Tm Thulium,Yb Ytterbium,Lu Lutetium,Hf Hafnium,Ta Tantalum,W Tungsten,Re Rhenium,Os Osmium,Ir Iridium,Pt Platinum,Au Gold,Hg Mercury,Tl Thallium,Pb Lead,Bi Bismuth,Po Polonium,At Astatine,Rn Radon,Fr Francium,Ra Radium,Ac Actinium,Th Thorium,Pa Protactinium,U Uranium,Np Neptunium,Pu Plutonium,Am Americium,Cm Curium,Bk Berkelium,Cf Californium,Es Einsteinium,Fm Fermium,Md Mendelevium,No Nobelium,Lr Lawrencium,Rf Rutherfordium,Db Dubnium,Sg Seaborgium,Bh Bohrium,Hs Hassium,Mt Meitnerium,Ds Darmstadtium,Rg Roentgenium,Cn Copernicium,Nh Nihonium,Fl Flerovium,Mc Moscovium,Lv Livermorium,Ts Tennessine,Og Oganesson";
+
+var PRIMES = (function(){
+  var N = 1000, s = new Uint8Array(N + 1), out = [];
+  for (var i = 2; i <= N; i++) {
+    if (!s[i]) { out.push(i); for (var j = i * i; j <= N; j += i) s[j] = 1; }
+  }
+  return out.slice(0, 118);
+})();
+
+var ELEMENTS = RAW.split(',').map(function (e, i) {
+  var parts = e.split(' ');
+  return { Z: i + 1, sym: parts[0], name: parts[1], p: PRIMES[i] };
+});
+var BY_SYM = {};
+ELEMENTS.forEach(function (e) { BY_SYM[e.sym] = e; });
+var MAX_PRIME = PRIMES[117];
+
+/* ================= helpers ================= */
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function group(str) {
+  return String(str).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+function plural(n, one, many) { return n === 1 ? one : (many || one + 's'); }
+function ordinal(n) {
+  var s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+/* ---- typesetting a raw formula string into pretty chemistry ---- */
+function typeset(text) {
+  var out = '', i = 0;
+  while (i < text.length) {
+    var c = text[i];
+    if (/[A-Za-z]/.test(c)) {
+      var j = i; while (j < text.length && /[A-Za-z]/.test(text[j])) j++;
+      out += '<span class="t-el">' + esc(text.slice(i, j)) + '</span>'; i = j;
+    } else if (/[0-9]/.test(c)) {
+      var k = i; while (k < text.length && /[0-9]/.test(text[k])) k++;
+      var prev = i > 0 ? text[i - 1] : '';
+      out += /[A-Za-z)]/.test(prev)
+        ? '<sub>' + text.slice(i, k) + '</sub>'
+        : '<span class="t-coef">' + text.slice(i, k) + '</span>';
+      i = k;
+    } else {
+      out += '<span class="t-op">' + esc(c) + '</span>'; i++;
+    }
+  }
+  return out;
+}
+function formulaHTML(list) {
+  return list.map(function (e) {
+    return '<span class="t-el">' + e.sym + '</span>' + (e.count > 1 ? '<sub>' + e.count + '</sub>' : '');
+  }).join('');
+}
+function formulaText(list) {
+  return list.map(function (e) { return e.sym + (e.count > 1 ? e.count : ''); }).join('');
+}
+function hill(list) {
+  var c = list.filter(function (e) { return e.sym === 'C'; });
+  var h = list.filter(function (e) { return e.sym === 'H'; });
+  var rest = list.filter(function (e) { return e.sym !== 'C' && e.sym !== 'H'; })
+                 .sort(function (a, b) { return a.sym < b.sym ? -1 : 1; });
+  if (c.length) return c.concat(h, rest);
+  return list.slice().sort(function (a, b) { return a.sym < b.sym ? -1 : 1; });
+}
+
+/* ================= the parser ================= */
+function ParseError(msg, hint) { this.msg = msg; this.hint = hint || ''; }
+
+function parseFormula(src) {
+  var text = src.replace(/\s+/g, '').replace(/[*.]/g, '·');
+  var i = 0;
+  var tally = [];
+  function push(sym, n) {
+    for (var t = 0; t < tally.length; t++) {
+      if (tally[t].sym === sym) { tally[t].count += n; return; }
+    }
+    tally.push({ sym: sym, count: n, Z: BY_SYM[sym].Z, p: BY_SYM[sym].p, name: BY_SYM[sym].name });
+  }
+  function number() {
+    var s = '';
+    while (i < text.length && /[0-9]/.test(text[i])) s += text[i++];
+    return s ? parseInt(s, 10) : 1;
+  }
+  function seq() {
+    var local = [];
+    function add(sym, n) {
+      for (var t = 0; t < local.length; t++) {
+        if (local[t].sym === sym) { local[t].count += n; return; }
+      }
+      local.push({ sym: sym, count: n });
+    }
+    while (i < text.length) {
+      var c = text[i];
+      if (c === ')') break;
+      if (c === '(') {
+        i++;
+        var inner = seq();
+        if (text[i] !== ')') throw new ParseError('A parenthesis is still open.', 'Add the matching ) before the count.');
+        i++;
+        var m = number();
+        inner.forEach(function (e) { add(e.sym, e.count * m); });
+        continue;
+      }
+      if (c === '·') {
+        i++;
+        var mult = number();
+        var part = seq();
+        if (!part.length) throw new ParseError('Nothing follows the dot.', 'A dot joins two parts, like CuSO4·5H2O.');
+        part.forEach(function (e) { add(e.sym, e.count * mult); });
+        continue;
+      }
+      if (/[0-9]/.test(c)) {
+        var lead = number();
+        var body = seq();
+        if (!body.length) throw new ParseError('That number has nothing to count.', 'Numbers go after an atom, like H2O.');
+        body.forEach(function (e) { add(e.sym, e.count * lead); });
+        continue;
+      }
+      if (/[A-Z]/.test(c)) {
+        var sym = c; i++;
+        if (i < text.length && /[a-z]/.test(text[i]) && BY_SYM[sym + text[i]]) { sym += text[i]; i++; }
+        else if (i < text.length && /[a-z]/.test(text[i]) && !BY_SYM[sym]) { sym += text[i]; i++; }
+        if (!BY_SYM[sym]) {
+          throw new ParseError('There is no element called ' + sym + '.',
+            BY_SYM[sym[0].toUpperCase() + sym.slice(1).toLowerCase()]
+              ? 'Did you mean ' + (sym[0].toUpperCase() + sym.slice(1).toLowerCase()) + '?'
+              : 'Element symbols are capitalized, like Na or Cl.');
+        }
+        add(sym, number());
+        continue;
+      }
+      if (/[a-z]/.test(c)) {
+        throw new ParseError('A symbol cannot start with a small letter.',
+          BY_SYM[c.toUpperCase()] ? 'Did you mean ' + c.toUpperCase() + '?' : 'Start every element with a capital letter.');
+      }
+      throw new ParseError('“' + c + '” does not belong in a formula.',
+        'Use element symbols, digits, parentheses and · only.');
+    }
+    return local;
+  }
+  var result = seq();
+  if (i < text.length && text[i] === ')') throw new ParseError('There is an extra ) here.', 'Every ) needs an ( before it.');
+  result.forEach(function (e) { push(e.sym, e.count); });
+  return tally;
+}
+
+/* ================= encode / decode ================= */
+function encode(tally) {
+  var id = 1n;
+  var rows = tally.map(function (e) {
+    var p = BigInt(e.p), power = p ** BigInt(e.count);
+    id *= power;
+    return { sym: e.sym, name: e.name, Z: e.Z, p: e.p, count: e.count, power: power };
+  });
+  return { id: id, rows: rows };
+}
+
+function decode(digits) {
+  var n;
+  try { n = BigInt(digits); } catch (err) { return { error: 'notanumber' }; }
+  if (n < 1n) return { error: 'toosmall' };
+  if (n === 1n) return { error: 'empty' };
+  var start = n, trials = [], rows = [];
+  for (var k = 0; k < PRIMES.length && n > 1n; k++) {
+    var p = BigInt(PRIMES[k]), e = 0, chain = [];
+    while (n % p === 0n) { n /= p; e++; chain.push(n.toString()); }
+    trials.push({ p: PRIMES[k], Z: k + 1, count: e });
+    if (e) rows.push({ p: PRIMES[k], Z: k + 1, sym: ELEMENTS[k].sym, name: ELEMENTS[k].name, count: e, chain: chain });
+  }
+  if (n > 1n) return { error: 'leftover', leftover: n.toString(), rows: rows, trials: trials, start: start };
+  return { rows: rows, trials: trials, start: start };
+}
+
+/* ================= caret plumbing for the formula box ================= */
+var box = document.getElementById('formulaBox');
+
+function caretOffset(el) {
+  var sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !el.contains(sel.anchorNode)) return null;
+  var r = sel.getRangeAt(0), pre = document.createRange();
+  pre.selectNodeContents(el);
+  pre.setEnd(r.endContainer, r.endOffset);
+  return pre.toString().length;
+}
+function setCaret(el, off) {
+  var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null), acc = 0, node;
+  while ((node = walker.nextNode())) {
+    var len = node.nodeValue.length;
+    if (acc + len >= off) {
+      var r = document.createRange();
+      r.setStart(node, Math.max(0, off - acc));
+      r.collapse(true);
+      var s = window.getSelection();
+      s.removeAllRanges(); s.addRange(r);
+      return;
+    }
+    acc += len;
+  }
+  var r2 = document.createRange();
+  r2.selectNodeContents(el); r2.collapse(false);
+  var s2 = window.getSelection();
+  s2.removeAllRanges(); s2.addRange(r2);
+}
+function paint(keepCaret) {
+  var text = box.textContent.replace(/\s+/g, '');
+  var off = keepCaret ? caretOffset(box) : null;
+  box.innerHTML = text ? typeset(text) : '';
+  if (off !== null) setCaret(box, Math.min(off, text.length));
+  return text;
+}
+function insertAtCaret(str) {
+  var text = box.textContent.replace(/\s+/g, '');
+  var off = caretOffset(box);
+  if (off === null) off = text.length;
+  var next = text.slice(0, off) + str + text.slice(off);
+  box.innerHTML = typeset(next);
+  box.focus();
+  setCaret(box, off + str.length);
+  runEncode();
+}
+function setFormula(str) {
+  box.innerHTML = typeset(str);
+  runEncode();
+}
+
+/* ================= encode rendering ================= */
+var idValue = document.getElementById('idValue');
+var idMeta = document.getElementById('idMeta');
+var productLine = document.getElementById('productLine');
+var encodeNote = document.getElementById('encodeNote');
+var ledgerBody = document.querySelector('#encodeLedger tbody');
+var encodeSteps = document.getElementById('encodeSteps');
+var lastId = null;
+var lastFormula = '';
+
+function primeStrip(Z) {
+  var out = [], list;
+  if (Z <= 14) {
+    list = PRIMES.slice(0, Z).map(function (p, idx) { return { p: p, n: idx + 1 }; });
+  } else {
+    list = PRIMES.slice(0, 4).map(function (p, idx) { return { p: p, n: idx + 1 }; });
+    list.push(null);
+    list = list.concat(PRIMES.slice(Z - 2, Z).map(function (p, idx) { return { p: p, n: Z - 1 + idx }; }));
+  }
+  list.forEach(function (item) {
+    if (!item) { out.push('<span class="pz" style="border:0;background:none">…</span>'); return; }
+    out.push('<span class="pz' + (item.n === Z ? ' on' : '') + '">' + item.p + '<span class="ord">' + item.n + '</span></span>');
+  });
+  return '<div class="strip">' + out.join('') + '</div>';
+}
+
+function powerWork(row) {
+  if (row.count === 1) {
+    return '<span class="pp">' + row.p + '</span><sup>1</sup><span class="eq">=</span><span class="hl">' + group(row.p) + '</span> &mdash; one atom, so the prime stands alone';
+  }
+  var parts = [];
+  for (var i = 0; i < Math.min(row.count, 6); i++) parts.push(row.p);
+  var chain = parts.join(' × ') + (row.count > 6 ? ' × …' : '');
+  return '<span class="pp">' + row.p + '</span><sup>' + row.count + '</sup><span class="eq">=</span>' +
+         chain + '<span class="eq">=</span><span class="hl">' + group(row.power.toString()) + '</span>';
+}
+
+function renderEncodeSteps(tally, res) {
+  var rows = res.rows;
+  var html = '';
+
+  html += '<li><div><p class="step-t">Tally the atoms</p>' +
+    '<p class="step-b">Expand every bracket first, then count how many of each element the formula actually contains.</p>' +
+    '<div class="work"><div class="line"><span class="f">' + formulaHTML(rows) + '</span><span class="eq">→</span>' +
+    rows.map(function (r) { return '<span class="pp">' + r.sym + '</span>&thinsp;<span class="hl">' + r.count + '</span>'; }).join('<span style="color:var(--muted)">,&ensp;</span>') +
+    '</div></div></div></li>';
+
+  html += '<li><div><p class="step-t">Look up each atomic number</p>' +
+    '<p class="step-b">Z is the element’s position on the periodic table &mdash; the number of protons.</p>' +
+    '<div class="work">' + rows.map(function (r) {
+      return '<div class="line"><span class="pp">' + r.sym + '</span> is ' + r.name.toLowerCase() +
+        ', element number <span class="hl">' + r.Z + '</span></div>';
+    }).join('') + '</div></div></li>';
+
+  html += '<li><div><p class="step-t">Count that far along the primes</p>' +
+    '<p class="step-b">Start at 2 and count off primes. The one you land on at position Z is the element’s stand-in.</p>' +
+    rows.map(function (r) {
+      return '<div class="work"><div class="line">For <span class="pp">' + r.sym + '</span>, take the <span class="hl">' +
+        ordinal(r.Z) + '</span> prime:</div></div>' + primeStrip(r.Z) +
+        '<div class="work"><div class="line">p(' + r.Z + ')<span class="eq">=</span><span class="hl">' + r.p + '</span></div></div>';
+    }).join('') + '</div></li>';
+
+  html += '<li><div><p class="step-t">Raise each prime to its atom count</p>' +
+    '<p class="step-b">The count becomes the exponent. Multiply the prime by itself that many times.</p>' +
+    '<div class="work">' + rows.map(function (r) {
+      return '<div class="line">' + powerWork(r) + '</div>';
+    }).join('') + '</div></div></li>';
+
+  var running = 1n, lines = [];
+  if (rows.length === 1) {
+    lines.push('<div class="line">Only one kind of atom here, so the power <em>is</em> the ID: <span class="hl">' + group(rows[0].power.toString()) + '</span></div>');
+    running = rows[0].power;
+  } else {
+    running = rows[0].power;
+    lines.push('<div class="line">Start with <span class="hl">' + group(running.toString()) + '</span></div>');
+    for (var i = 1; i < rows.length; i++) {
+      var before = running;
+      running = running * rows[i].power;
+      lines.push('<div class="line">' + group(before.toString()) + '<span class="eq">×</span>' +
+        group(rows[i].power.toString()) + ' <span style="color:var(--muted)">(' + rows[i].sym + ')</span>' +
+        '<span class="eq">=</span><span class="hl">' + group(running.toString()) + '</span></div>');
+    }
+  }
+  html += '<li><div><p class="step-t">Multiply the powers together</p>' +
+    '<p class="step-b">One factor at a time, left to right. Order never matters &mdash; you land on the same number either way.</p>' +
+    '<div class="work">' + lines.join('') + '</div>' +
+    '<div class="callout">The ID for <span class="f">' + formulaHTML(rows) + '</span> is <b>' + group(res.id.toString()) + '</b>.</div>' +
+    '</div></li>';
+
+  encodeSteps.innerHTML = html;
+}
+
+function runEncode() {
+  var text = paint(true);
+  lastFormula = text;
+  if (!text) {
+    encodeNote.className = 'field-note';
+    encodeNote.textContent = 'Type a formula, or tap one of the examples below.';
+    idValue.className = 'id-value';
+    idValue.innerHTML = '&mdash;';
+    idMeta.textContent = '';
+    productLine.innerHTML = '';
+    ledgerBody.innerHTML = '';
+    encodeSteps.innerHTML = '<li><div><p class="step-t">Waiting on a formula</p><p class="step-b">The worked steps appear here and follow whatever you type.</p></div></li>';
+    lastId = null;
+    return;
+  }
+  var tally;
+  try {
+    tally = parseFormula(text);
+  } catch (err) {
+    if (!(err instanceof ParseError)) throw err;
+    encodeNote.className = 'field-note bad';
+    encodeNote.innerHTML = esc(err.msg) + (err.hint ? ' <strong>' + esc(err.hint) + '</strong>' : '');
+    idValue.className = 'id-value invalid';
+    idValue.textContent = 'Not a formula yet';
+    idMeta.textContent = '';
+    productLine.innerHTML = '';
+    lastId = null;
+    return;
+  }
+  if (!tally.length) { encodeNote.textContent = ''; return; }
+
+  var res = encode(tally);
+  lastId = res.id.toString();
+  var atoms = tally.reduce(function (a, e) { return a + e.count; }, 0);
+
+  encodeNote.className = 'field-note';
+  encodeNote.innerHTML = 'Reads as <strong>' + atoms + ' ' + plural(atoms, 'atom') + '</strong> across ' +
+    tally.length + ' ' + plural(tally.length, 'element') + '.';
+
+  idValue.className = 'id-value';
+  idValue.textContent = group(lastId);
+  idMeta.textContent = lastId.length + ' ' + plural(lastId.length, 'digit') + ' · one number, one molecule';
+
+  productLine.innerHTML = '<span class="lhs">=</span>' + res.rows.map(function (r) {
+    return '<span class="pp">' + r.p + '</span>' + (r.count > 1 ? '<sup>' + r.count + '</sup>' : '');
+  }).join('<span class="times">×</span>');
+
+  ledgerBody.innerHTML = res.rows.map(function (r) {
+    return '<tr><td class="sym">' + r.sym + '</td><td>' + r.Z + '</td><td class="prime">' + r.p +
+      '</td><td class="count">' + r.count + '</td><td class="pow">' +
+      (r.count > 1 ? r.p + '<sup>' + r.count + '</sup> = ' + group(r.power.toString()) : group(r.power.toString())) +
+      '</td></tr>';
+  }).join('');
+
+  renderEncodeSteps(tally, res);
+}
+
+/* ================= decode rendering ================= */
+var idInput = document.getElementById('idInput');
+var decodeNote = document.getElementById('decodeNote');
+var formulaOut = document.getElementById('formulaOut');
+var formulaMeta = document.getElementById('formulaMeta');
+var factorLine = document.getElementById('factorLine');
+var decodeBody = document.querySelector('#decodeLedger tbody');
+var decodeSteps = document.getElementById('decodeSteps');
+var lastDecoded = '';
+
+function renderDecodeSteps(digits, res) {
+  var html = '';
+  html += '<li><div><p class="step-t">Write the number down</p>' +
+    '<p class="step-b">Everything below is long division, one prime at a time, smallest first.</p>' +
+    '<div class="work"><div class="line">N<span class="eq">=</span><span class="hl">' + group(digits) + '</span></div></div></div></li>';
+
+  var running = res.start.toString();
+  var ladder = '';
+  res.rows.forEach(function (r) {
+    var parts = [];
+    var prev = running;
+    r.chain.forEach(function (q) {
+      parts.push('<b>' + group(q) + '</b>');
+    });
+    ladder += '<div class="rung"><div class="div">÷ ' + r.p + ', ' + r.count + ' ' + plural(r.count, 'time') + '</div>' +
+      '<div class="chain">' + group(prev) + '<span class="arrow">→</span>' + parts.join('<span class="arrow">→</span>') + '</div></div>';
+    running = r.chain[r.chain.length - 1];
+  });
+
+  var failed = res.trials.filter(function (t) { return t.count === 0; });
+  html += '<li><div><p class="step-t">Divide out the primes in order</p>' +
+    '<p class="step-b">Try 2, then 3, then 5, and so on. Each time one divides evenly, write the quotient and try the same prime again. Keep a tally.</p>' +
+    '<div class="ladder">' + ladder + '</div>' +
+    (failed.length ? '<p class="step-b" style="margin-top:12px">Primes that did not go in evenly &mdash; crossed off and skipped:</p><div class="strip">' +
+      failed.slice(0, 40).map(function (t) { return '<span class="pz off">' + t.p + '</span>'; }).join('') +
+      (failed.length > 40 ? '<span class="pz" style="border:0;background:none">and ' + (failed.length - 40) + ' more</span>' : '') + '</div>' : '') +
+    '</div></li>';
+
+  html += '<li><div><p class="step-t">Stop at 1</p>' +
+    '<p class="step-b">Reaching 1 means the number is fully broken down. The tally is the whole answer.</p>' +
+    '<div class="work">' + res.rows.map(function (r) {
+      return '<div class="line"><span class="pp">' + r.p + '</span> went in <span class="hl">' + r.count + '</span> ' + plural(r.count, 'time') + '</div>';
+    }).join('') + '</div></div></li>';
+
+  html += '<li><div><p class="step-t">Turn each prime back into an element</p>' +
+    '<p class="step-b">A prime’s <em>position</em> in the list of primes is the atomic number. Its exponent is the number of atoms.</p>' +
+    '<div class="work">' + res.rows.map(function (r) {
+      return '<div class="line"><span class="pp">' + r.p + '</span> is the <span class="hl">' + ordinal(r.Z) +
+        '</span> prime <span class="eq">→</span> element ' + r.Z + ', ' + r.name.toLowerCase() +
+        ' <span class="pp">(' + r.sym + ')</span><span class="eq">→</span><span class="hl">' + r.count + '</span> ' + plural(r.count, 'atom') + '</div>';
+    }).join('') + '</div></div></li>';
+
+  var ordered = hill(res.rows);
+  html += '<li><div><p class="step-t">Write the formula out</p>' +
+    '<p class="step-b">Chemists put carbon first, hydrogen second, then everything else alphabetically. That is Hill order.</p>' +
+    '<div class="callout"><span class="f" style="font-size:22px">' + formulaHTML(ordered) + '</span>' +
+    ' &nbsp;&mdash;&nbsp; check it by multiplying the powers back together; you should land on ' + group(digits) + ' again.</div>' +
+    '</div></li>';
+
+  decodeSteps.innerHTML = html;
+}
+
+function runDecode() {
+  var digits = idInput.value.replace(/[^0-9]/g, '');
+  if (digits !== idInput.value) idInput.value = digits;
+  if (!digits) {
+    decodeNote.className = 'field-note';
+    decodeNote.textContent = 'Paste or type a molecule ID.';
+    formulaOut.className = 'formula-out';
+    formulaOut.innerHTML = '&mdash;';
+    formulaMeta.textContent = '';
+    factorLine.innerHTML = '';
+    decodeBody.innerHTML = '';
+    decodeSteps.innerHTML = '<li><div><p class="step-t">Waiting on a number</p><p class="step-b">The division ladder appears here as soon as you enter one.</p></div></li>';
+    lastDecoded = '';
+    return;
+  }
+  if (digits.length > 300) {
+    decodeNote.className = 'field-note bad';
+    decodeNote.textContent = 'That is longer than 300 digits. No molecule is anywhere near that big.';
+    return;
+  }
+  var res = decode(digits);
+  if (res.error) {
+    formulaOut.className = 'formula-out invalid';
+    formulaMeta.textContent = '';
+    factorLine.innerHTML = '';
+    decodeBody.innerHTML = '';
+    lastDecoded = '';
+    decodeNote.className = 'field-note bad';
+    if (res.error === 'empty') {
+      formulaOut.textContent = 'No atoms at all';
+      decodeNote.textContent = '1 is the empty product — a molecule with nothing in it.';
+      decodeSteps.innerHTML = '<li><div><p class="step-t">1 has no prime factors</p><p class="step-b">There is nothing to divide out, so there is nothing to name. Every real molecule has an ID of 2 or more.</p></div></li>';
+    } else if (res.error === 'toosmall') {
+      formulaOut.textContent = 'IDs start at 2';
+      decodeNote.textContent = 'Only whole numbers above 1 factor into primes.';
+    } else if (res.error === 'leftover') {
+      formulaOut.textContent = 'No molecule has this ID';
+      decodeNote.innerHTML = 'After dividing out every prime up to ' + MAX_PRIME + ' (oganesson, element 118), <strong>' +
+        group(res.leftover) + '</strong> is left over — and no element owns a prime that large.';
+      decodeSteps.innerHTML = '<li><div><p class="step-t">The division never reaches 1</p>' +
+        '<p class="step-b">Divide out everything you can and a stubborn remainder stays behind. Its own prime factors are bigger than ' +
+        MAX_PRIME + ', so they cannot stand for any element on the periodic table. This number is simply not a molecule ID.</p>' +
+        '<div class="work"><div class="line">left over<span class="eq">=</span><span class="hl">' + group(res.leftover) + '</span></div></div></div></li>';
+    } else {
+      formulaOut.textContent = 'That is not a whole number';
+      decodeNote.textContent = 'Enter digits only.';
+    }
+    return;
+  }
+
+  var ordered = hill(res.rows);
+  lastDecoded = formulaText(ordered);
+  var atoms = res.rows.reduce(function (a, r) { return a + r.count; }, 0);
+
+  decodeNote.className = 'field-note';
+  decodeNote.innerHTML = 'Broken down cleanly after trying <strong>' + res.trials.length + '</strong> ' +
+    plural(res.trials.length, 'prime') + '.';
+
+  formulaOut.className = 'formula-out';
+  formulaOut.innerHTML = formulaHTML(ordered);
+  formulaMeta.textContent = atoms + ' ' + plural(atoms, 'atom') + ' · ' + res.rows.length + ' ' +
+    plural(res.rows.length, 'element') + ' · written in Hill order';
+
+  factorLine.innerHTML = '<span class="lhs">' + group(digits) + ' =</span>' + res.rows.map(function (r) {
+    return '<span class="pp">' + r.p + '</span>' + (r.count > 1 ? '<sup>' + r.count + '</sup>' : '');
+  }).join('<span class="times">×</span>');
+
+  decodeBody.innerHTML = res.rows.map(function (r) {
+    return '<tr><td class="prime">' + r.p + '</td><td>' + ordinal(r.Z) + '</td><td class="sym">' + r.sym +
+      '<span style="color:var(--muted);font-size:12px;font-family:var(--sans);margin-left:6px">' + r.name +
+      '</span></td><td class="count">' + r.count + '</td></tr>';
+  }).join('');
+
+  renderDecodeSteps(digits, res);
+}
+
+/* ================= keypad, chips, reference ================= */
+var COMMON = ['H', 'C', 'N', 'O', 'Na', 'Mg', 'P', 'S', 'Cl', 'K', 'Ca', 'Fe', 'Cu', 'Zn'];
+document.getElementById('keypad').innerHTML =
+  COMMON.map(function (s) {
+    return '<button class="key" data-ins="' + s + '">' + s + '<span class="kz">' + BY_SYM[s].Z + '</span></button>';
+  }).join('') +
+  '<button class="key" data-ins="(">(</button>' +
+  '<button class="key" data-ins=")">)</button>' +
+  '<button class="key" data-ins="·" title="hydrate dot">·</button>' +
+  '<button class="key util" id="backspace">⌫ Back</button>' +
+  '<button class="key util" id="clearBox">Clear</button>';
+
+var EXAMPLES = [
+  ['H2O', 'water'], ['CH4', 'methane'], ['CO2', 'carbon dioxide'], ['C2H6O', 'ethanol'],
+  ['NaCl', 'table salt'], ['H2SO4', 'sulfuric acid'], ['Ca(OH)2', 'slaked lime'],
+  ['C6H12O6', 'glucose'], ['C8H10N4O2', 'caffeine'], ['CuSO4·5H2O', 'blue vitriol']
+];
+document.getElementById('examples').innerHTML = EXAMPLES.map(function (e) {
+  return '<button class="chip" data-f="' + e[0] + '">' + typeset(e[0]).replace(/class="t-el"/g, '') +
+    '<span class="cn">' + e[1] + '</span></button>';
+}).join('');
+
+var ID_EXAMPLES = [['76', 'water'], ['208', 'methane'], ['4693', 'carbon dioxide'], ['1829', 'table salt'],
+  ['205504', 'ethanol'], ['1354', 'no molecule fits']];
+document.getElementById('idExamples').innerHTML = ID_EXAMPLES.map(function (e) {
+  return '<button class="chip" data-id="' + e[0] + '">' + group(e[0]) + '<span class="cn">' + e[1] + '</span></button>';
+}).join('');
+
+function renderRef(filter) {
+  var q = (filter || '').trim().toLowerCase();
+  var list = ELEMENTS.filter(function (e) {
+    if (!q) return true;
+    return e.sym.toLowerCase() === q || e.name.toLowerCase().indexOf(q) === 0 ||
+      String(e.Z) === q || String(e.p) === q || e.sym.toLowerCase().indexOf(q) === 0;
+  });
+  document.getElementById('refGrid').innerHTML = list.length
+    ? list.map(function (e) {
+        return '<div class="ref-cell"><span class="z">' + e.Z + '</span><span class="s">' + e.sym +
+          '<em>' + e.name + '</em></span><span class="p">' + e.p + '</span></div>';
+      }).join('')
+    : '<div class="ref-cell" style="grid-column:1/-1;color:var(--muted)">Nothing matches that.</div>';
+}
+renderRef('');
+
+/* ================= wiring ================= */
+box.addEventListener('input', function () { runEncode(); });
+box.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); box.blur(); }
+});
+box.addEventListener('paste', function (e) {
+  e.preventDefault();
+  var t = (e.clipboardData || window.clipboardData).getData('text') || '';
+  insertAtCaret(t.replace(/\s+/g, ''));
+});
+document.getElementById('keypad').addEventListener('mousedown', function (e) { e.preventDefault(); });
+document.getElementById('keypad').addEventListener('click', function (e) {
+  var b = e.target.closest('button');
+  if (!b) return;
+  if (b.id === 'clearBox') { box.innerHTML = ''; box.focus(); runEncode(); return; }
+  if (b.id === 'backspace') {
+    var text = box.textContent.replace(/\s+/g, '');
+    var off = caretOffset(box); if (off === null) off = text.length;
+    if (off > 0) {
+      var next = text.slice(0, off - 1) + text.slice(off);
+      box.innerHTML = next ? typeset(next) : '';
+      box.focus(); setCaret(box, off - 1); runEncode();
+    }
+    return;
+  }
+  if (b.dataset.ins) insertAtCaret(b.dataset.ins);
+});
+document.getElementById('examples').addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-f]');
+  if (b) setFormula(b.dataset.f);
+});
+document.getElementById('idExamples').addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-id]');
+  if (b) { idInput.value = b.dataset.id; runDecode(); }
+});
+idInput.addEventListener('input', runDecode);
+document.getElementById('refSearch').addEventListener('input', function (e) { renderRef(e.target.value); });
+
+function show(which) {
+  var enc = which === 'encode';
+  document.getElementById('panelEncode').hidden = !enc;
+  document.getElementById('panelDecode').hidden = enc;
+  document.getElementById('tabEncode').setAttribute('aria-selected', String(enc));
+  document.getElementById('tabDecode').setAttribute('aria-selected', String(!enc));
+}
+document.getElementById('tabEncode').addEventListener('click', function () { show('encode'); });
+document.getElementById('tabDecode').addEventListener('click', function () { show('decode'); });
+
+document.getElementById('toDecoder').addEventListener('click', function () {
+  if (!lastId) { toast('Nothing to decode yet.'); return; }
+  idInput.value = lastId;
+  runDecode();
+  show('decode');
+});
+document.getElementById('toEncoder').addEventListener('click', function () {
+  if (!lastDecoded) { toast('Nothing to encode yet.'); return; }
+  setFormula(lastDecoded);
+  show('encode');
+});
+
+var toastEl = null, toastTimer = null;
+function toast(msg) {
+  if (toastEl) toastEl.remove();
+  toastEl = document.createElement('div');
+  toastEl.className = 'toast';
+  toastEl.textContent = msg;
+  document.body.appendChild(toastEl);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { if (toastEl) { toastEl.remove(); toastEl = null; } }, 2200);
+}
+document.getElementById('copyId').addEventListener('click', function () {
+  if (!lastId) { toast('Nothing to copy yet.'); return; }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(lastId).then(function () { toast('Copied ' + lastId.length + '-digit ID'); },
+      function () { selectText(idValue); toast('Press copy to take the selection'); });
+  } else { selectText(idValue); toast('Press copy to take the selection'); }
+});
+function selectText(el) {
+  var r = document.createRange();
+  r.selectNodeContents(el);
+  var s = window.getSelection();
+  s.removeAllRanges(); s.addRange(r);
+}
+
+/* ================= boot ================= */
+function start(state) {
+  setFormula((state && state.formula) || 'C2H6O');
+  idInput.value = (state && state.id) || '205504';
+  runDecode();
+  if (state && state.tab === 'decode') show('decode');
+}
+if (window.claude && window.claude.hot) {
+  try {
+    window.claude.hot.snapshot(function () {
+      return {
+        formula: box.textContent,
+        id: idInput.value,
+        tab: document.getElementById('panelDecode').hidden ? 'encode' : 'decode'
+      };
+    });
+  } catch (e) {}
+}
+if (window.claude && window.claude.hot && window.claude.hot.ready) {
+  window.claude.hot.ready(start);
+} else {
+  start((window.claude && window.claude.hot && window.claude.hot.data) || {});
+}
+</script>
+
+</body>
+</html>
