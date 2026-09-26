@@ -989,6 +989,18 @@ const CFG = {
        the quad is a vertical sheet hanging down a cliff and is left
        out entirely. */
     maxFallGrade: 1.6,
+    /* ---- WATER DOES NOT STAND ON A HILL ----------------------------
+       How far a lake's surface may stand above the lowest dry ground on
+       its own edge before it is treated as perched and dropped to that
+       edge. Not zero: the heightfield is sampled at four metres and a
+       shoreline is allowed a few centimetres of slop without the whole
+       lake being re-levelled for it. */
+    perchTolerance: 0.25,
+    /* Draining one lake exposes new boundary, which can be lower still,
+       so it is settled repeatedly until nothing moves. It converges in
+       two or three on every seed measured; the cap is a guard, not a
+       budget. */
+    perchPasses: 6,
     /* ---- WHAT FREEZES, AND HOW HARD -------------------------------
        Still water freezes; moving water does not, and the faster it
        moves the longer it holds out. So ice is decided per cell from
@@ -3886,6 +3898,7 @@ function tameCutWalls(){
     if(H[l] > lv){ H[l] = lv; touched++; }
     if(H[r] > rv){ H[r] = rv; touched++; }
   }
+
   Wld.stats.tamedCells = touched;
 }
 
@@ -4488,6 +4501,83 @@ function genHydrology(){
   Wld.stats.springCells = springCells;
 
   for(let i=0;i<n2;i++) if(POND[i]) WLEV[i] = pondLevel[i];
+
+  /* =====================================================================
+     WATER DOES NOT STAND ON A HILL.
+
+     Everything above decides where water GOES. This decides whether it
+     could STAY there, and it is the only test in the hydrology that asks
+     the question the player asks when they look at a lake: what is
+     holding that up?
+
+     The rule is one line of physics. A body of still water is bounded by
+     dry land; if any cell of that boundary is LOWER than the surface,
+     the water pours out there. So for each connected lake: find the
+     lowest dry cell touching it, and if the surface stands above that
+     cell, the surface is wrong. It is dropped to the rim, the cells that
+     are now above the water go dry, and the body is measured again --
+     because draining a lake exposes new boundary, which can be lower
+     still.
+
+     THIS IS WHY IT IS HERE AND NOT IN THE TERRAIN. The first attempt
+     fixed this by filling in the pits that tameCutWalls dug, which is
+     the same idea applied one stage too early: raising ground to remove
+     a hollow dams whatever was draining through it. Measured, it took
+     seed 2244's deepest water from 88m down to 55m and seed 1234's from
+     58.6m UP to 107.2m -- it moved the lake rather than removing it.
+     Acting on the water surface cannot do that, because it only ever
+     takes water away and never moves a grain of earth.
+     ===================================================================== */
+  {
+    const tol = HY.perchTolerance;
+    let drained = 0, dropped = 0, worstDrop = 0, bodies = 0, perched = 0;
+    const seen = new Uint8Array(n2);
+    const stack = [];
+    const body = [];
+    for(let pass=0; pass<HY.perchPasses; pass++){
+      seen.fill(0);
+      let movedThisPass = 0;
+      for(let i0=0;i0<n2;i0++){
+        if(seen[i0] || !POND[i0]) continue;
+        if(!(WLEV[i0] > -9000 && WLEV[i0] - H[i0] > 0.015)) continue;
+        /* One lake, flood-filled, and the lowest dry ground on its edge. */
+        body.length = 0; stack.length = 0;
+        stack.push(i0); seen[i0] = 1;
+        let rim = Infinity, level = WLEV[i0];
+        while(stack.length){
+          const i = stack.pop();
+          body.push(i);
+          if(WLEV[i] > level) level = WLEV[i];
+          const ix = i%N, iz = (i/N)|0;
+          for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+            const nx = ix+dx, nz = iz+dz;
+            /* The map edge is an outlet, not a wall: a lake that runs
+               off the side of the world drains off the side of it. */
+            if(nx<0||nz<0||nx>=N||nz>=N){ rim = Math.min(rim, H[i]); continue; }
+            const j = nz*N+nx;
+            const jWet = POND[j] && WLEV[j] > -9000 && WLEV[j] - H[j] > 0.015;
+            if(jWet){ if(!seen[j]){ seen[j] = 1; stack.push(j); } }
+            else if(H[j] < rim) rim = H[j];
+          }
+        }
+        if(pass === 0) bodies++;
+        if(!(rim < level - tol)) continue;      // properly held
+        if(pass === 0) perched++;
+        /* It pours out at the rim, so the rim is where it stands. */
+        const drop = level - rim;
+        if(drop > worstDrop) worstDrop = drop;
+        movedThisPass++;
+        for(const i of body){
+          if(H[i] >= rim - 0.015){              // now above the waterline
+            WLEV[i] = -9999; POND[i] = 0; drained++;
+          } else { WLEV[i] = rim; dropped++; }
+        }
+      }
+      if(!movedThisPass) break;
+    }
+    Wld.stats.perched = { bodies, perched, cellsDrained: drained,
+                          cellsLowered: dropped, worstDrop:+worstDrop.toFixed(1) };
+  }
 
   /* ---- THE FREEZE ---------------------------------------------------
      On a winter seed the water is not painted white, it is frozen, and
@@ -16651,6 +16741,13 @@ const Audio = (()=>{
     /* ---- the volume, which is the player's and not the mix's -------- */
     get volume(){ return volume; },
     get muted(){ return muted; },
+    /* THE GAIN THE SPEAKERS ACTUALLY GET, not the number the player is
+       steering. These are not the same thing and the difference is
+       exactly where a volume control goes wrong: the stored value can
+       update perfectly while the node never moves. Exposed so a test
+       can check the audible end rather than the bookkeeping. */
+    get outputGain(){ return outGain ? outGain.gain.value : null; },
+    get ctxState(){ return ctx ? ctx.state : 'none'; },
     setVolume(v){
       volume = clamp(v, 0, 1);
       if(volume > 0) muted = false;
@@ -19760,6 +19857,44 @@ const DEV = (()=>{
      and reading the result, not by reading the code. Each one has a
      button in this panel or a line in the notes that reproduces it. If
      a system is not in this list, this file does not claim it works.
+
+     WATER DOES NOT STAND ON A HILL  (seeds 2244, 1234, 42)
+       Reported as sheets of water hanging in the air above the trees,
+       and as water cutting off dead at a hillside. They were the same
+       fault: lakes perched on ground that could not hold them.
+
+       deepest body of water      88.0 / 58.6 / 69.3m  ->  4.6 / 5.7 / 6.5m
+       lakes standing above the
+         lowest dry ground on
+         their own edge ......... 47 / 58 / 41 of them ->  0 / 0 / 0
+       shoreline quads the mesh
+         refused to draw ........ 629 / 1039 / 994     ->  0 / 0 / 0
+       trees standing in water ... 0 (and still 0)
+       water left: 15,938-18,765 wet cells per map, 5,906-8,898 of them
+         river, 367-504 drinkable sources. All five seeds pass every
+         guarantee, G3 included.
+
+       The dropped shoreline quads going to zero is the "cuts off at a
+       hill" report, and it was never a mesh bug: the mesh refuses a
+       quad that would stand up vertically, and it was refusing them
+       because the water really was standing up vertically. Nothing in
+       buildWaterMesh changed.
+
+     AND IT WAS MY OWN REGRESSION, measured against 54ff699, the build
+     before tameCutWalls existed:
+       seed 2244 deepest water   21.7m -> 88.0m,  quads dropped 169 -> 629
+       seed 1234 deepest water   25.3m -> 58.6m,  quads dropped 110 -> 1039
+     The cone that removes breach walls only ever lowers ground, and
+     lowering ground digs bowls; the hydrology then filled them, exactly
+     as it is supposed to fill a bowl.
+
+     THE FIRST ATTEMPT AT FIXING IT WAS WRONG AND IS WORTH RECORDING.
+     Filling the pits back in with rock -- acting on the terrain rather
+     than the water -- took 2244 from 88.0m to 55.0m and 1234 from 58.6m
+     UP to 107.2m. Raising ground to remove a hollow dams whatever was
+     draining through it, so it moved the lake instead of removing it.
+     Settling the water surface cannot do that: it only ever takes water
+     away, and never moves a grain of earth.
 
      VOLUME  (seed 1234, driven with real keydown events on the window)
        - and = move it by CFG.AUDIO.step: 0.85 -> 0.53 on four presses
