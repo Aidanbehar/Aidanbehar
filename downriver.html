@@ -134,6 +134,11 @@ button:active{ transform:translateY(1px); }
 }
 #pausenote.on{ display:flex; }
 
+/* The screen going out, and coming back. Pointer-events none so it can
+   never eat a click, and above the canvas but under the HUD so the hold
+   bar is still readable while the player is going under. */
+#sleepveil{ position:fixed; inset:0; background:#000; opacity:0; z-index:5;
+            pointer-events:none; }
 /* ---------- map overlay ---------- */
 #mapview{
   position:fixed; inset:0; z-index:35; display:none; align-items:center; justify-content:center;
@@ -219,6 +224,7 @@ button:active{ transform:translateY(1px); }
 <div id="app"></div>
 
 <!-- ===== HUD ===== -->
+<div id="sleepveil"></div>
 <div id="hud">
   <div id="crosshair"></div>
   <div id="prompt"></div>
@@ -1214,6 +1220,15 @@ const CFG = {
     fillHold: 3.2,
     pickHold: 1.9,
     restHold: 3.0,
+    /* Pulling boards off a door with your hands. Longer than any other
+       hold in the game, and it takes a bite of stamina on top of the
+       drain every hold costs, because it is the one interaction that is
+       meant to feel like work. */
+    forceHold: 4.2,
+    forceStamina: 22,
+    /* Lying down. Long enough that you cannot do it by brushing past a
+       bed, short enough that you are not holding E through a scare. */
+    sleepHold: 2.2,
     compassSettle: 2.6,      // seconds for the needle to stop swinging
     /* ---- THE HANDS THAT CANNOT FIND IT --------------------------
        A late symptom that takes the torch away for a few seconds at
@@ -1740,6 +1755,7 @@ const G = {
      is true the mind stops getting worse, and whatever comes after
      reaching the hospital is built on top of it. */
   admitted: false, admittedAt: 0, admittedStage: 0, admittedCollapsing: false,
+  clockHeld: false,    // Sleep is driving G.hours rather than updateSky
   stress: 0.05,        // 0..1 — drives vignette, grain, breathing. NOT sanity:
                        // it is a presentation value and the player never sees
                        // it as a number.
@@ -6921,6 +6937,16 @@ function buildMaterials(onStep){
   };
   MAT.lampWin.customProgramCacheKey = ()=> 'lampwin-distance-glow';
   MAT.lampOff = new THREE.MeshStandardMaterial({ color:0x1a1713, roughness:0.95 });
+  /* ---- WEATHER ON A BUILDING --------------------------------------
+     Two untextured, transparent materials laid a centimetre proud of the
+     wall they mark. Untextured on purpose: a stain is a change in how
+     wet a surface looks, not a pattern, and a repeating stain texture on
+     nine houses reads as wallpaper. They cost one material each for the
+     whole town and they merge into the house like everything else. */
+  MAT.stain = new THREE.MeshStandardMaterial({
+    color:0x2a2724, roughness:1.0, transparent:true, opacity:0.34, depthWrite:false });
+  MAT.moss = new THREE.MeshStandardMaterial({
+    color:0x3d5230, roughness:1.0, transparent:true, opacity:0.55, depthWrite:false });
   MAT.rock = snowify(
     new THREE.MeshStandardMaterial({ color:0x8a8b85, roughness:0.96 }), 1.0);
   MAT.ripples = TexLib.tex(TexLib.heightToNormal(TexLib.ripples({ seed: 91 + (G.seed % 887) }), 1.6), { repeat:[1,1] });
@@ -8273,7 +8299,10 @@ function skyKeyAt(h){
 }
 
 function updateSky(dt){
-  if(!CFG.DEBUG.freezeClock){
+  /* G.clockHeld is Sleep taking the clock over: it advances G.hours
+     itself, far faster than real time, and the sky has to read the hour
+     it is given rather than adding its own on top. */
+  if(!CFG.DEBUG.freezeClock && !G.clockHeld){
     G.hours = mod(G.hours + dt * (24 / (CFG.TIME.dayRealMinutes*60)), 24);
   }
   Sky.hours = G.hours;
@@ -10076,6 +10105,48 @@ const People = {
   /* ---- WHAT TIME OF DAY IT IS, FOR SOMEBODY WHO LIVES HERE --------
      'out' between waking and dusk, 'homeward' for the hour after it,
      'abed' through the night. */
+  /* ---- WHERE EVERYONE IS AT A GIVEN HOUR --------------------------
+     A night that is skipped rather than simulated leaves the villagers
+     standing wherever the clock stopped, which at six in the morning is
+     a row of people frozen in the street. This puts them where their own
+     schedule says they should be at the hour handed to it -- the same
+     schedule update() uses, asked once instead of ten thousand times.
+
+     Nothing here teleports anybody who is already right: somebody
+     already asleep in their own bed at the wake hour stays there. */
+  settleTo(hour){
+    const P2 = CFG.PEOPLE;
+    const phase = (hour >= P2.up && hour < P2.dusk) ? 'out'
+                : (hour >= P2.dusk && hour < P2.allIn) ? 'homeward' : 'abed';
+    for(const p of this.list){
+      if(p.role !== 'villager' || !p.home) continue;
+      if(p.stayOutUntil != null && hour < p.stayOutUntil) continue;
+      if(phase === 'abed'){
+        if(p.state === 'asleep') continue;
+        p.state = 'asleep'; p.hidden = false; p.target = null;
+        if(p.bed && p.home.mesh){
+          p.home.mesh.updateMatrixWorld(true);
+          const b = new THREE.Vector3(p.bed.x, p.bed.top, p.bed.z)
+                      .applyMatrix4(p.home.mesh.matrixWorld);
+          p.x = b.x; p.z = b.z;
+          p.obj.position.set(b.x, b.y, b.z);
+        }
+      } else {
+        /* Out: back on their feet at their own front door, which is
+           where somebody who has just left the house would be. */
+        if(p.state !== 'asleep') continue;
+        p.state = 'idle'; p.hidden = false; p.timer = 0.5 + (p.phase % 4);
+        if(p.home.mesh){
+          p.home.mesh.updateMatrixWorld(true);
+          const e = p.home.mesh.userData.entry.clone()
+                      .applyMatrix4(p.home.mesh.matrixWorld);
+          p.x = e.x; p.z = e.z;
+          p.obj.position.set(e.x, heightAt(e.x, e.z), e.z);
+        }
+      }
+    }
+  },
+
   phaseOfDay(){
     const P2 = CFG.PEOPLE, h = G.hours;
     if(h >= P2.up && h < P2.dusk) return 'out';
@@ -10315,7 +10386,11 @@ const People = {
          home after dusk, in bed through the night. Nothing teleports
          -- 'homeward' sets the target and they walk it, so a player
          arriving at half past eight watches the street empty. */
-      if(p.role === 'villager' && p.home){
+      /* Somebody who found a stranger in their bed is out of the house
+         for the rest of the night, and the schedule does not argue. */
+      if(p.stayOutUntil != null && G.hours < p.stayOutUntil){
+        // fall through to the plain idle/walk behaviour below
+      } else if(p.role === 'villager' && p.home){
         if(phase === 'abed' && p.state !== 'asleep' && p.state !== 'goinghome'){
           p.state = 'goinghome'; p.target = p.homeDoor || (p.homeDoor = (()=>{
             const e = p.home.mesh.userData.entry.clone()
@@ -10497,7 +10572,101 @@ const People = {
    than a quarry. A plot that fails is skipped, so a town on a tight site
    is a smaller town rather than a broken one.
    ------------------------------------------------------------------- */
+/* =====================================================================
+   ===== CHIMNEY SMOKE =====
+   A column out of the chimney of a house that has somebody in it, when
+   it is dark enough for the stove to be lit. It is the cheapest possible
+   version on purpose: ONE THREE.Points for the whole town, one draw
+   call, with each particle remembering which chimney it belongs to and
+   respawning there when it dies.
+
+   It is deliberately not a light and not a shadow caster. What it is
+   for is the read from the treeline -- smoke over a roof is the clearest
+   signal in the game that the place ahead is somewhere people live, and
+   it has to survive being seen from two hundred metres in fog.
+   ===================================================================== */
+const Smoke = {
+  pts: null, pos: null, life: null, home: null, drift: null, n: 0, src: [],
+
+  clear(){
+    if(this.pts && this.pts.parent) this.pts.parent.remove(this.pts);
+    if(this.pts){ this.pts.geometry.dispose(); this.pts.material.dispose(); }
+    this.pts = null; this.src.length = 0; this.n = 0;
+  },
+
+  build(){
+    this.clear();
+    /* Every chimney whose house has a light on: the lamps are what
+       "somebody is home" means everywhere else in this file, so the
+       smoke agrees with the windows rather than inventing its own
+       occupancy. */
+    for(const b of (Wld.townBuildings || [])){
+      if(!b.lit || !b.mesh || !b.mesh.userData.chimney) continue;
+      const w = b.mesh.userData.chimney.clone().applyMatrix4(b.mesh.matrixWorld);
+      this.src.push(w);
+    }
+    if(!this.src.length) return;
+    const H2 = CFG.HOUSE;
+    this.n = this.src.length * H2.smokePuffs;
+    this.pos = new Float32Array(this.n*3);
+    this.life = new Float32Array(this.n);
+    this.home = new Int32Array(this.n);
+    this.drift = new Float32Array(this.n*2);
+    const r = rngFor('smoke', 0);
+    for(let i=0;i<this.n;i++){
+      this.home[i] = (i / H2.smokePuffs) | 0;
+      /* Staggered at birth, so a chimney does not cough its whole
+         column out in one frame the first time it is drawn. */
+      this.life[i] = r()*H2.smokeLife;
+      this.drift[i*2] = r.range(-0.22, 0.22);
+      this.drift[i*2+1] = r.range(-0.22, 0.22);
+      const c = this.src[this.home[i]];
+      this.pos[i*3] = c.x; this.pos[i*3+1] = c.y; this.pos[i*3+2] = c.z;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0x8d8f8c, size: 1.5, sizeAttenuation: true,
+      transparent: true, opacity: 0.20, depthWrite: false });
+    this.pts = new THREE.Points(geo, mat);
+    this.pts.frustumCulled = false;
+    this.pts.renderOrder = 2;
+    setLayerDeep(this.pts, LAYER_WORLD);
+    scene.add(this.pts);
+  },
+
+  update(dt, px, pz){
+    if(!this.pts || !this.n) return;
+    /* Only when the stove would be in: dusk and night. In daylight the
+       column is switched off rather than faded, because a stove is
+       either lit or it is not. */
+    const dark = Sky.phase === 'dusk' || Sky.phase === 'night';
+    this.pts.visible = dark;
+    if(!dark) return;
+    const H2 = CFG.HOUSE;
+    const wind = Weather.wind || 0.3;
+    for(let i=0;i<this.n;i++){
+      this.life[i] += dt;
+      const c = this.src[this.home[i]];
+      if(this.life[i] >= H2.smokeLife){
+        this.life[i] -= H2.smokeLife;
+        this.pos[i*3] = c.x; this.pos[i*3+1] = c.y; this.pos[i*3+2] = c.z;
+        continue;
+      }
+      const t = this.life[i]/H2.smokeLife;
+      this.pos[i*3]   += (this.drift[i*2]   + wind*0.55) * dt;
+      this.pos[i*3+1] += H2.smokeRise * dt * (1 - t*0.55);
+      this.pos[i*3+2] += (this.drift[i*2+1] + wind*0.22) * dt;
+    }
+    this.pts.geometry.attributes.position.needsUpdate = true;
+  },
+};
+
 const TOWN = {
+  /* How many of the town's houses have their doors boarded. Low: the
+     street has to read as lived in. They still have interiors, and the
+     boards come off with CFG.GEAR.forceHold of effort. */
+  boardedChance: 0.18,
   streetOffset: 21,      // metres from the hospital's front to the street
   streetHalfLength: 92,  // how far the street runs either way
   /* THE ROWS SIT ON THE ROAD BED. The street is graded across a verge
@@ -11733,6 +11902,15 @@ function genTown(){
          variation that remains is the one that means something: how far
          the door hangs open, and whether the lamps are lit. */
       enterable: kind === 'house',
+      /* ---- BOARDED, BUT NOT EMPTY ---------------------------------
+         A house with its door boarded used to mean a sealed shell with
+         nothing inside it, which is why they were taken out of the town
+         altogether. This is the other way round: the house is somebody's
+         house, fully furnished, and the boards are a lock rather than a
+         wall. You take them off with your hands and it costs you. That
+         also means the beds in them exist, which is what gives a player
+         arriving at two in the morning somewhere to sleep. */
+      boarded: kind === 'house' && rng.chance(TOWN.boardedChance),
       /* Most houses in a town have a light on in the evening. At 0.45
          a five-house town had two, which from the treeline read as an
          abandoned village rather than a place people live. */
@@ -11897,7 +12075,26 @@ function buildHouse(spec){
      plane. eaveY is the roof's underside directly over the wall line,
      which is where a wall has to stop; apexY is the same line at the
      ridge. */
-  const pitch = 0.52, slab = (D/2)/Math.cos(pitch) + 0.55;
+  /* ---- WHAT THIS PARTICULAR HOUSE IS ------------------------------
+     Every roll below comes from the house's own id mixed with the world
+     seed, so a given house is the same house every time it is built --
+     which is what keeps a phantom copy of it identical to the real one.
+     One stream for the whole exterior, drawn in a fixed order. */
+  const hr = makeRNG(hashString(spec.id || 'house') ^ G.seed ^ 0x40b1);
+  const HS = CFG.HOUSE;
+  /* Sawn boards, shakes, or painted clapboard. Only the OUTSIDE takes
+     it: inside, a house is boards whatever its owner painted the front. */
+  const skin = hr.weighted([
+    [HS.sidingWeights.boards,   MAT.timber],
+    [HS.sidingWeights.shingles, MAT.shingleWall || MAT.timber],
+    [HS.sidingWeights.painted,  null],
+  ]) || ((MAT.painted && MAT.painted.length)
+          ? MAT.painted[hr.irange(0, MAT.painted.length-1)] : MAT.timber);
+  /* The pitch is rolled, and everything that has to meet the roof is
+     computed from whatever it rolls -- eaveY, apexY, the gable prism and
+     the chimney all read roofUnderAt(), so a shallow cottage and a steep
+     alpine roof both close properly. */
+  const pitch = hr.range(HS.pitch[0], HS.pitch[1]), slab = (D/2)/Math.cos(pitch) + 0.55;
   const zEave = Math.cos(pitch)*slab;
   const underDrop = 0.09/Math.cos(pitch);
   const apexY = H + 0.14 + Math.sin(pitch)*slab - underDrop;
@@ -11906,28 +12103,88 @@ function buildHouse(spec){
 
   const doorW = 1.80;
   const segW = (W - doorW)/2;
-  addBox(g, segW, eaveY, wall, MAT.timber, -(doorW/2 + segW/2), eaveY/2, D/2);
-  addBox(g, segW, eaveY, wall, MAT.timber,  (doorW/2 + segW/2), eaveY/2, D/2);
-  addBox(g, doorW, eaveY-2.15, wall, MAT.timber, 0, 2.15 + (eaveY-2.15)/2, D/2);
-  addBox(g, W, eaveY, wall, MAT.timber, 0, eaveY/2, -D/2);
+  const panes = [];
+
+  /* ---- ONE WALL PANEL, WITH OR WITHOUT A WINDOW IN IT --------------
+     Written once and used by the front and the sides, because a window
+     on the street and a window on the gable end should be cut the same
+     way -- and because every pane it makes joins the same `panes` list,
+     which is what People swaps at dusk. `axis` is the direction the wall
+     runs: 'x' for the front and back, 'z' for the sides. */
+  const winW = 0.98, winH2 = 1.00, winY2 = 1.50;
+  const panel = (axis, centre, len, fixed, winAt)=>{
+    if(len <= 0.05) return null;
+    const put2 = (l, h, y, c)=> axis === 'x'
+      ? addBox(g, l, h, wall, skin, c, y, fixed)
+      : addBox(g, wall, h, l, skin, fixed, y, c);
+    if(winAt === null || len < winW + 0.5){ put2(len, eaveY, eaveY/2, centre); return null; }
+    const a0 = centre - len/2, a1 = centre + len/2;
+    const at = clamp(winAt, a0 + winW/2 + 0.12, a1 - winW/2 - 0.12);
+    const wl = at - winW/2, wr = at + winW/2;
+    if(wl - a0 > 0.04) put2(wl - a0, eaveY, eaveY/2, (a0 + wl)/2);
+    if(a1 - wr > 0.04) put2(a1 - wr, eaveY, eaveY/2, (wr + a1)/2);
+    put2(winW, winY2 - winH2/2, (winY2 - winH2/2)/2, at);               // under the sill
+    const topH = eaveY - (winY2 + winH2/2);
+    if(topH > 0.04) put2(winW, topH, (winY2 + winH2/2) + topH/2, at);   // over the head
+    const pane = axis === 'x'
+      ? addBox(g, winW - 0.08, winH2, 0.05, MAT.glass, at, winY2, fixed)
+      : addBox(g, 0.05, winH2, winW - 0.08, MAT.glass, fixed, winY2, at);
+    pane.userData.noclip = true; pane.castShadow = false;
+    pane.userData.keepMesh = true;                    // swapped lit/unlit
+    panes.push(pane);
+    return { pane, at };
+  };
+
+  /* ---- THE FRONT, WHICH IS THE FACE THE STREET SEES ----------------
+     The front used to be two blank panels and a door, so a town read as
+     a row of sheds with doors in them. The windows that carry a lit
+     house at night were all on the SIDES, where the street cannot see
+     them. There are windows beside the door now, and they go into the
+     same pane list, so a lit house is lit from the front. */
+  const frontWins = hr.irange(HS.frontWindows[0], HS.frontWindows[1]);
+  const fWin = [];
+  for(const sgn of hr.chance(0.5) ? [-1, 1] : [1, -1]){
+    const want = fWin.length < frontWins;
+    const c = sgn*(doorW/2 + segW/2);
+    const made = panel('x', c, segW, D/2, want ? c : null);
+    if(made) fWin.push(made);
+  }
+  addBox(g, doorW, eaveY-2.15, wall, skin, 0, 2.15 + (eaveY-2.15)/2, D/2);
+  addBox(g, W, eaveY, wall, skin, 0, eaveY/2, -D/2);
+
+  /* ---- SHUTTERS, AND THE ONE THAT CAME OFF -------------------------
+     A pair beside each front window, and sometimes only one of the pair,
+     because a house that has been standing a while loses one and nobody
+     puts it back. Noclip: they are 4cm of board on the outside face and
+     colliding with them would only mean catching on the wall. */
+  if(fWin.length && hr.chance(HS.shutterChance)){
+    for(const w of fWin){
+      const gone = hr.chance(HS.shutterMissing) ? (hr.chance(0.5) ? -1 : 1) : 0;
+      for(const sx of [-1, 1]){
+        if(sx === gone) continue;
+        const sh = addBox(g, 0.30, winH2 + 0.16, 0.05, MAT.timber,
+                          w.at + sx*(winW/2 + 0.17), winY2, D/2 + 0.06);
+        sh.userData.noclip = true;
+      }
+    }
+  }
 
   // side walls, with windows
-  const panes = [];
   for(const sx of [-1, 1]){
     const nWin = clamp(st.windows, 0, 3);
     /* eaveY, not H: a side wall that stops at H leaves the same slot
        under the eaves as the front one did. */
-    if(!nWin){ addBox(g, wall, eaveY, D, MAT.timber, sx*W/2, eaveY/2, 0); continue; }
+    if(!nWin){ addBox(g, wall, eaveY, D, skin, sx*W/2, eaveY/2, 0); continue; }
     const winH = 1.0, winY = 1.5, halfGap = 0.55;
     const pitchZ = D/(nWin+1);
     let cursor = -D/2;
     for(let i=0;i<nWin;i++){
       const wz = -D/2 + pitchZ*(i+1);
       const len = (wz - halfGap) - cursor;
-      if(len > 0.05) addBox(g, wall, eaveY, len, MAT.timber, sx*W/2, eaveY/2, cursor + len/2);
-      addBox(g, wall, winY-winH/2, halfGap*2, MAT.timber, sx*W/2, (winY-winH/2)/2, wz);
+      if(len > 0.05) addBox(g, wall, eaveY, len, skin, sx*W/2, eaveY/2, cursor + len/2);
+      addBox(g, wall, winY-winH/2, halfGap*2, skin, sx*W/2, (winY-winH/2)/2, wz);
       const topH = eaveY-(winY+winH/2);
-      addBox(g, wall, topH, halfGap*2, MAT.timber, sx*W/2, (winY+winH/2)+topH/2, wz);
+      addBox(g, wall, topH, halfGap*2, skin, sx*W/2, (winY+winH/2)+topH/2, wz);
       const pane = addBox(g, 0.05, winH, halfGap*2-0.08, MAT.glass, sx*W/2, winY, wz);
       pane.userData.noclip = true; pane.castShadow = false;
       /* Kept out of the merge: People swaps this material at dusk. */
@@ -11941,7 +12198,7 @@ function buildHouse(spec){
       cursor = wz + halfGap;
     }
     const tail = D/2 - cursor;
-    if(tail > 0.05) addBox(g, wall, eaveY, tail, MAT.timber, sx*W/2, eaveY/2, cursor + tail/2);
+    if(tail > 0.05) addBox(g, wall, eaveY, tail, skin, sx*W/2, eaveY/2, cursor + tail/2);
   }
 
   // a pitched roof, overhanging
@@ -11967,12 +12224,226 @@ function buildHouse(spec){
       [zb, roofUnderAt(zb) - y0 + 0.015],
       [0,  apexY - y0 + 0.015],
       [-zb, roofUnderAt(zb) - y0 + 0.015],
-    ], MAT.timber, sx*(W/2 - wall*0.5 + 0.02), y0, 0);
+    ], skin, sx*(W/2 - wall*0.5 + 0.02), y0, 0);
   }
   /* The chimney has to come out of the roof, not stop inside it. */
+  const chimX = W/2-0.9, chimZ = -D/2 + 0.9;
   {
-    const cz2 = -D/2 + 0.9, top = roofUnderAt(cz2) + 0.18/Math.cos(pitch) + 0.75;
-    addBox(g, 0.62, top - 1.2, 0.62, MAT.concrete, W/2-0.9, 1.2 + (top-1.2)/2, cz2);
+    const top = roofUnderAt(chimZ) + 0.18/Math.cos(pitch) + 0.75;
+    addBox(g, 0.62, top - 1.2, 0.62, MAT.concrete, chimX, 1.2 + (top-1.2)/2, chimZ);
+    g.userData.chimney = new THREE.Vector3(chimX, top, chimZ);
+  }
+
+  /* ---- A PORCH, WHICH IS WHERE THE DOOR ACTUALLY IS ----------------
+     Deck, posts, a rail down each side and across the front, and steps
+     down to the ground. Everything is sized from the rolled pitch: the
+     porch roof is tucked UNDER the main eave rather than placed at a
+     fixed height, because on a steep roll a fixed height puts it
+     straight through the overhang.
+
+     The front rail is deliberately in two pieces with the steps in the
+     gap between them, and the gap is never narrower than the door --
+     otherwise the porch is a fence across the only way in, which is the
+     class of bug this file has spent the most time removing. */
+  if(hr.chance(HS.porchChance)){
+    const pd = hr.range(HS.porchDepth[0], HS.porchDepth[1]);
+    const pw = Math.min(W - 0.5, doorW + hr.range(3.0, 4.6));
+    const z0 = D/2, zOut = z0 + pd;
+    const deckTop = 0.22, rise = 0.34;
+    const roofIn = eaveY - 0.20, roofOut = roofIn - rise;
+    addBox(g, pw, deckTop, pd, MAT.timber, 0, deckTop/2, z0 + pd/2);   // the deck
+    const postH = roofOut - deckTop - 0.06;
+    for(const sx of [-1, 1])
+      addBox(g, 0.14, postH, 0.14, MAT.timber, sx*(pw/2 - 0.12), deckTop + postH/2, zOut - 0.12);
+    {
+      const rl = Math.hypot(pd, rise);
+      const pr = addBox(g, pw + 0.40, 0.12, rl, MAT.roof, 0, (roofIn + roofOut)/2, z0 + pd/2);
+      pr.rotation.x = Math.atan2(rise, pd);
+    }
+    const railY = deckTop + 0.52, gap = Math.max(doorW + 0.3, 1.9);
+    for(const sx of [-1, 1]){                                           // down the sides
+      addBox(g, 0.07, 0.09, pd - 0.2, MAT.timber, sx*(pw/2 - 0.10), railY, z0 + pd/2)
+        .userData.noclip = true;
+      const seg = (pw - gap)/2;
+      if(seg > 0.15)
+        addBox(g, seg, 0.09, 0.07, MAT.timber, sx*(gap/2 + seg/2), railY, zOut - 0.10)
+          .userData.noclip = true;
+    }
+    addBox(g, gap, 0.16, 0.42, MAT.concrete, 0, deckTop*0.5, zOut + 0.20);   // the step
+    g.userData.porch = { depth: pd, width: pw };
+  }
+
+  /* ---- A LEAN-TO AT THE BACK --------------------------------------
+     A store tacked onto the back wall with a single-pitch roof falling
+     away from the house. It is closed on three sides and open to the
+     back, which is why it reads as a lean-to and not a second room. */
+  if(hr.chance(HS.leanToChance)){
+    const ld = hr.range(1.6, 2.4), lw = Math.min(W*0.62, 5.2);
+    const zB = -D/2, zOut = zB - ld;
+    const hIn = Math.min(eaveY - 0.35, 2.30), hOut = hIn - 0.42;
+    for(const sx of [-1, 1])                                     // the two side walls
+      addBox(g, wall, hOut, ld, skin, sx*(lw/2 - wall/2), hOut/2, zB - ld/2);
+    addBox(g, lw, hOut*0.55, wall, skin, 0, hOut*0.275, zOut + wall/2);   // a low back
+    {
+      const rl = Math.hypot(ld, hIn - hOut);
+      const lr = addBox(g, lw + 0.30, 0.12, rl, MAT.roof, 0, (hIn + hOut)/2, zB - ld/2);
+      lr.rotation.x = -Math.atan2(hIn - hOut, ld);
+    }
+    if(hr.chance(0.6))                                           // and something in it
+      addBox(g, 0.55, 0.85, 0.55, MAT.metal, lw*0.22, 0.42, zB - ld*0.55);
+  }
+
+  /* ---- A HALF STOREY, RARELY ---------------------------------------
+     A dormer standing out of the front roof slab, with a window in it
+     that joins the same lit/unlit list as every other window -- so a
+     house with one reads as having somebody upstairs. Its cheeks and
+     its own little roof are cut to sit ON the slab at whatever pitch
+     was rolled. */
+  if(hr.chance(HS.dormerChance)){
+    const dz = D*0.24, dw = 1.5, dh = 1.15;
+    const base = roofUnderAt(dz) + 0.18/Math.cos(pitch) - 0.12;
+    addBox(g, dw, dh, wall, skin, 0, base + dh/2, dz + 0.55);           // its face
+    for(const sx of [-1, 1])                                            // the cheeks
+      addBox(g, wall, dh, 1.10, skin, sx*(dw/2 - wall/2), base + dh/2, dz + 0.02);
+    const dr = addBox(g, dw + 0.26, 0.10, 1.30, MAT.roof, 0, base + dh + 0.06, dz + 0.05);
+    dr.rotation.x = pitch*0.45;
+    const dp = addBox(g, dw - 0.42, 0.72, 0.05, MAT.glass, 0, base + dh*0.52, dz + 0.58);
+    dp.userData.noclip = true; dp.castShadow = false; dp.userData.keepMesh = true;
+    panes.push(dp);
+  }
+
+  /* ---- WEATHER ON IT ----------------------------------------------
+     Three things, all of them the same idea: a building that has stood
+     through a lot of winters is marked by where the water goes.
+
+     The moss is the one worth the arithmetic. It grows on the side that
+     does not get the sun, so it has to know which way the house is
+     TURNED -- and the group is built in the house's own frame and
+     rotated by spec.yaw afterwards, so world north has to be brought
+     back into local space first. A local (lx,lz) becomes world
+     (lx*cos + lz*sin, -lx*sin + lz*cos), so the inverse takes world
+     north (0,-1) to local (sin(yaw), -cos(yaw)). Whichever of the four
+     walls faces most nearly that way is the one that gets it. */
+  {
+    const yaw = spec.yaw || 0;
+    const nx = Math.sin(yaw), nz = -Math.cos(yaw);
+    if(hr.chance(HS.stainChance)){
+      /* Under the eaves, where the run-off comes over. */
+      for(const sx of [-1, 1]){
+        const st2 = addBox(g, 0.03, 0.9, D*0.86, MAT.stain, sx*(W/2 + 0.015), eaveY - 0.62, 0);
+        st2.userData.noclip = true; st2.castShadow = false;
+      }
+      const sf = addBox(g, W*0.9, 0.7, 0.03, MAT.stain, 0, eaveY - 0.52, D/2 + 0.015);
+      sf.userData.noclip = true; sf.castShadow = false;
+    }
+    if(hr.chance(HS.mossChance)){
+      /* The four faces, as (local outward normal, placer). */
+      const faces = [
+        [ 1, 0, ()=> addBox(g, 0.03, 0.55, D*0.80, MAT.moss,  (W/2 + 0.02), 0.42, 0)],
+        [-1, 0, ()=> addBox(g, 0.03, 0.55, D*0.80, MAT.moss, -(W/2 + 0.02), 0.42, 0)],
+        [ 0, 1, ()=> addBox(g, W*0.80, 0.55, 0.03, MAT.moss, 0, 0.42,  (D/2 + 0.02))],
+        [ 0,-1, ()=> addBox(g, W*0.80, 0.55, 0.03, MAT.moss, 0, 0.42, -(D/2 + 0.02))],
+      ];
+      let best = faces[0], bd = -2;
+      for(const f of faces){ const d = f[0]*nx + f[1]*nz; if(d > bd){ bd = d; best = f; } }
+      const m = best[2]();
+      m.userData.noclip = true; m.castShadow = false;
+    }
+    if(hr.chance(HS.gutterChance)){
+      /* A gutter along one eave, and one length of it hanging off. */
+      const gz = D/2 + 0.10, gy = eaveY + 0.04;
+      const bent = hr.chance(0.45);
+      const seg = W*0.46;
+      for(const sx of [-1, 1]){
+        const gt = addBox(g, seg, 0.10, 0.12, MAT.metal, sx*seg/2, gy, gz);
+        gt.userData.noclip = true;
+        if(bent && sx > 0){ gt.rotation.z = -0.13; gt.position.y -= 0.10; }
+      }
+      const dp2 = addBox(g, 0.09, eaveY - 0.3, 0.09, MAT.metal, W/2 - 0.25, (eaveY-0.3)/2, gz);
+      dp2.userData.noclip = true;
+    }
+    if(hr.chance(HS.missingShingleChance)){
+      /* One shake gone, and the dark of the batten showing through. */
+      const mz = hr.range(0.25, 0.85)*(D/2), sgn = hr.chance(0.5) ? 1 : -1;
+      const my = roofUnderAt(mz) + 0.18/Math.cos(pitch) + 0.012;
+      const hole = addBox(g, hr.range(0.35, 0.6), 0.03, 0.30, MAT.dark,
+                          hr.range(-0.3, 0.3)*W, my, sgn*mz);
+      hole.rotation.x = sgn*pitch;
+      hole.userData.noclip = true; hole.castShadow = false;
+    }
+  }
+
+  /* ---- THE YARD ---------------------------------------------------
+     The plot, not the street. Everything here is placed in the house's
+     own frame, where +z is the way the front door faces and the road is
+     further out that way still, so the rule that keeps all of it out of
+     the way is simple: nothing goes in the corridor straight out from
+     the door, and nothing goes further out than the yard.
+
+     That corridor is HS.yardClear wide and it is measured from the
+     middle of the door, which is also where the porch steps and the
+     path are. It is the reason none of this can block the way in, and
+     it is checked by the doorway probe in the dev panel rather than
+     trusted. */
+  {
+    const porch = g.userData.porch;
+    const frontOut = D/2 + (porch ? porch.depth : 0.4) + 1.0;
+    const sideX = W/2 + hr.range(1.8, 2.8);
+    if(hr.chance(HS.fenceChance)){
+      /* A line of pickets down one side and along the back, stopping
+         short of the front so it never crosses the path. */
+      const sgn = hr.chance(0.5) ? 1 : -1;
+      const z0 = -D/2 - 1.6, z1 = D/2 - 0.2;
+      for(let z=z0; z<=z1; z+=0.46){
+        const pk = addBox(g, 0.07, hr.range(0.72, 0.94), 0.05, MAT.timber,
+                          sgn*sideX, 0.42, z);
+        pk.rotation.z = hr.range(-0.05, 0.05);
+        pk.userData.noclip = true;
+      }
+      for(const ry of [0.34, 0.66])
+        addBox(g, 0.05, 0.05, z1-z0, MAT.timber, sgn*sideX, ry, (z0+z1)/2)
+          .userData.noclip = true;
+    }
+    if(hr.chance(HS.woodpileChance)){
+      /* Against the back wall, under the eave, which is where a woodpile
+         goes if you want it dry. Solid: it is a metre of stacked timber
+         and walking through it would read as nothing being there. */
+      const px2 = hr.range(-0.3, 0.3)*W, pz2 = -D/2 - 0.55;
+      addBox(g, 1.5, 0.95, 0.75, MAT.timber, px2, 0.48, pz2);
+      for(let i=0;i<6;i++)
+        addBox(g, 0.13, 0.13, 0.78, MAT.timber,
+               px2 - 0.6 + (i%3)*0.42, 1.02 + ((i/3)|0)*0.14, pz2)
+          .userData.noclip = true;
+    }
+    if(hr.chance(HS.clotheslineChance)){
+      const sgn = hr.chance(0.5) ? 1 : -1;
+      const ax = sgn*(W/2 + 1.1), bx2 = sgn*(W/2 + 3.4), lz = -D*0.20;
+      for(const x of [ax, bx2])
+        addBox(g, 0.09, 1.95, 0.09, MAT.timber, x, 0.97, lz).userData.noclip = true;
+      addBox(g, Math.abs(bx2-ax), 0.02, 0.02, MAT.timber, (ax+bx2)/2, 1.88, lz)
+        .userData.noclip = true;
+      if(hr.chance(0.7)) for(let i=0;i<2;i++){
+        const sh = addBox(g, 0.42, 0.56, 0.03, MAT.fabric,
+                          (ax+bx2)/2 + (i?0.5:-0.5), 1.58, lz);
+        sh.userData.noclip = true; sh.castShadow = false;
+      }
+    }
+    if(hr.chance(HS.barrelChance)){
+      const sgn = hr.chance(0.5) ? 1 : -1;
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.88, 10), MAT.metal);
+      b.position.set(sgn*(W/2 + 1.0), 0.44, -D/2 + hr.range(0.4, 1.6));
+      b.rotation.y = hr.range(0, TAU);
+      b.castShadow = true; b.receiveShadow = true;
+      g.add(b);
+    }
+    if(hr.chance(HS.mailboxChance)){
+      /* Beside the path and outside the corridor, never in it. */
+      const sgn = hr.chance(0.5) ? 1 : -1;
+      const mx = sgn*Math.max(HS.yardClear, doorW*0.5 + 0.9);
+      addBox(g, 0.09, 1.05, 0.09, MAT.timber, mx, 0.52, frontOut).userData.noclip = true;
+      const bx3 = addBox(g, 0.22, 0.20, 0.38, MAT.metal, mx, 1.14, frontOut);
+      bx3.userData.noclip = true;
+    }
   }
 
   /* ---- THE INSIDE, WHICH IS SOMEBODY'S HOUSE -----------------------
@@ -12110,6 +12581,80 @@ function buildHouse(spec){
                     MAT.fabric, tx, 0.25, tz);
     rug.userData.noclip = true; rug.castShadow = false;
 
+    /* ---- WHAT HAPPENED IN HERE, WITHOUT SAYING IT ------------------
+       Curtains, pictures, and the dishes. None of it is readable and
+       none of it is labelled: the lore rule in this file is that found
+       text only ever arrives through Lore.note(), so a room is allowed
+       to imply and never to state. A picture turned face-down on a
+       shelf is the strongest thing in here and it says nothing at all.
+
+       When the house is boarded the same room is dressed differently:
+       sheets over the furniture and a bed nobody made. It is the same
+       plan, the same beds and the same lamps, so a player who forces
+       the boards at two in the morning can still sleep in it. */
+    const dusty = !!spec.boarded;
+
+    // curtains, hung inside every window this house has
+    for(const pn of panes){
+      if(Math.abs(pn.position.y - 1.5) > 0.6) continue;     // not the dormer
+      const vertical = Math.abs(pn.scale.x) < 1 && pn.geometry.parameters
+                     && pn.geometry.parameters.width < 0.2;
+      const inset = 0.12;
+      for(const sx2 of [-1, 1]){
+        const c2 = vertical
+          ? put(0.04, 0.92, 0.26, MAT.fabric,
+                pn.position.x - Math.sign(pn.position.x)*inset,
+                pn.position.y + 0.06, pn.position.z + sx2*0.30)
+          : put(0.26, 0.92, 0.04, MAT.fabric,
+                pn.position.x + sx2*0.30, pn.position.y + 0.06,
+                pn.position.z - Math.sign(pn.position.z)*inset);
+        c2.userData.noclip = true; c2.castShadow = false;
+      }
+    }
+
+    // pictures, and the ones somebody turned over
+    {
+      const n2 = r() < 0.5 ? 2 : 3;
+      for(let i=0;i<n2;i++){
+        const onCross = r() < 0.5;
+        const px3 = onCross ? (r()-0.5)*W*0.6 : (r()<0.5?-1:1)*(W/2 - 0.16);
+        const pz3 = onCross ? crossZ + wall*0.6 : (r()-0.5)*D*0.4;
+        const fr = onCross
+          ? put(0.34, 0.26, 0.03, MAT.timber, px3, 1.55 + r()*0.2, pz3)
+          : put(0.03, 0.26, 0.34, MAT.timber, px3, 1.55 + r()*0.2, pz3);
+        fr.userData.noclip = true;
+      }
+      /* Face-down on the dresser, which is a thing somebody did. */
+      if(r() < 0.45){
+        const fd = put(0.30, 0.03, 0.22, MAT.timber, -stoveX*0.92, 1.92, fz - 0.7);
+        fd.userData.noclip = true;
+      }
+    }
+
+    /* The table, laid. Sometimes for two, with one chair pushed back
+       from it -- which is the only thing in this house that suggests
+       anybody left in a hurry, and it never says so. */
+    if(!dusty && r() < 0.55){
+      for(const sx2 of [-1, 1]){
+        put(0.24, 0.02, 0.24, MAT.fabric, tx + sx2*0.42, 0.86, tz).userData.noclip = true;
+        put(0.05, 0.01, 0.14, MAT.metal, tx + sx2*0.42 + 0.19, 0.87, tz).userData.noclip = true;
+      }
+      put(0.16, 0.22, 0.16, MAT.glass, tx, 0.92, tz - 0.22).userData.noclip = true;
+    }
+
+    if(dusty){
+      /* Sheets. Big soft boxes draped over what is underneath, which at
+         this size is all a dust sheet is. */
+      const sheet = (w2,h2,d2,x2,y2,z2)=>{
+        const m2 = put(w2, h2, d2, MAT.fabric, x2, y2, z2);
+        m2.userData.noclip = true; m2.castShadow = false; return m2;
+      };
+      sheet(1.75, 0.10, 1.15, tx, 0.87, tz);                        // over the table
+      sheet(0.62, 1.90, 1.18, -stoveX*0.92, 1.02, fz - 0.7);        // over the dresser
+      for(const [cx3, cz3] of [[-1.15, 0], [1.15, 0]])
+        sheet(0.56, 0.70, 0.56, tx + cx3, 0.52, tz + cz3);          // over the chairs
+    }
+
     // ---- the back: where they sleep ----
     const beds = [];
     const bedIn = (cx2)=>{
@@ -12120,7 +12665,14 @@ function buildHouse(spec){
       put(0.80, 0.10, 0.55, MAT.fabric, cx2, 0.88, bz2 - 0.70);        // pillow
       put(0.46, 0.58, 0.40, MAT.timber, cx2 + 0.95, 0.29, bz2 - 0.75); // night stand
       // a blanket folded over the foot, a candle on the stand, shoes
-      put(1.20, 0.09, 0.70, MAT.fabric, cx2, 0.92, bz2 + 0.62).userData.noclip = true;
+      /* Folded over the foot -- or thrown back, in a house nobody has
+         been into for a long time. */
+      if(spec.boarded){
+        const bl = put(1.05, 0.12, 1.30, MAT.fabric, cx2 + 0.10, 0.93, bz2 + 0.45);
+        bl.rotation.y = 0.16; bl.userData.noclip = true;
+      } else {
+        put(1.20, 0.09, 0.70, MAT.fabric, cx2, 0.92, bz2 + 0.62).userData.noclip = true;
+      }
       put(0.05, 0.16, 0.05, MAT.fabric, cx2 + 0.95, 0.66, bz2 - 0.75).userData.noclip = true;
       if(r() < 0.6) for(const sx3 of [-0.09, 0.09])
         put(0.15, 0.10, 0.28, MAT.timber, cx2 + sx3, 0.05, bz2 + 1.35).userData.noclip = true;
@@ -12216,8 +12768,30 @@ function buildHouse(spec){
       door.add(pl);
     }
     g.userData.door = door;
-    g.userData.doorOpen = spec.decay > 0.28 ? 2.75 : 0;
+    g.userData.doorOpen = spec.boarded ? 0 : (spec.decay > 0.28 ? 2.75 : 0);
     door.rotation.y = -g.userData.doorOpen;
+
+    /* ---- AND THE BOARDS OVER IT -------------------------------------
+       Planks nailed across the opening, outside the leaf. They are
+       SOLID -- that is the whole point of them -- and they are held on
+       the group so that forcing them can take them off and refit the
+       building's colliders without rebuilding the house. Each is its
+       own mesh and kept out of the merge, because they stop existing
+       partway through a run. */
+    if(spec.boarded){
+      const bz = D/2 + 0.16;
+      const boards = [];
+      const br2 = makeRNG(hashString(spec.id || 'house') ^ G.seed ^ 0x9ab3);
+      for(let i=0;i<4;i++){
+        const bd = addBox(g, doorW + 0.5, 0.20, 0.06, MAT.timber,
+                          br2.range(-0.08, 0.08), 0.42 + i*0.56, bz);
+        bd.rotation.z = br2.range(-0.07, 0.07);
+        bd.userData.keepMesh = true;          // taken off later, so never merged
+        bd.userData.collide = 'boards';
+        boards.push(bd);
+      }
+      g.userData.boards = boards;
+    }
   }
   g.userData.entry = new THREE.Vector3(0, 0, D/2 + 1.2);
   /* A hundred boxes is how a house is described, not how it is drawn. */
@@ -12275,6 +12849,7 @@ function buildAllStructures(){
      replaced, so it goes off before they are thrown away. */
   if(typeof CollisionView !== 'undefined') CollisionView.reset();
   Doors.clear();
+  Sleep.reset();
   for(const s of Wld.structures){ buildStructure(s); }
   for(const s of Wld.structures) if(s.mesh) Doors.register(s, s.mesh);
   for(const t of (Wld.townBuildings || [])){
@@ -12298,6 +12873,8 @@ function buildAllStructures(){
   /* The people are built last, because where they walk is derived from
      the doors of buildings that have to exist first. */
   People.build();
+  /* After the buildings exist, because it reads their chimneys. */
+  Smoke.build();
   Fauna.build();
 }
 
@@ -12397,6 +12974,7 @@ const Player = {
   vel: new THREE.Vector3(),
   yaw: 0, pitch: 0,
   onGround: true, vy: 0, groundY: 0,
+  sleeping: false,          // under, with Sleep driving the clock
   stamina: CFG.PLAYER.staminaMax,
   sprinting: false, moving: false, speed: 0,
   bob: 0, bobAmt: 0, breath: 0,
@@ -12872,6 +13450,15 @@ function updatePlayer(dt){
   if(p.dead) return;
   /* Sitting in the car: the world goes on, the player does not move, and
      any movement key is taken as wanting to get out. */
+  /* Asleep: the body stays where it was put and the camera stays with
+     it. Waking is handled by Sleep itself, which watches the same keys
+     -- doing it here as well would end the night twice. */
+  if(p.sleeping){
+    p.moving = false; p.speed = 0; p.sprinting = false;
+    p.vel.set(0,0,0);
+    updateCamera(p, dt);
+    return;
+  }
   if(p.seated){
     p.moving = false; p.speed = 0; p.sprinting = false;
     p.vel.set(0,0,0);
@@ -13607,6 +14194,40 @@ const Survival = {
     if(this.warm > 0) this.warm = Math.max(0, this.warm - dt);
   },
 
+  /* ---- A NIGHT'S WORTH, WITHOUT A NIGHT'S WORTH OF FRAMES ---------
+     Sleep skips hours it does not simulate, so the needs have to be
+     advanced directly -- and by exactly the rates update() uses, not by
+     a second set of numbers that can drift away from them. The same
+     temperature() model runs, so being under a roof and beside a stove
+     that is still in still counts, which is the difference between
+     sleeping indoors and sleeping in a shed.
+
+     `dying` is kept in real seconds because that is what it is measured
+     in everywhere else, so the hours are converted back before they are
+     added to it. A player who lies down on an empty stomach at a
+     hundred per cent does not wake up. */
+  sleepHours(h){
+    if(G.over) return;
+    const S = CFG.SURVIVE;
+    const realSec = h / (24/(CFG.TIME.dayRealMinutes*60));
+    let tRate = S.thirstPerHour;
+    if(this.sick > 0) tRate *= S.sickThirstMult;
+    this.thirst = clamp(this.thirst + tRate*h, 0, 100);
+    this.hunger = clamp(this.hunger + S.hungerPerHour*h, 0, 100);
+    this.temperature(realSec, h);
+    if(this.sick > 0){
+      this.sick = Math.max(0, this.sick - realSec);
+      if(this.sick === 0) this.sickKind = null;
+    }
+    if(this.thirst >= S.thirstDeadlyAt) this.dying = (this.dying||0) + realSec;
+    else if(this.hunger >= S.hungerDeadlyAt) this.dying = (this.dying||0) + realSec*0.6;
+    else if(this.cold >= S.coldDeadlyAt) this.dying = (this.dying||0) + realSec*1.2;
+    else this.dying = Math.max(0, (this.dying||0) - realSec*0.5);
+    if(this.dying > 120)
+      this.die(this.cold >= S.coldDeadlyAt ? 'exposure'
+             : this.thirst >= S.thirstDeadlyAt ? 'dehydration' : 'starvation');
+  },
+
   update(dt){
     if(G.over) return;
     const S = CFG.SURVIVE;
@@ -14196,6 +14817,36 @@ function pickTarget(){
         act:()=>startRest(st) }, 0.6);
     }
   }
+  /* --- a bed ---
+     Only at night, only a real bed, and never on open ground: lying
+     down in a field is not a thing this offers. The campsite's "sit
+     down for a while" is untouched and still there in daylight. */
+  if(!Player.sleeping && Sleep.inWindow()){
+    for(const b of Sleep.bedsNear(Player.pos.x, Player.pos.z, 2.4)){
+      const sc3 = facingScore(b.world.x, b.world.z);
+      if(sc3 < -0.7) continue;
+      consider({ kind:'sleep', label:'Hold E \u2014 lie down', hold: CFG.GEAR.sleepHold,
+                 act:()=> Sleep.start(b.host, b.bed, b.world) }, sc3 + 2.2);
+      break;
+    }
+  }
+
+  /* --- boards over a door ---
+     Offered from outside, facing the boards. It is the longest hold in
+     the game and it charges stamina on top of the drain every hold
+     costs, because pulling four nailed planks off a door with your
+     hands is the one interaction here that is meant to be work. */
+  for(const b of (Wld.townBuildings || [])){
+    if(!b.boarded || !b.mesh || !b.mesh.userData.boards) continue;
+    const e = b.mesh.userData.entry.clone().applyMatrix4(b.mesh.matrixWorld);
+    const d2 = Math.hypot(e.x - Player.pos.x, e.z - Player.pos.z);
+    if(d2 > 3.2) continue;
+    const sc2 = facingScore(e.x, e.z);
+    if(sc2 < -0.3) continue;
+    consider({ kind:'boards', label:'Hold E \u2014 force the boards',
+               hold: CFG.GEAR.forceHold, act:()=> forceBoards(b) }, sc2 + 1.6);
+  }
+
   // --- doors ---
   {
     const d = Doors.nearest(Player.pos.x, Player.pos.z, 9);
@@ -14249,6 +14900,25 @@ function pickTarget(){
   return best;
 }
 
+/* THE BOARDS COME OFF, AND THE BUILDING IS REFITTED.
+   The planks were real colliders in spec.solids, so taking them out of
+   the scene is only half of it -- the other half is that the collider
+   set still has them. It is refitted from the group rather than edited,
+   for the same reason Doors.refit does: the only correct source for
+   where a building's solids are is the building. */
+function forceBoards(b){
+  const g2 = b.mesh;
+  for(const m of (g2.userData.boards || [])) if(m.parent) m.parent.remove(m);
+  g2.userData.boards = null;
+  b.boarded = false;
+  b.solids = structSolids(b, g2);
+  registerColliders();
+  Player.stamina = Math.max(0, Player.stamina - CFG.GEAR.forceStamina);
+  if(typeof Audio !== 'undefined')
+    Audio.play('doorMove', { gain: 0.95, pos: new THREE.Vector3(b.x, b.y + 1.1, b.z) });
+  UI.say('The boards come away.', 3);
+}
+
 function searchStructure(st){
   const found = Wld.items.filter(i=>i.host === st.id && !i.taken);
   if(!found.length){ UI.say('Nothing here worth carrying.', 3); Mind.credit(CFG.MIND.calmShelter); return; }
@@ -14284,6 +14954,272 @@ function updateRest(dt){
     Survival.sheltered = false;
   }
 }
+
+/* Weather does not stop because the player is not watching it. Rather
+   than run the state machine for a simulated night, its decision clock
+   is wound forward by the real seconds the night was worth and every
+   decision it would have made is made -- so the morning's weather is
+   arrived at rather than chosen. The continuous values are then snapped
+   to the kind that came out, because their lerps are tuned for minutes
+   of real time and would otherwise spend the whole of the next morning
+   catching up with a storm that started at three. */
+function skipWeather(realSec){
+  let left = realSec, walked = 0;
+  while(left > 0 && walked < 400){
+    const step = Math.min(left, Math.max(Weather.next, 1));
+    Weather.next -= step; left -= step; walked++;
+    if(Weather.next <= 0){
+      const r = rngFor('weatherClock', Math.floor((G.t + realSec - left)*7));
+      Weather.next = r.range(CFG.WEATHER.changeMinutes[0], CFG.WEATHER.changeMinutes[1])*60;
+      Weather.kind = rollWeather();
+    }
+  }
+  const K = Weather.kind;
+  Weather.rain = Weather.rainTarget = K==='rain' ? 0.62 : K==='storm' ? 1.0 : 0;
+  Weather.fogBoost = Weather.fogBoostTarget =
+    K==='fog' ? 0.92 : K==='rain' ? 0.34 : K==='storm' ? 0.5 : 0.06;
+  Weather.wind = (K==='storm' ? 1.0 : K==='rain' ? 0.55 : K==='fog' ? 0.12 : P.windBase);
+}
+
+/* =====================================================================
+   ===== SLEEP =====
+   Lie down in a bed at night and about a real minute later it is
+   morning. What that minute is NOT is the game running at sixty times
+   speed: a night of real simulation is ten thousand frames of creatures,
+   phantoms and pathfinding that nobody watches, it takes far longer than
+   a minute on any machine, and every one of those frames is a chance for
+   something to go wrong unobserved.
+
+   So the clock is advanced directly and the consequences are applied
+   directly, each by the system that owns them -- Survival.sleepHours,
+   Mind.sleepHours, skipWeather, People.settleTo. Each of those uses the
+   same per-hour rates the waking game uses, so the morning is the
+   morning the player would have had.
+
+   TWO THINGS ARE DELIBERATE AND WORTH STATING.
+
+   It is never called a dream. The events that fire while the player is
+   under come out of the same library and the same audio bank as
+   everything else, at the stage they are already at, and nothing labels
+   them. A player who hears somebody moving about downstairs at four in
+   the morning is owed the same doubt as a player who hears it awake:
+   this file's one rule is that nothing tells you what was real.
+
+   And it slows the illness without stopping it. See Mind.sleepHours.
+   ===================================================================== */
+const Sleep = {
+  active: false, phase: '', t: 0, veil: 0,
+  hoursLeft: 0, hoursTotal: 0, host: null, bed: null,
+  eventAt: [], villager: null, villagerAt: -1,
+  lastHours: 0, woke: '',
+
+  reset(){
+    this.active = false; this.phase = ''; this.t = 0; this.veil = 0;
+    this.hoursLeft = 0; this.host = null; this.bed = null;
+    this.eventAt.length = 0; this.villager = null; this.villagerAt = -1;
+    this.woke = '';
+    G.clockHeld = false;
+    const el = document.getElementById('sleepveil');
+    if(el) el.style.opacity = 0;
+  },
+
+  /* Dusk through the small hours. The window wraps midnight, which is
+     why this is two comparisons joined by OR rather than one range. */
+  inWindow(){
+    const S = CFG.SLEEP, h = G.hours;
+    return h >= S.earliestHour || h <= S.latestHour;
+  },
+
+  /* How many in-fiction hours from now until the wake hour. */
+  hoursTo(target){
+    let d = target - G.hours;
+    while(d <= 0) d += 24;
+    return d;
+  },
+
+  /* Every bed the player could lie down in: the town's houses, and any
+     structure whose builder left beds behind (the cabins do). A boarded
+     house is not offered until its boards are off, which is the point
+     of the boards. */
+  bedsNear(x, z, maxD){
+    const out = [];
+    const scan = (host)=>{
+      if(!host || !host.mesh || host.boarded) return;
+      const beds = host.mesh.userData.beds;
+      if(!beds || !beds.length) return;
+      if(Math.hypot(host.x - x, host.z - z) > maxD + 14) return;
+      host.mesh.updateMatrixWorld(true);
+      for(const b of beds){
+        const w = new THREE.Vector3(b.x, b.top, b.z).applyMatrix4(host.mesh.matrixWorld);
+        if(Math.hypot(w.x - x, w.z - z) <= maxD) out.push({ host, bed: b, world: w });
+      }
+    };
+    for(const b of (Wld.townBuildings || [])) scan(b);
+    for(const st of Wld.structures) scan(st);
+    return out;
+  },
+
+  start(host, bed, world){
+    if(this.active || G.over) return;
+    const S = CFG.SLEEP;
+    this.active = true; this.phase = 'fading'; this.t = 0; this.veil = 0;
+    this.host = host; this.bed = bed; this.woke = '';
+    this.lastHours = G.hours;
+    /* The tail is played live so dawn actually arrives on screen rather
+       than being handed over as a finished fact. */
+    this.hoursLeft = Math.max(0, this.hoursTo(S.wakeHour) - S.realTailHours);
+    this.hoursTotal = Math.max(0.001, this.hoursLeft);
+    G.clockHeld = true;
+    Player.sleeping = true;
+    Player.vel.set(0,0,0);
+    Survival.sheltered = true;
+    Mind.noteRest();
+
+    /* When, in the hours ahead, something is heard. Drawn once from a
+       stream salted by the hour the player lay down, so the same nap on
+       the same seed is the same night. */
+    const r = rngFor('sleep', Math.floor(G.t) ^ (G.seed>>>3));
+    const n = r.irange(S.events[0], S.events[1]);
+    this.eventAt.length = 0;
+    for(let i=0;i<n;i++) this.eventAt.push(r.range(0.12, 0.92)*this.hoursLeft);
+    this.eventAt.sort((a,b)=> b-a);          // consumed as hoursLeft falls
+
+    /* WHOSE BED IS THIS. If a villager sleeps here and has not come
+       home yet, they are going to, and the player is in it. */
+    this.villager = null; this.villagerAt = -1;
+    for(const p2 of People.list){
+      if(p2.bed !== bed || !p2.home) continue;
+      if(p2.state === 'asleep') break;       // already in it; nothing to come
+      const at = this.hoursTo(p2.home.bedAt != null ? p2.home.bedAt : CFG.PEOPLE.allIn);
+      if(at < this.hoursLeft){ this.villager = p2; this.villagerAt = this.hoursLeft - at; }
+      break;
+    }
+
+    if(world){ Player.pos.x = world.x; Player.pos.z = world.z; }
+    UI.say('You lie down.', 3);
+  },
+
+  /* Ending it. `why` is recorded for the dev panel and never shown. */
+  finish(why){
+    this.woke = why;
+    this.phase = 'waking'; this.t = 0;
+    G.clockHeld = false;
+    Player.sleeping = false;
+    Survival.sheltered = false;
+  },
+
+  update(dt){
+    if(!this.active) return;
+    const S = CFG.SLEEP;
+    const el = document.getElementById('sleepveil');
+
+    if(this.phase === 'fading'){
+      this.t += dt;
+      this.veil = clamp(this.t / S.fadeSeconds, 0, 1);
+      if(this.t >= S.fadeSeconds){ this.phase = 'under'; this.t = 0; }
+    } else if(this.phase === 'under'){
+      this.t += dt;
+      /* The hours are spent at a constant rate across the minute, so the
+         clock in the corner of the dev panel runs smoothly rather than
+         jumping. */
+      const total = Math.max(0.001, S.realSeconds);
+      /* A CONSTANT RATE, from the total decided when they lay down.
+         Spending a fraction of what is LEFT each frame is a decay curve:
+         it approaches the wake hour and never arrives, and the minute
+         ends early on a timeout with an hour still owed. */
+      const step = Math.min(this.hoursLeft, this.hoursTotal * (dt/total));
+      if(step > 0){
+        G.hours = mod(G.hours + step, 24);
+        this.hoursLeft -= step;
+        Survival.sleepHours(step);
+        Mind.sleepHours(step);
+        skipWeather(step / (24/(CFG.TIME.dayRealMinutes*60)));
+        if(G.over){ this.reset(); return; }
+        this.rollDanger(step);
+      }
+      /* Something in the next room. */
+      while(this.eventAt.length && this.hoursLeft <= this.eventAt[this.eventAt.length-1]){
+        this.eventAt.pop();
+        this.hear();
+      }
+      /* The one who lives here, coming home. */
+      if(this.villager && this.hoursLeft <= this.villagerAt){
+        this.villagerAt = -1;
+        this.standThere(this.villager);
+        this.villager = null;
+        this.finish('villager');
+      }
+      /* Any movement key, and they are awake at whatever hour it is. */
+      else if(Keys.KeyW||Keys.KeyA||Keys.KeyS||Keys.KeyD||Keys.Space)
+        this.finish('moved');
+      else if(this.hoursLeft <= 0 || this.t >= S.realSeconds)
+        this.finish('morning');
+    } else if(this.phase === 'waking'){
+      this.t += dt;
+      this.veil = 1 - clamp(this.t / S.fadeSeconds, 0, 1);
+      if(this.t >= S.fadeSeconds){
+        /* The villagers are put where the schedule says they are at this
+           hour, rather than being left standing wherever the night
+           found them. */
+        People.settleTo(G.hours);
+        this.reset();
+        return;
+      }
+    }
+    if(el) el.style.opacity = (this.veil * 0.96).toFixed(3);
+  },
+
+  /* A low, auditory event from the stage the player is already at. No
+     visual ones: their eyes are shut, and a phantom nobody can see is a
+     phantom that never happened. */
+  hear(){
+    const pool = Director.events.filter(e=> e.flavour === 'auditory'
+                                         && (e.stage || 1) <= Math.max(1, Mind.stage));
+    if(!pool.length) return;
+    const r = rngFor('sleepEv', Math.floor(G.hours*97) ^ G.seed);
+    Director.forceFire(pool[r.irange(0, pool.length-1)].id);
+  },
+
+  /* IN TOWN NOTHING COMES FOR YOU. townDepth is the same test the
+     creatures themselves use to decide where they will not go, so this
+     is not a special case for sleeping -- it is the same rule, asked
+     once per hour instead of once per frame. Outside it, every hour
+     under is an hour something could find you. */
+  rollDanger(h){
+    if(townDepth(Player.pos.x, Player.pos.z) > 0) return;
+    const S = CFG.SLEEP;
+    const r = rngFor('sleepRisk', Math.floor(G.hours*13) ^ (G.seed>>>5));
+    if(!r.chance(1 - Math.pow(1 - S.wakeRisk, Math.max(0.001, h)))) return;
+    const b = Fauna.list.find(o=> o && o.obj);
+    if(b){
+      const a = r()*TAU, d = r.range(S.creatureAt[0], S.creatureAt[1]);
+      b.x = Player.pos.x + Math.sin(a)*d;
+      b.z = Player.pos.z + Math.cos(a)*d;
+      b.obj.position.set(b.x, heightAt(b.x, b.z), b.z);
+      b.state = 'stalk'; b.stateT = 0; b.target = null; b.everSaw = true;
+    }
+    this.finish('creature');
+  },
+
+  /* Standing in the bedroom doorway. Still, and saying nothing -- there
+     is no dialogue in this game and this is not where it starts. They
+     leave afterwards and do not come back tonight. */
+  standThere(p2){
+    if(!p2 || !p2.home || !p2.home.mesh) return;
+    const M = p2.home.mesh;
+    M.updateMatrixWorld(true);
+    const D2 = p2.home.style.footprint[1];
+    const w = new THREE.Vector3(0, 0, -D2*0.06 + 0.9).applyMatrix4(M.matrixWorld);
+    p2.x = w.x; p2.z = w.z;
+    p2.obj.position.set(w.x, heightAt(w.x, w.z), w.z);
+    p2.obj.rotation.set(0, Math.atan2(Player.pos.x - w.x, Player.pos.z - w.z), 0);
+    p2.hidden = false; p2.obj.visible = true;
+    p2.state = 'idle'; p2.timer = 6;
+    /* Out of the house, and not back until tomorrow. */
+    p2.stayOutUntil = G.hours + 6;
+    p2.bed = null;
+  },
+};
 
 /* Hold-to-interact. Idempotent begin(), and losing your aim for a frame
    does not cancel it — a third of a second of genuinely looking away
@@ -14398,6 +15334,42 @@ const Mind = {
   leakedTo(s){ return G.t - this.lastLeak < 25 && this.leakStage >= s; },
 
   credit(v){ this.progress = clamp(this.progress + v, 0, 1); },
+
+  /* ---- THE ILLNESS DOES NOT STOP BECAUSE YOU SHUT YOUR EYES --------
+     Sleep is the one thing in this game that slows the mind down, and
+     it is deliberately a SLOWING and never a cure. The waking
+     multipliers still apply -- weather, thirst, hunger, cold, sickness,
+     and the calm of being near the town -- and two things change:
+
+       * the night multiplier is not applied. That is the whole of why
+         sleeping through a night beats walking through one: a night on
+         your feet runs at mulNight, and a night in a bed runs at
+         SLEEP.mindRate of the base. At the shipped numbers that is
+         0.35 against 2.15, so about a sixth of the rate.
+       * agitation drains to nothing, because agitation is what the
+         player's own behaviour is adding and they are not doing
+         anything.
+
+     Stage can still advance while they are under, and it is not
+     announced when they wake. */
+  sleepHours(h){
+    const M = CFG.MIND;
+    const realSec = h / (24/(CFG.TIME.dayRealMinutes*60));
+    let mul = P.declineRate * CFG.SLEEP.mindRate;
+    mul *= Weather.kind === 'rain' || Weather.kind === 'storm' ? M.mulRain
+         : Weather.kind === 'fog' ? M.mulFog : M.mulClear;
+    if(Survival.thirst > CFG.SURVIVE.thirstWeakAt) mul *= M.mulThirst;
+    if(Survival.hunger > CFG.SURVIVE.hungerWeakAt) mul *= M.mulHunger;
+    if(Survival.cold > 45) mul *= M.mulCold;
+    if(Survival.sick > 0) mul *= M.mulSick;
+    const civ = Wld.hospital ? Math.hypot(Player.pos.x - Wld.hospital.x,
+                                          Player.pos.z - Wld.hospital.z) : 1e9;
+    if(civ < M.civCalmRange)
+      mul *= lerp(M.civCalmAt, 1, smoothstep(M.civCalmClose, M.civCalmRange, civ));
+    this.agitation = 0;
+    if(!G.admitted) this.progress = clamp(this.progress + M.baseRate*mul*(realSec/60), 0, 1);
+    this.stage = this.stageOf(this.progress);
+  },
   dose(v){ this.spike = Math.max(this.spike, v); this.spikeUntil = G.t + 8; },
   shock(v){ this.dose(v); G.stress = clamp(G.stress + v, 0, 1); },
 
@@ -18141,6 +19113,7 @@ const DEV = (()=>{
     });
     button(g6, 'VALIDATE 40 SEEDS', ()=> runValidator(40));
     button(g6, 'validate 120 seeds', ()=> runValidator(120));
+    button(g6, 'sleep vs G2 (150 seeds)', ()=> runSleepAudit(150));
     button(g6, 'audio bank', ()=>{
       const cats = Audio.categories;
       flash(`${Audio.recipeCount} recipes across ${cats.length} categories\n`
@@ -18265,6 +19238,88 @@ const DEV = (()=>{
         + `${(attempts/n).toFixed(2)} attempts per world, ${Math.round(ms/n)}ms each\n`
         + (Object.keys(fails).length ? 'failures: ' + JSON.stringify(fails) : 'no failures')
         + '\n' + Object.entries(byStyle).map(([k,v])=>`  ${k.padEnd(8)} ${v.pass}/${v.n}`).join('\n')
+        + '\nNOTE: the live world was regenerated from your seed afterwards.'
+      );
+    }, 30);
+  }
+
+  /* ---- DOES SLEEPING BREAK THE RUN? -------------------------------
+     Two questions, and they pull in opposite directions, which is why
+     both are asked here rather than argued about.
+
+     1. CAN THE ROUTE STILL BE WALKED IF YOU SLEEP ONCE? G2 is checked at
+        generation time against mindMinutesBudget -- the real minutes the
+        mind allows before progress reaches 1. A night costs
+        SLEEP.realSeconds of that budget, and it buys hours the player
+        would otherwise have spent walking in the dark at mulNight. So
+        the test is: take each seed's guaranteed route, work out the
+        minutes of walking it needs, subtract the minute a sleep costs,
+        and see whether any seed no longer fits. If one does, sleeping is
+        a trap and the number here says so.
+
+     2. CAN YOU SLEEP FOR EVER? Sleep must SLOW the illness and never
+        stop it, so a player who sleeps every night still has to lose.
+        This walks a whole run forward in hours -- days of waking at the
+        waking rate, nights at the sleeping rate -- and reports the day
+        the mind reaches 1. If that ever comes back "never", sleep is a
+        cure and the feature is wrong.
+
+     Neither of these renders anything or generates a world twice: they
+     are arithmetic on the same constants the live systems use. */
+  function runSleepAudit(n){
+    flash('auditing ' + n + ' seeds against G2...');
+    setTimeout(()=>{
+      const savedSeed = G.seed, savedText = G.seedText, savedP = P, savedNum = G.seedNum;
+      const S = CFG.SLEEP, M = CFG.MIND;
+      const sleepMinutes = S.realSeconds/60;
+      let worst = null, failWithout = 0, failWith = 0, made = 0;
+      const rows = [];
+      for(let i=0;i<n;i++){
+        G.seedNum = (seedState(savedNum + i*2654435761) % (SEED_MAX+1));
+        G.seed = seedState(G.seedNum);
+        P = rollPersonality();
+        const v = generateWorld();
+        if(!v.pass) continue;
+        made++;
+        const budget = mindMinutesBudget();
+        const metres = Wld.stats.pathMetres || pathMetres(Wld.routePath || []);
+        /* The same walking speed the G2 check itself uses. */
+        const walkMin = metres / (CFG.PLAYER.walk * 60);
+        if(walkMin > budget) failWithout++;
+        if(walkMin + sleepMinutes > budget) failWith++;
+        const slack = budget - walkMin - sleepMinutes;
+        if(!worst || slack < worst.slack)
+          worst = { seed:G.seedNum, slack:+slack.toFixed(2), budget:+budget.toFixed(1),
+                    walk:+walkMin.toFixed(1), metres:Math.round(metres) };
+        rows.push(slack);
+      }
+      /* Question 2, on the live personality: sleep every night for ever
+         and see when the mind still gives out. */
+      P = savedP; G.seed = savedSeed; G.seedNum = savedNum;
+      const night = (24 - CFG.PEOPLE.up) + S.wakeHour;   // hours spent asleep
+      const dayH = 24 - night;
+      const perMin = M.baseRate * P.declineRate;
+      let prog = 0, days = 0;
+      while(prog < 1 && days < 400){
+        /* day: awake, at the blended waking multiplier the budget uses */
+        prog += perMin * 1.35 * (dayH / (24/CFG.TIME.dayRealMinutes));
+        /* night: asleep, at SLEEP.mindRate and no night multiplier */
+        prog += perMin * S.mindRate * (night / (24/CFG.TIME.dayRealMinutes));
+        days++;
+      }
+      G.seedText = savedText;
+      generateWorld();
+      flash(
+        `SLEEPING ONCE vs G2, ${made}/${n} seeds generated\n`
+        + `  fail G2 on walking alone ...... ${failWithout}\n`
+        + `  fail G2 after one sleep ....... ${failWith}\n`
+        + `  a sleep costs ${sleepMinutes.toFixed(2)} of ${worst ? worst.budget : '?'} budget minutes\n`
+        + (worst ? `  tightest seed ${worst.seed}: ${worst.walk}min demanded of ${worst.budget}, `
+                 + `${worst.slack}min spare after sleeping\n` : '')
+        + `\nSLEEPING EVERY NIGHT\n`
+        + `  mind still reaches 1 after ${days >= 400 ? 'NEVER — SLEEP IS A CURE, THIS IS A BUG'
+                                                     : days + ' in-fiction days'}\n`
+        + `  (night = ${night.toFixed(1)}h at mindRate ${S.mindRate}, day = ${dayH.toFixed(1)}h at 1.35)\n`
         + '\nNOTE: the live world was regenerated from your seed afterwards.'
       );
     }, 30);
@@ -19230,6 +20285,7 @@ const DEV = (()=>{
   D.frame = frame;
   D.runAudit = runAudit;
   D.runValidator = runValidator;
+  D.runSleepAudit = runSleepAudit;
   Object.defineProperty(D, 'fps', { get: ()=>fps });
   return D;
 })();
@@ -19318,6 +20374,7 @@ function admit(h){
 function stepWorld(dt){
   G.t += dt;
   Hold.update(dt);
+  Sleep.update(dt);
   updatePlayer(dt);
   updateRest(dt);
   updateWeather(dt);
@@ -19327,9 +20384,11 @@ function stepWorld(dt){
   People.update(dt);
   Fauna.update(dt);
   if(typeof CreatureView !== 'undefined') CreatureView.update();
-  Survival.update(dt);
+  /* While the clock is held, the needs and the mind are advanced by
+     Sleep in in-fiction hours instead. Running these as well would
+     charge the player twice for the same night. */
+  if(!G.clockHeld){ Survival.update(dt); Mind.update(dt); }
   Gear.update(dt);
-  Mind.update(dt);
   Director.tick(dt);
   Phantoms.update(dt);
   Echo.update(dt);
@@ -19381,6 +20440,7 @@ function animate(){
      the player has crossed into a different chunk, and when they have it
      builds one row of them rather than a world. */
   Terra.update(Player.pos.x, Player.pos.z);
+  Smoke.update(dt, Player.pos.x, Player.pos.z);
   updateShadowBudget(dt);
   composer.render();
 }
@@ -19600,7 +20660,7 @@ window.DR = {
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
   admit, townDepth, checkArrival, updateShadowBudget, ShadowBudget,
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders, shelterAt,
-  buildHouse, structSolids, Hold, pickTarget,
+  buildHouse, structSolids, Hold, pickTarget, Sleep, Smoke, forceBoards, skipWeather,
   CollisionView, CreatureView, People, Fauna, BEASTS, resolveCollisions, pushOutOfTerrain,
   get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
 };
