@@ -214,10 +214,20 @@ button:active{ transform:translateY(1px); }
 }
 #devaudit{ max-height:150px; overflow-y:auto; white-space:pre-wrap; line-height:1.5; color:#818d87; }
 #devhint{ padding:6px 12px; border-top:1px solid #1b2124; color:#4d5650; font-size:10px; }
-#comfortrow{ display:flex; align-items:center; gap:10px; margin-top:14px;
-  font-size:12px; letter-spacing:0.08em; opacity:0.72; justify-content:center; }
-#comfortrow input{ width:150px; }
-#comfortrow span{ min-width:3.2em; text-align:right; }
+/* Matches the hold bar's language -- a thin track with a filled bar --
+   rather than inventing a second visual vocabulary for one control. */
+#volnote{
+  position:fixed; left:50%; bottom:13%; transform:translateX(-50%);
+  display:flex; align-items:center; gap:10px; z-index:6;
+  font-size:11px; letter-spacing:0.22em; text-transform:uppercase;
+  color:#9aa49e; opacity:0; transition:opacity 0.28s ease; pointer-events:none;
+  text-shadow:0 1px 3px rgba(0,0,0,0.9);
+}
+#volnote.on{ opacity:0.92; }
+#volnote i{ display:block; width:150px; height:3px; background:rgba(255,255,255,0.16); }
+#volnote i b{ display:block; height:100%; width:0; background:#9aa49e; }
+#volnote.muted i b{ background:#6b5e5e; }
+#volnote span{ min-width:3.2em; text-align:right; }
 </style>
 </head>
 <body>
@@ -246,24 +256,28 @@ button:active{ transform:translateY(1px); }
   <div><b>W A S D</b> move &nbsp; <b>SHIFT</b> run &nbsp; <b>E</b> interact (hold)</div>
   <div><b>F</b> flashlight &nbsp; <b>C</b> compass &nbsp; <b>M</b> map</div>
   <div><b>H</b> hide this &nbsp; <b>P</b> fps &nbsp; <b>`</b> dev panel &nbsp; <b>ESC</b> release mouse</div>
+  <div><b>-</b> / <b>=</b> volume &nbsp; <b>0</b> mute</div>
 </div>
 
+<!-- The volume readout. A transient toast, not a HUD element: it is up
+     only while the player is actually changing the level, because a
+     permanent volume bar on screen is a settings menu that never closes. -->
+<div id="volnote"><label>volume</label><i><b></b></i><span>85%</span></div>
+
 <div id="fps"></div>
-<div id="pausenote"><span>click to resume</span>
-  <!-- COMFORT, WHERE SOMEBODY WHO NEEDS IT WILL FIND IT. This is the
-       one game setting that lives outside the dev panel, because a
-       player who cannot tolerate the screen effects should not have to
-       open a debug overlay to turn them down. It scales the blur, the
-       warp, the smear, the aberration, the camera lag and the tinnitus,
-       and it changes NOTHING about what happens in the world: the same
-       events fire, the same phantoms appear, and the run is the same
-       run. -->
-  <div id="comfortrow">
-    <label for="comfort">visual effects</label>
-    <input id="comfort" type="range" min="0" max="1" step="0.05" value="1">
-    <span id="comfortval">100%</span>
-  </div>
-</div>
+<!-- THE COMFORT SLIDER USED TO LIVE HERE, AND IT NEVER ONCE WORKED.
+     The overlay resumes the game on `mousedown`, registered on the
+     document; the slider's row stopped `pointerdown` and `click` and
+     not `mousedown`. So pressing the slider re-locked the pointer and
+     closed the overlay on the same press, every time -- the thumb could
+     never be dragged, and the control sat there for the whole life of
+     the file looking like a setting.
+
+     It is removed rather than repaired because the value it drove is
+     still on the dev panel's own slider, which does work. CFG.COMFORT
+     is untouched and still scales the blur, warp, smear, aberration,
+     camera lag and tinnitus exactly as before. -->
+<div id="pausenote"><span>click to resume</span></div>
 
 <!-- ===== MAP OVERLAY ===== -->
 <div id="mapview">
@@ -1734,14 +1748,36 @@ const CFG = {
     fovDefault: 74,
   },
 
+  /* ---- VOLUME ---------------------------------------------------------
+     A game setting, not a debug one: it lives on the keyboard where a
+     player can reach it without opening anything. The value is the
+     final output gain, applied AFTER the compressor so that it catches
+     every sound in the file -- including the tinnitus tone, which is
+     wired straight to the compressor and would otherwise have gone on
+     ringing at full level in a muted game. */
+  AUDIO: {
+    volume: 0.85,        // 0..1, the level the game starts at
+    step: 0.08,          // per key press
+    showSeconds: 1.6,    // how long the readout stays up after a change
+    /* A gentle curve rather than a straight line: loudness is not
+       linear in gain, and a linear slider spends its top half doing
+       almost nothing audible. Squaring it puts the useful range where
+       the presses are. */
+    curve: 2.0,
+  },
+
   /* ---- COMFORT -------------------------------------------------------
      One number, 0..1, that scales EVERY distortion this file applies to
      the player's perception: blur, warp, smear, aberration, the camera
      lag, the breath and the audio detune. 1 is the game as designed; 0
      is the same game with the same events and the same phantoms and
-     none of the screen effects. It is in the pause menu as well as the
-     dev panel, because somebody who needs it should not have to find
-     the dev panel to get it. */
+     none of the screen effects.
+
+     It is on the DEV PANEL ONLY. It used to have a second slider in the
+     pause overlay, which could not be dragged -- see the note where
+     that markup was -- and a control that does not work is worse than
+     no control, because it tells the player the setting exists and then
+     refuses it. */
   COMFORT: { level: 1.0 },
 
   DEBUG: { freezeClock:false, freezeMind:false, showPhantoms:false, logRolls:true,
@@ -13148,6 +13184,7 @@ function initInput(){
 
 function onKeyDown(e){
   if(e.code === 'Backquote' || e.code === 'F1'){ e.preventDefault(); DEV.toggle(); return; }
+  if(onVolumeKey(e)) return;
   /* ---- SPACE IS A FLIGHT CONTROL, NOT A BUTTON PRESS ---------------
      An HTML button keeps keyboard focus after it is clicked, and a
      focused button ACTIVATES ON SPACE. So the sequence that turns
@@ -13174,6 +13211,27 @@ function onKeyDown(e){
                    f.style.display = f.style.display === 'block' ? 'none' : 'block'; break; }
     case 'KeyE': Hold.begin(); break;
   }
+}
+
+/* ---- VOLUME, ON THE KEYBOARD -------------------------------------
+   Outside the dev panel and outside the pause overlay, because a player
+   who needs the sound down needs it down NOW -- not after finding a
+   menu. Handled before the started/over guard so it works on the title
+   screen and on the end screen too, which is where somebody is most
+   likely to want it.
+
+   MINUS and EQUAL are the two keys everything else uses for this, and
+   Equal is the unshifted `+`. DIGIT0 mutes, which is the other
+   convention. None of the three is bound to anything else in the game. */
+function onVolumeKey(e){
+  if(UI.mapOpen) return false;
+  let hit = true;
+  if(e.code === 'Minus' || e.code === 'NumpadSubtract') Audio.nudgeVolume(-CFG.AUDIO.step);
+  else if(e.code === 'Equal' || e.code === 'NumpadAdd') Audio.nudgeVolume(+CFG.AUDIO.step);
+  else if(e.code === 'Digit0' || e.code === 'Numpad0') Audio.toggleMute();
+  else hit = false;
+  if(hit){ e.preventDefault(); UI.volNote(); }
+  return hit;
 }
 function onKeyUp(e){ if(e.code === 'KeyE') Hold.cancel(); }
 
@@ -15829,6 +15887,12 @@ const Mind = {
    ===================================================================== */
 const Audio = (()=>{
   let ctx=null, master=null, verb=null, verbSend=null, verbTone=null, ready=false;
+  /* The very last node before the speakers, and the only one the volume
+     control touches. It is after the compressor on purpose: everything
+     in this file reaches the compressor, including the things that
+     bypass `master`, so this is the one place where turning it down
+     turns ALL of it down. */
+  let outGain=null, volume=CFG.AUDIO.volume, muted=false;
   let compressor=null, mindLP=null, mindGain=null, tinnitus=null, tinGain=null;
   const NOISE = { white:null, brown:null, pink:null };
   const NOISE_SECONDS = 6;
@@ -16462,8 +16526,35 @@ const Audio = (()=>{
     if(q != null) bed.bp.Q.setTargetAtTime(q, t, 0.8);
   }
 
+  /* What the gain node is actually set to, from the stored 0..1. */
+  function outLevel(){
+    return muted ? 0 : Math.pow(clamp(volume, 0, 1), CFG.AUDIO.curve);
+  }
+  function applyVolume(){
+    if(!outGain || !ctx) return;
+    /* Ramped, not assigned: a step change in a gain node is a click. */
+    outGain.gain.setTargetAtTime(outLevel(), ctx.currentTime, 0.02);
+  }
+  /* Kept across runs where the browser allows it. A file:// page is not
+     always given storage, and being refused must not stop the game
+     starting, so every access is guarded. */
+  function loadVolume(){
+    try {
+      const v = localStorage.getItem('downriver.volume');
+      if(v != null) volume = clamp(parseFloat(v), 0, 1);
+      muted = localStorage.getItem('downriver.muted') === '1';
+    } catch(e){ /* no storage; the default stands */ }
+  }
+  function saveVolume(){
+    try {
+      localStorage.setItem('downriver.volume', String(volume));
+      localStorage.setItem('downriver.muted', muted ? '1' : '0');
+    } catch(e){ /* nothing to do about it, and nothing breaks */ }
+  }
+
   function init(){
     if(ctx) return;
+    loadVolume();
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     master = ctx.createGain(); master.gain.value = 0.95;
     compressor = ctx.createDynamicsCompressor();
@@ -16480,7 +16571,10 @@ const Audio = (()=>{
     mindLP.type = 'lowpass'; mindLP.frequency.value = 20000; mindLP.Q.value = 0.4;
     mindGain = ctx.createGain(); mindGain.gain.value = 1;
     master.connect(mindLP); mindLP.connect(mindGain);
-    mindGain.connect(compressor); compressor.connect(ctx.destination);
+    mindGain.connect(compressor);
+    outGain = ctx.createGain();
+    outGain.gain.value = outLevel();
+    compressor.connect(outGain); outGain.connect(ctx.destination);
 
     /* A tone that is not in the world. It sits just above the speech
        band, always running, and is inaudible until the late stages
@@ -16554,6 +16648,23 @@ const Audio = (()=>{
 
   return {
     init, resume, play, thunder, updateListener, setBed, setMindAudio,
+    /* ---- the volume, which is the player's and not the mix's -------- */
+    get volume(){ return volume; },
+    get muted(){ return muted; },
+    setVolume(v){
+      volume = clamp(v, 0, 1);
+      if(volume > 0) muted = false;
+      applyVolume(); saveVolume();
+      return volume;
+    },
+    nudgeVolume(d){
+      /* Nudging up out of a mute unmutes rather than raising a muted
+         level silently, which is what every other piece of software
+         does and what anybody reaching for the key expects. */
+      if(muted && d > 0){ muted = false; applyVolume(); saveVolume(); return volume; }
+      return this.setVolume(volume + d);
+    },
+    toggleMute(){ muted = !muted; applyVolume(); saveVolume(); return muted; },
     get ready(){ return ready; },
     get ctx(){ return ctx; },
     get beds(){ return beds; },
@@ -17895,7 +18006,7 @@ const FakeHospital = {
    person notices about themselves; 68% thirst is a bar in a game.
    ===================================================================== */
 const UI = {
-  subT: 0, holdEl: null, blackT: 0, blackCb: null, mapOpen: false,
+  subT: 0, volT: 0, holdEl: null, blackT: 0, blackCb: null, mapOpen: false,
 
   init(){
     this.el = {
@@ -17939,36 +18050,25 @@ const UI = {
   },
   pauseNote(on, retry){
     this.el.pause.classList.toggle('on', !!on);
-    /* Bound once, the first time the note is shown. The slider lives in
-       the pause overlay, so it is only ever touched while the game is
-       not running and cannot be dragged by accident mid-run. */
-    if(!this._comfortBound){
-      const c = document.getElementById('comfort');
-      const v = document.getElementById('comfortval');
-      if(c && v){
-        this._comfortBound = true;
-        c.value = String(CFG.COMFORT.level);
-        v.textContent = Math.round(CFG.COMFORT.level*100) + '%';
-        c.addEventListener('input', ()=>{
-          CFG.COMFORT.level = clamp(parseFloat(c.value), 0, 1);
-          v.textContent = Math.round(CFG.COMFORT.level*100) + '%';
-        });
-        // and it must not steal the click that resumes the game
-        for(const ev of ['pointerdown','click'])
-          document.getElementById('comfortrow')
-            .addEventListener(ev, e=> e.stopPropagation());
-      }
-    }
-    const cc = document.getElementById('comfort');
-    const cv = document.getElementById('comfortval');
-    if(on && cc && cv){
-      cc.value = String(CFG.COMFORT.level);
-      cv.textContent = Math.round(CFG.COMFORT.level*100) + '%';
-    }
     if(on) this.el.pause.querySelector('span').textContent =
       retry ? 'the browser is still holding the mouse \u2014 click again'
             : 'click to resume';
   },
+  /* ---- THE VOLUME READOUT ------------------------------------------
+     Shown for a moment when the level changes and then gone. It reports
+     the stored 0..1 rather than the curved output gain, because the
+     number the player is steering is the one they pressed toward. */
+  volNote(){
+    const el = document.getElementById('volnote');
+    if(!el) return;
+    const pct = Math.round(Audio.volume*100);
+    el.querySelector('b').style.width = (Audio.muted ? 0 : pct) + '%';
+    el.querySelector('span').textContent = Audio.muted ? 'muted' : pct + '%';
+    el.classList.toggle('muted', Audio.muted);
+    el.classList.add('on');
+    this.volT = CFG.AUDIO.showSeconds;
+  },
+
   blackout(seconds, cb){ this.blackT = seconds; this.blackCb = cb; this.blackDone = false; },
 
   /* WORDS, NOT NUMBERS. Each line appears only when it has something to
@@ -18017,6 +18117,16 @@ const UI = {
     if(this.subT > 0){
       this.subT -= dt;
       if(this.subT <= 0) this.el.sub.classList.remove('on');
+    }
+    /* The volume readout fades itself out. It is driven off the same
+       clock as the subtitle so it behaves the same way when the game is
+       paused: it stops counting down rather than vanishing mid-drag. */
+    if(this.volT > 0){
+      this.volT -= dt;
+      if(this.volT <= 0){
+        const el = document.getElementById('volnote');
+        if(el) el.classList.remove('on');
+      }
     }
     // the prompt for whatever is in reach
     const t = hoverTarget;
@@ -19650,6 +19760,28 @@ const DEV = (()=>{
      and reading the result, not by reading the code. Each one has a
      button in this panel or a line in the notes that reproduces it. If
      a system is not in this list, this file does not claim it works.
+
+     VOLUME  (seed 1234, driven with real keydown events on the window)
+       - and = move it by CFG.AUDIO.step: 0.85 -> 0.53 on four presses
+         down, -> 0.69 on two back up, both to the exact expected value
+       it clamps at 0 and 1 and does not wrap
+       0 mutes; pressing = while muted unmutes rather than raising a
+         silent level; 0 again re-mutes
+       the readout shows the number and the bar, and fades itself out
+       the level survives a reload where the browser allows storage
+         (written as downriver.volume; a file:// page that refuses
+         storage falls back to the default and nothing breaks)
+       it is wired AFTER the compressor, so it also takes down the
+         tinnitus tone, which bypasses `master` and would otherwise have
+         gone on ringing in a muted game
+
+     THE COMFORT SLIDER IN THE PAUSE OVERLAY NEVER WORKED
+       The overlay resumes the game on a `mousedown` listener registered
+       on the document. The slider's row stopped `pointerdown` and
+       `click` and not `mousedown`, so pressing the thumb re-locked the
+       pointer and closed the overlay on the same press. It could not be
+       dragged, ever, on any build. Removed; CFG.COMFORT.level and the
+       dev panel's own slider are untouched and still work.
 
      ADMISSION ACTUALLY STOPS IT  (seed 1234, admitted at stage 4 with
      intensity pinned at 0.85 and agitation at 0.5, then 30 real seconds)
