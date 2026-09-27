@@ -538,7 +538,7 @@
     }
 
     out.appendChild(el('div', { class: 'tl-headline', text: r.headline }));
-    if (r.sub) out.appendChild(el('div', { class: 'tl-sub', html: ME.formulaHTML(r.sub) }));
+    if (r.sub) out.appendChild(el('div', { class: 'tl-sub', html: ME.chemHTML(r.sub) }));
     if (r.roadmap) out.appendChild(roadmap(r.roadmap));
     if (r.table) out.appendChild(table(r.table));
     if (r.steps) out.appendChild(stepList(r.steps));
@@ -571,7 +571,7 @@
     node.appendChild(head);
     t.rows.forEach((r) => {
       const tr = el('tr');
-      r.forEach((c) => tr.appendChild(el('td', { html: ME.formulaHTML(String(c)) })));
+      r.forEach((c) => tr.appendChild(el('td', { html: ME.chemHTML(String(c)) })));
       node.appendChild(tr);
     });
     return node;
@@ -584,7 +584,7 @@
       if (i) box.appendChild(el('span', { class: 'tl-rm-arrow', html: '&#8594;' }));
       box.appendChild(el('div', { class: 'tl-rm-step' }, [
         el('div', { class: 'v', text: s.label }),
-        el('div', { class: 'k', html: ME.formulaHTML(s.sub) }),
+        el('div', { class: 'k', html: ME.chemHTML(s.sub) }),
       ]));
     });
     return box;

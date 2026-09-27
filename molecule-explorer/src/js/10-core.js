@@ -40,12 +40,33 @@ window.ME = window.ME || {};
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  /* Molecular formulas read much better with real subscripts. */
+  /* Molecular formulas read much better with real subscripts. For a string
+   * that is nothing but a formula, every digit is a subscript. */
   function formulaHTML(f) {
     if (!f) return '';
     return esc(f)
       .replace(/(\d+)/g, '<sub>$1</sub>')
       .replace(/([+-])(?=$|\D)/g, '<sup>$1</sup>');
+  }
+
+  /* Prose with formulas in it, which is most of the teaching text. The rules
+   * above cannot be used here: they would turn "109.5" into 109 with a
+   * subscript 5, and superscript the plus in "2 + 6 = 8".
+   *
+   * So a digit run is a subscript only when a letter or a closing bracket
+   * comes immediately before it, and a plus or minus is a charge only when
+   * what precedes it looks like a chemical symbol or a subscript and nothing
+   * word-like follows. That leaves hyphenated words, ranges, dates, decimals
+   * and arithmetic alone.
+   *
+   * The charge pass runs first, because after the subscript pass the character
+   * before a charge sign is the ">" of a tag rather than the digit. */
+  function chemHTML(t) {
+    if (!t) return '';
+    return esc(t)
+      .replace(/((?:\b[A-Za-z][a-z]?)|(?:[A-Z]{1,3})|\d|\)|\])([+\u2212-])(?![A-Za-z0-9])/g,
+        '$1<sup>$2</sup>')
+      .replace(/([A-Za-z)\]])(\d+)/g, '$1<sub>$2</sub>');
   }
 
   function debounce(fn, ms) {
@@ -234,5 +255,5 @@ window.ME = window.ME || {};
     emit(evt, data) { (listeners[evt] || []).forEach((f) => { try { f(data); } catch (e) { console.error(e); } }); },
   };
 
-  Object.assign(ME, { el, $, $$, clear, esc, formulaHTML, debounce, store, toast, showTip, hideTip, bindTips, copy, download, icon, theme, bus });
+  Object.assign(ME, { el, $, $$, clear, esc, formulaHTML, chemHTML, debounce, store, toast, showTip, hideTip, bindTips, copy, download, icon, theme, bus });
 })();

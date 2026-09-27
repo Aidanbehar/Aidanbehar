@@ -379,7 +379,7 @@
           wrong: '17 electrons, and 12 are used up before the 3p set. How many are left?' },
       ],
       quizzes: [
-        { kind: 'name', mode: 'name', q: 'Write the electron configuration of nitrogen (7 electrons). Use the form 1s2 2s2 2p3.',
+        { kind: 'name', mode: 'name', q: 'Write the electron configuration of nitrogen, which has 7 electrons. Superscripts are optional — type them plainly if that is easier.',
           answer: '1s2 2s2 2p3', also: ['1s² 2s² 2p³', '1s22s22p3'],
           right: '1s² 2s² 2p³. And note the three p electrons sit one in each orbital, which is what makes nitrogen form three bonds.',
           wrong: 'Fill 1s, then 2s, then 2p, and check the superscripts add to 7.' },

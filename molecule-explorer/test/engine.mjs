@@ -889,6 +889,60 @@ describe('generated practice problems', () => {
   });
 });
 
+/* ---------------------------------------------------- prose with formulas in */
+describe('rendering formulas inside teaching prose', () => {
+  /* Every lesson page, question, table and worked example goes through
+   * chemHTML, so a rule that is too eager silently mangles the whole course.
+   * The first table is what must be marked up; the second is what must not. */
+  const MARKED = [
+    ['H2O', 'H<sub>2</sub>O'],
+    ['CO2 drifts out of a fizzy drink', 'CO<sub>2</sub> drifts out of a fizzy drink'],
+    ['Ca(OH)2', 'Ca(OH)<sub>2</sub>'],
+    ['(NH4)2SO4', '(NH<sub>4</sub>)<sub>2</sub>SO<sub>4</sub>'],
+    ['Na+', 'Na<sup>+</sup>'],
+    ['Cl-', 'Cl<sup>-</sup>'],
+    ['OH-', 'OH<sup>-</sup>'],
+    ['SO42-', 'SO<sub>42</sub><sup>-</sup>'],
+    ['MnO4- is purple', 'MnO<sub>4</sub><sup>-</sup> is purple'],
+    ['an electron, e-, on its own', 'an electron, e<sup>-</sup>, on its own'],
+    ['a 2+ charge', 'a 2<sup>+</sup> charge'],
+  ];
+  const LEFT_ALONE = [
+    /* decimals and measurements: the old rule made this 109 with a subscript 5 */
+    '109.5 degrees', '104.5', '35.45', 'melts at 801 C', 'about 3550 C',
+    /* arithmetic: the old rule superscripted this plus */
+    '2 + 6 = 8', '24 - 16 = 8 electrons shared', 'R = 8.314',
+    /* ordinary numbers after a space */
+    'period 3', 'group 17', 'level 2 holds 8', 'in 1869 Mendeleev',
+    /* hyphenated words, ranges and dates */
+    'self-contained', 'cis-trans', 'X-ray', 'pre- and post-reaction',
+    'one- or two-electron', 'T-shaped', '20-30 kJ', 'the 1909 result',
+  ];
+
+  test('marks up what is a formula', async () => {
+    const got = await run((cs) => cs.map((c) => window.ME.chemHTML(c[0])), MARKED);
+    got.forEach((g, i) => assert.equal(g, MARKED[i][1], JSON.stringify(MARKED[i][0])));
+  });
+
+  test('leaves ordinary prose, arithmetic and hyphens alone', async () => {
+    const got = await run((cs) => cs.map((c) => window.ME.chemHTML(c)), LEFT_ALONE);
+    got.forEach((g, i) => assert.equal(g, LEFT_ALONE[i], 'changed: ' + LEFT_ALONE[i] + ' -> ' + g));
+  });
+
+  test('still escapes, so lesson text cannot inject markup', async () => {
+    const got = await run(() => window.ME.chemHTML('<img src=x onerror=1> & "quoted"'));
+    assert.ok(got.indexOf('<img') < 0, got);
+    assert.ok(got.indexOf('&lt;img') >= 0, got);
+    assert.ok(got.indexOf('&amp;') >= 0, got);
+  });
+
+  test('the formula-only renderer is unchanged, since every digit there is a subscript', async () => {
+    const got = await run(() => [window.ME.formulaHTML('H2SO4'), window.ME.formulaHTML('Ca(OH)2')]);
+    assert.equal(got[0], 'H<sub>2</sub>SO<sub>4</sub>');
+    assert.equal(got[1], 'Ca(OH)<sub>2</sub>');
+  });
+});
+
 /* -------------------------------------------------------- Lewis and VSEPR */
 describe('Lewis structures and shapes', () => {
   /* Every one of these has a settled textbook answer, so the table is an

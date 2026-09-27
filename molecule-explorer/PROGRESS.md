@@ -166,10 +166,25 @@ network switched off.
 - **Unit 3 — Atoms** (4 lessons; build-an-atom simulation)
 - **Unit 4 — Electrons and where they live** (4 lessons)
 - **Unit 5 — The periodic table** (3 lessons; trend-map simulation)
+- **Unit 6 — Chemical bonding** (5 lessons: why atoms bond and ionic bonding,
+  covalent bonding and Lewis structures, VSEPR shapes, polarity, and forces
+  between molecules; the Lewis builder appears in three of them)
 - **Unit 15 — Organic chemistry: reading structures** (the original 12 lessons,
   kept working unchanged)
 
-35 lessons, 71 pages, 229 questions, about 6 hours of reading.
+40 lessons, 85 pages, 266 questions, about 7 hours of reading.
+
+**`src/js/20-calc-lewis.js` — Lewis structures and VSEPR**
+- Runs the counting method and returns electron totals, bond orders, lone
+  pairs, formal charges, shape, bond angle, a polarity verdict and the numbered
+  working, so a lesson's drawing cannot disagree with its arithmetic.
+- The two families of exception are handled explicitly: boron and beryllium
+  settle for six and four, and period 3 and below expand their octets when the
+  count gives too few bonds for the outer atoms. It refuses, with a reason,
+  where the method cannot honestly go: NF₅, the NO radical, a d-block metal.
+- 27 molecules with settled textbook answers are pinned in the engine tests,
+  along with electron conservation, formal charges summing to the species
+  charge, and resonance detection.
 
 ### Bugs found and fixed
 - The practice generators loaded *before* the course engine, because the
@@ -185,9 +200,22 @@ network switched off.
   function nobody had called. Two tests now render **every** page, hook and
   question for real and fail on an exception, an empty render, or a stray
   `undefined` reaching the text.
+- A bonds-only polarity rule called H₂S and PH₃ non-polar, because sulfur and
+  phosphorus sit within 0.4 of hydrogen on the electronegativity scale. A lone
+  pair is a lump of charge on one side whatever the bonds do.
+- **Every number in every lesson was being mangled.** `formulaHTML` subscripts
+  every digit and superscripts every plus, which is right for a bare formula
+  and wrong for prose: "109.5°" rendered as 109 with a subscript 5, and
+  "2 + 6 = 8" got a superscript plus. There is now a separate `chemHTML` for
+  prose, which subscripts a digit run only after a letter or closing bracket
+  and treats a plus or minus as a charge only when what precedes it looks
+  chemical and no word follows — so decimals, dates, ranges, arithmetic and
+  hyphenated words are left alone. Every lesson, question, table, worked
+  example and Tools step now goes through it, and a test pins both what must
+  be marked up and what must not.
 
 ### Next, in order
-1. Unit 6 bonding, 7 naming, 8 reactions, 9 the mole and stoichiometry,
+1. Unit 7 naming, 8 reactions, 9 the mole and stoichiometry,
    10 gases, 11 solutions, 12 acids and bases, 13 thermochemistry,
    14 rates and equilibrium — one commit each
 2. The nine remaining Unit 15 organic lessons (IUPAC naming, functional groups

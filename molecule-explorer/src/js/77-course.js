@@ -73,7 +73,7 @@
     const buttons = [];
     opts.forEach((o, i) => {
       const btn = el('button', { class: 'quiz-opt' });
-      if (o.node) btn.appendChild(o.node); else btn.innerHTML = ME.formulaHTML(o.t);
+      if (o.node) btn.appendChild(o.node); else btn.innerHTML = ME.chemHTML(o.t);
       btn.addEventListener('click', () => {
         if (btn.disabled) return;
         if (o.ok) {
@@ -260,7 +260,7 @@
       const row = el('div', { class: 'quiz-order-item', draggable: 'true' });
       row.dataset.index = it.i;
       row.appendChild(el('span', { class: 'grip', html: '&#8942;&#8942;' }));
-      row.appendChild(el('span', { html: ME.formulaHTML(it.t) }));
+      row.appendChild(el('span', { html: ME.chemHTML(it.t) }));
       list.appendChild(row);
     });
     body.appendChild(list);
@@ -283,7 +283,7 @@
     const chosen = {};
     q.pairs.forEach((p, i) => {
       const row = el('div', { class: 'quiz-match-row' });
-      row.appendChild(el('div', { class: 'quiz-match-left', html: ME.formulaHTML(p[0]) }));
+      row.appendChild(el('div', { class: 'quiz-match-left', html: ME.chemHTML(p[0]) }));
       const sel = el('select', { class: 'tl-select', 'aria-label': 'match for ' + p[0] });
       sel.appendChild(el('option', { value: '', text: 'choose…' }));
       rights.forEach((r) => sel.appendChild(el('option', { value: String(r.i), text: r.t })));
@@ -322,7 +322,7 @@
     items.forEach((it) => {
       const chip = el('button', { class: 'quiz-sort-item', draggable: 'true' });
       chip.dataset.cat = it.cat;
-      chip.innerHTML = ME.formulaHTML(it.t);
+      chip.innerHTML = ME.chemHTML(it.t);
       /* Clicking cycles through the bins, so it works without dragging. */
       chip.addEventListener('click', () => {
         const here = chip.parentNode.dataset ? chip.parentNode.dataset.cat : null;
@@ -363,7 +363,7 @@
         li.appendChild(input);
         li.appendChild(el('span', { text: s.after || '' }));
       } else {
-        li.innerHTML = ME.formulaHTML(s.text);
+        li.innerHTML = ME.chemHTML(s.text);
       }
       list.appendChild(li);
     });
@@ -448,7 +448,7 @@
 
     const body = el('div', { class: 'quiz-body' });
     item.appendChild(body);
-    body.appendChild(el('div', { class: 'quiz-q', html: ME.formulaHTML(q.q) }));
+    body.appendChild(el('div', { class: 'quiz-q', html: ME.chemHTML(q.q) }));
     if (q.figure) body.appendChild(q.figure());
 
     const feedback = el('div', { class: 'quiz-feedback' });
@@ -456,7 +456,7 @@
     function say(ok, message) {
       feedback.classList.add('show');
       ME.clear(feedback);
-      feedback.appendChild(el('div', { class: 'callout ' + (ok ? 'ok' : 'warn'), html: ME.formulaHTML(message) }));
+      feedback.appendChild(el('div', { class: 'callout ' + (ok ? 'ok' : 'warn'), html: ME.chemHTML(message) }));
       if (ok && !solved) {
         solved = true;
         item.classList.add('solved');

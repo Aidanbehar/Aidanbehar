@@ -32,7 +32,7 @@
   const callout = (...kids) => el('div', { class: 'callout' }, kids.flat());
   const warnCallout = (...kids) => el('div', { class: 'callout warn' }, kids.flat());
   const okCallout = (...kids) => el('div', { class: 'callout ok' }, kids.flat());
-  const eq = (text) => el('div', { class: 'lesson-eq', html: ME.formulaHTML(text) });
+  const eq = (text) => el('div', { class: 'lesson-eq', html: ME.chemHTML(text) });
 
   function table(head, rows, caption) {
     const t = el('table', { class: 'lesson-table reasons' });
@@ -43,7 +43,7 @@
       const tr = el('tr');
       r.forEach((c, i) => {
         const td = el('td', { 'data-label': head[i] });
-        if (typeof c === 'string') td.innerHTML = ME.formulaHTML(c);
+        if (typeof c === 'string') td.innerHTML = ME.chemHTML(c);
         else if (c) td.appendChild(c);
         tr.appendChild(td);
       });
@@ -61,9 +61,9 @@
     box.appendChild(el('div', { class: 'lw-title', text: title }));
     lines.forEach((line) => {
       const row = el('div', { class: 'lw-step' });
-      if (line.q) row.appendChild(el('div', { class: 'lw-q', html: ME.formulaHTML(line.q) }));
-      if (line.why) row.appendChild(el('div', { class: 'lw-why', html: ME.formulaHTML(line.why) }));
-      if (line.maths) row.appendChild(el('div', { class: 'lw-maths', html: ME.formulaHTML(line.maths) }));
+      if (line.q) row.appendChild(el('div', { class: 'lw-q', html: ME.chemHTML(line.q) }));
+      if (line.why) row.appendChild(el('div', { class: 'lw-why', html: ME.chemHTML(line.why) }));
+      if (line.maths) row.appendChild(el('div', { class: 'lw-maths', html: ME.chemHTML(line.maths) }));
       box.appendChild(row);
     });
     return box;

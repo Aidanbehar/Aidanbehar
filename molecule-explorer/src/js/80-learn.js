@@ -1263,8 +1263,8 @@
         text: 'Not a list of things to avoid so much as a list of things that are genuinely easy to think. Each one is worth reading even if you are sure you would not.' }));
       l.mistakes.forEach((m) => {
         const item = el('div', { class: 'ls-mistake' });
-        item.appendChild(el('div', { class: 'ls-mistake-claim', html: ME.formulaHTML(m.wrong) }));
-        item.appendChild(el('div', { class: 'ls-mistake-why', html: ME.formulaHTML(m.why) }));
+        item.appendChild(el('div', { class: 'ls-mistake-claim', html: ME.chemHTML(m.wrong) }));
+        item.appendChild(el('div', { class: 'ls-mistake-why', html: ME.chemHTML(m.why) }));
         box.appendChild(item);
       });
       art.appendChild(box);
@@ -1287,7 +1287,7 @@
       const box = el('section', { class: 'ls-recap' });
       box.appendChild(el('h3', { text: 'What you now know' }));
       (Array.isArray(l.recap) ? l.recap : [l.recap]).forEach((t) =>
-        box.appendChild(el('p', { html: ME.formulaHTML(t) })));
+        box.appendChild(el('p', { html: ME.chemHTML(t) })));
       art.appendChild(box);
     }
 
@@ -1470,7 +1470,7 @@
       const sol = el('div', { class: 'ls-solution' });
       sol.appendChild(el('h4', { text: 'Worked through' }));
       const list = el('ol');
-      current.solution.forEach((s) => list.appendChild(el('li', { html: ME.formulaHTML(typeof s === 'string' ? s : s.text) })));
+      current.solution.forEach((s) => list.appendChild(el('li', { html: ME.chemHTML(typeof s === 'string' ? s : s.text) })));
       sol.appendChild(list);
       slot.appendChild(sol);
     });
