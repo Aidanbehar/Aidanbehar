@@ -924,6 +924,91 @@ describe('dots never pile up', () => {
 });
 
 /* ----------------------------------------------------- the lesson checks */
+/* A condensed formula reads along one connected chain. Cisplatin used to come
+ * out as "ClPtCl", which is one of its three pieces presented as all of it, so
+ * no molecule in several pieces may be given one. */
+describe('condensed formulas never describe only part of a molecule', () => {
+  test('nothing in more than one piece gets one', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.search.all().forEach((m) => {
+        let mol;
+        try { mol = window.ME.chem.fromSmiles(m.m); } catch (e) { return; }
+        if (window.ME.chem.fragmentCount(mol) < 2) return;
+        const c = window.ME.chem.condensed(mol);
+        if (c.text) out.push([m.n, m.f, c.text]);
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], 'partial condensed formulas: ' + JSON.stringify(bad.slice(0, 5)));
+  });
+
+  test('and the refusal says why, for cisplatin specifically', async () => {
+    const r = await run(() => {
+      const m = window.ME.search.all().find((x) => x.n === 'Cisplatin');
+      return window.ME.chem.condensed(window.ME.chem.fromSmiles(m.m));
+    });
+    assert.equal(r.text, null);
+    assert.match(r.why, /more than one separate piece/);
+  });
+
+  test('a single-piece molecule still gets one', async () => {
+    const r = await run(() => window.ME.chem.condensed(window.ME.chem.fromSmiles('CCO')).text);
+    assert.equal(r, 'CH3CH2OH');
+  });
+});
+
+/* ------------------------------------------------------- the gallery's reach */
+/* Plain-English things a reader would actually type, and the molecule each one
+ * has to land on. These broke once already: deduplicating the seed dropped the
+ * copy that carried the search term, and "bleach" quietly started answering
+ * hydrogen peroxide. Pinning them here means that cannot happen unnoticed. */
+describe('the words a reader would search for', () => {
+  const WANT = {
+    /* household */
+    bleach: 'Sodium hypochlorite', 'oxygen bleach': 'Sodium percarbonate',
+    mothballs: null, 'pool chlorine': null, descaler: 'EDTA',
+    'rust remover': 'Oxalic acid', 'salt substitute': 'Potassium chloride',
+    /* brands and everyday names */
+    tylenol: 'Paracetamol', advil: 'Ibuprofen', ritalin: 'Methylphenidate',
+    adderall: 'Amphetamine', vyvanse: 'Lisdexamfetamine', xanax: 'Alprazolam',
+    eliquis: 'Apixaban', ventolin: 'Salbutamol', 'laughing gas': 'Nitrous oxide',
+    /* what a thing is for */
+    adhd: null, statin: null, 'beta blocker': null, 'blood thinner': null,
+    antidepressant: null, antibiotic: null, chemotherapy: null, gout: null,
+    migraine: null, contraceptive: null, 'sleeping pill': null,
+    /* materials and the lab */
+    kevlar: 'p-Phenylenediamine', 'school glue': 'Vinyl acetate',
+    epoxy: 'Epichlorohydrin', sandpaper: null, titration: null,
+    fingerprints: 'Ninhydrin', 'rocket fuel': null, airbag: 'Sodium azide',
+    /* body and minerals */
+    'tooth enamel': 'Hydroxyapatite',
+    /* psychoactive, by their plant or source */
+    kratom: 'Mitragynine', 'fly agaric': 'Muscimol', ayahuasca: null,
+    'betel nut': 'Arecoline', khat: 'Cathinone', nutmeg: 'Myristicin',
+    kava: 'Kavain', salvia: 'Salvinorin A',
+  };
+
+  test('each one finds something, and the named ones find the right thing', async () => {
+    const got = await run((terms) => {
+      const out = {};
+      terms.forEach((t) => {
+        const r = window.ME.search.search(t).results;
+        out[t] = r.length ? r[0].m.n : null;
+      });
+      return out;
+    }, Object.keys(WANT));
+
+    const empty = Object.keys(WANT).filter((t) => !got[t]);
+    assert.deepEqual(empty, [], 'these searches found nothing: ' + empty.join(', '));
+    Object.keys(WANT).forEach((t) => {
+      if (WANT[t]) {
+        assert.equal(got[t], WANT[t], `"${t}" should find ${WANT[t]}, found ${got[t]}`);
+      }
+    });
+  });
+});
+
 /* ------------------------------------------------- degrees of unsaturation */
 /* Every number the unsaturation lesson quotes is checked here against the
  * real structure, two independent ways: the arithmetic on the formula, and a

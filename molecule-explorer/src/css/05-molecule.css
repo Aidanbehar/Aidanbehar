@@ -57,6 +57,13 @@
 
 /* ------------------------------------------------------------- gallery */
 .gal-filters { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 20px; }
+/* The per-category tally on each filter button. */
+.gal-count {
+  margin-left: 6px; padding: 1px 5px; border-radius: 999px;
+  background: var(--surface-2); color: var(--text-faint);
+  font-size: .72em; font-variant-numeric: tabular-nums;
+}
+.gal-filters .btn.on .gal-count { background: rgba(255, 255, 255, .22); color: inherit; }
 .gal-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
 .gal-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);

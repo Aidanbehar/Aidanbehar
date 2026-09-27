@@ -207,7 +207,7 @@
       /* Two or more unconnected pieces: a salt is a repeating grid of ions, and
        * their positions relative to one another are not a property of a single
        * molecule. Generating coordinates here would be inventing a fact. */
-      source.why = 'This is made of separate ions rather than one joined-up molecule. In the solid they sit in a repeating grid, and in water they drift apart entirely — so there is no single 3D shape to rotate.';
+      source.why = 'This is made of separate pieces rather than one joined-up molecule. In the solid they pack into a repeating grid, and in water they drift apart — so there is no single 3D shape to rotate.';
     } else {
       source.mol = mol;
     }

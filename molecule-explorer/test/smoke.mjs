@@ -198,12 +198,39 @@ await page.screenshot({ path: path.join(SHOTS, '07-salt.png'), fullPage: true })
 await page.locator('.tab[data-view=gallery]').click();
 await page.waitForTimeout(900);
 const cards = await page.locator('.gal-card').count();
-check('gallery shows ~60 molecules', cards >= 55, 'got ' + cards);
+/* Counted from the database rather than pinned to a number that has to be
+   edited every time the gallery grows. */
+const galleryTotal = await page.evaluate(() => window.ME.search.gallery().length);
+check('every gallery molecule has a card', cards === galleryTotal, cards + ' cards for ' + galleryTotal + ' molecules');
+check('the gallery is a substantial collection', galleryTotal >= 400, 'got ' + galleryTotal);
 check('gallery thumbnails drew', await page.locator('.gal-card .thumb svg').count() > 5);
+/* The filter buttons carry their own counts, and each must match the data. */
+const filterCounts = await page.evaluate(() => {
+  const all = window.ME.search.gallery();
+  const by = {};
+  all.forEach((m) => { by[m.c] = (by[m.c] || 0) + 1; });
+  return Array.from(document.querySelectorAll('.gal-filters .btn')).map((b) => ({
+    cat: b.dataset.cat,
+    shown: parseInt(b.querySelector('.gal-count').textContent, 10),
+    real: b.dataset.cat === 'all' ? all.length : (by[b.dataset.cat] || 0),
+  }));
+});
+check('every category is offered with a count', filterCounts.length >= 8, 'got ' + filterCounts.length);
+check('no filter offers a category with nothing in it', filterCounts.every((f) => f.real > 0),
+  JSON.stringify(filterCounts.filter((f) => !f.real)));
+check('the counts on the filters are the real counts',
+  filterCounts.every((f) => f.shown === f.real),
+  JSON.stringify(filterCounts.filter((f) => f.shown !== f.real)));
 await page.screenshot({ path: path.join(SHOTS, '08-gallery.png') });
-await page.locator('.gal-filters .btn', { hasText: 'Medicines' }).click();
-await page.waitForTimeout(400);
-check('gallery filter narrows the grid', await page.locator('.gal-card').count() < cards);
+for (const [label, key] of [['Medicines', 'medicine'], ['Psychoactive', 'psychoactive'],
+  ['Household', 'household'], ['Plastics & materials', 'materials'],
+  ['Inorganic', 'inorganic'], ['Lab & solvents', 'lab']]) {
+  await page.locator('.gal-filters .btn', { hasText: label }).first().click();
+  await page.waitForTimeout(220);
+  const shown = await page.locator('.gal-card').count();
+  const want = filterCounts.find((f) => f.cat === key).real;
+  check(`the ${label} filter shows exactly its ${want} molecules`, shown === want, 'got ' + shown);
+}
 
 /* -------------------------------------------------------- periodic table */
 await page.locator('.tab[data-view=elements]').click();

@@ -330,6 +330,13 @@
       }
     }
     if (n > 24) return { text: null, why: 'This molecule is too big for a condensed formula to stay readable. The skeletal drawing is the better shorthand here.' };
+    /* A condensed formula is one line walked along one connected chain, so a
+     * substance in several separate pieces cannot have one: the walk would
+     * describe a single piece and quietly present it as the whole thing.
+     * Cisplatin did exactly that, reading "ClPtCl" and dropping two ammonias. */
+    if (fragmentCount(mol) > 1) {
+      return { text: null, why: 'This is in more than one separate piece, and a condensed formula reads along a single connected chain \u2014 so there is no one line that describes all of it. The molecular formula above counts everything.' };
+    }
     for (let a = 0; a < n; a++) {
       if (mol.getAtomCharge(a) !== 0) {
         return { text: null, why: 'This molecule carries a charge, which condensed formulas have no tidy way of showing.' };

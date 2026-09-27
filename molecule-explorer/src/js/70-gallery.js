@@ -28,11 +28,20 @@
     const wrap = el('div', { class: 'wrap' });
     wrap.appendChild(el('h1', { text: 'Gallery' }));
     wrap.appendChild(el('p', { class: 'note', style: { maxWidth: '64ch', marginBottom: '18px' } },
-      'Molecules you have already met today. Every one of these is in your kitchen, your bathroom cabinet, your bloodstream or your fuel tank.'));
+      'Every molecule in here is a real one, checked against PubChem. Most you have already met today — in your kitchen, your bathroom cabinet, your medicine drawer, your bloodstream or your fuel tank. Pick a category, or just scroll.'));
+
+    /* With a few hundred molecules on show, the count on each filter is the
+     * quickest way to see what is actually in here. A category with nothing in
+     * it is left out rather than offered and then found empty. */
+    const all = ME.search.gallery();
+    const counts = {};
+    all.forEach((m) => { counts[m.c] = (counts[m.c] || 0) + 1; });
 
     const filters = el('div', { class: 'gal-filters' });
-    CATS.forEach((c) => {
-      const b = el('button', { class: 'btn btn-sm' + (c.k === 'all' ? ' on' : ''), text: c.label });
+    CATS.filter((c) => c.k === 'all' || counts[c.k]).forEach((c) => {
+      const b = el('button', { class: 'btn btn-sm' + (c.k === 'all' ? ' on' : '') });
+      b.appendChild(document.createTextNode(c.label));
+      b.appendChild(el('span', { class: 'gal-count', text: String(c.k === 'all' ? all.length : counts[c.k]) }));
       b.dataset.cat = c.k;
       b.addEventListener('click', () => {
         filter = c.k;
