@@ -151,14 +151,52 @@ network switched off.
   for every scenario preset.
 - Nine tabs pushed the search box onto a second row.
 
+## Stage 3 — the course itself
+
+### Done
+- **Course engine** (`77-course.js`), **practice generators** (`78-generators.js`,
+  18 of them), **lesson kit** (`79-lesson-kit.js`) and **simulations**
+  (`79b-sims.js`, 10 of them). The reader is the course map at `#/learn` and a
+  long-form lesson at `#/learn/<id>`: hook, multi-page body with a checkpoint
+  between pages, worked examples, common mistakes, a question set, unlimited
+  randomised practice and a recap.
+- **Unit 1 — What is chemistry?** (6 lessons)
+- **Unit 2 — Matter and its states** (6 lessons; states-of-matter and
+  heating-curve simulations)
+- **Unit 3 — Atoms** (4 lessons; build-an-atom simulation)
+- **Unit 4 — Electrons and where they live** (4 lessons)
+- **Unit 5 — The periodic table** (3 lessons; trend-map simulation)
+- **Unit 15 — Organic chemistry: reading structures** (the original 12 lessons,
+  kept working unchanged)
+
+35 lessons, 71 pages, 229 questions, about 6 hours of reading.
+
+### Bugs found and fixed
+- The practice generators loaded *before* the course engine, because the
+  bundler concatenates `src/js/*.js` in filename order and the engine was
+  numbered 79. `ME.practice` was undefined and the app did not boot.
+- The gas-law generator picked all four variables independently and produced
+  5469 K plasma states. It now picks P, n and T in sensible ranges, derives V,
+  and then rebuilds the answer from the *rounded* numbers the question prints,
+  so the shown answer and the grader can never drift apart.
+- The reaction-type generator returned null about one time in ten for redox
+  equations.
+- Structure tests could not see a typo inside a page body, because a body is a
+  function nobody had called. Two tests now render **every** page, hook and
+  question for real and fail on an exception, an empty render, or a stray
+  `undefined` reaching the text.
+
 ### Next, in order
-1. Course map + long-form lesson format (multi-page, checkpoints between pages)
-2. New question types: numeric, balance, name/formula, order, match, sort,
-   fillstep, build-in-Draw
-3. Glossary, practice-generator framework
-4. `17-calc-stoich.js`, `18-calc-gas.js`, `19-calc-solution.js`
-5. Balancer tab → Gas Simulator tab → Tools + Reference tabs
-6. Units 1–15, one commit each
+1. Unit 6 bonding, 7 naming, 8 reactions, 9 the mole and stoichiometry,
+   10 gases, 11 solutions, 12 acids and bases, 13 thermochemistry,
+   14 rates and equilibrium — one commit each
+2. The nine remaining Unit 15 organic lessons (IUPAC naming, functional groups
+   in depth, isomers, cis/trans and E/Z, chirality, reaction types, polymers,
+   biomolecules)
+3. Remaining simulations embedded in their lessons; Lewis/VSEPR builder,
+   stoichiometry road map, calorimetry
+4. Lessons, tools, reference sections and glossary terms findable from the top
+   search bar
 
 Phone and tablet layout is deliberately **not** being done yet, at the user's
 request. Seven-plus tabs will need a scrollable tab row before release.

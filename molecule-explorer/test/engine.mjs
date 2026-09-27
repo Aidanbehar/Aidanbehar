@@ -980,4 +980,59 @@ describe('the course structure', () => {
     });
     assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 6)));
   });
+
+  /* Structure checks cannot see a typo inside a page body, because a body is a
+   * function nobody has called yet. So call all of them, for real, and let any
+   * exception fail the build rather than the reader. */
+  test('every page body, hook and recap actually renders', async () => {
+    const bad = await run(() => {
+      const out = [];
+      const sink = document.createElement('div');
+      sink.style.display = 'none';
+      document.body.appendChild(sink);
+      window.ME.course.allLessons().forEach((l) => {
+        const parts = [];
+        if (l.hook) parts.push(['hook', l.hook]);
+        (l.pages || []).forEach((pg, i) => parts.push(['page ' + i, pg.body]));
+        parts.forEach(([what, fn]) => {
+          let node = null;
+          try { node = fn(); } catch (e) { out.push([l.id, what, String(e && e.message || e)]); return; }
+          if (!node || !node.nodeType) { out.push([l.id, what, 'returned nothing renderable']); return; }
+          const probe = document.createElement('div');
+          probe.appendChild(node);
+          sink.appendChild(probe);
+          const text = (probe.textContent || '').trim();
+          if (text.length < 40) out.push([l.id, what, 'rendered only ' + text.length + ' characters']);
+          /* An undefined slipping into a template shows up as the literal word. */
+          if (/\bundefined\b|\[object Object\]|\bNaN\b/.test(text)) out.push([l.id, what, 'rendered a placeholder: ' + text.slice(0, 80)]);
+        });
+      });
+      sink.remove();
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 6), null, 1));
+  });
+
+  /* Same argument for the questions: a kind renderer that throws on one
+   * question's shape is invisible until somebody reaches that question. */
+  test('every question renders through its own kind', async () => {
+    const bad = await run(() => {
+      const out = [];
+      const sink = document.createElement('div');
+      sink.style.display = 'none';
+      document.body.appendChild(sink);
+      window.ME.course.allLessons().forEach((l) => {
+        window.ME.course.questionsOf(l).forEach((q, i) => {
+          const body = document.createElement('div');
+          sink.appendChild(body);
+          try { window.ME.quiz.KINDS[q.kind](q, body, function () {}); }
+          catch (e) { out.push([l.id, i, q.kind, String(e && e.message || e)]); return; }
+          if (!body.childNodes.length) out.push([l.id, i, q.kind, 'rendered nothing']);
+        });
+      });
+      sink.remove();
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 6), null, 1));
+  });
 });
