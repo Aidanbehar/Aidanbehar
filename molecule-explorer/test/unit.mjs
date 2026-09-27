@@ -849,3 +849,156 @@ describe('hydrogens can be switched off', () => {
     assert.ok(out.flagged >= 1);
   });
 });
+
+/* ------------------------------------------------------------- the dots */
+describe('dots never pile up', () => {
+  test('bare atoms packed together keep their dots apart', async () => {
+    const out = await run(() => {
+      const M = window.ME.drawModel, DC = window.ME.drawCanvas;
+      const fsUnits = 0.46;
+      const ring = fsUnits * window.ME.render2d.DECO_RING;
+      const dotDiameter = fsUnits * 0.11 * 2;
+      function closest(g) {
+        const P = DC.prepare(g, 0, fsUnits);
+        const pts = [];
+        P.atoms.forEach((a) => a.dotDirs.forEach((d) => {
+          pts.push({ x: a.x + Math.cos(d) * ring, y: a.y + Math.sin(d) * ring });
+        }));
+        let m = Infinity;
+        for (let i = 0; i < pts.length; i++) {
+          for (let j = i + 1; j < pts.length; j++) {
+            m = Math.min(m, Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y));
+          }
+        }
+        return { closest: m, dots: pts.length };
+      }
+      const cases = {};
+      /* the arrangement that showed the problem: four bare carbons in a square */
+      {
+        const g = M.emptyGraph();
+        [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(([x, y]) => M.addAtom(g, x, y, 'C', true));
+        cases.square = closest(g);
+      }
+      [0.8, 1.0, 1.2].forEach((sp) => {
+        const g = M.emptyGraph();
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) M.addAtom(g, c * sp, r * sp, 'C', true);
+        cases['grid' + sp] = closest(g);
+      });
+      {
+        const g = M.emptyGraph();
+        ['C', 'N', 'O', 'S', 'C', 'N'].forEach((sym, i) => M.addAtom(g, i * 0.8, 0, sym, true));
+        cases.row = closest(g);
+      }
+      return { cases, dotDiameter };
+    });
+    Object.entries(out.cases).forEach(([name, r]) => {
+      assert.ok(r.dots > 0, name + ' produced no dots');
+      assert.ok(r.closest >= out.dotDiameter * 1.5,
+        `${name}: closest dots ${r.closest.toFixed(3)} apart, dot diameter is ${out.dotDiameter.toFixed(3)}`);
+    });
+  });
+
+  test('lone pairs keep clear of each other and of the hydrogens', async () => {
+    const bad = await run(() => {
+      const out = [];
+      ['O', 'N', 'CCO', 'CC(=O)O', 'C(F)(F)F', 'OS(=O)(=O)O', 'ClCCl'].forEach((smi) => {
+        const svg = window.ME.render2d.render(window.ME.chem.fromSmiles(smi),
+          { xray: 1, lonePairs: true, width: 420, height: 300, interactive: false });
+        const dots = Array.from(svg.querySelectorAll('circle'))
+          .filter((c) => parseFloat(c.getAttribute('r')) < 6 && c.getAttribute('fill') === 'var(--text-soft)')
+          .map((c) => ({ x: +c.getAttribute('cx'), y: +c.getAttribute('cy'), r: +c.getAttribute('r') }));
+        for (let i = 0; i < dots.length; i++) {
+          for (let j = i + 1; j < dots.length; j++) {
+            const d = Math.hypot(dots[i].x - dots[j].x, dots[i].y - dots[j].y);
+            /* two dots of one lone pair sit deliberately close; anything closer
+             * than touching between different pairs is a collision */
+            if (d < dots[i].r * 1.6) out.push([smi, +d.toFixed(2), dots[i].r]);
+          }
+        }
+      });
+      return out;
+    });
+    assert.equal(bad.length, 0, 'overlapping dots: ' + JSON.stringify(bad.slice(0, 6)));
+  });
+});
+
+/* ----------------------------------------------------- the lesson checks */
+describe('every lesson check is answerable', () => {
+  test('each click-an-atom question has at least one correct atom', async () => {
+    const out = await run(() => {
+      const res = [];
+      window.ME.learn.LESSONS.forEach((L) => {
+        const q = L.quiz;
+        if (!q || q.kind !== 'clickatom') return;
+        const mol = q.mol ? q.mol() : window.ME.chem.fromSmiles(q.smiles);
+        const desc = window.ME.render2d.describe(mol, {});
+        const atoms = desc.atoms.map((a, i) => ({
+          i, sym: a.sym, hydrogens: a.hydrogens, bondCount: a.bonds.length,
+        }));
+        res.push({ id: L.id, accepted: atoms.filter((a) => q.test(a)).length, total: atoms.length });
+      });
+      return res;
+    });
+    assert.ok(out.length >= 4, 'expected several click-an-atom questions');
+    out.forEach((r) => {
+      assert.ok(r.accepted >= 1, `lesson "${r.id}" asks for an atom that does not exist in its molecule`);
+      assert.ok(r.accepted < r.total, `lesson "${r.id}" accepts every atom, so it is not a question`);
+    });
+  });
+
+  test('each counting question matches its own molecule', async () => {
+    const out = await run(() => {
+      const res = [];
+      window.ME.learn.LESSONS.forEach((L) => {
+        const q = L.quiz;
+        if (!q || q.kind !== 'count' || !q.smiles) return;
+        const mol = window.ME.chem.fromSmiles(q.smiles);
+        let carbons = 0, hydrogens = 0;
+        for (let a = 0; a < mol.getAllAtoms(); a++) {
+          if (mol.getAtomicNo(a) === 6) carbons++;
+          hydrogens += mol.getImplicitHydrogens(a);
+        }
+        res.push({ id: L.id, answer: q.answer, carbons, hydrogens });
+      });
+      return res;
+    });
+    assert.ok(out.length >= 2);
+    out.forEach((r) => {
+      assert.ok(r.answer === r.carbons || r.answer === r.hydrogens,
+        `lesson "${r.id}" expects ${r.answer}, but its molecule has ${r.carbons} carbons and ${r.hydrogens} hydrogens`);
+    });
+  });
+
+  test('no question contradicts the answer it accepts', async () => {
+    /* A question that asks for "no hydrogens" must accept an atom with none. */
+    const out = await run(() => {
+      const res = [];
+      window.ME.learn.LESSONS.forEach((L) => {
+        const q = L.quiz;
+        if (!q || q.kind !== 'clickatom') return;
+        const mol = q.mol ? q.mol() : window.ME.chem.fromSmiles(q.smiles);
+        const desc = window.ME.render2d.describe(mol, {});
+        const atoms = desc.atoms.map((a, i) => ({ i, sym: a.sym, hydrogens: a.hydrogens, bondCount: a.bonds.length }));
+        const accepted = atoms.filter((a) => q.test(a));
+        res.push({
+          id: L.id,
+          q: q.q,
+          right: q.right,
+          note: q.note || '',
+          hydrogensOfAccepted: accepted.map((a) => a.hydrogens),
+        });
+      });
+      return res;
+    });
+    out.forEach((r) => {
+      const asksForNone = /no hydrogens at all|has no hydrogens/i.test(r.q);
+      if (asksForNone) {
+        r.hydrogensOfAccepted.forEach((h) => {
+          assert.equal(h, 0, `lesson "${r.id}" asks for a carbon with no hydrogens but accepts one with ${h}`);
+        });
+      }
+      assert.ok(!/there is no .* in this molecule/i.test(r.note),
+        `lesson "${r.id}" has a note admitting its own question cannot be answered`);
+    });
+  });
+});

@@ -134,11 +134,32 @@
     return Math.max(clear, Math.min(needed, fs * 2.1));
   }
 
-  function placeAllHydrogens(atoms) {
+  /* Ring the dots sit on, as a fraction of the font size: just outside the
+   * disc that backs the atom's letter. */
+  const DECO_RING = 0.88;
+
+  /* Places everything that hangs off an atom — its hydrogens, the dots marking
+   * hands left empty, and its lone pairs — in one pass over the whole molecule,
+   * against a single shared map of what is already on the page.
+   *
+   * Every one of these used to be chosen per atom, looking only at that atom's
+   * own bonds, which is why two neighbouring atoms would happily put a mark in
+   * exactly the same spot and the dots between them merged into one.
+   *
+   * fsUnits is the font size expressed in bond lengths, so that the marks scale
+   * with the drawing.
+   */
+  function placeDecorations(atoms, fsUnits) {
+    const ring = fsUnits * DECO_RING;
+    const dotR = fsUnits * 0.16;
+    const pairR = fsUnits * 0.34;
+
+    /* kind 'centre' entries are skipped for their own atom's marks: a dot is
+     * meant to hug the letter it belongs to. */
     const occupied = [];
-    atoms.forEach((a) => {
-      a.hDirs = [];
-      occupied.push({ x: a.x, y: a.y, r: LABEL_R });
+    atoms.forEach((a, i) => {
+      a.hDirs = []; a.dotDirs = []; a.lpDirs = [];
+      occupied.push({ x: a.x, y: a.y, r: LABEL_R, kind: 'centre', owner: i });
     });
 
     /* Most-constrained first: an atom with three bonds has almost no choice
@@ -147,60 +168,87 @@
     const order = atoms.map((a, i) => i)
       .sort((i, j) => atoms[j].bonds.length - atoms[i].bonds.length);
 
+    const bondAnglesOf = (a) => a.bonds.map((bd) => {
+      const o = bd.a === a.i ? bd.b : bd.a;
+      return Math.atan2(atoms[o].y - a.y, atoms[o].x - a.x);
+    });
+
+    /* Pick the best free direction for one mark and record where it landed. */
+    function place(a, i, radius, markR, bondAngles, taken, prefer) {
+      let best = 0, bestScore = Infinity;
+      for (let k = 0; k < 72; k++) {
+        const th = -Math.PI + (k * Math.PI) / 36;
+        const mx = a.x + Math.cos(th) * radius;
+        const my = a.y + Math.sin(th) * radius;
+        let score = 0;
+
+        /* Stay out of the directions this atom's bonds already use. */
+        for (const b of bondAngles) {
+          const d = Math.abs(angleDiff(th, b));
+          if (d < 0.9) score += (0.9 - d) * 4;
+        }
+        /* Stay clear of every mark already on the page. */
+        for (const q of occupied) {
+          if (q.kind === 'centre' && q.owner === i) continue;
+          const need = q.r + markR + fsUnits * 0.1;
+          const dx = mx - q.x, dy = my - q.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < need * need) {
+            const d = Math.sqrt(d2);
+            score += (need - d) * (need - d) * 60;
+          }
+        }
+        if (prefer) score += prefer(th);
+        /* Among equally free directions, take the one furthest from
+         * everything, so marks spread evenly instead of bunching. */
+        let spread = Math.PI;
+        for (const t of bondAngles) spread = Math.min(spread, Math.abs(angleDiff(th, t)));
+        for (const t of taken) spread = Math.min(spread, Math.abs(angleDiff(th, t)));
+        score -= spread * 0.25;
+
+        if (score < bestScore) { bestScore = score; best = th; }
+      }
+      taken.push(best);
+      return best;
+    }
+
+    /* 1. hydrogens, which are the biggest marks and the most constrained */
     order.forEach((i) => {
       const a = atoms[i];
       if (!a.hydrogens) return;
-      const bondAngles = a.bonds.map((bd) => {
-        const o = bd.a === a.i ? bd.b : bd.a;
-        return Math.atan2(atoms[o].y - a.y, atoms[o].x - a.x);
-      });
-
+      const bondAngles = bondAnglesOf(a);
       for (let h = 0; h < a.hydrogens; h++) {
-        let best = 0, bestScore = Infinity;
-        for (let k = 0; k < 72; k++) {
-          const th = -Math.PI + (k * Math.PI) / 36;
-          const hx = a.x + Math.cos(th) * H_BOND_FRACTION;
-          const hy = a.y + Math.sin(th) * H_BOND_FRACTION;
-          let score = 0;
-
-          /* Stay out of the directions the atom's own bonds already use. */
-          for (const b of bondAngles) {
-            const d = Math.abs(angleDiff(th, b));
-            if (d < 0.9) score += (0.9 - d) * 4;
-          }
-          /* Stay clear of every label already placed, including this atom's
-           * own earlier hydrogens. */
-          for (const q of occupied) {
-            const need = q.r + LABEL_R + 0.12;
-            const dx = hx - q.x, dy = hy - q.y;
-            const d2 = dx * dx + dy * dy;
-            if (d2 < need * need) {
-              const d = Math.sqrt(d2);
-              score += (need - d) * (need - d) * 60;
-            }
-          }
-          /* A heteroatom's first hydrogen prefers to sit beside it, so that an
-           * O with one hydrogen reads as "OH" rather than stacking vertically. */
-          if (a.preferH && h === 0) {
-            const horiz = Math.min(Math.abs(angleDiff(th, 0)), Math.abs(angleDiff(th, Math.PI)));
-            score += horiz * 0.35;
-          }
-          /* Among directions that are equally free, take the one furthest from
-           * everything else. Without this the search settles on the first angle
-           * that merely clears its neighbours, which leaves a lone water
-           * molecule with both hydrogens bunched to one side. */
-          let spread = Math.PI;
-          for (const t of bondAngles) spread = Math.min(spread, Math.abs(angleDiff(th, t)));
-          for (const t of a.hDirs) spread = Math.min(spread, Math.abs(angleDiff(th, t)));
-          score -= spread * 0.25;
-          if (score < bestScore) { bestScore = score; best = th; }
-        }
-        a.hDirs.push(best);
+        const prefer = (a.preferH && h === 0)
+          /* A heteroatom's first hydrogen sits beside it, so an O with one
+           * hydrogen reads as "OH" rather than stacking vertically. */
+          ? (th) => Math.min(Math.abs(angleDiff(th, 0)), Math.abs(angleDiff(th, Math.PI))) * 0.35
+          : null;
+        const ang = place(a, i, H_BOND_FRACTION, LABEL_R, bondAngles, a.hDirs, prefer);
         occupied.push({
-          x: a.x + Math.cos(best) * H_BOND_FRACTION,
-          y: a.y + Math.sin(best) * H_BOND_FRACTION,
-          r: LABEL_R,
+          x: a.x + Math.cos(ang) * H_BOND_FRACTION,
+          y: a.y + Math.sin(ang) * H_BOND_FRACTION,
+          r: LABEL_R, kind: 'h', owner: i,
         });
+      }
+    });
+
+    /* 2. then the dots, which have to dodge the hydrogens as well as each
+     * other and the neighbouring atoms */
+    order.forEach((i) => {
+      const a = atoms[i];
+      if (!a.openHands && !a.lonePairs) return;
+      const bondAngles = bondAnglesOf(a);
+      const taken = a.hDirs.slice();
+
+      for (let k = 0; k < (a.openHands || 0); k++) {
+        const ang = place(a, i, ring, dotR, bondAngles, taken, null);
+        a.dotDirs.push(ang);
+        occupied.push({ x: a.x + Math.cos(ang) * ring, y: a.y + Math.sin(ang) * ring, r: dotR, kind: 'dot', owner: i });
+      }
+      for (let k = 0; k < (a.lonePairs || 0); k++) {
+        const ang = place(a, i, ring, pairR, bondAngles, taken, null);
+        a.lpDirs.push(ang);
+        occupied.push({ x: a.x + Math.cos(ang) * ring, y: a.y + Math.sin(ang) * ring, r: pairR, kind: 'lp', owner: i });
       }
     });
   }
@@ -241,7 +289,6 @@
        * hydrogens on a carbon are the ones the shorthand hides. */
       a.hAlpha = a.isCarbon ? xray : 1;
     });
-    placeAllHydrogens(atoms);
 
     /* ---- layout ---- */
     const pad = 1.0;
@@ -270,6 +317,10 @@
     const fs = Math.max(9, scale * 0.46);
     const lw = Math.max(1.3, scale / 15);
     const bondColor = opts.bondColor || 'var(--bond)';
+
+    /* Where the hydrogens, dots and lone pairs go. It has to wait for the font
+     * size, because the marks are spaced in multiples of it. */
+    placeDecorations(atoms, fs / scale);
 
     const svg = svgEl('svg', {
       xmlns: SVGNS, viewBox: `0 0 ${round(w)} ${round(h)}`,
@@ -429,36 +480,26 @@
       }
       /* unpaired electrons where hydrogens were switched off: single dots, so
        * they read differently from the paired dots of a lone pair */
-      if (a.openHands > 0) {
-        const used = a.hDirs.slice();
-        for (let k = 0; k < a.openHands; k++) {
-          const ang = pickFreeAngle(a, atoms, used);
-          used.push(ang);
+      a.dotDirs.forEach((ang) => {
+        gAtoms.appendChild(svgEl('circle', {
+          cx: round(x + Math.cos(ang) * fs * DECO_RING),
+          cy: round(y + Math.sin(ang) * fs * DECO_RING),
+          r: round(Math.max(1.2, fs * 0.11)), fill: 'var(--text-soft)',
+        }));
+      });
+      /* lone pairs: two dots side by side, so they read as a pair */
+      a.lpDirs.forEach((ang) => {
+        const r = fs * DECO_RING;
+        const ox = x + Math.cos(ang) * r, oy = y + Math.sin(ang) * r;
+        const pxp = -Math.sin(ang), pyp = Math.cos(ang);
+        const d = fs * 0.17;
+        [-1, 1].forEach((side) => {
           gAtoms.appendChild(svgEl('circle', {
-            cx: round(x + Math.cos(ang) * fs * 0.85),
-            cy: round(y + Math.sin(ang) * fs * 0.85),
-            r: round(Math.max(1.2, fs * 0.11)), fill: 'var(--text-soft)',
+            cx: round(ox + pxp * d * side), cy: round(oy + pyp * d * side),
+            r: round(Math.max(1.1, fs * 0.095)), fill: 'var(--text-soft)', opacity: 0.85,
           }));
-        }
-      }
-      /* lone pairs */
-      if (a.lonePairs > 0) {
-        const used = a.hDirs.slice();
-        for (let p = 0; p < a.lonePairs; p++) {
-          const ang = pickFreeAngle(a, atoms, used);
-          used.push(ang);
-          const r = fs * 0.92;
-          const ox = x + Math.cos(ang) * r, oy = y + Math.sin(ang) * r;
-          const pxp = -Math.sin(ang), pyp = Math.cos(ang);
-          const d = fs * 0.17;
-          [[-1], [1]].forEach(([s]) => {
-            gAtoms.appendChild(svgEl('circle', {
-              cx: round(ox + pxp * d * s), cy: round(oy + pyp * d * s),
-              r: round(Math.max(1.1, fs * 0.095)), fill: 'var(--text-soft)', opacity: 0.85,
-            }));
-          });
-        }
-      }
+        });
+      });
     });
 
     /* ---- invisible hover / click targets ---- */
@@ -489,22 +530,6 @@
     svg.__scale = scale;
     svg.__project = (a) => ({ x: PX(a), y: PY(a) });
     return svg;
-  }
-
-  function pickFreeAngle(atom, atoms, used) {
-    const occupied = atom.bonds.map((bd) => {
-      const o = bd.a === atom.i ? bd.b : bd.a;
-      return Math.atan2(atoms[o].y - atom.y, atoms[o].x - atom.x);
-    }).concat(used);
-    let best = 0, bestScore = -Infinity;
-    for (let k = 0; k < 36; k++) {
-      const c = (k * 10 * Math.PI) / 180 - Math.PI;
-      let score = Infinity;
-      for (const o of occupied) score = Math.min(score, Math.abs(angleDiff(c, o)));
-      if (score === Infinity) score = Math.PI;
-      if (score > bestScore) { bestScore = score; best = c; }
-    }
-    return best;
   }
 
   /* The tooltip line the lessons promise: "Carbon, with 2 hidden hydrogens." */
@@ -648,7 +673,7 @@
   ME.render2d = {
     render, mountXray, describe, toStandaloneSVG, svgToPNG, atomDescription, svgEl,
     /* shared with the drawing editor's canvas painter so both obey the same rules */
-    placeAllHydrogens, collapsedRadius, carbonNeedsLabel, angleDiff, lerp, clamp01,
-    H_BOND_FRACTION, LABEL_R,
+    placeDecorations, collapsedRadius, carbonNeedsLabel, angleDiff, lerp, clamp01,
+    H_BOND_FRACTION, LABEL_R, DECO_RING,
   };
 })();

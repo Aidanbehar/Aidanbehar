@@ -241,22 +241,23 @@
         f.appendChild(el('div', { class: 'callout ok' }, [
           b('Count the lines touching the carbon. Subtract from four. That is your answer.'),
         ]));
-        f.appendChild(p('A carbon at the end of a chain has one line, so three hydrogens. A carbon in the middle has two lines, so two hydrogens. A carbon where three chains meet has one hydrogen. A carbon with four lines has none — its hands are all full.'));
+        f.appendChild(p('So: a carbon at the end of a chain has one line, and three hydrogens. A carbon in the middle of a chain has two lines, and two hydrogens. A branch point has three lines, and one hydrogen. And a carbon with four lines has none at all — every hand is already holding something.'));
         f.appendChild(p('Careful with double bonds: a double bond is ', b('two'), ' of the four, drawn as two lines between the same pair of atoms. So a carbon with one double bond and one single bond has used three and has one hydrogen left.'));
-        f.appendChild(xrayFigure('CC(C)CCO', '4-methylbutan-1-ol. Try to predict each carbon before you slide.'));
+        f.appendChild(xrayFigure('CC(C)CCO', '3-methylbutan-1-ol. Work out each corner before you slide, then check yourself.'));
         f.appendChild(p('Hover over the corners in that drawing. Each one will tell you what it is carrying, so you can check yourself immediately.'));
         return f;
       },
       quiz: {
+        /* 2,2-dimethylpropan-1-ol, chosen because exactly one of its carbons
+         * really does carry no hydrogens. */
         kind: 'clickatom',
-        smiles: 'CC(C)CCO',
+        smiles: 'CC(C)(C)CO',
         xray: 0,
-        q: 'Click the carbon that has no hydrogens at all — the one where three chains meet.',
-        test: (a) => a.sym === 'C' && a.hydrogens === 1 && a.bondCount === 3,
-        testFallback: (a) => a.sym === 'C' && a.bondCount === 3,
-        right: 'That is the branch point. Three lines meet there, so three of its four hands are used, leaving exactly one hydrogen.',
-        wrong: 'Look for the corner where three separate lines come together — the place the molecule branches.',
-        note: 'A carbon with three bonds drawn has one hydrogen left, not none. There is no zero-hydrogen carbon in this molecule — clicking the branch point is the right answer.',
+        q: 'Every corner in this drawing is a carbon. Click the one that has no hydrogens at all.',
+        test: (a) => a.sym === 'C' && a.hydrogens === 0,
+        right: 'That is the one. Four lines meet there, so all four of carbon\u2019s hands are already holding another carbon and there is no room left for a hydrogen. It is the only carbon here like that.',
+        wrong: 'Not that one. Count the lines meeting at the corner and take that away from four: one line leaves three hydrogens, two lines leaves two, three lines leaves one. You are after the corner with nothing left over.',
+        note: 'Count the lines at each corner, then subtract from four.',
       },
     },
 
@@ -564,8 +565,7 @@
         onAtomClick(i, atom) {
           if (answered) return;
           const enriched = Object.assign({}, atom, { bondCount: info.atoms[i].bonds.length });
-          let ok = q.test(enriched);
-          if (!ok && q.testFallback) ok = q.testFallback(enriched);
+          const ok = q.test(enriched);
           if (ok) answered = true;
           settle(ok, ok ? q.right : q.wrong);
         },

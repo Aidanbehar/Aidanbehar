@@ -64,7 +64,7 @@ PubChem module fails the build.
 
 **`npm test`** runs both suites:
 
-- `test/unit.mjs` — 46 logic tests (search by case, typo, synonym, formula and
+- `test/unit.mjs` — 51 logic tests (search by case, typo, synonym, formula and
   SMILES; the five-bond-carbon message; twenty-odd valid ions and hypervalent
   species that must *not* be flagged; formula and molar mass against known
   values; drawing → recognition; label spacing in the drawings; crowding in the
@@ -160,12 +160,15 @@ concatenation order is the only coupling between them.
 
 Two things that are easy to get wrong and are pinned down by tests:
 
-- **Hydrogens are placed for the whole molecule at once**, not atom by atom.
-  Deciding each atom's hydrogen directions independently is what makes drawings
-  unreadable: two bonded carbons both see the same roomy gap between them, both
-  put a hydrogen in it, and the letters land on top of each other.
-  `placeAllHydrogens` scores every candidate direction against a shared map of
-  what is already on the page, placing the most constrained atoms first.
+- **Every mark is placed for the whole molecule at once**, not atom by atom.
+  Hydrogens, the dots showing hands left empty, and lone pairs all go through
+  one pass (`placeDecorations`) against a single shared map of what is already
+  on the page.
+  Deciding directions per atom is what makes drawings unreadable: two bonded
+  carbons both see the same roomy gap between them, both put a mark in it, and
+  the two land on top of each other — as a single merged blob, in the case of
+  the dots. The pass scores every candidate direction against everything
+  already placed, most-constrained atoms first.
 - **A tap is never a drag.** The pointer has to travel half a bond length
   before the editor treats a click as a drag. Below that threshold every wobble
   from a trackpad or a fingertip used to spawn a second, bonded atom, which made
