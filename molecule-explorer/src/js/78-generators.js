@@ -462,6 +462,121 @@
     },
   });
 
+  /* ------------------------------------------------------- shapes and bonding */
+  /* One pool for all three bonding generators, filtered by what the counting
+   * method can actually do rather than by a hand-kept list. Every candidate is
+   * run through ME.lewis and dropped if it comes back refused, so a question
+   * can never be set that the app cannot answer. */
+  function lewisPool() {
+    if (lewisPool.cache) return lewisPool.cache;
+    const candidates = [
+      'CH4', 'CCl4', 'CF4', 'SiCl4', 'SiH4', 'NH3', 'PH3', 'PCl3', 'NF3', 'NCl3',
+      'H2O', 'H2S', 'OF2', 'SCl2', 'CO2', 'CS2', 'SO2', 'SO3', 'CH2O', 'BF3',
+      'BCl3', 'BeCl2', 'BeF2', 'PCl5', 'PF5', 'SF6', 'SF4', 'ClF3', 'XeF4',
+      'XeF2', 'NH4+', 'H3O+', 'CO3 2-', 'NO3-', 'SO4 2-', 'PO4 3-', 'ClO4-',
+      'ClO3-', 'O3', 'SeF6', 'AsF5', 'TeCl4', 'ICl4-', 'BrF5',
+    ];
+    lewisPool.cache = candidates.map((formula) => {
+      const r = ME.lewis.fromFormula(formula);
+      if (!r.ok) return null;
+      const parsed = ME.formula.parse(formula);
+      if (!parsed.ok) return null;
+      return { formula: formula, display: parsed.display, r: r };
+    }).filter(Boolean);
+    return lewisPool.cache;
+  }
+
+  gen('valence-count', {
+    name: 'Counting valence electrons',
+    make(r) {
+      const item = r.pick(lewisPool());
+      const a = item.r;
+      const parts = [a.central + ' brings ' + ME.lewis.valenceOf(a.central)];
+      const groups = {};
+      a.terminals.forEach((t) => { groups[t] = (groups[t] || 0) + 1; });
+      Object.keys(groups).forEach((t) => {
+        parts.push(groups[t] + ' × ' + t + ' at ' + ME.lewis.valenceOf(t) + ' = ' + (groups[t] * ME.lewis.valenceOf(t)));
+      });
+      return {
+        kind: 'count',
+        q: 'How many valence electrons are there altogether in ' + item.display + '?',
+        answer: a.available,
+        right: a.available + ' \u2014 and getting this number right is the whole battle, because everything else in a Lewis structure is bookkeeping on it.',
+        wrong: 'Add the group-number valence count for every atom, then adjust for the charge \u2014 a negative ion has gained electrons, so its charge is subtracted.',
+        solution: a.steps.slice(0, 1).map((st) => ({ text: st.detail + ', giving ' + st.value }))
+          .concat([{ text: parts.join('; ') + '.' }]),
+      };
+    },
+  });
+
+  gen('shape', {
+    name: 'Molecular shapes',
+    make(r) {
+      const item = r.pick(lewisPool());
+      const a = item.r;
+      /* Wrong options are other real shapes, and the tempting one is always in
+       * there: the shape you would get by forgetting the lone pairs. */
+      const noLone = ME.lewis.SHAPES[a.groups + ',0'];
+      const others = Object.keys(ME.lewis.SHAPES).map((k) => ME.lewis.SHAPES[k].name)
+        .filter((n) => n !== a.shape);
+      const decoys = [];
+      if (noLone && noLone.name !== a.shape) decoys.push(noLone.name);
+      ME.quiz.shuffle(others).forEach((n) => { if (decoys.indexOf(n) < 0 && decoys.length < 3) decoys.push(n); });
+      return {
+        kind: 'choice',
+        q: 'What shape is ' + item.display + '?',
+        options: ME.quiz.shuffle([a.shape].concat(decoys.slice(0, 3))).map((n) => ({
+          t: n,
+          ok: n === a.shape,
+          why: n === a.shape
+            ? a.shapeWhy + (a.centralLone
+              ? ' The ' + (a.centralLone === 1 ? 'lone pair' : a.centralLone + ' lone pairs') + ' on the ' +
+                a.central + ' take up room but get left out of the name.'
+              : '')
+            : (noLone && n === noLone.name && a.centralLone
+              ? 'That is the arrangement of everything around the ' + a.central + ', lone pairs included \u2014 but the shape is named after the atoms you can see, so it is ' + a.shape + '.'
+              : 'That shape needs a different number of groups around the central atom. Count the bonded atoms and the lone pairs: ' + item.display + ' has ' + a.groups + ' and ' + a.centralLone + '.'),
+        })),
+        solution: a.steps.map((st) => ({ text: st.label + ': ' + st.value }))
+          .concat([{ text: a.groups + ' bonded atom' + (a.groups === 1 ? '' : 's') + ' plus ' + a.centralLone +
+            ' lone pair' + (a.centralLone === 1 ? '' : 's') + ' is ' + a.steric + ' groups around the ' + a.central +
+            ', which gives ' + a.shape + (a.angle ? ' at about ' + a.angle + '°' : '') + '.' }]),
+      };
+    },
+  });
+
+  gen('polarity', {
+    name: 'Polar or not',
+    make(r) {
+      /* Ions are excluded rather than skipped: "is this polar" is not a
+       * question you can ask about something that is charged all over. */
+      const item = r.pick(lewisPool().filter((x) => !x.r.charge));
+      const a = item.r;
+      return {
+        kind: 'choice',
+        q: 'Is ' + item.display + ' a polar molecule?',
+        options: ME.quiz.shuffle([
+          { t: 'Yes', ok: a.polar },
+          { t: 'No', ok: !a.polar },
+        ]).map((o) => Object.assign(o, {
+          why: a.polar
+            ? (a.bondPolar
+              ? 'Polar. The bonds pull unequally, and the shape is ' + a.shape + ', which does not let those pulls cancel.'
+              : 'Polar, and this one is a trap: the bonds are near enough even, but the lone pair on the ' + a.central + ' is a lump of charge on one side.')
+            : (a.bondPolar
+              ? 'Non-polar, and this is the case people get wrong. The bonds really are polar, but ' + a.shape +
+                ' is symmetric with identical outer atoms, so every pull is cancelled by an equal one opposite. Polar bonds, non-polar molecule.'
+              : 'Non-polar. Neither the bonds nor the shape gives it a direction.'),
+        })),
+        solution: [
+          { text: 'Shape first: ' + a.shape + (a.centralLone ? ', with ' + a.centralLone + ' lone pair' + (a.centralLone === 1 ? '' : 's') + ' on the ' + a.central : '') + '.' },
+          { text: 'Then the bonds: ' + (a.bondPolar ? 'the outer atoms pull noticeably harder than the ' + a.central + ', so each bond is polar.' : 'the electronegativities are close, so the bonds are barely polar at all.') },
+          { text: 'Then whether the pulls cancel: ' + (a.polar ? 'they do not, so the molecule is polar.' : 'they do, so the molecule is non-polar.') },
+        ],
+      };
+    },
+  });
+
   gen('ion-charge', {
     name: 'Ion charges',
     make(r) {

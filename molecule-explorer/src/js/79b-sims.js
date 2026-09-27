@@ -953,8 +953,221 @@
       'Try to turn each one. One spins freely; the other will not budge.', body);
   }
 
+  /* ============================================ Lewis structures and VSEPR */
+  /* Type a formula and watch the counting method run. Everything on screen —
+   * the electron totals, the bonds, the lone pairs, the shape name, the angle,
+   * the formal charges, the polarity verdict — comes out of ME.lewis, so the
+   * picture cannot disagree with the working printed underneath it. */
+  const LEWIS_LAYOUT = {
+    /* bonds and lone pairs placed by angle, 0° to the right. Schematic: a flat
+     * drawing of a shape that is mostly not flat. */
+    '1,0': { b: [0], l: [] },
+    '2,0': { b: [0, 180], l: [] },
+    '2,1': { b: [200, 340], l: [90] },
+    '2,2': { b: [230, 310], l: [50, 130] },
+    '2,3': { b: [90, 270], l: [0, 130, 230] },
+    '3,0': { b: [90, 210, 330], l: [] },
+    '3,1': { b: [190, 270, 350], l: [90] },
+    '3,2': { b: [90, 270, 0], l: [160, 200] },
+    '4,0': { b: [45, 135, 225, 315], l: [] },
+    '4,1': { b: [90, 270, 10, 350], l: [180] },
+    '4,2': { b: [0, 90, 180, 270], l: [45, 225] },
+    '5,0': { b: [90, 270, 0, 145, 215], l: [] },
+    '5,1': { b: [0, 72, 144, 216, 288], l: [90] },
+    '6,0': { b: [0, 60, 120, 180, 240, 300], l: [] },
+  };
+
+  function lewis(opts) {
+    opts = opts || {};
+    const PRESETS = opts.presets ||
+      ['CH4', 'H2O', 'NH3', 'CO2', 'SO2', 'BF3', 'CH2O', 'PCl5', 'SF6', 'XeF4', 'NH4+', 'CO3 2-'];
+    const body = el('div');
+
+    const chips = el('div', { class: 'sim-buttons' });
+    body.appendChild(chips);
+
+    const row = el('div', { class: 'sim-control' });
+    row.appendChild(el('label', { text: 'Formula' }));
+    const input = el('input', { type: 'text', class: 'sim-input', spellcheck: 'false',
+      autocomplete: 'off', autocapitalize: 'off', value: opts.start || 'H2O',
+      'aria-label': 'a formula to draw' });
+    row.appendChild(input);
+    body.appendChild(row);
+
+    const toggles = el('div', { class: 'sim-buttons' });
+    let showLone = true;
+    const loneBtn = el('button', { class: 'btn btn-sm on', text: 'Lone pairs shown' });
+    loneBtn.addEventListener('click', () => {
+      showLone = !showLone;
+      loneBtn.textContent = showLone ? 'Lone pairs shown' : 'Lone pairs hidden';
+      loneBtn.classList.toggle('on', showLone);
+      draw();
+    });
+    toggles.appendChild(loneBtn);
+    body.appendChild(toggles);
+
+    const canvas = el('div', { class: 'sim-lewis' });
+    body.appendChild(canvas);
+    const verdict = el('div', { class: 'sim-verdict' });
+    body.appendChild(verdict);
+    const work = el('div', { class: 'sim-steps' });
+    body.appendChild(work);
+
+    PRESETS.forEach((f) => {
+      const btn = el('button', { class: 'btn btn-sm', text: f });
+      btn.addEventListener('click', () => { input.value = f; draw(); });
+      chips.appendChild(btn);
+    });
+    input.addEventListener('input', draw);
+
+    const svgEl = (name, attrs) => {
+      const n = document.createElementNS('http://www.w3.org/2000/svg', name);
+      Object.keys(attrs || {}).forEach((k) => n.setAttribute(k, String(attrs[k])));
+      return n;
+    };
+
+    function draw() {
+      ME.clear(canvas); ME.clear(verdict); ME.clear(work);
+      const r = ME.lewis.fromFormula(input.value);
+      if (!r.ok) {
+        verdict.appendChild(el('p', { class: 'note', text: r.why }));
+        return;
+      }
+
+      const W = 340, H = 260, CX = W / 2, CY = H / 2, R = 78;
+      const svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%',
+        role: 'img', 'aria-label': r.formula + ', ' + r.shape });
+      const layout = LEWIS_LAYOUT[r.groups + ',' + r.centralLone] || null;
+      const angleOf = (i, n) => 90 + i * (360 / n);
+      const bondAngles = layout ? layout.b : r.terminals.map((_, i) => angleOf(i, r.groups));
+      const loneAngles = layout ? layout.l
+        : new Array(r.centralLone).fill(0).map((_, i) => angleOf(r.groups + i, r.groups + r.centralLone));
+      const at = (deg, dist) => [CX + Math.cos(-deg * Math.PI / 180) * dist,
+                                 CY + Math.sin(-deg * Math.PI / 180) * dist];
+
+      const accent = css('--accent', '#3b6ef0');
+      const text = css('--text', '#111');
+      const faint = css('--text-faint', '#888');
+
+      /* bonds first, so the atom labels sit on top of them */
+      r.terminals.forEach((sym, i) => {
+        const a = bondAngles[i % bondAngles.length];
+        const [x, y] = at(a, R);
+        const offsets = r.order[i] === 1 ? [0] : r.order[i] === 2 ? [-3.5, 3.5] : [-5, 0, 5];
+        const perp = [Math.sin(-a * Math.PI / 180) * -1, Math.cos(-a * Math.PI / 180) * -1];
+        offsets.forEach((o) => {
+          svg.appendChild(svgEl('line', {
+            x1: CX + perp[0] * o + (x - CX) * 0.28, y1: CY + perp[1] * o + (y - CY) * 0.28,
+            x2: x + perp[0] * o - (x - CX) * 0.24, y2: y + perp[1] * o - (y - CY) * 0.24,
+            stroke: text, 'stroke-width': 1.7, 'stroke-linecap': 'round',
+          }));
+        });
+      });
+
+      /* lone pairs on the central atom: two dots side by side, pointing out */
+      if (showLone) {
+        loneAngles.forEach((a) => {
+          const perp = [Math.sin(-a * Math.PI / 180) * -1, Math.cos(-a * Math.PI / 180) * -1];
+          [-4, 4].forEach((o) => {
+            const [x, y] = at(a, 30);
+            svg.appendChild(svgEl('circle', { cx: x + perp[0] * o, cy: y + perp[1] * o, r: 2.6, fill: accent }));
+          });
+        });
+        /* and on the outer atoms */
+        r.terminals.forEach((sym, i) => {
+          const a = bondAngles[i % bondAngles.length];
+          const [x, y] = at(a, R);
+          for (let k = 0; k < r.terminalLone[i]; k++) {
+            const sub = a + 40 + k * 55;
+            const perp = [Math.sin(-sub * Math.PI / 180) * -1, Math.cos(-sub * Math.PI / 180) * -1];
+            [-3.5, 3.5].forEach((o) => {
+              const px = x + Math.cos(-sub * Math.PI / 180) * 17 + perp[0] * o;
+              const py = y + Math.sin(-sub * Math.PI / 180) * 17 + perp[1] * o;
+              svg.appendChild(svgEl('circle', { cx: px, cy: py, r: 2.2, fill: faint }));
+            });
+          }
+        });
+      }
+
+      const label = (x, y, sym, fc) => {
+        const g = svgEl('g', {});
+        g.appendChild(svgEl('circle', { cx: x, cy: y, r: 14, fill: css('--surface', '#fff') }));
+        const t = svgEl('text', { x: x, y: y + 5.5, 'text-anchor': 'middle',
+          'font-size': 16, 'font-weight': 600, fill: text });
+        t.textContent = sym;
+        g.appendChild(t);
+        if (fc) {
+          const f = svgEl('text', { x: x + 13, y: y - 9, 'text-anchor': 'middle',
+            'font-size': 10.5, 'font-weight': 700, fill: accent });
+          f.textContent = (fc > 0 ? '+' : '−') + (Math.abs(fc) === 1 ? '' : Math.abs(fc));
+          g.appendChild(f);
+        }
+        svg.appendChild(g);
+      };
+      r.terminals.forEach((sym, i) => {
+        const [x, y] = at(bondAngles[i % bondAngles.length], R);
+        label(x, y, sym, r.terminalFC[i]);
+      });
+      label(CX, CY, r.central, r.centralFC);
+
+      if (r.charge) {
+        const t = svgEl('text', { x: W - 16, y: 22, 'text-anchor': 'end',
+          'font-size': 15, 'font-weight': 700, fill: text });
+        t.textContent = (r.charge > 0 ? '+' : '−') + (Math.abs(r.charge) === 1 ? '' : Math.abs(r.charge));
+        svg.appendChild(t);
+      }
+      canvas.appendChild(svg);
+
+      /* The verdict, in words. Built as nodes rather than a string, because
+       * formulaHTML subscripts every digit it sees and this is prose. */
+      const say = function () {
+        const para = el('p');
+        Array.prototype.slice.call(arguments).forEach((x) => {
+          para.appendChild(typeof x === 'string' ? document.createTextNode(x) : x);
+        });
+        verdict.appendChild(para);
+      };
+      const bold = (t) => el('b', { text: t });
+      say(bold(r.shape), (r.angle ? ', with bond angles of about ' + r.angle + '°' : '') + '. ' + r.shapeWhy);
+      if (r.centralLone) {
+        say('There ' + (r.centralLone === 1 ? 'is one lone pair' : 'are ' + r.centralLone + ' lone pairs') +
+          ' on the ' + r.central + '. Turn them off above: the shape is named after what is left, because the lone pairs are not atoms and nobody can see them — but they still take up room, which is why the angle is not the neat one.');
+      }
+      if (r.polar) {
+        say('The molecule is ', bold('polar'), r.bondPolar
+          ? ' — the bonds pull unequally, and the shape does not let those pulls cancel.'
+          : ' — the bonds themselves are near enough even, but a lone pair is a lump of charge on one side.');
+      } else {
+        say('The molecule is ', bold('non-polar'), r.bondPolar
+          ? ' — the bonds are polar, but the shape is symmetric and every pull is matched by an equal one opposite. Polar bonds, non-polar molecule.'
+          : ' — neither the bonds nor the shape gives it a direction.');
+      }
+      if (r.resonance) {
+        say('The outer atoms are identical, but the drawing gives one of them a double bond — which cannot be right, because nothing tells them apart. The real molecule is the average of the ways you could draw it, every bond the same and somewhere between single and double. That averaging is called ', bold('resonance'), '.');
+      }
+      if (r.expanded) {
+        say('The ' + r.central + ' ends up with more than eight electrons around it. Only period 3 and below can do that, because only they have d orbitals close enough in energy to use.');
+      }
+
+      /* and the arithmetic, so the picture is never a black box */
+      const ol = el('ol', { class: 'sim-worklist' });
+      r.steps.forEach((st) => {
+        const li = el('li');
+        li.appendChild(el('span', { class: 'sim-worklabel', text: st.label }));
+        li.appendChild(el('span', { class: 'sim-workval', text: st.value }));
+        if (st.detail) li.appendChild(el('div', { class: 'note', text: st.detail }));
+        ol.appendChild(li);
+      });
+      work.appendChild(ol);
+    }
+
+    draw();
+    return shell(opts.title || 'Build a Lewis structure',
+      'Pick one, or type any formula — including ones that cannot exist, which it will tell you about.', body);
+  }
+
   ME.sims = {
-    statesOfMatter, heatingCurve, buildAtom, trendMap, phScale, titration,
+    statesOfMatter, heatingCurve, buildAtom, trendMap, phScale, titration, lewis,
     energyDiagram, equilibrium, solutionMixer, bondRotation,
     shell, slider, whenVisible, css,
   };

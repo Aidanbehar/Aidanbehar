@@ -889,6 +889,140 @@ describe('generated practice problems', () => {
   });
 });
 
+/* -------------------------------------------------------- Lewis and VSEPR */
+describe('Lewis structures and shapes', () => {
+  /* Every one of these has a settled textbook answer, so the table is an
+   * independent check rather than a copy of what the code happens to do. */
+  const CASES = [
+    /* formula,   central, bond orders, lone pairs on central, shape, angle, polar */
+    ['CH4',   'C', '1111',   0, 'tetrahedral',           109.5, false],
+    ['NH3',   'N', '111',    1, 'trigonal pyramidal',    107,   true],
+    ['H2O',   'O', '11',     2, 'bent',                  104.5, true],
+    ['CO2',   'C', '22',     0, 'linear',                180,   false],
+    ['SO2',   'S', '21',     1, 'bent',                  118,   true],
+    ['SO3',   'S', '211',    0, 'trigonal planar',       120,   false],
+    ['CH2O',  'C', '112',    0, 'trigonal planar',       120,   true],
+    ['CCl4',  'C', '1111',   0, 'tetrahedral',           109.5, false],
+    ['NF3',   'N', '111',    1, 'trigonal pyramidal',    107,   true],
+    ['H2S',   'S', '11',     2, 'bent',                  104.5, true],
+    ['PH3',   'P', '111',    1, 'trigonal pyramidal',    107,   true],
+    ['OF2',   'O', '11',     2, 'bent',                  104.5, true],
+    ['SiCl4', 'Si', '1111',  0, 'tetrahedral',           109.5, false],
+    /* the electron-deficient pair, which the plain octet rule gets wrong */
+    ['BF3',   'B', '111',    0, 'trigonal planar',       120,   false],
+    ['BeCl2', 'Be', '11',    0, 'linear',                180,   false],
+    /* expanded octets */
+    ['PCl5',  'P', '11111',  0, 'trigonal bipyramidal',  120,   false],
+    ['SF6',   'S', '111111', 0, 'octahedral',            90,    false],
+    ['SF4',   'S', '1111',   1, 'seesaw',                90,    true],
+    ['ClF3',  'Cl', '111',   2, 'T-shaped',              90,    true],
+    ['XeF4',  'Xe', '1111',  2, 'square planar',         90,    false],
+    ['XeF2',  'Xe', '11',    3, 'linear',                180,   false],
+    /* ions */
+    ['NH4+',  'N', '1111',   0, 'tetrahedral',           109.5, false],
+    ['H3O+',  'O', '111',    1, 'trigonal pyramidal',    107,   true],
+    ['CO3 2-', 'C', '211',   0, 'trigonal planar',       120,   false],
+    ['NO3-',  'N', '211',    0, 'trigonal planar',       120,   false],
+    ['SO4 2-', 'S', '1111',  0, 'tetrahedral',           109.5, false],
+    ['PO4 3-', 'P', '1111',  0, 'tetrahedral',           109.5, false],
+  ];
+
+  test('come out right for the molecules a course actually draws', async () => {
+    const got = await run((cs) => cs.map((c) => {
+      const r = window.ME.lewis.fromFormula(c[0]);
+      if (!r.ok) return [c[0], 'refused: ' + r.why];
+      return [c[0], r.central, r.order.join(''), r.centralLone, r.shape, r.angle, r.polar];
+    }), CASES);
+    got.forEach((g, i) => {
+      assert.deepEqual(g, CASES[i], CASES[i][0] + ': got ' + JSON.stringify(g));
+    });
+  });
+
+  test('the electron count always balances', async () => {
+    const bad = await run((cs) => {
+      const out = [];
+      cs.forEach((c) => {
+        const r = window.ME.lewis.fromFormula(c[0]);
+        if (!r.ok) { out.push([c[0], r.why]); return; }
+        /* Every available electron is either in a bond or in a lone pair. */
+        const inBonds = r.order.reduce((a, b) => a + b, 0) * 2;
+        const inLone = (r.centralLone + r.terminalLone.reduce((a, b) => a + b, 0)) * 2;
+        if (inBonds + inLone !== r.available) out.push([c[0], inBonds + ' + ' + inLone + ' != ' + r.available]);
+        /* And the valence count is the group number, summed. */
+        let sum = window.ME.lewis.valenceOf(r.central);
+        r.terminals.forEach((t) => { sum += window.ME.lewis.valenceOf(t); });
+        if (sum - r.charge !== r.available) out.push([c[0], 'valence sum ' + sum + ' with charge ' + r.charge + ' != ' + r.available]);
+      });
+      return out;
+    }, CASES);
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('formal charges add up to the charge on the species', async () => {
+    const bad = await run((cs) => {
+      const out = [];
+      cs.forEach((c) => {
+        const r = window.ME.lewis.fromFormula(c[0]);
+        if (r.ok && r.formalChargeSum !== r.charge) out.push([c[0], r.formalChargeSum, r.charge]);
+      });
+      return out;
+    }, CASES);
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('refuses what the counting method cannot honestly do', async () => {
+    const got = await run(() => ({
+      /* Period 2 cannot expand, so there is no such molecule. */
+      nf5: window.ME.lewis.fromFormula('NF5').ok,
+      /* An odd electron count is a radical. */
+      no: window.ME.lewis.fromFormula('NO').ok,
+      /* A d-block metal does not follow group-number counting. */
+      fecl3: window.ME.lewis.fromFormula('FeCl3').ok,
+      whyNF5: window.ME.lewis.fromFormula('NF5').why,
+      whyNO: window.ME.lewis.fromFormula('NO').why,
+    }));
+    assert.equal(got.nf5, false);
+    assert.equal(got.no, false);
+    assert.equal(got.fecl3, false);
+    assert.match(got.whyNF5, /period 2|more than eight/i);
+    assert.match(got.whyNO, /radical|odd/i);
+  });
+
+  test('spots the structures that need resonance', async () => {
+    const got = await run(() => ({
+      ozone: window.ME.lewis.fromFormula('O3').resonance,
+      carbonate: window.ME.lewis.fromFormula('CO3 2-').resonance,
+      nitrate: window.ME.lewis.fromFormula('NO3-').resonance,
+      methane: window.ME.lewis.fromFormula('CH4').resonance,
+      water: window.ME.lewis.fromFormula('H2O').resonance,
+    }));
+    /* Identical outer atoms but unequal bonds: the drawing has to pick one,
+     * and the real molecule is the average. */
+    assert.equal(got.ozone, true);
+    assert.equal(got.carbonate, true);
+    assert.equal(got.nitrate, true);
+    assert.equal(got.methane, false);
+    assert.equal(got.water, false);
+  });
+
+  test('every worked step it shows carries a real number', async () => {
+    const bad = await run((cs) => {
+      const out = [];
+      cs.forEach((c) => {
+        const r = window.ME.lewis.fromFormula(c[0]);
+        if (!r.ok) return;
+        if (r.steps.length < 4) out.push([c[0], 'only ' + r.steps.length + ' steps']);
+        r.steps.forEach((s, i) => {
+          if (!s.label || !s.value) out.push([c[0], i, 'step with no label or value']);
+          if (/undefined|NaN/.test(s.label + s.detail + s.value)) out.push([c[0], i, s.value]);
+        });
+      });
+      return out;
+    }, CASES);
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+});
+
 /* ------------------------------------------------------------- the course */
 describe('the course structure', () => {
   test('every lesson has a question, and every question a kind that exists', async () => {

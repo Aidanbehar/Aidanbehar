@@ -1013,6 +1013,23 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
   margin: 0; overflow-x: auto;
 }
 
+/* the Lewis-structure builder */
+.sim-lewis { display: flex; justify-content: center; padding: 6px 0 2px; }
+.sim-lewis svg { max-width: 360px; }
+.sim-input {
+  flex: 1; min-width: 0; font-family: var(--font-mono); font-size: .95rem;
+  padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text);
+}
+.sim-verdict p { margin: 0 0 8px; font-size: .92rem; line-height: 1.6; }
+.sim-verdict p:last-child { margin-bottom: 0; }
+.sim-worklist { margin: 10px 0 0; padding-left: 22px; font-size: .88rem; line-height: 1.6; }
+.sim-worklist li { margin-bottom: 7px; }
+.sim-worklabel { color: var(--text-soft); }
+.sim-workval {
+  font-weight: 650; margin-left: 8px; font-variant-numeric: tabular-nums;
+}
+
 
 /* ---- 08-elements.css ---- */
 /* --------------------------------------------------------- periodic table */
@@ -4774,6 +4791,288 @@ window.ME = window.ME || {};
   ME.solution = {
     molarity, molarityFromGrams, dilute, massPercent, ppm, molality,
     pHfromH, HfrompH, neutralise, heat, gibbs,
+  };
+})();
+
+
+/* ================= 20-calc-lewis.js ================= */
+/* Lewis structures and VSEPR shapes, worked out rather than listed.
+ *
+ * Every molecule the lessons show is run through this code, so the drawing,
+ * the electron count, the formal charges, the shape name and the bond angle
+ * all come from one place and cannot disagree with each other. The method is
+ * the ordinary school one — count what you have, count what you need, the
+ * difference is what gets shared — with the two families of exception
+ * (electron-deficient boron and beryllium, and the expanded octets further
+ * down the table) handled explicitly rather than quietly getting them wrong.
+ */
+(function () {
+  'use strict';
+  const ME = window.ME;
+
+  /* How many electrons an atom of this element brings to the table. Straight
+   * off the group number, so it cannot drift away from the periodic table. */
+  function valenceOf(sym) {
+    const e = ME.chem.element(sym);
+    if (!e) return null;
+    if (sym === 'He') return 2;
+    const pos = ME.chem.ptPosition(e.z);
+    const group = pos ? pos[1] : null;
+    if (group === null) return null;
+    if (group <= 2) return group;
+    if (group >= 13) return group - 10;
+    return null;                       /* d-block: not a main-group count */
+  }
+
+  /* How many electrons an atom wants around it once the sharing is done.
+   * Hydrogen and helium fill at two. Beryllium and boron are famously content
+   * with less, and pretending otherwise is what makes BF3 come out wrong. */
+  function needsOf(sym) {
+    if (sym === 'H' || sym === 'He') return 2;
+    if (sym === 'Be') return 4;
+    if (sym === 'B' || sym === 'Al') return 6;
+    return 8;
+  }
+
+  /* Only period 3 and below can hold more than eight, because only they have
+   * d orbitals close enough in energy to use. */
+  const CAN_EXPAND = { P: 1, S: 1, Cl: 1, Br: 1, I: 1, Xe: 1, Kr: 1, As: 1, Se: 1, Sb: 1, Te: 1, Si: 1 };
+  /* An atom that will not take a share in a second or third bond in any
+   * structure a school course draws. */
+  const NEVER_MULTIPLE = { H: 1, F: 1, Cl: 1, Br: 1, I: 1 };
+
+  /* Which atom goes in the middle: never hydrogen, and otherwise the one that
+   * holds its electrons most loosely, because the central atom is the one
+   * doing the most sharing. A single atom of its element is a strong hint. */
+  function chooseCentral(counts) {
+    const syms = Object.keys(counts).filter((s) => s !== 'H');
+    if (!syms.length) return null;
+    if (syms.length === 1) return syms[0];
+    const singles = syms.filter((s) => counts[s] === 1);
+    const pool = singles.length ? singles : syms;
+    let best = null, bestEn = Infinity;
+    pool.forEach((s) => {
+      const e = ME.chem.element(s);
+      const en = e && e.en != null ? e.en : 99;
+      if (en < bestEn) { bestEn = en; best = s; }
+    });
+    return best;
+  }
+
+  /* ------------------------------------------------------------- shapes */
+  /* Keyed by the number of things around the central atom (bonded groups plus
+   * lone pairs) and how many of those are lone pairs. Symmetric means the bond
+   * dipoles cancel when every outer atom is the same. */
+  const SHAPES = {
+    '1,0': { name: 'linear', angle: null, symmetric: true, why: 'Two atoms can only lie in a line.' },
+    '2,0': { name: 'linear', angle: 180, symmetric: true, why: 'Two groups get as far apart as possible, which is opposite ends of a straight line.' },
+    '2,1': { name: 'bent', angle: 118, symmetric: false, why: 'Three groups would be a flat triangle, but one corner is a lone pair you cannot see, so what is left looks bent.' },
+    '2,2': { name: 'bent', angle: 104.5, symmetric: false, why: 'Four groups point at the corners of a tetrahedron; two of those corners are lone pairs, so the visible shape is bent.' },
+    '2,3': { name: 'linear', angle: 180, symmetric: true, why: 'Five groups make a trigonal bipyramid, and three lone pairs take the roomy equatorial corners, leaving the two poles in a line.' },
+    '3,0': { name: 'trigonal planar', angle: 120, symmetric: true, why: 'Three groups spread into a flat triangle, 120° apart.' },
+    '3,1': { name: 'trigonal pyramidal', angle: 107, symmetric: false, why: 'Four groups point tetrahedrally, and one is a lone pair, so the three bonds form a pyramid under it.' },
+    '3,2': { name: 'T-shaped', angle: 90, symmetric: false, why: 'Five groups, with two lone pairs taking equatorial corners, leaves three bonds in a T.' },
+    '4,0': { name: 'tetrahedral', angle: 109.5, symmetric: true, why: 'Four groups get furthest apart at the corners of a tetrahedron, not in a flat cross.' },
+    '4,1': { name: 'seesaw', angle: 90, symmetric: false, why: 'Five groups with one equatorial lone pair, which pushes the rest into a seesaw.' },
+    '4,2': { name: 'square planar', angle: 90, symmetric: true, why: 'Six groups make an octahedron; two lone pairs take opposite poles, leaving a flat square.' },
+    '5,0': { name: 'trigonal bipyramidal', angle: 120, symmetric: true, why: 'Five groups: three round the equator at 120°, two at the poles.' },
+    '5,1': { name: 'square pyramidal', angle: 90, symmetric: false, why: 'Six groups with one lone pair at a pole, leaving a square base and one apex.' },
+    '6,0': { name: 'octahedral', angle: 90, symmetric: true, why: 'Six groups, all at 90° to their neighbours.' },
+  };
+
+  /* --------------------------------------------------------- the method */
+  /* counts: { C: 1, H: 4 }. Returns everything a lesson needs to draw and
+   * explain the structure, or { ok: false, why } if it is outside what this
+   * method can honestly do. */
+  function analyse(counts, opts) {
+    opts = opts || {};
+    const charge = opts.charge || 0;
+    const atoms = [];
+    Object.keys(counts).forEach((s) => { for (let i = 0; i < counts[s]; i++) atoms.push(s); });
+    if (atoms.length < 2) return { ok: false, why: 'A Lewis structure needs at least two atoms.' };
+
+    const central = opts.central || chooseCentral(counts);
+    if (!central) return { ok: false, why: 'Every atom here is hydrogen, and hydrogen cannot be a central atom — it only ever makes one bond.' };
+    if (valenceOf(central) === null) return { ok: false, why: ME.chem.element(central).name + ' is a transition metal, and its bonding does not follow the simple counting method.' };
+
+    const terminals = atoms.slice();
+    terminals.splice(terminals.indexOf(central), 1);
+    if (!terminals.length) return { ok: false, why: 'There is nothing for the central atom to bond to.' };
+    for (let i = 0; i < terminals.length; i++) {
+      if (valenceOf(terminals[i]) === null) return { ok: false, why: ME.chem.element(terminals[i]).name + ' is a transition metal, and its bonding does not follow the simple counting method.' };
+    }
+
+    const steps = [];
+
+    /* 1. What we have. A negative ion has gained electrons, so its charge is
+     *    subtracted, which is the sign catching everybody out. */
+    let available = valenceOf(central);
+    const perAtom = [central + ' brings ' + valenceOf(central)];
+    terminals.forEach((s) => { available += valenceOf(s); });
+    const termGroups = {};
+    terminals.forEach((s) => { termGroups[s] = (termGroups[s] || 0) + 1; });
+    Object.keys(termGroups).forEach((s) => {
+      perAtom.push(termGroups[s] + ' × ' + s + ' at ' + valenceOf(s) + ' = ' + (termGroups[s] * valenceOf(s)));
+    });
+    available -= charge;
+    steps.push({
+      label: 'Count the valence electrons you have',
+      detail: perAtom.join(', ') +
+        (charge ? '; the ' + (charge > 0 ? charge + '+' : (-charge) + '−') + ' charge ' +
+          (charge > 0 ? 'means ' + charge + ' fewer' : 'means ' + (-charge) + ' more') : ''),
+      value: available + ' electrons available',
+    });
+
+    /* 2. What they would all want if they were on their own. */
+    let needed = needsOf(central);
+    terminals.forEach((s) => { needed += needsOf(s); });
+    steps.push({
+      label: 'Count what they would all need separately',
+      detail: 'eight each, except hydrogen at two' +
+        (central === 'B' || central === 'Be' || central === 'Al' ? ' and ' + central + ', which settles for ' + needsOf(central) : ''),
+      value: needed + ' electrons needed',
+    });
+
+    /* 3. The difference has to be made up by sharing, and a shared pair is
+     *    counted twice — once by each atom. That is the whole trick. */
+    let shared = needed - available;
+    let bonds = Math.floor(shared / 2);
+    let expanded = false;
+
+    if (bonds < terminals.length) {
+      /* Not enough bonds to reach every outer atom. Either the central atom is
+       * holding more than eight, or the molecule does not exist. */
+      if (!CAN_EXPAND[central]) {
+        return { ok: false, why: 'The counting gives only ' + bonds + ' bond' + (bonds === 1 ? '' : 's') +
+          ' for ' + terminals.length + ' outer atoms, and ' + central + ' is in period 2, so it cannot hold more than eight electrons. This is not a structure that exists.' };
+      }
+      expanded = true;
+      bonds = terminals.length;
+      shared = bonds * 2;
+      steps.push({
+        label: 'The count says too few bonds, so the central atom expands',
+        detail: central + ' is in period 3 or below, so it has d orbitals near enough in energy to hold more than eight electrons. Give it one bond to each outer atom and carry on.',
+        value: bonds + ' bonds',
+      });
+    } else {
+      steps.push({
+        label: 'The difference must be shared',
+        detail: needed + ' − ' + available + ' = ' + shared + ' shared electrons, and a shared pair is one bond',
+        value: bonds + ' bond' + (bonds === 1 ? '' : 's'),
+      });
+    }
+
+    /* 4. One bond to each outer atom, then spend anything left over on making
+     *    some of them double or triple. Hydrogen and the halogens never take
+     *    a second share in a structure at this level. */
+    const order = terminals.map(() => 1);
+    let extra = bonds - terminals.length;
+    if (extra < 0) return { ok: false, why: 'There are not enough electrons to bond every atom on.' };
+    for (let pass = 0; pass < 2 && extra > 0; pass++) {
+      for (let i = 0; i < terminals.length && extra > 0; i++) {
+        if (NEVER_MULTIPLE[terminals[i]]) continue;
+        if (order[i] >= 3) continue;
+        order[i]++; extra--;
+      }
+    }
+    if (extra > 0) return { ok: false, why: 'The count leaves bonds with nowhere to go — the outer atoms here cannot take double bonds.' };
+
+    const multiples = order.filter((o) => o > 1).length;
+    if (multiples) {
+      const spare = bonds - terminals.length;
+      steps.push({
+        label: 'Place the bonds',
+        detail: 'One bond to each outer atom uses ' + (terminals.length * 2) + ' electrons, and the ' +
+          (spare === 1 ? 'one left over becomes ' : spare + ' left over become ') +
+          (order.indexOf(3) >= 0 ? 'a triple bond'
+            : multiples === 1 ? 'a double bond' : multiples + ' double bonds') + '.',
+        value: order.map((o, i) => terminals[i] + (o === 1 ? '' : o === 2 ? ' (double)' : ' (triple)')).join(', '),
+      });
+    }
+
+    /* 5. Everything not in a bond is a lone pair. Outer atoms get theirs
+     *    first, and whatever is left sits on the central atom. */
+    let leftover = available - bonds * 2;
+    const termLone = [];
+    terminals.forEach((s, i) => {
+      const want = Math.max(0, (needsOf(s) - order[i] * 2) / 2);
+      const give = Math.min(want, Math.floor(leftover / 2));
+      termLone.push(give);
+      leftover -= give * 2;
+    });
+    const centralLone = Math.floor(leftover / 2);
+    leftover -= centralLone * 2;
+    if (leftover !== 0) return { ok: false, why: 'An odd electron is left over. This molecule is a radical, and radicals do not obey the octet rule.' };
+
+    steps.push({
+      label: 'Everything left is lone pairs',
+      detail: 'Fill the outer atoms first, then whatever remains sits on ' + central + '.',
+      value: centralLone === 0 ? 'no lone pairs on ' + central
+        : centralLone + ' lone pair' + (centralLone === 1 ? '' : 's') + ' on ' + central,
+    });
+
+    /* 6. Formal charge, which is the check that the structure is the sensible
+     *    one: valence electrons brought, minus the ones kept, minus the bonds. */
+    const fcOf = (sym, lone, bondCount) => valenceOf(sym) - lone * 2 - bondCount;
+    const centralFC = fcOf(central, centralLone, order.reduce((a, b) => a + b, 0));
+    const termFC = terminals.map((s, i) => fcOf(s, termLone[i], order[i]));
+    const fcSum = centralFC + termFC.reduce((a, b) => a + b, 0);
+
+    /* 7. Shape. Lone pairs take up room even though you cannot see them, so
+     *    they count towards the arrangement and then get left out of the name. */
+    const groups = terminals.length;
+    const steric = groups + centralLone;
+    const shape = SHAPES[groups + ',' + centralLone] ||
+      { name: 'not a standard shape', angle: null, symmetric: false,
+        why: 'This arrangement is beyond the shapes a first course covers.' };
+
+    /* 8. Polarity. A bond is polar when the two ends pull unequally; the
+     *    molecule is polar when those pulls do not cancel. */
+    const sameTerminals = terminals.every((s) => s === terminals[0]);
+    const cEn = ME.chem.element(central).en;
+    const bondPolar = terminals.some((s) => {
+      const e = ME.chem.element(s).en;
+      return e != null && cEn != null && Math.abs(e - cEn) >= 0.4;
+    });
+    /* Symmetric shape with identical outer atoms means every pull is matched by
+     * an equal one opposite, so the molecule has no overall direction. Anything
+     * else is polar if the bonds pull unequally — or if there is a lone pair,
+     * which is a lump of charge on one side even when the bonds are even. PH3
+     * is the case that catches a bonds-only rule out. */
+    const polar = (shape.symmetric && sameTerminals) ? false : (bondPolar || centralLone > 0);
+
+    return {
+      ok: true,
+      central: central, terminals: terminals, order: order,
+      charge: charge, available: available, needed: needed, shared: shared,
+      bonds: bonds, expanded: expanded,
+      centralLone: centralLone, terminalLone: termLone,
+      centralFC: centralFC, terminalFC: termFC, formalChargeSum: fcSum,
+      groups: groups, steric: steric,
+      shape: shape.name, angle: shape.angle, shapeWhy: shape.why, symmetric: shape.symmetric,
+      polar: polar, bondPolar: bondPolar,
+      resonance: multiples > 0 && sameTerminals && terminals.length > 1 && order.some((o) => o === 1),
+      steps: steps,
+      formula: formulaOf(counts, charge),
+    };
+  }
+
+  function formulaOf(counts, charge) {
+    const f = ME.formula.parse(Object.keys(counts).map((s) => s + (counts[s] > 1 ? counts[s] : '')).join(''));
+    return f.ok ? f.display : '';
+  }
+
+  /* A convenience: give it a formula and it does the parsing too. */
+  function fromFormula(text, opts) {
+    const f = ME.formula.parse(text);
+    if (!f.ok) return { ok: false, why: f.error };
+    return analyse(f.counts, Object.assign({ charge: f.charge || 0 }, opts || {}));
+  }
+
+  ME.lewis = {
+    analyse: analyse, fromFormula: fromFormula,
+    valenceOf: valenceOf, needsOf: needsOf, chooseCentral: chooseCentral,
+    SHAPES: SHAPES,
   };
 })();
 
@@ -12997,6 +13296,121 @@ window.ME = window.ME || {};
     },
   });
 
+  /* ------------------------------------------------------- shapes and bonding */
+  /* One pool for all three bonding generators, filtered by what the counting
+   * method can actually do rather than by a hand-kept list. Every candidate is
+   * run through ME.lewis and dropped if it comes back refused, so a question
+   * can never be set that the app cannot answer. */
+  function lewisPool() {
+    if (lewisPool.cache) return lewisPool.cache;
+    const candidates = [
+      'CH4', 'CCl4', 'CF4', 'SiCl4', 'SiH4', 'NH3', 'PH3', 'PCl3', 'NF3', 'NCl3',
+      'H2O', 'H2S', 'OF2', 'SCl2', 'CO2', 'CS2', 'SO2', 'SO3', 'CH2O', 'BF3',
+      'BCl3', 'BeCl2', 'BeF2', 'PCl5', 'PF5', 'SF6', 'SF4', 'ClF3', 'XeF4',
+      'XeF2', 'NH4+', 'H3O+', 'CO3 2-', 'NO3-', 'SO4 2-', 'PO4 3-', 'ClO4-',
+      'ClO3-', 'O3', 'SeF6', 'AsF5', 'TeCl4', 'ICl4-', 'BrF5',
+    ];
+    lewisPool.cache = candidates.map((formula) => {
+      const r = ME.lewis.fromFormula(formula);
+      if (!r.ok) return null;
+      const parsed = ME.formula.parse(formula);
+      if (!parsed.ok) return null;
+      return { formula: formula, display: parsed.display, r: r };
+    }).filter(Boolean);
+    return lewisPool.cache;
+  }
+
+  gen('valence-count', {
+    name: 'Counting valence electrons',
+    make(r) {
+      const item = r.pick(lewisPool());
+      const a = item.r;
+      const parts = [a.central + ' brings ' + ME.lewis.valenceOf(a.central)];
+      const groups = {};
+      a.terminals.forEach((t) => { groups[t] = (groups[t] || 0) + 1; });
+      Object.keys(groups).forEach((t) => {
+        parts.push(groups[t] + ' × ' + t + ' at ' + ME.lewis.valenceOf(t) + ' = ' + (groups[t] * ME.lewis.valenceOf(t)));
+      });
+      return {
+        kind: 'count',
+        q: 'How many valence electrons are there altogether in ' + item.display + '?',
+        answer: a.available,
+        right: a.available + ' \u2014 and getting this number right is the whole battle, because everything else in a Lewis structure is bookkeeping on it.',
+        wrong: 'Add the group-number valence count for every atom, then adjust for the charge \u2014 a negative ion has gained electrons, so its charge is subtracted.',
+        solution: a.steps.slice(0, 1).map((st) => ({ text: st.detail + ', giving ' + st.value }))
+          .concat([{ text: parts.join('; ') + '.' }]),
+      };
+    },
+  });
+
+  gen('shape', {
+    name: 'Molecular shapes',
+    make(r) {
+      const item = r.pick(lewisPool());
+      const a = item.r;
+      /* Wrong options are other real shapes, and the tempting one is always in
+       * there: the shape you would get by forgetting the lone pairs. */
+      const noLone = ME.lewis.SHAPES[a.groups + ',0'];
+      const others = Object.keys(ME.lewis.SHAPES).map((k) => ME.lewis.SHAPES[k].name)
+        .filter((n) => n !== a.shape);
+      const decoys = [];
+      if (noLone && noLone.name !== a.shape) decoys.push(noLone.name);
+      ME.quiz.shuffle(others).forEach((n) => { if (decoys.indexOf(n) < 0 && decoys.length < 3) decoys.push(n); });
+      return {
+        kind: 'choice',
+        q: 'What shape is ' + item.display + '?',
+        options: ME.quiz.shuffle([a.shape].concat(decoys.slice(0, 3))).map((n) => ({
+          t: n,
+          ok: n === a.shape,
+          why: n === a.shape
+            ? a.shapeWhy + (a.centralLone
+              ? ' The ' + (a.centralLone === 1 ? 'lone pair' : a.centralLone + ' lone pairs') + ' on the ' +
+                a.central + ' take up room but get left out of the name.'
+              : '')
+            : (noLone && n === noLone.name && a.centralLone
+              ? 'That is the arrangement of everything around the ' + a.central + ', lone pairs included \u2014 but the shape is named after the atoms you can see, so it is ' + a.shape + '.'
+              : 'That shape needs a different number of groups around the central atom. Count the bonded atoms and the lone pairs: ' + item.display + ' has ' + a.groups + ' and ' + a.centralLone + '.'),
+        })),
+        solution: a.steps.map((st) => ({ text: st.label + ': ' + st.value }))
+          .concat([{ text: a.groups + ' bonded atom' + (a.groups === 1 ? '' : 's') + ' plus ' + a.centralLone +
+            ' lone pair' + (a.centralLone === 1 ? '' : 's') + ' is ' + a.steric + ' groups around the ' + a.central +
+            ', which gives ' + a.shape + (a.angle ? ' at about ' + a.angle + '°' : '') + '.' }]),
+      };
+    },
+  });
+
+  gen('polarity', {
+    name: 'Polar or not',
+    make(r) {
+      /* Ions are excluded rather than skipped: "is this polar" is not a
+       * question you can ask about something that is charged all over. */
+      const item = r.pick(lewisPool().filter((x) => !x.r.charge));
+      const a = item.r;
+      return {
+        kind: 'choice',
+        q: 'Is ' + item.display + ' a polar molecule?',
+        options: ME.quiz.shuffle([
+          { t: 'Yes', ok: a.polar },
+          { t: 'No', ok: !a.polar },
+        ]).map((o) => Object.assign(o, {
+          why: a.polar
+            ? (a.bondPolar
+              ? 'Polar. The bonds pull unequally, and the shape is ' + a.shape + ', which does not let those pulls cancel.'
+              : 'Polar, and this one is a trap: the bonds are near enough even, but the lone pair on the ' + a.central + ' is a lump of charge on one side.')
+            : (a.bondPolar
+              ? 'Non-polar, and this is the case people get wrong. The bonds really are polar, but ' + a.shape +
+                ' is symmetric with identical outer atoms, so every pull is cancelled by an equal one opposite. Polar bonds, non-polar molecule.'
+              : 'Non-polar. Neither the bonds nor the shape gives it a direction.'),
+        })),
+        solution: [
+          { text: 'Shape first: ' + a.shape + (a.centralLone ? ', with ' + a.centralLone + ' lone pair' + (a.centralLone === 1 ? '' : 's') + ' on the ' + a.central : '') + '.' },
+          { text: 'Then the bonds: ' + (a.bondPolar ? 'the outer atoms pull noticeably harder than the ' + a.central + ', so each bond is polar.' : 'the electronegativities are close, so the bonds are barely polar at all.') },
+          { text: 'Then whether the pulls cancel: ' + (a.polar ? 'they do not, so the molecule is polar.' : 'they do, so the molecule is non-polar.') },
+        ],
+      };
+    },
+  });
+
   gen('ion-charge', {
     name: 'Ion charges',
     make(r) {
@@ -14197,8 +14611,221 @@ window.ME = window.ME || {};
       'Try to turn each one. One spins freely; the other will not budge.', body);
   }
 
+  /* ============================================ Lewis structures and VSEPR */
+  /* Type a formula and watch the counting method run. Everything on screen —
+   * the electron totals, the bonds, the lone pairs, the shape name, the angle,
+   * the formal charges, the polarity verdict — comes out of ME.lewis, so the
+   * picture cannot disagree with the working printed underneath it. */
+  const LEWIS_LAYOUT = {
+    /* bonds and lone pairs placed by angle, 0° to the right. Schematic: a flat
+     * drawing of a shape that is mostly not flat. */
+    '1,0': { b: [0], l: [] },
+    '2,0': { b: [0, 180], l: [] },
+    '2,1': { b: [200, 340], l: [90] },
+    '2,2': { b: [230, 310], l: [50, 130] },
+    '2,3': { b: [90, 270], l: [0, 130, 230] },
+    '3,0': { b: [90, 210, 330], l: [] },
+    '3,1': { b: [190, 270, 350], l: [90] },
+    '3,2': { b: [90, 270, 0], l: [160, 200] },
+    '4,0': { b: [45, 135, 225, 315], l: [] },
+    '4,1': { b: [90, 270, 10, 350], l: [180] },
+    '4,2': { b: [0, 90, 180, 270], l: [45, 225] },
+    '5,0': { b: [90, 270, 0, 145, 215], l: [] },
+    '5,1': { b: [0, 72, 144, 216, 288], l: [90] },
+    '6,0': { b: [0, 60, 120, 180, 240, 300], l: [] },
+  };
+
+  function lewis(opts) {
+    opts = opts || {};
+    const PRESETS = opts.presets ||
+      ['CH4', 'H2O', 'NH3', 'CO2', 'SO2', 'BF3', 'CH2O', 'PCl5', 'SF6', 'XeF4', 'NH4+', 'CO3 2-'];
+    const body = el('div');
+
+    const chips = el('div', { class: 'sim-buttons' });
+    body.appendChild(chips);
+
+    const row = el('div', { class: 'sim-control' });
+    row.appendChild(el('label', { text: 'Formula' }));
+    const input = el('input', { type: 'text', class: 'sim-input', spellcheck: 'false',
+      autocomplete: 'off', autocapitalize: 'off', value: opts.start || 'H2O',
+      'aria-label': 'a formula to draw' });
+    row.appendChild(input);
+    body.appendChild(row);
+
+    const toggles = el('div', { class: 'sim-buttons' });
+    let showLone = true;
+    const loneBtn = el('button', { class: 'btn btn-sm on', text: 'Lone pairs shown' });
+    loneBtn.addEventListener('click', () => {
+      showLone = !showLone;
+      loneBtn.textContent = showLone ? 'Lone pairs shown' : 'Lone pairs hidden';
+      loneBtn.classList.toggle('on', showLone);
+      draw();
+    });
+    toggles.appendChild(loneBtn);
+    body.appendChild(toggles);
+
+    const canvas = el('div', { class: 'sim-lewis' });
+    body.appendChild(canvas);
+    const verdict = el('div', { class: 'sim-verdict' });
+    body.appendChild(verdict);
+    const work = el('div', { class: 'sim-steps' });
+    body.appendChild(work);
+
+    PRESETS.forEach((f) => {
+      const btn = el('button', { class: 'btn btn-sm', text: f });
+      btn.addEventListener('click', () => { input.value = f; draw(); });
+      chips.appendChild(btn);
+    });
+    input.addEventListener('input', draw);
+
+    const svgEl = (name, attrs) => {
+      const n = document.createElementNS('http://www.w3.org/2000/svg', name);
+      Object.keys(attrs || {}).forEach((k) => n.setAttribute(k, String(attrs[k])));
+      return n;
+    };
+
+    function draw() {
+      ME.clear(canvas); ME.clear(verdict); ME.clear(work);
+      const r = ME.lewis.fromFormula(input.value);
+      if (!r.ok) {
+        verdict.appendChild(el('p', { class: 'note', text: r.why }));
+        return;
+      }
+
+      const W = 340, H = 260, CX = W / 2, CY = H / 2, R = 78;
+      const svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%',
+        role: 'img', 'aria-label': r.formula + ', ' + r.shape });
+      const layout = LEWIS_LAYOUT[r.groups + ',' + r.centralLone] || null;
+      const angleOf = (i, n) => 90 + i * (360 / n);
+      const bondAngles = layout ? layout.b : r.terminals.map((_, i) => angleOf(i, r.groups));
+      const loneAngles = layout ? layout.l
+        : new Array(r.centralLone).fill(0).map((_, i) => angleOf(r.groups + i, r.groups + r.centralLone));
+      const at = (deg, dist) => [CX + Math.cos(-deg * Math.PI / 180) * dist,
+                                 CY + Math.sin(-deg * Math.PI / 180) * dist];
+
+      const accent = css('--accent', '#3b6ef0');
+      const text = css('--text', '#111');
+      const faint = css('--text-faint', '#888');
+
+      /* bonds first, so the atom labels sit on top of them */
+      r.terminals.forEach((sym, i) => {
+        const a = bondAngles[i % bondAngles.length];
+        const [x, y] = at(a, R);
+        const offsets = r.order[i] === 1 ? [0] : r.order[i] === 2 ? [-3.5, 3.5] : [-5, 0, 5];
+        const perp = [Math.sin(-a * Math.PI / 180) * -1, Math.cos(-a * Math.PI / 180) * -1];
+        offsets.forEach((o) => {
+          svg.appendChild(svgEl('line', {
+            x1: CX + perp[0] * o + (x - CX) * 0.28, y1: CY + perp[1] * o + (y - CY) * 0.28,
+            x2: x + perp[0] * o - (x - CX) * 0.24, y2: y + perp[1] * o - (y - CY) * 0.24,
+            stroke: text, 'stroke-width': 1.7, 'stroke-linecap': 'round',
+          }));
+        });
+      });
+
+      /* lone pairs on the central atom: two dots side by side, pointing out */
+      if (showLone) {
+        loneAngles.forEach((a) => {
+          const perp = [Math.sin(-a * Math.PI / 180) * -1, Math.cos(-a * Math.PI / 180) * -1];
+          [-4, 4].forEach((o) => {
+            const [x, y] = at(a, 30);
+            svg.appendChild(svgEl('circle', { cx: x + perp[0] * o, cy: y + perp[1] * o, r: 2.6, fill: accent }));
+          });
+        });
+        /* and on the outer atoms */
+        r.terminals.forEach((sym, i) => {
+          const a = bondAngles[i % bondAngles.length];
+          const [x, y] = at(a, R);
+          for (let k = 0; k < r.terminalLone[i]; k++) {
+            const sub = a + 40 + k * 55;
+            const perp = [Math.sin(-sub * Math.PI / 180) * -1, Math.cos(-sub * Math.PI / 180) * -1];
+            [-3.5, 3.5].forEach((o) => {
+              const px = x + Math.cos(-sub * Math.PI / 180) * 17 + perp[0] * o;
+              const py = y + Math.sin(-sub * Math.PI / 180) * 17 + perp[1] * o;
+              svg.appendChild(svgEl('circle', { cx: px, cy: py, r: 2.2, fill: faint }));
+            });
+          }
+        });
+      }
+
+      const label = (x, y, sym, fc) => {
+        const g = svgEl('g', {});
+        g.appendChild(svgEl('circle', { cx: x, cy: y, r: 14, fill: css('--surface', '#fff') }));
+        const t = svgEl('text', { x: x, y: y + 5.5, 'text-anchor': 'middle',
+          'font-size': 16, 'font-weight': 600, fill: text });
+        t.textContent = sym;
+        g.appendChild(t);
+        if (fc) {
+          const f = svgEl('text', { x: x + 13, y: y - 9, 'text-anchor': 'middle',
+            'font-size': 10.5, 'font-weight': 700, fill: accent });
+          f.textContent = (fc > 0 ? '+' : '−') + (Math.abs(fc) === 1 ? '' : Math.abs(fc));
+          g.appendChild(f);
+        }
+        svg.appendChild(g);
+      };
+      r.terminals.forEach((sym, i) => {
+        const [x, y] = at(bondAngles[i % bondAngles.length], R);
+        label(x, y, sym, r.terminalFC[i]);
+      });
+      label(CX, CY, r.central, r.centralFC);
+
+      if (r.charge) {
+        const t = svgEl('text', { x: W - 16, y: 22, 'text-anchor': 'end',
+          'font-size': 15, 'font-weight': 700, fill: text });
+        t.textContent = (r.charge > 0 ? '+' : '−') + (Math.abs(r.charge) === 1 ? '' : Math.abs(r.charge));
+        svg.appendChild(t);
+      }
+      canvas.appendChild(svg);
+
+      /* The verdict, in words. Built as nodes rather than a string, because
+       * formulaHTML subscripts every digit it sees and this is prose. */
+      const say = function () {
+        const para = el('p');
+        Array.prototype.slice.call(arguments).forEach((x) => {
+          para.appendChild(typeof x === 'string' ? document.createTextNode(x) : x);
+        });
+        verdict.appendChild(para);
+      };
+      const bold = (t) => el('b', { text: t });
+      say(bold(r.shape), (r.angle ? ', with bond angles of about ' + r.angle + '°' : '') + '. ' + r.shapeWhy);
+      if (r.centralLone) {
+        say('There ' + (r.centralLone === 1 ? 'is one lone pair' : 'are ' + r.centralLone + ' lone pairs') +
+          ' on the ' + r.central + '. Turn them off above: the shape is named after what is left, because the lone pairs are not atoms and nobody can see them — but they still take up room, which is why the angle is not the neat one.');
+      }
+      if (r.polar) {
+        say('The molecule is ', bold('polar'), r.bondPolar
+          ? ' — the bonds pull unequally, and the shape does not let those pulls cancel.'
+          : ' — the bonds themselves are near enough even, but a lone pair is a lump of charge on one side.');
+      } else {
+        say('The molecule is ', bold('non-polar'), r.bondPolar
+          ? ' — the bonds are polar, but the shape is symmetric and every pull is matched by an equal one opposite. Polar bonds, non-polar molecule.'
+          : ' — neither the bonds nor the shape gives it a direction.');
+      }
+      if (r.resonance) {
+        say('The outer atoms are identical, but the drawing gives one of them a double bond — which cannot be right, because nothing tells them apart. The real molecule is the average of the ways you could draw it, every bond the same and somewhere between single and double. That averaging is called ', bold('resonance'), '.');
+      }
+      if (r.expanded) {
+        say('The ' + r.central + ' ends up with more than eight electrons around it. Only period 3 and below can do that, because only they have d orbitals close enough in energy to use.');
+      }
+
+      /* and the arithmetic, so the picture is never a black box */
+      const ol = el('ol', { class: 'sim-worklist' });
+      r.steps.forEach((st) => {
+        const li = el('li');
+        li.appendChild(el('span', { class: 'sim-worklabel', text: st.label }));
+        li.appendChild(el('span', { class: 'sim-workval', text: st.value }));
+        if (st.detail) li.appendChild(el('div', { class: 'note', text: st.detail }));
+        ol.appendChild(li);
+      });
+      work.appendChild(ol);
+    }
+
+    draw();
+    return shell(opts.title || 'Build a Lewis structure',
+      'Pick one, or type any formula — including ones that cannot exist, which it will tell you about.', body);
+  }
+
   ME.sims = {
-    statesOfMatter, heatingCurve, buildAtom, trendMap, phScale, titration,
+    statesOfMatter, heatingCurve, buildAtom, trendMap, phScale, titration, lewis,
     energyDiagram, equilibrium, solutionMixer, bondRotation,
     shell, slider, whenVisible, css,
   };

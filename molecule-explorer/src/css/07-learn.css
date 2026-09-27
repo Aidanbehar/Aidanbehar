@@ -437,3 +437,20 @@
   background: var(--surface-2); padding: 14px 18px; border-radius: var(--r);
   margin: 0; overflow-x: auto;
 }
+
+/* the Lewis-structure builder */
+.sim-lewis { display: flex; justify-content: center; padding: 6px 0 2px; }
+.sim-lewis svg { max-width: 360px; }
+.sim-input {
+  flex: 1; min-width: 0; font-family: var(--font-mono); font-size: .95rem;
+  padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text);
+}
+.sim-verdict p { margin: 0 0 8px; font-size: .92rem; line-height: 1.6; }
+.sim-verdict p:last-child { margin-bottom: 0; }
+.sim-worklist { margin: 10px 0 0; padding-left: 22px; font-size: .88rem; line-height: 1.6; }
+.sim-worklist li { margin-bottom: 7px; }
+.sim-worklabel { color: var(--text-soft); }
+.sim-workval {
+  font-weight: 650; margin-left: 8px; font-variant-numeric: tabular-nums;
+}
