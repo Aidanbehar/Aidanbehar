@@ -1007,6 +1007,11 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
 .sim-ph-row .bar { display: block; height: 11px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
 .sim-ph-row .bar i { display: block; height: 100%; border-radius: 99px; }
 .sim-ph-row .l { font-size: .84rem; }
+.lesson-pre {
+  font-family: var(--font-mono); font-size: .92rem; line-height: 1.7;
+  background: var(--surface-2); padding: 14px 18px; border-radius: var(--r);
+  margin: 0; overflow-x: auto;
+}
 
 
 /* ---- 08-elements.css ---- */
@@ -17826,6 +17831,1195 @@ window.ME = window.ME || {};
         'Floating is a comparison with the surrounding fluid. Less dense floats. A steel ship floats because the hull is mostly air.',
         'Water is the great exception: freezing locks it into a lattice with holes, so ice is about 9% less dense than water and floats.',
         'Water is densest at 4 °C, so lakes freeze from the top down and the ice insulates the life underneath.',
+      ],
+    },
+
+    ],
+  });
+})();
+
+
+/* ================= lessons/03-atoms.js ================= */
+/* Unit 3: Atoms. */
+(function () {
+  'use strict';
+  const ME = window.ME;
+  const K = ME.kit;
+  const { p, b, em, h4, frag, term, callout, eq, table, worked, figure, goto } = K;
+  const el = ME.el;
+
+  ME.course.unit({
+    n: 3, id: 'atoms',
+    title: 'Atoms',
+    blurb: 'What is inside an atom, how anybody worked that out, and the three numbers — protons, neutrons, electrons — that decide everything else.',
+    lessons: [
+
+    {
+      id: 'atom-story',
+      title: 'How we found out what is inside',
+      mins: 15,
+      builds_on: ['how-we-know'],
+      hook() {
+        return frag(
+          p('In 1909 a student was firing radioactive particles at a sheet of gold foil and counting where they landed. Almost all went straight through, as expected.'),
+          p('Then he noticed that about one in eight thousand bounced ', b('backwards'), '.'),
+          p('His supervisor, Ernest Rutherford, later said it was "as if you had fired a fifteen-inch shell at a piece of tissue paper and it came back and hit you". That one observation destroyed the accepted picture of the atom and replaced it with something nobody had imagined.'));
+      },
+      pages: [
+        {
+          h: 'Four pictures, each forced by a measurement',
+          body() {
+            return frag(
+              p('The atom has been redrawn four times, and each redraw was forced by an experiment the previous picture could not explain. This is the pattern from Unit 1 in action.'),
+              table(['Picture', 'What it said', 'What broke it'], [
+                ['Dalton, 1808', 'Atoms are indivisible solid spheres, each element with its own mass.',
+                 'Thomson found something coming out of them. So they have parts.'],
+                ['Thomson, 1897', 'A ball of positive stuff with negative electrons embedded in it, like currants in a bun.',
+                 'Rutherford’s foil. A diffuse positive ball could never bounce anything backwards.'],
+                ['Rutherford, 1911', 'A tiny dense positive nucleus with electrons somewhere around it, and mostly empty space.',
+                 'An orbiting electron should radiate energy and spiral into the nucleus in a fraction of a second. Atoms do not do that.'],
+                ['Bohr, 1913, onwards', 'Electrons can only occupy certain fixed energy levels, and do not radiate while they stay in one.',
+                 'Nothing, for chemistry. It was replaced by quantum mechanics in the 1920s, and the fixed-energy-levels idea survived and is what this course uses.'],
+              ]),
+              callout(b('Notice what each step kept. '), 'Nothing was thrown away wholesale. Dalton’s fixed masses are still right. Thomson’s electrons are still there. Rutherford’s nucleus is still there. Each picture absorbed the last one and added the bit it was missing.'));
+          },
+        },
+        {
+          h: 'Why the foil experiment was decisive',
+          body() {
+            return frag(
+              p('It is worth seeing exactly why one observation could be so conclusive, because the logic is beautiful.'),
+              p('Thomson’s atom had its positive charge spread thinly through the whole volume. A fast, heavy, positive particle flying through that would feel a weak push and be nudged slightly off course. It could never be turned round — there is nothing solid enough anywhere to bounce off.'),
+              p('So the fact that some came ', b('straight back'), ' meant they had hit something both very massive and very concentrated. And the fact that this only happened once in eight thousand times meant that whatever they hit was very small — almost all of the foil was clear passage.'),
+              eq('mostly empty + occasional violent bounce = tiny dense centre'),
+              p('Rutherford did the arithmetic and found the nucleus must be around ten thousand times smaller across than the atom.'),
+              callout(b('To scale: '), 'if an atom were a sports stadium, the nucleus would be a pea on the centre spot. Everything else — all the volume of everything you have ever touched — is electrons and empty space. You have never actually touched anything solid; you have felt electrons pushing back on electrons.'));
+          },
+        },
+        {
+          h: 'The three particles',
+          body() {
+            return frag(
+              p('What ended up inside, and it is a short list.'),
+              table(['Particle', 'Charge', 'Mass', 'Where'], [
+                ['Proton', '+1', '1 (about 1.67 × 10⁻²⁷ kg)', 'in the nucleus'],
+                ['Neutron', '0', '1, a shade more than a proton', 'in the nucleus'],
+                ['Electron', '−1', 'about 1/1836 of a proton', 'around the outside'],
+              ], 'Masses are quoted relative to a proton, because the absolute numbers are unhelpfully small.'),
+              p('The mass ratio is the striking one. An electron weighs about ', b('one two-thousandth'), ' of a proton, so essentially all of an atom’s mass is in that pea at the centre and essentially all of its volume is the electron cloud around it.'),
+              h4('Which leads to the division of labour that runs the rest of this course'),
+              p(b('The nucleus has the mass. The electrons do the chemistry.'), ' Chemical reactions never touch the nucleus — rearranging nuclei is nuclear physics, and it takes millions of times more energy. Every reaction you will ever meet is electrons being shared, swapped or shifted, with the nuclei looking on.'),
+              p('So the next unit is about electrons, and the nucleus will barely be mentioned again after this one.'));
+          },
+        },
+      ],
+      checkpoints: [
+        { kind: 'choice', after: 1,
+          q: 'One particle in eight thousand bounced backwards off the gold foil. Why did that rule out Thomson’s picture?',
+          options: [
+            { t: 'Because positive charge spread thinly through the whole atom could never turn a fast heavy particle round.', ok: true,
+              why: 'Exactly. A diffuse charge gives a gentle nudge. Reversing something means hitting a concentrated mass, and the rarity of it means that mass is tiny.' },
+            { t: 'Because the particles should all have bounced.', ok: false,
+              why: 'Thomson predicted that almost none would bounce, and almost none did. The problem was the few that bounced hard.' },
+            { t: 'Because gold is too heavy.', ok: false,
+              why: 'Gold was chosen because it can be beaten very thin. Its weight is not the issue — the concentration of that weight is.' },
+          ] },
+      ],
+      quizzes: [
+        { kind: 'order', q: 'Put the models of the atom in the order they were proposed.',
+          items: ['Indivisible solid spheres', 'Electrons embedded in a positive ball',
+                  'A tiny dense nucleus with electrons around it', 'Electrons restricted to fixed energy levels'],
+          right: 'Yes — Dalton, Thomson, Rutherford, Bohr. Each was forced by an experiment the one before could not explain.',
+          wrong: 'Think about which discovery had to come first for the next model to be necessary.' },
+        { kind: 'match', q: 'Match each particle to its charge.',
+          pairs: [['Proton', 'positive'], ['Neutron', 'no charge'], ['Electron', 'negative']],
+          right: 'Yes. The names help: neutron is neutral, and electron goes with electricity.',
+          wrong: 'The neutron is the one with no charge — the name says so.' },
+        { kind: 'choice', q: 'Where is nearly all the mass of an atom?',
+          options: [
+            { t: 'In the nucleus.', ok: true,
+              why: 'Right. Protons and neutrons are each about 1836 times an electron, so the nucleus holds essentially all the mass in a fraction of the volume.' },
+            { t: 'Spread evenly.', ok: false, why: 'Very far from evenly — that was Thomson’s picture and the foil experiment killed it.' },
+            { t: 'In the electrons.', ok: false, why: 'Electrons are about a two-thousandth of a proton each. They contribute almost nothing to the mass.' },
+          ] },
+        { kind: 'choice', q: 'Which part of the atom does chemistry involve?',
+          options: [
+            { t: 'The electrons.', ok: true,
+              why: 'Every reaction in this course is electrons being shared, swapped or shifted. The nucleus is a spectator, which is why the rest of the course barely mentions it.' },
+            { t: 'The nucleus.', ok: false,
+              why: 'Rearranging nuclei is nuclear physics and takes millions of times more energy. Chemistry never gets near it.' },
+            { t: 'The neutrons.', ok: false,
+              why: 'Neutrons affect mass and stability and have essentially no effect on chemical behaviour — which is why isotopes of an element react identically.' },
+          ] },
+        { kind: 'choice', q: 'If an atom were a sports stadium, how big would the nucleus be?',
+          options: [
+            { t: 'About the size of a pea on the centre spot.', ok: true,
+              why: 'Roughly, yes — the nucleus is about ten thousand times smaller across than the atom. Which means all the stuff you have ever touched is mostly empty space.' },
+            { t: 'About the size of the pitch.', ok: false, why: 'Far too big. That would be closer to Thomson’s picture.' },
+            { t: 'About the size of a football.', ok: false,
+              why: 'Still much too big by a factor of a hundred or so.' },
+          ] },
+        { kind: 'choice', q: 'Rutherford’s model had a problem: an orbiting electron should radiate energy and fall into the nucleus. How was that resolved?',
+          options: [
+            { t: 'Bohr proposed that electrons can only sit at certain fixed energies, and do not radiate while they stay at one.', ok: true,
+              why: 'Right. It was a bold thing to assert with no explanation, and it worked — it predicted the exact colours of light hydrogen emits. Quantum mechanics later explained why, and kept the fixed levels.' },
+            { t: 'The electrons were found not to move.', ok: false,
+              why: 'They are not stationary. The resolution was about which energies are allowed, not about stopping.' },
+            { t: 'The problem was never resolved.', ok: false,
+              why: 'It was, and the resolution is the whole basis of the next unit.' },
+          ] },
+      ],
+      mistakes: [
+        { wrong: 'Thinking each model of the atom was simply wrong and discarded.',
+          why: 'Each one kept everything that worked and added what was missing. Dalton’s fixed masses, Thomson’s electrons and Rutherford’s nucleus are all still in the picture you will use.' },
+        { wrong: 'Picturing electrons in neat planetary orbits.',
+          why: 'It is the standard diagram and it is a convenient lie. Electrons occupy regions of probability, not paths. The diagram gets the energy levels right, which is what matters for chemistry, and gets the shape wrong.' },
+        { wrong: 'Thinking atoms are solid.',
+          why: 'They are overwhelmingly empty. Solidity is electrons repelling other electrons — which is genuinely why you cannot push your hand through a table, and not because there is anything there in the way.' },
+      ],
+      recap: [
+        'The atom was redrawn four times, each time because an experiment broke the previous picture — and each picture kept what worked.',
+        'The gold foil experiment showed a tiny, dense, positive nucleus surrounded by mostly empty space, because only a concentrated mass could turn a fast particle round.',
+        'Protons (+1), neutrons (0) and electrons (−1), with the electron about 1/1836 of the mass of the others.',
+        'The nucleus has the mass; the electrons do the chemistry. Everything after this unit is about electrons.',
+      ],
+    },
+
+    {
+      id: 'atomic-number',
+      title: 'Atomic number, mass number, and reading an element’s box',
+      mins: 16,
+      builds_on: ['atom-story'],
+      hook() {
+        return frag(
+          p('Gold has 79 protons. Platinum has 78. That single proton is the difference between the two most valuable metals on Earth — different colour, different density, different price.'),
+          p('Add one proton to a gold atom and you have mercury: a liquid, silver, and poisonous.'),
+          p('Nothing else about an atom does that. You can change the neutrons and it is still gold. You can strip electrons off and it is still gold. Change the protons and it is a different element entirely.'));
+      },
+      pages: [
+        {
+          h: 'The two numbers',
+          body() {
+            return frag(
+              p('Every atom is described by two counts.'),
+              p('The ', b('atomic number'), ', written Z, is the number of protons. It is the atom’s identity — it decides which element it is, and nothing else does. It is also why the periodic table is ordered the way it is: the table is just the elements lined up by proton count.'),
+              p('The ', b('mass number'), ', written A, is protons plus neutrons — the total number of heavy particles in the nucleus. It is not the mass in any unit; it is a count.'),
+              eq('A = Z + neutrons,    so    neutrons = A − Z'),
+              figure('The standard way of writing it. The bottom number identifies the element; the top number counts the nucleus.',
+                el('div', { class: 'lesson-eq', html: '<sup>23</sup><sub>11</sub>Na &nbsp;&nbsp; or just &nbsp;&nbsp; sodium-23' })),
+              p('You will meet both notations. The written-out form, sodium-23, gives only the mass number — which is enough, because the name already tells you the element and therefore the proton count.'),
+              h4('And a neutral atom has as many electrons as protons'),
+              p('Charges have to cancel for the atom to be neutral, so a neutral atom has exactly Z electrons. That is the default assumption unless the atom is written as an ion, which is the next lesson.'));
+          },
+        },
+        {
+          h: 'Working the three counts out',
+          body() {
+            return frag(
+              worked('How many protons, neutrons and electrons in an atom of ⁴⁰₁₈Ar?', [
+                { q: 'Protons', why: 'The bottom number is Z, the proton count. That is the identity of the element, and 18 is argon — which the symbol confirms.', maths: '18 protons' },
+                { q: 'Neutrons', why: 'Mass number minus atomic number. The nucleus holds 40 particles altogether, 18 of which are protons.', maths: '40 − 18 = 22 neutrons' },
+                { q: 'Electrons', why: 'Nothing says it is charged, so it is neutral, so electrons match protons.', maths: '18 electrons' },
+              ]),
+              worked('An atom has 26 protons and 30 neutrons. Name it and write it properly.', [
+                { q: 'Which element?', why: '26 protons is iron — you can look it up in the Elements tab, or read it off the periodic table, which is ordered by exactly this number.' },
+                { q: 'Mass number', why: 'Protons plus neutrons.', maths: '26 + 30 = 56' },
+                { q: 'Written out', why: 'Iron-56, or with both numbers stacked.', maths: '⁵⁶₂₆Fe' },
+                { q: 'And is it a common one?', why: 'Iron-56 is the commonest isotope of iron and, as it happens, the most tightly bound nucleus there is — which is why iron is where nuclear fusion in stars stops.' },
+              ]),
+              goto('Look any element up', '#/elements', 'Every element’s atomic number, mass and properties, from PubChem.'));
+          },
+        },
+        {
+          h: 'Build one and see',
+          body() {
+            return frag(
+              p('The quickest way to make the relationship stick is to break it deliberately. Add protons and watch the element change under your hands. Add neutrons and watch it stay the same element but become an unusual isotope. Take electrons away and watch it become an ion while remaining the same element.'),
+              ME.sims.buildAtom(),
+              callout(b('The thing to notice: '), 'only one of those three sliders changes what the substance is.'));
+          },
+        },
+      ],
+      checkpoints: [
+        { kind: 'count', after: 0,
+          q: 'An atom of ³⁹₁₉K. How many neutrons does it have?',
+          answer: 20,
+          right: 'Twenty. Mass number minus atomic number: 39 − 19.',
+          wrong: 'Neutrons = mass number − atomic number.',
+          hints: { 39: 'That is the mass number, which counts protons and neutrons together. Subtract the protons.',
+                   19: 'That is the proton count. The neutrons are what is left of the 39 after the protons.',
+                   58: 'You have added instead of subtracted. The mass number already includes the protons.' } },
+        { kind: 'choice', after: 2,
+          q: 'You add a neutron to a carbon atom. What have you got?',
+          options: [
+            { t: 'Still carbon — a heavier isotope of it, with identical chemistry.', ok: true,
+              why: 'Right. Only protons decide the element. Carbon-13 behaves chemically exactly like carbon-12; it is just heavier, which is how carbon dating and mass spectrometry work.' },
+            { t: 'Nitrogen.', ok: false,
+              why: 'That would need an extra proton, not a neutron. Neutrons do not change the element.' },
+            { t: 'An ion.', ok: false,
+              why: 'Neutrons have no charge, so adding one cannot make an ion. Ions come from changing the electrons.' },
+          ] },
+      ],
+      quizzes: [
+        { kind: 'count', q: 'An atom of ⁵⁶₂₆Fe. How many protons?', answer: 26,
+          right: '26 — the bottom number, which is what makes it iron.',
+          wrong: 'The atomic number is the smaller of the two, and it is the proton count.' },
+        { kind: 'count', q: 'An atom of ⁵⁶₂₆Fe. How many neutrons?', answer: 30,
+          right: '30. 56 − 26.',
+          wrong: 'Mass number minus atomic number.', hints: { 56: 'That is protons and neutrons together.' } },
+        { kind: 'count', q: 'A neutral atom of ⁵⁶₂₆Fe. How many electrons?', answer: 26,
+          right: '26 — matching the protons, because a neutral atom has to have its charges cancel.',
+          wrong: 'A neutral atom has as many electrons as protons.' },
+        { kind: 'count', q: 'An atom has 17 protons and 18 neutrons. What is its mass number?', answer: 35,
+          right: '35. Protons plus neutrons. It is chlorine-35, the commonest chlorine isotope.',
+          wrong: 'Mass number is protons plus neutrons added together.' },
+        { kind: 'numeric', q: 'An atom has a mass number of 31 and 16 neutrons. What is its atomic number?', answer: 15, tol: 0.001,
+          right: '15, which is phosphorus.',
+          wrong: '31 − 16.' },
+        { kind: 'choice', q: 'Why is the periodic table ordered by atomic number rather than by atomic mass?',
+          options: [
+            { t: 'Because atomic number is the element’s identity, and ordering by mass puts a couple of elements in the wrong place.', ok: true,
+              why: 'Right. Mendeleev ordered by mass and had to swap two pairs to make the chemistry work. Once protons were discovered, the swaps turned out to be exactly where mass and proton count disagree — tellurium and iodine being the famous pair.' },
+            { t: 'Because atomic mass is hard to measure.', ok: false,
+              why: 'It was measured long before the proton was discovered. The issue is that it is not quite the right ordering.' },
+            { t: 'Because atomic number is always a whole number.', ok: false,
+              why: 'True and not the reason. The reason is that it decides the chemistry.' },
+          ] },
+        { kind: 'choice', q: 'Add one proton to a gold atom. What do you get?',
+          options: [
+            { t: 'Mercury — a completely different element.', ok: true,
+              why: 'Right, and it says everything about why the proton count is the identity. One particle is the difference between a solid yellow metal and a liquid silver one.' },
+            { t: 'A heavier kind of gold.', ok: false,
+              why: 'That would be adding a neutron. Adding a proton changes the element.' },
+            { t: 'A gold ion.', ok: false,
+              why: 'Ions come from changing electrons. Changing protons changes the element itself.' },
+          ] },
+      ],
+      mistakes: [
+        { wrong: 'Thinking the mass number is the mass.',
+          why: 'It is a count of protons and neutrons, so it is a whole number with no units. The actual atomic mass is close to it but never exactly it, for reasons the next lesson gets to.' },
+        { wrong: 'Forgetting to subtract when finding neutrons.',
+          why: 'The mass number already includes the protons. Neutrons = A − Z, always a subtraction.' },
+        { wrong: 'Assuming a neutral atom is the default when the question says otherwise.',
+          why: 'If a charge is written, the electron count has changed. Check for a superscript plus or minus before assuming electrons equal protons.' },
+      ],
+      recap: [
+        'Atomic number Z is the proton count, and it is the element’s identity. Nothing else is.',
+        'Mass number A is protons plus neutrons — a count, not a mass.',
+        'Neutrons = A − Z, and a neutral atom has Z electrons.',
+        'The periodic table is ordered by atomic number, which is why it works where ordering by mass did not quite.',
+      ],
+    },
+
+    {
+      id: 'isotopes',
+      title: 'Isotopes, and why chlorine weighs 35.45',
+      mins: 16,
+      builds_on: ['atomic-number'],
+      hook() {
+        return frag(
+          p('Look up chlorine and its atomic mass is 35.45. But mass number is a count of protons and neutrons, and you cannot have 0.45 of a neutron.'),
+          p('So what is being counted? Nothing, in a single atom. No chlorine atom anywhere weighs 35.45.'),
+          p('The number is an average over a mixture — and once you see that, every non-whole-number mass on the periodic table stops being strange.'));
+      },
+      pages: [
+        {
+          h: 'Same element, different mass',
+          body() {
+            return frag(
+              p('An ', term('isotope', 'Atoms of the same element with different numbers of neutrons. Same chemistry, different mass.'), ' is an atom of an element with a different number of neutrons from its siblings. Same protons, so the same element and the same chemistry; different neutrons, so a different mass.'),
+              table(['Isotope', 'Protons', 'Neutrons', 'Share of natural chlorine'], [
+                ['chlorine-35', '17', '18', 'about 76%'],
+                ['chlorine-37', '17', '20', 'about 24%'],
+              ]),
+              p('Both are ordinary, stable chlorine. Dig up chlorine anywhere on Earth and you get roughly that mixture, which is why the quoted mass is reliable enough to calculate with.'),
+              callout(b('And the chemistry really is identical. '), 'Chlorine-35 and chlorine-37 form the same compounds, react at the same rate and taste the same in salt. This is the strongest possible evidence that neutrons do not participate in chemistry — change them and nothing chemical changes at all.'));
+          },
+        },
+        {
+          h: 'Working out an average atomic mass',
+          body() {
+            return frag(
+              p('The quoted mass is a ', b('weighted'), ' average — weighted by how common each isotope is. That word matters: a plain average of 35 and 37 would be 36, and the answer is 35.45, because there is three times as much of the light one.'),
+              worked('Chlorine is 75.8% chlorine-35 and 24.2% chlorine-37. Find its average atomic mass.', [
+                { q: 'Turn the percentages into fractions', why: 'Percentages are per hundred, so divide by 100. This is the step people skip, and it puts the answer out by a factor of a hundred.', maths: '0.758 and 0.242' },
+                { q: 'Weight each mass by its share', why: 'Each isotope contributes its own mass times how much of it there is.', maths: '(35 × 0.758) + (37 × 0.242)' },
+                { q: 'Work it out', why: 'The first term dominates because there is three times as much chlorine-35.', maths: '26.53 + 8.954 = 35.48' },
+                { q: 'Sanity check', why: 'The answer must land between 35 and 37, and closer to 35 because that one is commoner. It does. If your answer comes out outside that range, you have made an arithmetic slip, and the check takes two seconds.' },
+              ]),
+              p('The published figure is 35.45, using more precise isotope masses than the whole numbers used here. The method is identical.'),
+              h4('The sanity check is the whole lesson'),
+              p('A weighted average must always lie between the smallest and largest values, and must lean towards whichever is commonest. That single fact catches almost every mistake anyone makes in this calculation.'));
+          },
+        },
+        {
+          h: 'What isotopes are used for',
+          body() {
+            return frag(
+              p('Isotopes being chemically identical but physically distinguishable turns out to be enormously useful.'),
+              table(['Use', 'Which isotope', 'How it works'], [
+                ['Carbon dating', 'carbon-14', 'Living things take in carbon-14 from the air while alive and stop when they die. It decays at a known rate, so the amount left dates the sample. Good to about 50 000 years.'],
+                ['Medical imaging', 'technetium-99m', 'Injected, it goes where the body sends it and emits gamma rays that a camera detects. It decays within hours, so it does not linger.'],
+                ['Radiotherapy', 'cobalt-60', 'Its radiation kills dividing cells, and tumour cells divide fastest.'],
+                ['Nuclear power', 'uranium-235', 'Only about 0.7% of natural uranium, and the only part that will sustain a chain reaction — which is why fuel has to be enriched.'],
+                ['Tracing reactions', 'oxygen-18, deuterium', 'Label one atom in a reactant and find out where it ended up. This is how chemists work out reaction mechanisms.'],
+              ]),
+              p('That last one is quietly the most important for chemistry. If you want to know whether the oxygen in the product came from the acid or the alcohol, you make one of them with heavy oxygen and see where it turns up — and it works precisely ', em('because'), ' the labelled atom behaves chemically like the ordinary one.'),
+              callout(b('One clarification. '), 'Not all isotopes are radioactive. Chlorine-35 and chlorine-37 are both perfectly stable, and so are the great majority of isotopes you will meet. Radioactivity is about a nucleus being unstable, which is a separate question from having an unusual number of neutrons.'));
+          },
+        },
+      ],
+      checkpoints: [
+        { kind: 'choice', after: 0,
+          q: 'Chlorine-35 and chlorine-37 form identical compounds and react at identical rates. What does that prove?',
+          options: [
+            { t: 'That neutrons take no part in chemistry.', ok: true,
+              why: 'Exactly, and it is about as direct a piece of evidence as chemistry offers. The only difference between the two atoms is neutrons, and there is no chemical difference at all — so neutrons cannot matter chemically.' },
+            { t: 'That they are the same isotope.', ok: false,
+              why: 'They are different isotopes, with different masses. They are chemically identical, which is a different claim.' },
+            { t: 'That chlorine has no isotopes.', ok: false,
+              why: 'It has two common ones, which is exactly why its atomic mass is 35.45 rather than a whole number.' },
+          ] },
+        { kind: 'numeric', after: 1,
+          q: 'An element is 60% of an isotope with mass 10 and 40% of one with mass 11. What is its average atomic mass?',
+          answer: 10.4, tol: 0.01,
+          right: '10.4 — between 10 and 11 and leaning towards 10, because 10 is commoner. (This is boron, near enough.)',
+          wrong: 'Multiply each mass by its fraction and add. The answer has to land between 10 and 11, nearer the commoner one.' },
+      ],
+      quizzes: [
+        { kind: 'choice', q: 'What is different between two isotopes of the same element?',
+          options: [
+            { t: 'The number of neutrons.', ok: true,
+              why: 'Right. Same protons (so same element), same electrons if neutral (so same chemistry), different neutrons (so different mass).' },
+            { t: 'The number of protons.', ok: false,
+              why: 'That would make it a different element, not a different isotope.' },
+            { t: 'The number of electrons.', ok: false,
+              why: 'That would make it an ion. Isotopes differ in neutrons.' },
+          ] },
+        { kind: 'numeric', q: 'An element has two isotopes: 80% at mass 24 and 20% at mass 26. What is its average atomic mass?', answer: 24.4, tol: 0.01,
+          right: '24.4. Close to 24, because that one is four times as common.',
+          wrong: '(24 × 0.80) + (26 × 0.20). Remember to turn the percentages into fractions.' },
+        { kind: 'numeric', q: 'Copper is 69.2% copper-63 and 30.8% copper-65. What is its average atomic mass?', answer: 63.62, tol: 0.01,
+          right: 'About 63.6, which is what the periodic table says.',
+          wrong: '(63 × 0.692) + (65 × 0.308). The answer must be between 63 and 65 and nearer 63.' },
+        { kind: 'choice', q: 'An element’s average atomic mass is 20.2. It has isotopes at 20 and 22. Which is commoner?',
+          options: [
+            { t: 'Mass 20, by a long way.', ok: true,
+              why: 'Right — the average is very close to 20, so almost all of it must be the mass-20 isotope. This is neon, which is about 90% neon-20.' },
+            { t: 'Mass 22.', ok: false,
+              why: 'Then the average would be nearer 22. A weighted average always leans towards the commoner one.' },
+            { t: 'They are equally common.', ok: false,
+              why: 'Then the average would be 21. The fact that it is 20.2 tells you the mass-20 one dominates.' },
+          ] },
+        { kind: 'choice', q: 'How does carbon dating work?',
+          options: [
+            { t: 'Living things absorb carbon-14 while alive and stop when they die, and it decays at a known rate.', ok: true,
+              why: 'Right. The clock starts at death. Measuring how much carbon-14 is left tells you how long ago that was — up to about 50 000 years, after which too little remains to measure.' },
+            { t: 'Carbon turns into nitrogen at a rate that depends on temperature.', ok: false,
+              why: 'Radioactive decay rates do not depend on temperature, which is exactly what makes them usable as clocks.' },
+            { t: 'The amount of carbon in a body falls over time.', ok: false,
+              why: 'It is the ratio of carbon-14 to ordinary carbon-12 that changes, not the total.' },
+          ] },
+        { kind: 'choice', q: 'Are all isotopes radioactive?',
+          options: [
+            { t: 'No — most of the ones you meet are perfectly stable.', ok: true,
+              why: 'Right. Chlorine-35 and chlorine-37 are both stable and both ordinary. Radioactivity is about an unstable nucleus, which is a separate matter from having an unusual neutron count.' },
+            { t: 'Yes, that is what makes them isotopes.', ok: false,
+              why: 'What makes them isotopes is a different neutron count. Stability is a separate question.' },
+            { t: 'Only the heavy ones.', ok: false,
+              why: 'There is a rough trend that way, and it is not a rule — carbon-14 is light and radioactive, while lead-208 is heavy and stable.' },
+          ] },
+        { kind: 'choice', q: 'Why can chemists use a heavy isotope to trace where an atom goes in a reaction?',
+          options: [
+            { t: 'Because it behaves chemically like the ordinary atom but can be told apart by its mass.', ok: true,
+              why: 'Exactly, and both halves are essential. If it behaved differently the experiment would not represent the real reaction; if it could not be told apart there would be nothing to trace.' },
+            { t: 'Because it glows.', ok: false, why: 'Isotopes do not glow. They are detected by mass, or by their radiation if radioactive.' },
+            { t: 'Because it reacts faster.', ok: false,
+              why: 'There is a tiny rate difference for very light atoms, and it is small enough to ignore. Identical chemistry is the point.' },
+          ] },
+      ],
+      mistakes: [
+        { wrong: 'Forgetting to divide the percentages by 100.',
+          why: 'Multiplying by 75.8 instead of 0.758 gives an answer a hundred times too big. The sanity check catches it instantly: the answer must land between the isotope masses.' },
+        { wrong: 'Taking a plain average instead of a weighted one.',
+          why: 'For chlorine that gives 36 instead of 35.45. The weighting is the entire point — there is three times as much of the light isotope.' },
+        { wrong: 'Thinking isotopes have different chemistry.',
+          why: 'They do not, to any degree that matters. Chemistry is electrons, and isotopes have the same electrons.' },
+        { wrong: 'Assuming isotope means radioactive.',
+          why: 'Most stable elements have several stable isotopes. Radioactivity is about nuclear stability, not neutron count.' },
+      ],
+      recap: [
+        'Isotopes are atoms of one element with different neutron counts: same chemistry, different mass.',
+        'A quoted atomic mass is a weighted average over the natural mixture, which is why it is not a whole number — no single atom weighs 35.45.',
+        'Multiply each isotope mass by its fractional abundance and add. The answer must lie between the extremes and lean towards the commonest.',
+        'Isotopes being chemically identical but physically distinguishable is what makes carbon dating, medical imaging and reaction tracing possible.',
+        'Most isotopes are not radioactive.',
+      ],
+    },
+
+    {
+      id: 'ions',
+      title: 'Ions: why atoms gain and lose electrons',
+      mins: 16,
+      builds_on: ['atomic-number'],
+      hook() {
+        return frag(
+          p('Sodium metal reacts violently with water. Chlorine is a poisonous gas. Yet sodium ions and chloride ions dissolved in water are so harmless that they are the main thing in your blood, and you eat them on chips.'),
+          p('The difference is a single electron, handed from one atom to the other. And after that handover, neither atom behaves anything like it did before.'),
+          p('So: why would an atom give an electron away at all? Nothing is generous about it, and the answer is the reason for nearly all of chemistry.'));
+      },
+      pages: [
+        {
+          h: 'Atoms do what lowers their energy',
+          body() {
+            return frag(
+              p('Here is the principle, and it is worth stating plainly because it explains an enormous amount later.'),
+              callout(b('Everything in nature settles into the lowest-energy arrangement available to it. '), 'A ball rolls downhill. Water finds its level. And an atom will rearrange its electrons if doing so puts it in a lower-energy state.'),
+              p('It turns out that having a ', b('full outer shell'), ' of electrons is a particularly low-energy arrangement. Unit 4 explains why in terms of where the electrons actually sit; for now, take it as the observed fact that it is.'),
+              p('For most of the atoms you will meet, a full outer shell means ', b('eight'), ' electrons. So an atom with a nearly-full shell will grab the one or two it needs, and an atom with a nearly-empty shell will dump the one or two it has — because reaching the full shell either way lowers its energy.'),
+              h4('Which explains the two directions'),
+              table(['Situation', 'Cheaper route', 'Result'], [
+                ['One electron in the outer shell (sodium)', 'Lose it. Finding seven more is hopeless.', 'Na⁺, a positive ion'],
+                ['Seven in the outer shell (chlorine)', 'Gain one. Losing seven is hopeless.', 'Cl⁻, a negative ion'],
+                ['Two in the outer shell (magnesium)', 'Lose both.', 'Mg²⁺'],
+                ['Six in the outer shell (oxygen)', 'Gain two.', 'O²⁻'],
+                ['Already full (neon)', 'Do nothing.', 'no ion — which is why noble gases do not react'],
+                ['Four in the outer shell (carbon)', 'Neither — both are too expensive.', 'shares instead, which is why carbon makes covalent bonds'],
+              ]),
+              p('That table is the whole of ionic chemistry in one picture, and the last two rows are the interesting ones. Noble gases are unreactive because they have nothing to gain. Carbon shares because it is stuck exactly halfway.'));
+          },
+        },
+        {
+          h: 'The signs, which catch everybody',
+          body() {
+            return frag(
+              p('Lose an electron and the atom becomes ', b('positive'), '. That feels backwards the first time — you removed something, so surely it should be less of something.'),
+              p('The trick is to remember that the electron is the ', em('negative'), ' one. Take a negative away and what is left is more positive. The protons have not changed; there is simply one less negative charge to cancel them out.'),
+              eq('charge = protons − electrons'),
+              worked('Sodium loses one electron. What is the ion?', [
+                { q: 'What has sodium got?', why: '11 protons, and as a neutral atom, 11 electrons.' },
+                { q: 'Lose one electron', why: 'Still 11 protons; now 10 electrons.' },
+                { q: 'Net charge', why: 'Eleven positives, ten negatives.', maths: '11 − 10 = +1, so Na⁺' },
+                { q: 'Is it still sodium?', why: 'Yes. The protons did not change, and protons are the identity. It is a sodium ion — chemically nothing like sodium metal, and still the element sodium.' },
+              ]),
+              table(['Name', 'What it is', 'Charge'], [
+                ['Cation', 'an ion that has lost electrons', 'positive'],
+                ['Anion', 'an ion that has gained electrons', 'negative'],
+              ], 'Remember cation with the t as a plus sign, or "paw-sitive cat". Anion has the n of negative.'));
+          },
+        },
+        {
+          h: 'Predicting the charge from the table',
+          body() {
+            return frag(
+              p('The best part: you do not have to learn these. The group number on the periodic table tells you how many outer electrons an atom has, and the charge follows.'),
+              table(['Group', 'Outer electrons', 'Does what', 'Charge'], [
+                ['1', '1', 'loses one', '1+'],
+                ['2', '2', 'loses two', '2+'],
+                ['13', '3', 'loses three', '3+'],
+                ['15', '5', 'gains three', '3−'],
+                ['16', '6', 'gains two', '2−'],
+                ['17', '7', 'gains one', '1−'],
+                ['18', '8 — already full', 'nothing', 'none'],
+              ], 'Groups 14 and the transition metals are the exceptions, for reasons the table below explains.'),
+              p('Notice the symmetry: the charge is the group number for the metals on the left, and the group number minus 18 for the non-metals on the right. Both are just "how far is it from a full shell, and which way is nearer".'),
+              h4('The two sets of exceptions'),
+              p(b('Group 14 '), '— carbon and silicon — sits exactly halfway, so neither gaining four nor losing four is affordable. They share instead. This is why carbon builds molecules rather than salts, and therefore why there is an entire branch of chemistry devoted to it.'),
+              p(b('The transition metals '), 'genuinely take more than one charge: iron is happy as 2+ or 3+, copper as 1+ or 2+. That is not vagueness on the part of the chemistry — it is a real fact about them, and it is exactly why their names carry Roman numerals. Iron(II) chloride and iron(III) chloride are different compounds, and the numeral is there to say which.'),
+              goto('See every element’s charge, with the reason', '#/reference/charges',
+                'Derived from each element’s group rather than stored as a list, so it cannot disagree with the table.'));
+          },
+        },
+      ],
+      checkpoints: [
+        { kind: 'choice', after: 1,
+          q: 'An atom loses an electron. Why does it become positive?',
+          options: [
+            { t: 'Because the electron was the negative part — taking a negative away leaves a surplus of positive.', ok: true,
+              why: 'Exactly. The protons never moved. There is just one fewer negative charge to cancel them, so the balance tips positive.' },
+            { t: 'Because it has less mass.', ok: false,
+              why: 'It does have very slightly less mass, and mass has nothing to do with charge. It is the loss of a negative that makes it positive.' },
+            { t: 'Because it gained a proton.', ok: false,
+              why: 'It did not — and if it had, it would be a different element. Ions come from changing electrons only.' },
+          ] },
+        { kind: 'choice', after: 2,
+          q: 'Why do noble gases not form ions?',
+          options: [
+            { t: 'Their outer shell is already full, so there is nothing to gain by changing.', ok: true,
+              why: 'Right, and that is the whole explanation for their unreactivity. Everything else is doing chemistry in order to reach the arrangement they already have.' },
+            { t: 'They are too heavy.', ok: false,
+              why: 'Helium is the second lightest element there is. Weight is not the reason.' },
+            { t: 'They have no electrons to lose.', ok: false,
+              why: 'They have plenty — xenon has 54. They are held tightly because the shell is complete.' },
+          ] },
+      ],
+      quizzes: [
+        { kind: 'choice', q: 'Sodium is in group 1. What ion does it form?',
+          options: [
+            { t: 'Na⁺', ok: true, why: 'One electron in the outer shell, so it loses it. Group 1 always gives 1+.' },
+            { t: 'Na⁻', ok: false, why: 'To gain a full shell by taking electrons it would need seven more, which is far harder than losing one.' },
+            { t: 'Na²⁺', ok: false, why: 'It has only one outer electron to lose. Taking a second would have to break into a full shell underneath.' },
+          ] },
+        { kind: 'choice', q: 'Oxygen is in group 16. What ion does it form?',
+          options: [
+            { t: 'O²⁻', ok: true, why: 'Six outer electrons, two short of eight, so it gains two.' },
+            { t: 'O²⁺', ok: false, why: 'Losing six electrons is hopeless when gaining two will do.' },
+            { t: 'O⁻', ok: false, why: 'One is not enough — it needs two to complete the shell.' },
+          ] },
+        { kind: 'count', q: 'An Mg²⁺ ion. How many electrons does it have? (Magnesium has 12 protons.)', answer: 10,
+          right: '10. Twelve protons, and it has lost two electrons, so 12 − 2 = 10 — the same as neon, which is the point.',
+          wrong: 'Start from the neutral atom’s 12 electrons and remove as many as the positive charge says.',
+          hints: { 12: 'That is the neutral atom. The 2+ means two electrons have gone.', 14: 'A positive charge means electrons were lost, not gained.' } },
+        { kind: 'count', q: 'A Cl⁻ ion. How many electrons? (Chlorine has 17 protons.)', answer: 18,
+          right: '18 — one more than its 17 protons, which is what makes it negative. And 18 is argon’s count, which is exactly what it was after.',
+          wrong: 'A negative charge means it gained electrons.',
+          hints: { 16: 'Negative means gained, so the count goes up from 17, not down.' } },
+        { kind: 'choice', q: 'Why does iron need a Roman numeral in its name but sodium does not?',
+          options: [
+            { t: 'Because iron genuinely takes more than one charge and sodium only ever takes 1+.', ok: true,
+              why: 'Right. Iron(II) and iron(III) compounds are different substances, so the name has to say which. Sodium is 1+ every time, so there is nothing to disambiguate.' },
+            { t: 'Because iron is a transition metal and they all need numerals.', ok: false,
+              why: 'Nearly all do, and a handful — zinc, silver, cadmium — take only one charge and are named without one. The numeral is there when it is needed.' },
+            { t: 'Because iron is heavier.', ok: false, why: 'Weight has nothing to do with it.' },
+          ] },
+        { kind: 'choice', q: 'Why does carbon not form ions readily?',
+          options: [
+            { t: 'It has four outer electrons, so gaining four and losing four are both too expensive. It shares instead.', ok: true,
+              why: 'Exactly, and that is why carbon builds molecules rather than salts — and therefore why organic chemistry exists as a subject at all.' },
+            { t: 'It is unreactive.', ok: false,
+              why: 'Carbon is extremely versatile chemically. It just does its chemistry by sharing.' },
+            { t: 'Its shell is already full.', ok: false,
+              why: 'Four out of eight is exactly half. Being halfway is what makes both routes unattractive.' },
+          ] },
+        { kind: 'sort', q: 'Sort these into what they form.',
+          categories: ['Forms a positive ion', 'Forms a negative ion', 'Forms no ion'],
+          items: [
+            { t: 'Sodium', cat: 'Forms a positive ion' }, { t: 'Magnesium', cat: 'Forms a positive ion' },
+            { t: 'Aluminium', cat: 'Forms a positive ion' }, { t: 'Chlorine', cat: 'Forms a negative ion' },
+            { t: 'Oxygen', cat: 'Forms a negative ion' }, { t: 'Nitrogen', cat: 'Forms a negative ion' },
+            { t: 'Neon', cat: 'Forms no ion' }, { t: 'Argon', cat: 'Forms no ion' },
+          ],
+          right: 'Yes. Metals on the left lose; non-metals on the right gain; noble gases already have what everyone else is after.',
+          wrong: 'Ask which side of the table it is on, and therefore whether it is nearer a full shell by gaining or by losing.' },
+      ],
+      practice: 'ion-charge',
+      mistakes: [
+        { wrong: 'Thinking losing an electron makes an atom negative.',
+          why: 'The electron is the negative part. Removing it leaves the positive protons less cancelled, so the ion is positive. Losing a negative makes you more positive.' },
+        { wrong: 'Thinking an ion is a different element.',
+          why: 'Na and Na⁺ are both sodium — same protons. Only the electrons changed. Their chemistry is utterly different and their identity is the same.' },
+        { wrong: 'Trying to predict a transition metal’s charge from its group.',
+          why: 'It genuinely varies, which is why the Roman numeral exists. For iron, copper, lead and the rest, you read the charge off the name or work it out backwards from the formula.' },
+        { wrong: 'Expecting group 14 to form 4+ or 4− ions.',
+          why: 'Both are far too expensive. Carbon and silicon share electrons instead, and that choice is the foundation of organic chemistry.' },
+      ],
+      recap: [
+        'Atoms settle into the lowest-energy arrangement available, and a full outer shell — usually eight electrons — is a low-energy arrangement.',
+        'So an atom close to full grabs the electrons it needs, and an atom with almost none dumps what it has. Whichever is cheaper.',
+        'Losing electrons makes a positive ion (a cation); gaining them makes a negative one (an anion). Charge = protons − electrons.',
+        'The group number tells you the charge for the main-group elements, so there is nothing to memorise.',
+        'Group 14 shares instead, and the transition metals genuinely take several charges — which is why their names carry Roman numerals.',
+      ],
+    },
+
+    ],
+  });
+})();
+
+
+/* ================= lessons/04-electrons.js ================= */
+/* Unit 4: Electrons and where they live. */
+(function () {
+  'use strict';
+  const ME = window.ME;
+  const K = ME.kit;
+  const { p, b, em, h4, frag, term, callout, eq, table, worked, figure, goto } = K;
+  const el = ME.el;
+
+  ME.course.unit({
+    n: 4, id: 'electrons',
+    title: 'Electrons and where they live',
+    blurb: 'The electrons do all the chemistry, so where they sit decides everything. This unit is the one that makes the periodic table stop being a list.',
+    lessons: [
+
+    {
+      id: 'energy-levels',
+      title: 'Energy levels: why electrons cannot sit anywhere',
+      mins: 16,
+      builds_on: ['atom-story'],
+      hook() {
+        return frag(
+          p('Heat sodium in a flame and it glows a particular orange — the same orange as an old street lamp. Heat copper and you get green. Heat lithium and you get crimson.'),
+          p('Not a spread of colours. One specific colour, the same every time, precise enough that astronomers use it to work out what distant stars are made of.'),
+          p('If electrons could have any energy at all, heating an atom would give a smear across the whole spectrum. Sharp single colours mean the energies available are not continuous. They come in steps.'));
+      },
+      pages: [
+        {
+          h: 'The staircase, not the ramp',
+          body() {
+            return frag(
+              p('An electron in an atom cannot have just any energy. It can only have one of a specific set of values — like standing on a staircase rather than a ramp. There are steps, and there is nothing in between them.'),
+              p('These allowed energies are ', b('energy levels'), ', or shells. They are numbered outwards from the nucleus: level 1 is closest and lowest in energy, level 2 next, and so on.'),
+              p('Why lowest at the bottom? Because the nucleus is positive and the electron is negative, so they attract. Being close is comfortable and low-energy. Getting further away means fighting that attraction, which costs energy — in the same way that lifting something costs energy against gravity.'),
+              h4('And that is where the colours come from'),
+              p('Give an atom energy — heat it, or pass electricity through it — and an electron can jump up a level. It does not stay there; it falls back almost immediately, and as it falls it releases the energy it gained as light.'),
+              callout(b('And here is the point. '), 'The gap between two specific levels is a specific amount of energy, and a specific amount of energy is a specific colour of light. So a sodium atom can only emit certain colours, because it only has certain gaps. That orange street-lamp glow is one particular electron falling one particular step, in every sodium atom, every time.'),
+              p('Which is why this is so useful: every element has its own set of gaps, and therefore its own fingerprint of colours. Split the light from a star and you can read off which elements are in it, from here. Helium was discovered in the Sun before anybody found it on Earth.'));
+          },
+        },
+        {
+          h: 'How many fit in each level',
+          body() {
+            return frag(
+              p('Each level holds a limited number of electrons, and once it is full the next electron has to go further out.'),
+              table(['Level', 'Holds up to', 'Full when the element is'], [
+                ['1', '2', 'helium'],
+                ['2', '8', 'neon'],
+                ['3', '8 in practice for the first 20 elements', 'argon'],
+                ['4', '8, then more once the d-block starts filling', 'krypton'],
+              ], 'The pattern 2, 8, 8 will get you correctly through the first twenty elements, which is most of what school chemistry needs.'),
+              p('The third level is the one that is more complicated than it looks. It can hold 18 in total, but the first 8 go in, then level 4 starts, and only then does level 3 finish. That out-of-order filling is what produces the transition metals, and the next lesson explains why.'),
+              callout(b('For now: 2, 8, 8. '), 'It is not the whole truth and it is right for every element up to calcium, which covers the vast majority of the chemistry in this course.'),
+              h4('Which explains the periodic table’s shape'),
+              p('Count the levels and their capacities and the table’s rows appear on their own. Two elements before level 1 is full — hence a first row of only two. Eight more before level 2 is full — hence a row of eight. Eight more again — another row of eight.'),
+              p('The table is not a convenient arrangement somebody chose. It is what happens when you write the elements out in order and start a new line every time a shell fills up.'));
+          },
+        },
+        {
+          h: 'And why this makes a full shell special',
+          body() {
+            return frag(
+              p('The last unit asserted that a full outer shell is a low-energy arrangement, and asked you to take it on trust. Here is the reason.'),
+              p('Electrons fill from the bottom up, because low is comfortable. Once a level is complete, the next electron has no choice but to start a new level, much further out — which is a big jump in energy, and therefore a substantial cost.'),
+              p('So a full shell sits at the bottom of a steep step. Adding to it is expensive because the next place is far away; taking from it is expensive because you are pulling an electron out of a comfortable, tightly held arrangement.'),
+              eq('full shell = at the bottom of a step, with the next step a long way up'),
+              p('That is what stability means here. Not that the atom is inert by nature, but that both of its options — gain or lose — cost more energy than they return.'),
+              callout(b('And it explains the group 1 metals’ violence. '), 'Sodium has one lonely electron in a brand new level, sitting at the top of the step, a long way from the nucleus and shielded from it by everything underneath. It is barely held on at all. Which is why sodium will hand it to almost anything, including water, with a bang.'));
+          },
+        },
+      ],
+      checkpoints: [
+        { kind: 'choice', after: 0,
+          q: 'Why does sodium glow one specific orange rather than a spread of colours?',
+          options: [
+            { t: 'Because the gap between two of its energy levels is one specific size, and one specific energy is one specific colour.', ok: true,
+              why: 'Exactly. Sharp lines are direct evidence that the allowed energies come in steps. A ramp would give a smear; a staircase gives lines.' },
+            { t: 'Because sodium is orange.', ok: false,
+              why: 'Sodium metal is silvery. The orange is emitted light, from electrons falling between levels.' },
+            { t: 'Because the flame is orange.', ok: false,
+              why: 'A gas flame is blue. Drop sodium in and it turns orange, and drop lithium in and it turns crimson — the colour comes from the metal.' },
+          ] },
+        { kind: 'choice', after: 2,
+          q: 'Why is sodium so reactive?',
+          options: [
+            { t: 'Its single outer electron sits in a new level, far from the nucleus and shielded from it, so it is barely held.', ok: true,
+              why: 'Right. Being at the top of a step with everything underneath getting in the way makes that electron cheap to give away — which is exactly what sodium does, violently.' },
+            { t: 'Because it is a soft metal.', ok: false,
+              why: 'It is soft, and that is a consequence of weak metallic bonding rather than the cause of its reactivity.' },
+            { t: 'Because it has a lot of electrons.', ok: false,
+              why: 'It has eleven, which is not many. What matters is where the outermost one sits.' },
+          ] },
+      ],
+      quizzes: [
+        { kind: 'count', q: 'How many electrons fit in the first energy level?', answer: 2,
+          right: 'Two — which is why helium, with two, is already full and completely unreactive.',
+          wrong: 'The first level is the small one.', hints: { 8: 'That is the second level. The first is smaller.' } },
+        { kind: 'count', q: 'How many electrons fit in the second energy level?', answer: 8,
+          right: 'Eight — which is why the second row of the periodic table has eight elements in it.',
+          wrong: 'Think about how many elements there are in the second row of the table.' },
+        { kind: 'choice', q: 'What happens when an electron falls from a higher level to a lower one?',
+          options: [
+            { t: 'It releases the energy difference as light.', ok: true,
+              why: 'Right, and the colour of that light is set by the size of the gap. It is how flame tests work, how neon signs work, and how we know what stars are made of.' },
+            { t: 'It absorbs energy.', ok: false, why: 'Absorbing energy makes it jump up. Falling releases.' },
+            { t: 'Nothing observable.', ok: false, why: 'It is extremely observable — it is light.' },
+          ] },
+        { kind: 'choice', q: 'Why does an electron further from the nucleus have more energy?',
+          options: [
+            { t: 'Because it has been moved against the nucleus’s attraction, which costs energy.', ok: true,
+              why: 'Yes — the same logic as lifting something against gravity. Further out means more energy stored.' },
+            { t: 'Because it moves faster.', ok: false,
+              why: 'Outer electrons actually move more slowly on average. The energy is in the separation.' },
+            { t: 'Because it is bigger.', ok: false, why: 'Electrons are all identical. Only their position and energy differ.' },
+          ] },
+        { kind: 'choice', q: 'Helium was discovered in the Sun before it was found on Earth. How?',
+          options: [
+            { t: 'Its emission lines appeared in sunlight and matched no known element.', ok: true,
+              why: 'Right — in 1868, during an eclipse. Every element has its own set of energy gaps and therefore its own fingerprint of colours, which is readable from 150 million kilometres away.' },
+            { t: 'A probe brought some back.', ok: false, why: 'Nothing has ever been to the Sun and back. This was done with a prism.' },
+            { t: 'It was predicted mathematically.', ok: false,
+              why: 'It was seen, in the spectrum. The name comes from helios, the Greek for sun.' },
+          ] },
+        { kind: 'choice', q: 'What does it actually mean to say a full outer shell is "stable"?',
+          options: [
+            { t: 'That both gaining and losing an electron would cost more energy than they return.', ok: true,
+              why: 'Right, and that is a much more useful way to hold it than "atoms want eight electrons". Nothing wants anything — it is simply that neither option pays.' },
+            { t: 'That the atom cannot react at all.', ok: false,
+              why: 'Xenon can be made to react under pressure with fluorine. Stability is about cost, not impossibility.' },
+            { t: 'That the electrons stop moving.', ok: false, why: 'They do not stop. Stability is about energy, not motion.' },
+          ] },
+        { kind: 'order', q: 'Order these by energy, lowest first.',
+          items: ['An electron in level 1', 'An electron in level 2', 'An electron in level 3', 'An electron removed from the atom entirely'],
+          right: 'Yes. Each step out costs energy, and removing it altogether costs the most — that cost is the ionisation energy, which Unit 5 measures.',
+          wrong: 'Further from the nucleus means more energy, because you have worked against the attraction to get there.' },
+      ],
+      mistakes: [
+        { wrong: 'Thinking atoms "want" a full shell.',
+          why: 'Convenient shorthand and worth unlearning. Atoms do not want anything. They end up in low-energy arrangements for the same reason water ends up at the bottom of a hill, and a full shell happens to be one.' },
+        { wrong: 'Picturing energy levels as physical orbits at fixed distances.',
+          why: 'They are energies, not paths. The next lesson gets closer to what the shape really is, and the important thing here is the ordering: higher level, more energy, further out on average.' },
+        { wrong: 'Assuming the 2, 8, 8 rule holds for every element.',
+          why: 'It is right up to calcium and then the third level goes back to filling. That out-of-order filling is what makes the transition metals, and it is the next lesson.' },
+      ],
+      recap: [
+        'Electrons can only have certain energies — a staircase, not a ramp. The evidence is that heated atoms emit sharp single colours rather than a smear.',
+        'The gap between two levels is a fixed energy, and a fixed energy is a fixed colour. So every element has its own fingerprint of colours, readable across the galaxy.',
+        'Levels fill from the bottom up: 2, then 8, then 8 for the first twenty elements. That is why the periodic table has the rows it has.',
+        'A full shell is stable because it sits at the bottom of a steep step — adding means starting a distant new level, and removing means pulling from a tightly held one.',
+      ],
+    },
+
+    {
+      id: 'orbitals',
+      title: 'Orbitals: the shapes electrons actually occupy',
+      mins: 16,
+      builds_on: ['energy-levels'],
+      hook() {
+        return frag(
+          p('The picture of electrons circling the nucleus like planets is on every textbook cover, and it is wrong in an interesting way.'),
+          p('It is not wrong about the energies. It is wrong about the paths — because electrons do not have paths. You cannot say where an electron is; you can only say where it probably is.'),
+          p('And the shapes of those probability regions turn out to matter enormously, because they are the reason molecules have shapes at all.'));
+      },
+      pages: [
+        {
+          h: 'A region, not a route',
+          body() {
+            return frag(
+              p('An ', term('orbital', 'A region around the nucleus where an electron is likely to be found, with a definite shape and a definite energy. It holds at most two electrons.'), ' is a region where an electron is likely to be. Not a track it runs along — a cloud of probability, denser where the electron spends more of its time.'),
+              p('This is genuinely strange and worth being honest about. It is not that we do not know where the electron is and could find out with better equipment. On the scale of an atom, having a definite position is simply not something an electron does. That is uncomfortable, it is what the experiments say, and for chemistry the consequence is manageable: work with the regions and their shapes.'),
+              callout(b('Every orbital holds at most two electrons. '), 'Two, and no more, ever. That one fact drives the whole filling pattern, and therefore the whole periodic table.'));
+          },
+        },
+        {
+          h: 'The four shapes',
+          body() {
+            return frag(
+              p('Orbitals come in a few shapes, labelled with letters for historical reasons.'),
+              table(['Type', 'Shape', 'How many of them', 'Electrons held'], [
+                ['s', 'a sphere', '1 per level', '2'],
+                ['p', 'a dumbbell, two lobes either side of the nucleus', '3 per level, at right angles to each other', '6'],
+                ['d', 'four lobes, mostly', '5 per level', '10'],
+                ['f', 'complicated', '7 per level', '14'],
+              ]),
+              p('The s orbital is spherical, so an electron in one is equally likely in any direction. The p orbitals are the first ones with a direction: three of them, pointing along x, y and z, at right angles.'),
+              callout(b('And that is where molecular shape comes from. '), 'The p orbitals point at right angles, so the bonds an atom makes using them point in particular directions too — which is why water is bent and methane is a tetrahedron rather than everything being flat and arbitrary. Unit 6 builds shapes properly, and this is the foundation of it.'),
+              p('You can see the real shapes, rotating, in the Elements tab: each element shows the orbital types it actually uses.'),
+              goto('See the 3D orbitals', '#/elements/C', 'Carbon uses s and p. Drag them round.'));
+          },
+        },
+        {
+          h: 'Why the levels hold the numbers they do',
+          body() {
+            return frag(
+              p('The capacities from the last lesson — 2, 8, 8 — now stop being arbitrary. They are just the orbitals added up.'),
+              table(['Level', 'Orbitals available', 'Electrons'], [
+                ['1', 'one s', '2'],
+                ['2', 'one s, three p', '2 + 6 = 8'],
+                ['3', 'one s, three p, five d', '2 + 6 + 10 = 18'],
+                ['4', 'one s, three p, five d, seven f', '2 + 6 + 10 + 14 = 32'],
+              ], 'Two electrons per orbital, every time. The capacities follow.'),
+              p('So level 2 holds eight because it has four orbitals, and four orbitals hold eight electrons. Nothing was decided; it was counted.'),
+              h4('And the out-of-order filling'),
+              p('Level 3 can hold 18, but the row of the periodic table it belongs to has only 8 elements. The reason is that the 3d orbitals are ', b('higher in energy than the 4s'), ' — the levels overlap.'),
+              p('Electrons fill lowest-energy first, so after 3s and 3p are full, the next cheapest place is 4s, not 3d. Only when 4s is full do the 3d orbitals start filling — and those ten elements are the first row of transition metals.'),
+              callout(b('So the transition metals are the d orbitals filling late. '), 'That is the whole explanation for that block of the table existing, and for it being ten wide.'));
+          },
+        },
+      ],
+      checkpoints: [
+        { kind: 'count', after: 1,
+          q: 'How many electrons can a single orbital hold?',
+          answer: 2,
+          right: 'Two. Always, whatever type it is — and this one fact generates the whole filling pattern.',
+          wrong: 'The same number for every orbital, whatever its shape.',
+          hints: { 8: 'That is a whole level of s and p together, not one orbital.',
+                   6: 'That is all three p orbitals together. One on its own holds fewer.',
+                   1: 'One more than that — two electrons can share an orbital.' } },
+        { kind: 'choice', after: 2,
+          q: 'Why does the third row of the periodic table have 8 elements when level 3 can hold 18 electrons?',
+          options: [
+            { t: 'Because the 3d orbitals are higher in energy than the 4s, so level 4 starts before level 3 finishes.', ok: true,
+              why: 'Exactly. Electrons take the cheapest available place, and after 3p that is 4s. The 3d orbitals fill afterwards, and those ten elements are the first transition metals.' },
+            { t: 'Because level 3 only holds 8.', ok: false,
+              why: 'It holds 18 — one s, three p and five d. It just does not fill all at once.' },
+            { t: 'Because the table was drawn that way for convenience.', ok: false,
+              why: 'The shape is forced by the filling order, not chosen. The overlap between levels 3 and 4 is a real energy fact.' },
+          ] },
+      ],
+      quizzes: [
+        { kind: 'match', q: 'Match each orbital type to its shape.',
+          pairs: [['s', 'a sphere'], ['p', 'a dumbbell with two lobes'], ['d', 'usually four lobes'], ['f', 'complicated']],
+          right: 'Yes. The s is the only spherical one, which is why it has no direction and the p orbitals do.',
+          wrong: 'The simplest shape goes with the simplest letter.' },
+        { kind: 'count', q: 'How many p orbitals are there in a given energy level?', answer: 3,
+          right: 'Three, at right angles to each other along x, y and z — which is where molecular shapes come from.',
+          wrong: 'Think about how many directions are at right angles in three dimensions.',
+          hints: { 6: 'That is how many electrons three p orbitals hold. The question is how many orbitals.' } },
+        { kind: 'count', q: 'How many electrons can the five d orbitals hold altogether?', answer: 10,
+          right: '10 — five orbitals, two each. Which is why there are ten transition metals in each row.',
+          wrong: 'Five orbitals, two electrons each.' },
+        { kind: 'choice', q: 'Why is water a bent molecule rather than a straight one?',
+          options: [
+            { t: 'Because the orbitals oxygen uses point in particular directions rather than anywhere.', ok: true,
+              why: 'Right — this is the foundation and Unit 6 finishes the job. If orbitals had no directions, molecular shape would be arbitrary, and it is not.' },
+            { t: 'Because the hydrogens repel each other.', ok: false,
+              why: 'They do repel, and that alone would push them to opposite sides and make it straight. The directional orbitals are why it is bent.' },
+            { t: 'Because water is a liquid.', ok: false, why: 'The shape of the molecule is the same in ice, water and steam.' },
+          ] },
+        { kind: 'choice', q: 'What does it mean to say an electron has no definite position?',
+          options: [
+            { t: 'That having a definite position is not something an electron does, not merely that we cannot measure it.', ok: true,
+              why: 'Right, and it is worth sitting with how odd that is. Better instruments would not help. What an orbital gives you is a probability distribution, and that turns out to be enough for all of chemistry.' },
+            { t: 'That our instruments are not good enough yet.', ok: false,
+              why: 'This is the natural reading and it is not what the physics says. The indefiniteness is a property of the electron, not of the equipment.' },
+            { t: 'That electrons move too fast to see.', ok: false,
+              why: 'Speed is not the issue. Even in principle, with unlimited time, there is no definite position to find.' },
+          ] },
+        { kind: 'numeric', q: 'A level has one s, three p and five d orbitals. How many electrons can it hold in total?', answer: 18, tol: 0.001,
+          right: '18. Nine orbitals, two electrons each.',
+          wrong: 'Count the orbitals first, then double it.' },
+        { kind: 'choice', q: 'Why do the transition metals exist as a block ten elements wide?',
+          options: [
+            { t: 'Because the five d orbitals hold ten electrons, and they fill after the s orbital of the next level up.', ok: true,
+              why: 'Right — ten electrons to place means ten elements in the block, and the late filling is why it sits where it does in the table.' },
+            { t: 'Because there are ten useful metals.', ok: false,
+              why: 'The number comes from orbital capacity, not from usefulness.' },
+            { t: 'Because they all have ten outer electrons.', ok: false,
+              why: 'They have one or two outer electrons; it is the d orbitals underneath that are filling.' },
+          ] },
+      ],
+      mistakes: [
+        { wrong: 'Picturing electrons on circular tracks.',
+          why: 'There are no tracks. An orbital is a region of probability with a shape. The planetary picture gets the energies right and the geometry wrong, and the geometry is what shapes molecules.' },
+        { wrong: 'Thinking an orbital and an energy level are the same thing.',
+          why: 'A level contains several orbitals. Level 2 has four of them — one s and three p — which is why it holds eight electrons rather than two.' },
+        { wrong: 'Assuming levels fill strictly in order.',
+          why: '4s fills before 3d, because it is lower in energy. The overlap is exactly what creates the transition metals.' },
+      ],
+      recap: [
+        'An orbital is a region of probability with a definite shape and energy, and it holds at most two electrons — always two.',
+        'Shapes: s is a sphere, p is a dumbbell and there are three of them at right angles, d has five, f has seven.',
+        'The level capacities 2, 8, 18, 32 are just the orbitals counted and doubled.',
+        'The p orbitals pointing in particular directions is why molecules have shapes at all.',
+        '4s is lower in energy than 3d, so levels overlap — and that late d filling is exactly what the transition metals are.',
+      ],
+    },
+
+    {
+      id: 'configurations',
+      title: 'Electron configurations, and the filling order',
+      mins: 18,
+      builds_on: ['orbitals'],
+      hook() {
+        return frag(
+          p('There is an exam question that looks like memorisation and is not: "write the electron configuration of iron".'),
+          p('The answer is 1s² 2s² 2p⁶ 3s² 3p⁶ 4s² 3d⁶, and you can work it out from a diagram you can draw from scratch in ten seconds.'),
+          p('More usefully, once you can do it, the periodic table’s entire shape and most of its chemistry becomes obvious rather than something to learn.'));
+      },
+      pages: [
+        {
+          h: 'The notation',
+          body() {
+            return frag(
+              p('A configuration is a list of which orbitals hold how many electrons, written in filling order.'),
+              eq('1s² 2s² 2p⁶'),
+              p('Read it as three pieces of information each time: the ', b('number'), ' is the energy level, the ', b('letter'), ' is the orbital type, and the ', b('superscript'), ' is how many electrons are in it.'),
+              p('So 2p⁶ means: level 2, the p orbitals, holding six electrons. Since there are three p orbitals and each holds two, six means they are full.'),
+              table(['Element', 'Electrons', 'Configuration'], [
+                ['hydrogen', '1', '1s¹'],
+                ['helium', '2', '1s² — level 1 is now full'],
+                ['lithium', '3', '1s² 2s¹ — a new level starts'],
+                ['carbon', '6', '1s² 2s² 2p²'],
+                ['neon', '10', '1s² 2s² 2p⁶ — level 2 full'],
+                ['sodium', '11', '1s² 2s² 2p⁶ 3s¹ — a new level again'],
+              ]),
+              callout(b('Look at lithium and sodium. '), 'Both end in a lone electron in a brand new s orbital. That is why they behave so similarly, and why they are in the same group. The configuration explains the family.'));
+          },
+        },
+        {
+          h: 'The filling order, and a diagram you can draw',
+          body() {
+            return frag(
+              p('Electrons fill the lowest-energy orbital available. The awkward part is that the order is not simply 1, 2, 3 — because 4s is below 3d, as the last lesson explained.'),
+              p('The actual order is:'),
+              eq('1s 2s 2p 3s 3p 4s 3d 4p 5s 4d 5p 6s 4f 5d 6p 7s 5f 6d'),
+              p('Nobody memorises that. You get it from a diagram: write the levels in rows, with the orbital types each one has, then read the diagonals.'),
+              figure('Write the rows, then read diagonally down-left to up-right. Each arrow gives the next few orbitals in order.',
+                el('pre', { class: 'lesson-pre', text:
+'1s\n2s 2p\n3s 3p 3d\n4s 4p 4d 4f\n5s 5p 5d 5f\n6s 6p 6d\n7s 7p' })),
+              p('Follow the diagonals and out comes 1s, then 2s, then 2p and 3s, then 3p and 4s, then 3d and 4p and 5s, and so on. It takes ten seconds to draw and removes any need to remember the sequence.'),
+              h4('Two rules for filling within a set'),
+              p(b('One at a time first. '), 'Given three empty p orbitals and three electrons, they go one into each rather than two into one. Electrons repel, so spreading out is lower in energy. Only when every orbital in the set has one does pairing start.'),
+              p(b('Two per orbital, no more. '), 'Which is the rule from the last lesson, and sets every capacity.'),
+              p('You can see both rules drawn out for any element in the Elements tab, as boxes with arrows.'));
+          },
+        },
+        {
+          h: 'Working them out, including the shorthand',
+          body() {
+            return frag(
+              worked('Write the configuration of sulfur, which has 16 electrons.', [
+                { q: 'Fill in order from the diagonal diagram', why: '1s takes 2, leaving 14. 2s takes 2, leaving 12. 2p takes 6, leaving 6. 3s takes 2, leaving 4. 3p can take 6 and only 4 are left, so it gets 4.' },
+                { q: 'Write it out', why: 'Check the superscripts add to 16.', maths: '1s² 2s² 2p⁶ 3s² 3p⁴' },
+                { q: 'What does it tell you?', why: 'The outer level has 2 + 4 = 6 electrons, two short of eight. So sulfur gains two electrons and forms S²⁻ — which you could also have read off its group.' },
+              ]),
+              worked('Write the configuration of iron, which has 26 electrons.', [
+                { q: 'Follow the order, watching the 4s and 3d swap', why: '1s² 2s² 2p⁶ 3s² 3p⁶ accounts for 18. Next in order is 4s, which takes 2, leaving 6. Then 3d, which takes the remaining 6.' },
+                { q: 'Write it out', why: '2+2+6+2+6+2+6 = 26.', maths: '1s² 2s² 2p⁶ 3s² 3p⁶ 4s² 3d⁶' },
+                { q: 'And why iron can be 2+ or 3+', why: 'Its outermost electrons are the two in 4s, which come off first to give Fe²⁺. A 3d electron can also be removed without much extra cost, giving Fe³⁺. That near-equal cost is the whole reason transition metals have variable charges.' },
+              ]),
+              h4('The noble gas shorthand'),
+              p('Writing out the first eighteen every time is tedious, so you can abbreviate any full noble-gas core in square brackets.'),
+              eq('iron:  [Ar] 4s² 3d⁶'),
+              p('[Ar] stands for argon’s entire configuration, 1s² 2s² 2p⁶ 3s² 3p⁶. This is not just laziness — it puts the chemically interesting electrons at the front where you can see them, and buries the ones that never do anything.'),
+              goto('See any element’s configuration, drawn out', '#/elements/Fe',
+                'With the shell diagram and the orbital boxes, and the noble-gas core expanded.'));
+          },
+        },
+      ],
+      checkpoints: [
+        { kind: 'choice', after: 1,
+          q: 'You have three empty p orbitals and three electrons to place. Where do they go?',
+          options: [
+            { t: 'One in each, because electrons repel and spreading out is lower in energy.', ok: true,
+              why: 'Right. Pairing two into one orbital forces two negative charges into the same region, which costs energy. They only pair up once every orbital in the set has one.' },
+            { t: 'Two in the first, one in the second.', ok: false,
+              why: 'That pairs two electrons unnecessarily while an orbital sits empty. Spreading out first is cheaper.' },
+            { t: 'All three in the first.', ok: false, why: 'An orbital holds two at most, whatever else is going on.' },
+          ] },
+        { kind: 'fillstep', after: 2,
+          q: 'Complete the configuration of chlorine, which has 17 electrons.',
+          steps: [
+            { text: '1s² 2s² 2p⁶ 3s² accounts for 12 electrons.' },
+            { text: 'That leaves 5, and the next orbitals in order are the 3p set.' },
+            { blank: true, before: 'So the configuration ends in 3p', after: '' },
+          ],
+          numeric: true, answer: 5, tol: 0.001,
+          right: '3p⁵. Five electrons in the p orbitals — one short of the six that would fill them, which is exactly why chlorine grabs one electron and forms Cl⁻.',
+          wrong: '17 electrons, and 12 are used up before the 3p set. How many are left?' },
+      ],
+      quizzes: [
+        { kind: 'name', mode: 'name', q: 'Write the electron configuration of nitrogen (7 electrons). Use the form 1s2 2s2 2p3.',
+          answer: '1s2 2s2 2p3', also: ['1s² 2s² 2p³', '1s22s22p3'],
+          right: '1s² 2s² 2p³. And note the three p electrons sit one in each orbital, which is what makes nitrogen form three bonds.',
+          wrong: 'Fill 1s, then 2s, then 2p, and check the superscripts add to 7.' },
+        { kind: 'name', mode: 'name', q: 'Write the electron configuration of calcium (20 electrons).',
+          answer: '1s2 2s2 2p6 3s2 3p6 4s2', also: ['1s² 2s² 2p⁶ 3s² 3p⁶ 4s²', '[Ar] 4s2', '[Ar]4s2'],
+          right: '1s² 2s² 2p⁶ 3s² 3p⁶ 4s², or [Ar] 4s² for short. The 4s fills before the 3d.',
+          wrong: 'After 3p⁶ you have 18 electrons. The next orbital in the filling order is 4s, not 3d.' },
+        { kind: 'count', q: 'How many electrons are in the outer level of an atom with configuration 1s² 2s² 2p⁶ 3s² 3p⁴?', answer: 6,
+          right: 'Six — the 3s² and 3p⁴ together. Two short of eight, so this element gains two electrons. It is sulfur.',
+          wrong: 'Add up the electrons in the highest-numbered level.',
+          hints: { 4: 'The 3s electrons are in the outer level too, not just the 3p ones.',
+                   16: 'That is the total for the whole atom. The question is about the outermost level only.' } },
+        { kind: 'choice', q: 'Why does 4s fill before 3d?',
+          options: [
+            { t: 'Because 4s is lower in energy than 3d, and electrons take the cheapest place available.', ok: true,
+              why: 'Right. The levels overlap in energy, so the level number is not a reliable guide to the order — which is exactly why the diagonal diagram exists.' },
+            { t: 'Because 4s is closer to the nucleus.', ok: false,
+              why: 'It is further out on average. Energy, not distance, decides the order — and the two do not always agree.' },
+            { t: 'Because 3d does not exist until later.', ok: false,
+              why: 'The orbitals exist regardless; the question is only which one an electron goes into first.' },
+          ] },
+        { kind: 'choice', q: 'What does [Ne] 3s² 3p⁵ mean?',
+          options: [
+            { t: 'Argon’s... no — neon’s ten electrons, plus seven more in level 3. It is chlorine.', ok: true,
+              why: 'Right: 10 + 2 + 5 = 17, which is chlorine. The shorthand hides the ten electrons that never do any chemistry and shows the seven that do.' },
+            { t: 'An atom with only seven electrons.', ok: false,
+              why: 'The bracket stands for a full ten electrons of neon on top of the seven shown.' },
+            { t: 'Neon bonded to something.', ok: false,
+              why: 'It is a shorthand for a configuration, not a compound. Neon does not bond.' },
+          ] },
+        { kind: 'choice', q: 'Lithium is 1s² 2s¹ and sodium is 1s² 2s² 2p⁶ 3s¹. Why do they behave so similarly?',
+          options: [
+            { t: 'Both end in a single electron in a fresh s orbital, and the outer electrons are what does the chemistry.', ok: true,
+              why: 'Exactly. The inner electrons differ and never take part, so the two elements behave almost identically — which is the whole reason the periodic table has groups.' },
+            { t: 'They have similar masses.', ok: false,
+              why: 'Sodium is over three times heavier. Mass has no bearing on chemical family.' },
+            { t: 'Coincidence.', ok: false,
+              why: 'It is the deepest pattern in chemistry. Same outer configuration means same behaviour, every time.' },
+          ] },
+        { kind: 'numeric', q: 'An atom has configuration 1s² 2s² 2p⁶ 3s² 3p⁶ 4s² 3d¹⁰ 4p³. How many electrons does it have altogether?', answer: 33, tol: 0.001,
+          right: '33, which is arsenic. Add the superscripts: 2+2+6+2+6+2+10+3.',
+          wrong: 'Add all the superscripts together.' },
+      ],
+      mistakes: [
+        { wrong: 'Filling 3d before 4s.',
+          why: '4s is lower in energy, so it goes first. This is the single commonest mistake in the topic, and the diagonal diagram prevents it.' },
+        { wrong: 'Pairing electrons before every orbital in a set has one.',
+          why: 'Electrons repel, so three p electrons go one into each p orbital. Pairing only starts when there is no empty orbital left in the set.' },
+        { wrong: 'Forgetting that the superscripts must add to the electron count.',
+          why: 'It is a free check and it catches nearly every slip. Iron has 26 electrons, so the superscripts of its configuration must total 26.' },
+        { wrong: 'Thinking the noble-gas shorthand is just an abbreviation.',
+          why: 'It is also a statement about which electrons matter. [Ar] 4s² 3d⁶ puts the chemically active electrons where you can see them and hides the eighteen that never do anything.' },
+      ],
+      recap: [
+        'A configuration lists which orbitals hold how many electrons: the number is the level, the letter the type, the superscript the count.',
+        'Electrons fill lowest energy first, and the order is not 1, 2, 3 — 4s comes before 3d. The diagonal diagram gives the order in ten seconds.',
+        'Within a set of orbitals, one electron each before any pairing, because electrons repel.',
+        'Check your answer by adding the superscripts: they must equal the electron count.',
+        'The noble-gas shorthand puts the chemically interesting electrons at the front, which is what makes iron’s [Ar] 4s² 3d⁶ explain its 2+ and 3+ charges.',
+      ],
+    },
+
+    {
+      id: 'valence',
+      title: 'Valence electrons, and dot diagrams',
+      mins: 15,
+      builds_on: ['configurations'],
+      hook() {
+        return frag(
+          p('A uranium atom has 92 electrons. When uranium does chemistry, ', b('six'), ' of them are involved. The other 86 are spectators and might as well not be there.'),
+          p('Chlorine has 17 electrons and uses 7. Sodium has 11 and uses 1.'),
+          p('So if only the outer few matter, most of an electron configuration is irrelevant — and there is a much quicker way to write down the part that counts.'));
+      },
+      pages: [
+        {
+          h: 'Only the outer shell does chemistry',
+          body() {
+            return frag(
+              p(term('Valence electrons', 'The electrons in the outermost energy level. They are the ones involved in bonding, and almost everything about an element’s chemistry follows from how many it has.'), ' are the electrons in the outermost level. Everything underneath is the ', b('core'), ', and the core takes no part.'),
+              p('The reason is distance and shielding. The core electrons are close to the nucleus and tightly held, and they also sit between the nucleus and the outer electrons, getting in the way. So when two atoms approach, it is their outer electrons that meet, and the cores never come near each other.'),
+              table(['Element', 'Total electrons', 'Valence electrons', 'Which explains'], [
+                ['sodium', '11', '1', 'it gives one away, forming Na⁺'],
+                ['magnesium', '12', '2', 'it gives two away, forming Mg²⁺'],
+                ['carbon', '6', '4', 'it shares four — four bonds, which is all of organic chemistry'],
+                ['nitrogen', '7', '5', 'it makes three bonds, needing three more for eight'],
+                ['oxygen', '8', '6', 'it makes two bonds'],
+                ['chlorine', '17', '7', 'it takes one, forming Cl⁻'],
+                ['neon', '10', '8', 'it does nothing at all'],
+              ]),
+              callout(b('And the group number gives it to you. '), 'For the main-group elements, the valence electron count is the group number — or the group number minus 10 for groups 13 to 18. Group 1 has one, group 2 has two, group 16 has six, group 17 has seven. Nothing to learn.'));
+          },
+        },
+        {
+          h: 'Dot diagrams',
+          body() {
+            return frag(
+              p('Since only the outer electrons matter, there is a notation that shows only those: the element symbol with one dot per valence electron around it.'),
+              figure('Four dots for carbon, one for each valence electron, spread around the symbol before any pairing.',
+                el('div', { class: 'lesson-eq', html: '&middot;C&middot; with a dot above and below &nbsp;&nbsp;&mdash;&nbsp;&nbsp; four in all' })),
+              p('The convention is to put one dot on each of the four sides first and only then start doubling up — the same one-at-a-time logic as filling orbitals, and for the same reason.'),
+              table(['Element', 'Valence electrons', 'Dots'], [
+                ['sodium', '1', 'one dot'],
+                ['magnesium', '2', 'two dots, on opposite sides'],
+                ['carbon', '4', 'four dots, one per side'],
+                ['nitrogen', '5', 'four sides used, one side doubled'],
+                ['oxygen', '6', 'two sides doubled'],
+                ['chlorine', '7', 'three sides doubled, one single'],
+                ['neon', '8', 'all four sides doubled — full, and inert'],
+              ]),
+              p('The single dots are the ones available for bonding. Nitrogen with five dots has one pair and three singles, so it makes three bonds — which is exactly what the organic chemistry unit says about nitrogen having three hands.'),
+              callout(b('This is where Unit 6 starts. '), 'A covalent bond is drawn as two atoms sharing a pair of dots, and the whole of Lewis structures is bookkeeping with these diagrams. Getting the dot counts right now makes that unit much easier.'));
+          },
+        },
+        {
+          h: 'Why this is the single most useful idea so far',
+          body() {
+            return frag(
+              p('Almost every chemical property of an element follows from its valence electron count, and this is worth laying out explicitly because it is the payoff for the whole unit.'),
+              table(['If an element has…', 'Then it…', 'Because'], [
+                ['1 or 2 valence electrons', 'is a reactive metal that loses them', 'losing one or two is far cheaper than finding six or seven'],
+                ['4', 'shares, forming four bonds', 'gaining four and losing four are both too expensive'],
+                ['5, 6 or 7', 'is a reactive non-metal that gains electrons', 'it only needs a few to complete the shell'],
+                ['8', 'does nothing', 'there is nothing to gain either way'],
+              ]),
+              p('And the same reasoning explains the groups. Elements in a column have the same valence count, so they do the same chemistry — which is why fluorine and chlorine and bromine all form 1− ions, all react with metals to make salts, and all sit in the same column.'),
+              callout(b('So the periodic table is a map of valence electrons. '), 'Which is exactly what the next unit is about, and why it comes after this one rather than before.'));
+          },
+        },
+      ],
+      checkpoints: [
+        { kind: 'count', after: 0,
+          q: 'Sulfur is in group 16. How many valence electrons does it have?',
+          answer: 6,
+          right: 'Six. Group 16, so 16 − 10 = 6 — which is two short of eight, so sulfur gains two and forms S²⁻.',
+          wrong: 'For groups 13 to 18, subtract 10 from the group number.',
+          hints: { 16: 'That is the group number. For the later groups, subtract 10 to get the valence count.',
+                   2: 'That is how many it needs, not how many it has. Six plus two is eight.' } },
+        { kind: 'choice', after: 1,
+          q: 'Nitrogen has five valence electrons. Why does it form three bonds?',
+          options: [
+            { t: 'Because three of its five are unpaired, and it needs three more to reach eight.', ok: true,
+              why: 'Exactly. Five dots means one pair and three singles, so three bonding slots — which is the "three hands" the organic unit talks about, explained.' },
+            { t: 'Because it has three electrons.', ok: false, why: 'It has five valence electrons and seven altogether.' },
+            { t: 'Because it is in group 3.', ok: false, why: 'Nitrogen is in group 15. Five valence electrons.' },
+          ] },
+      ],
+      quizzes: [
+        { kind: 'count', q: 'How many valence electrons does oxygen have?', answer: 6,
+          right: 'Six — group 16. Two short of eight, so it forms two bonds or takes two electrons.',
+          wrong: 'Oxygen is in group 16, so subtract 10.' },
+        { kind: 'count', q: 'How many valence electrons does aluminium have?', answer: 3,
+          right: 'Three — group 13, so 13 − 10. Which is why it forms Al³⁺.',
+          wrong: 'Aluminium is in group 13.' },
+        { kind: 'count', q: 'Uranium has 92 electrons. How many take part in its chemistry, roughly?', answer: 6,
+          right: 'About six. The other 86 are core electrons and spectators — which is the whole point of the valence idea.',
+          wrong: 'Only the outermost ones do chemistry, and for uranium that is a handful.',
+          hints: { 92: 'Almost all of those are buried in the core and never meet another atom.' } },
+        { kind: 'match', q: 'Match each element to its number of valence electrons.',
+          pairs: [['Sodium', '1'], ['Carbon', '4'], ['Oxygen', '6'], ['Neon', '8']],
+          right: 'Yes. And each of those numbers explains the element: gives one away, shares four, takes two, does nothing.',
+          wrong: 'Use the group number — subtracting 10 for groups 13 and above.' },
+        { kind: 'choice', q: 'Why do core electrons take no part in chemistry?',
+          options: [
+            { t: 'They are close to the nucleus, tightly held, and shielded from other atoms by the outer electrons.', ok: true,
+              why: 'Right. When two atoms meet it is their outermost electrons that come into contact; the cores never get near each other.' },
+            { t: 'They are not really there.', ok: false, why: 'They are entirely real and hold the atom together. They just do not react.' },
+            { t: 'They have no charge.', ok: false, why: 'Every electron has a charge of −1. Position is what makes them inactive.' },
+          ] },
+        { kind: 'choice', q: 'Why do fluorine, chlorine and bromine behave so similarly?',
+          options: [
+            { t: 'They all have seven valence electrons, and the valence count is what sets the chemistry.', ok: true,
+              why: 'Exactly, and it is why they share a column. All three need one more electron, all three form 1− ions, all three make salts with metals.' },
+            { t: 'They are all gases.', ok: false,
+              why: 'Fluorine and chlorine are gases, bromine is a liquid and iodine a solid — and all four behave chemically alike, which shows that state is not the connection.' },
+            { t: 'They have similar masses.', ok: false,
+              why: 'Iodine is over six times heavier than fluorine and behaves the same way chemically.' },
+          ] },
+        { kind: 'choice', q: 'In a dot diagram, why is the first dot put on each side before any side gets two?',
+          options: [
+            { t: 'Because electrons repel, so spreading out is lower in energy — the same rule as filling orbitals.', ok: true,
+              why: 'Right, and it matters practically: it is the single dots that are available for bonding, so getting the pairing right tells you how many bonds the atom will make.' },
+            { t: 'Because it looks tidier.', ok: false, why: 'It does, and the reason is physical.' },
+            { t: 'Because there are four orbitals.', ok: false,
+              why: 'There are four in the outer level (one s and three p), which is related — but the one-at-a-time rule comes from repulsion.' },
+          ] },
+        { kind: 'choice', q: 'An element has 2 valence electrons. What is it likely to do?',
+          options: [
+            { t: 'Lose both, forming a 2+ ion — it is a reactive metal.', ok: true,
+              why: 'Right. Losing two is far cheaper than finding six, so group 2 elements are reactive metals forming 2+ ions. Magnesium and calcium are the everyday examples.' },
+            { t: 'Gain six.', ok: false,
+              why: 'Six is a great deal to gather. Losing two gets to the same place for much less.' },
+            { t: 'Share two, forming two bonds.', ok: false,
+              why: 'Possible in principle, and metals that far to the left find losing far cheaper. Sharing is what group 14 does.' },
+          ] },
+      ],
+      practice: 'ion-charge',
+      mistakes: [
+        { wrong: 'Counting all the electrons rather than just the outer ones.',
+          why: 'Chlorine has 17 electrons and 7 valence electrons, and it is the 7 that matter. The core is a spectator.' },
+        { wrong: 'Using the group number directly for groups 13 to 18.',
+          why: 'Subtract 10. Group 16 has six valence electrons, not sixteen. The older numbering used I to VIII for exactly this reason.' },
+        { wrong: 'Pairing dots up before all four sides have one.',
+          why: 'It gives the wrong bond count. Nitrogen’s five dots are one pair and three singles, which is why it makes three bonds — pair them differently and you would predict the wrong number.' },
+      ],
+      recap: [
+        'Valence electrons are the outermost ones, and they do all the chemistry. Everything underneath is a spectator.',
+        'The group number gives the count directly — subtracting 10 for groups 13 to 18 — so there is nothing to memorise.',
+        'A dot diagram shows only the valence electrons, one dot per side before any doubling, and the single dots are the bonding slots.',
+        'Almost every chemical property of an element follows from its valence count: 1 or 2 loses, 4 shares, 5 to 7 gains, 8 does nothing.',
+        'Elements in a column share a valence count, which is why they share their chemistry — and why the periodic table works.',
       ],
     },
 

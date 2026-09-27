@@ -432,3 +432,8 @@
 .sim-ph-row .bar { display: block; height: 11px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
 .sim-ph-row .bar i { display: block; height: 100%; border-radius: 99px; }
 .sim-ph-row .l { font-size: .84rem; }
+.lesson-pre {
+  font-family: var(--font-mono); font-size: .92rem; line-height: 1.7;
+  background: var(--surface-2); padding: 14px 18px; border-radius: var(--r);
+  margin: 0; overflow-x: auto;
+}
