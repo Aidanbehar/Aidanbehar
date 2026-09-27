@@ -20,6 +20,7 @@ const { loadOCL, sameFormula, parseFormula } = require('./ocl.js');
 const ROOT = path.join(__dirname, '..');
 const CACHE = path.join(ROOT, '.cache');
 const SEED = require(path.join(ROOT, 'src/data/seed.js'));
+const IONS = require(path.join(ROOT, 'src/data/ions.js'));
 const OCL = loadOCL();
 
 const BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug';
@@ -179,6 +180,63 @@ async function buildElements() {
   }
 
   console.log(`\u2713 ${out.length} elements from PubChem's periodic table, symbols cross-checked.`);
+  return out;
+}
+
+/* ------------------------------------------------------------------- ions */
+/* The polyatomic ion table Unit 7 is built on. PubChem knows these as
+ * compounds with a charge, so the same treatment applies as to every molecule:
+ * state the formula and charge expected, and fail loudly on a disagreement.
+ * Both tripwires have already earned their keep - "thiosulfate" resolves to the
+ * monoprotonated HS2O3- and "peroxide" to neutral hydrogen peroxide. */
+async function buildIons() {
+  const out = [];
+  const problems = [];
+
+  for (const ion of IONS) {
+    let p = null;
+    try {
+      if (ion.cid) {
+        const raw = await get(`${BASE}/compound/cid/${ion.cid}/property/${PROPS},Charge/JSON`);
+        p = raw ? JSON.parse(raw).PropertyTable.Properties[0] : null;
+      } else {
+        const raw = await get(`${BASE}/compound/name/${encodeURIComponent(ion.q)}/property/${PROPS},Charge/JSON`);
+        p = raw ? JSON.parse(raw).PropertyTable.Properties[0] : null;
+      }
+    } catch (e) {
+      problems.push(`${ion.n}: request failed (${e.message})`);
+      continue;
+    }
+    if (!p) { problems.push(`${ion.n} (query "${ion.q}"): PubChem could not resolve this`); continue; }
+
+    /* PubChem writes an ion's charge onto the formula as a suffix, "O4S-2".
+     * Turn that into the caret form the app's own parser reads. */
+    const pcFormula = String(p.MolecularFormula || '').replace(/([+-])(\d*)$/, (m, sign, d) => '^' + (d || '1') + sign);
+    const expect = ion.f + '^' + Math.abs(ion.c) + (ion.c < 0 ? '-' : '+');
+
+    if (!sameFormula(pcFormula.replace(/\^\d*[+-]$/, ''), ion.f)) {
+      problems.push(`${ion.n} (query "${ion.q}"): expected ${expect} but PubChem returned ${pcFormula} (CID ${p.CID}, title "${p.Title}")`);
+      continue;
+    }
+    if (Number(p.Charge) !== ion.c) {
+      problems.push(`${ion.n} (query "${ion.q}"): expected a charge of ${ion.c} but PubChem says ${p.Charge} (CID ${p.CID}, title "${p.Title}")`);
+      continue;
+    }
+
+    out.push({
+      n: ion.n, f: ion.f, c: ion.c, note: ion.note || null,
+      syn: ion.syn || [], cid: p.CID, t: p.Title || ion.n,
+      m: p.SMILES || p.ConnectivitySMILES || null,
+    });
+  }
+
+  if (problems.length) {
+    console.error(`\n\u2716 ${problems.length} polyatomic ions FAILED verification:\n`);
+    problems.forEach((x) => console.error('  \u2716 ' + x));
+    console.error('\nFix src/data/ions.js (or supply an explicit cid) and re-run. Nothing was written.');
+    process.exit(1);
+  }
+  console.log(`\u2713 ${out.length} polyatomic ions verified against PubChem, formula and charge.`);
   return out;
 }
 
@@ -356,8 +414,9 @@ async function fetchSynonyms(cid) {
   /* Element reference data from PubChem's own periodic table, cross-checked
    * against the shipped chemistry library. Nothing here is typed from memory. */
   const elements = await buildElements();
+  const ions = await buildIons();
 
-  const db = { v: 1, built: new Date().toISOString().slice(0, 10), elements, molecules: out };
+  const db = { v: 1, built: new Date().toISOString().slice(0, 10), elements, ions, molecules: out };
   const dest = path.join(ROOT, 'src/data/molecules.json');
   fs.writeFileSync(dest, JSON.stringify(db));
   const with3d = out.filter((m) => m.d).length;

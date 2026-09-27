@@ -263,6 +263,7 @@
   function boot() {
     const db = window.__ME_DB;
     ME.chem.setElements(db.elements);
+    ME.ref.setIons(db.ions || []);
     ME.search.build(db.molecules);
 
     document.body.appendChild(buildNav());

@@ -537,3 +537,263 @@ describe('grading a typed answer', () => {
     });
   });
 });
+
+/* ---------------------------------------------------------- reference data */
+describe('reference data', () => {
+  test('the polyatomic ion table loaded, verified at build time', async () => {
+    const got = await run(() => ({
+      count: window.ME.ref.ions.length,
+      noNote: window.ME.ref.ions.filter((i) => !i.note).map((i) => i.n),
+      noCid: window.ME.ref.ions.filter((i) => !i.cid).map((i) => i.n),
+    }));
+    assert.ok(got.count >= 30, 'only ' + got.count + ' ions');
+    assert.deepEqual(got.noNote, [], 'ions with no explanation: ' + got.noNote);
+    assert.deepEqual(got.noCid, [], 'ions with no PubChem record: ' + got.noCid);
+  });
+
+  test('every ion in the table parses, and its charge matches', async () => {
+    const bad = await run(() => window.ME.ref.ions.map((ion) => {
+      const p = window.ME.formula.parse(ion.f);
+      if (!p.ok) return [ion.n, ion.f, p.error];
+      const found = window.ME.ref.ionByFormula(ion.f, ion.c);
+      if (!found || found.n !== ion.n) return [ion.n, 'not findable by formula and charge'];
+      if (window.ME.ref.ionByName(ion.n) !== ion) return [ion.n, 'not findable by name'];
+      return null;
+    }).filter(Boolean));
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('ions are findable by their everyday names too', async () => {
+    const got = await run(() => ({
+      bicarbonate: (window.ME.ref.ionByName('bicarbonate') || {}).n,
+      bleach: (window.ME.ref.ionByName('bleach') || {}).n,
+      ethanoate: (window.ME.ref.ionByName('ethanoate') || {}).n,
+      bisulfate: (window.ME.ref.ionByName('bisulfate') || {}).n,
+    }));
+    assert.equal(got.bicarbonate, 'Hydrogen carbonate');
+    assert.equal(got.bleach, 'Hypochlorite');
+    assert.equal(got.ethanoate, 'Acetate');
+    assert.equal(got.bisulfate, 'Hydrogen sulfate');
+  });
+
+  test('monatomic ion charges are derived from the group, and come out right', async () => {
+    /* The bug this pins: aluminium read as a variable-charge transition metal,
+     * because PubChem's block for it is "post-transition metal" and a
+     * substring test for "transition" matched. Al is always 3+. */
+    const FIXED = {
+      H: 1, Li: 1, Na: 1, K: 1, Rb: 1, Cs: 1,
+      Be: 2, Mg: 2, Ca: 2, Sr: 2, Ba: 2,
+      Al: 3, Ga: 3, In: 3, Bi: 3,
+      F: -1, Cl: -1, Br: -1, I: -1,
+      O: -2, S: -2, Se: -2,
+      N: -3, P: -3,
+      He: 0, Ne: 0, Ar: 0, Kr: 0, Xe: 0,
+      /* d-block metals with only one common charge, named without a numeral */
+      Zn: 2, Cd: 2, Ag: 1, Sc: 3,
+    };
+    const VARIES = ['Fe', 'Cu', 'Cr', 'Mn', 'Ni', 'Co', 'Sn', 'Pb', 'Tl', 'C', 'Si', 'U', 'Ce', 'Ti', 'V'];
+    const got = await run((arg) => {
+      const R = window.ME.ref, out = { fixed: {}, varies: {} };
+      Object.keys(arg.FIXED).forEach((s) => {
+        const t = R.typicalCharge(s);
+        out.fixed[s] = t ? { charge: t.charge, variable: !!t.variable, why: t.why } : null;
+      });
+      arg.VARIES.forEach((s) => {
+        const t = R.typicalCharge(s);
+        out.varies[s] = t ? { charge: t.charge, variable: !!t.variable } : null;
+      });
+      return out;
+    }, { FIXED, VARIES });
+
+    Object.keys(FIXED).forEach((s) => {
+      const g = got.fixed[s];
+      assert.ok(g, s + ' has no charge rule');
+      assert.equal(g.charge, FIXED[s], `${s}: got ${g.charge}, expected ${FIXED[s]}`);
+      assert.equal(g.variable, false, s + ' should not be variable');
+      assert.ok(g.why && g.why.length > 20, s + ' needs a reason, got: ' + g.why);
+    });
+    VARIES.forEach((s) => {
+      const g = got.varies[s];
+      assert.ok(g, s + ' has no charge rule');
+      assert.equal(g.variable, true, `${s} should take more than one charge, got ${g.charge}`);
+    });
+  });
+
+  test('-ide names are right, including the irregular stems', async () => {
+    const got = await run(() => {
+      const out = {};
+      ['Cl', 'O', 'N', 'S', 'P', 'F', 'Br', 'I', 'H', 'C', 'Se', 'Si', 'As'].forEach((s) => {
+        out[s] = window.ME.ref.ideName(s);
+      });
+      return out;
+    });
+    assert.deepEqual(got, {
+      Cl: 'chloride', O: 'oxide', N: 'nitride', S: 'sulfide', P: 'phosphide',
+      F: 'fluoride', Br: 'bromide', I: 'iodide', H: 'hydride', C: 'carbide',
+      Se: 'selenide', Si: 'silicide', As: 'arsenide',
+    });
+  });
+
+  test('the activity series orders metals the way it should', async () => {
+    const got = await run(() => {
+      const R = window.ME.ref;
+      return {
+        znCu: R.moreReactive('Zn', 'Cu'), cuZn: R.moreReactive('Cu', 'Zn'),
+        mgFe: R.moreReactive('Mg', 'Fe'), agAu: R.moreReactive('Ag', 'Au'),
+        kNa: R.moreReactive('K', 'Na'),
+        /* anything above hydrogen displaces it from an acid; copper does not */
+        znH: R.moreReactive('Zn', 'H'), cuH: R.moreReactive('Cu', 'H'),
+        unknown: R.moreReactive('Xx', 'Cu'),
+      };
+    });
+    assert.equal(got.znCu, true);
+    assert.equal(got.cuZn, false);
+    assert.equal(got.mgFe, true);
+    assert.equal(got.agAu, true);
+    assert.equal(got.kNa, true);
+    assert.equal(got.znH, true, 'zinc fizzes in acid');
+    assert.equal(got.cuH, false, 'copper does not fizz in acid');
+    assert.equal(got.unknown, null);
+  });
+
+  test('every literature table says where it came from', async () => {
+    const got = await run(() => {
+      const R = window.ME.ref;
+      return [R.SOLUBILITY, R.ACTIVITY, R.STRONG_ACIDS, R.STRONG_BASES, R.SPECIFIC_HEAT, R.LATENT]
+        .map((t) => !!(t.source && t.source.length > 20));
+    });
+    assert.deepEqual(got, got.map(() => true), 'a table with no stated source');
+  });
+
+  test('specific heats and latent heats are the standard values', async () => {
+    const got = await run(() => ({
+      water: window.ME.ref.SPECIFIC_HEAT.values['water (liquid)'],
+      iron: window.ME.ref.SPECIFIC_HEAT.values.iron,
+      fusion: window.ME.ref.LATENT.fusion,
+      vap: window.ME.ref.LATENT.vaporisation,
+    }));
+    assert.equal(got.water, 4.184);
+    assert.ok(Math.abs(got.iron - 0.449) < 0.01);
+    assert.ok(Math.abs(got.fusion - 334) < 2);
+    assert.ok(Math.abs(got.vap - 2257) < 5);
+  });
+});
+
+/* --------------------------------------------------------------- naming */
+describe('naming inorganic compounds', () => {
+  const NAMES = [
+    /* ionic, fixed-charge metal */
+    ['NaCl', 'sodium chloride'], ['MgO', 'magnesium oxide'], ['CaCl2', 'calcium chloride'],
+    ['Al2O3', 'aluminium oxide'], ['K2S', 'potassium sulfide'], ['Li3N', 'lithium nitride'],
+    /* ionic, variable-charge metal: the Roman numeral is worked out */
+    ['FeCl2', 'iron(II) chloride'], ['FeCl3', 'iron(III) chloride'],
+    ['CuO', 'copper(II) oxide'], ['Cu2O', 'copper(I) oxide'],
+    ['PbO2', 'lead(IV) oxide'], ['SnCl4', 'tin(IV) chloride'],
+    ['Fe2(SO4)3', 'iron(III) sulfate'],
+    /* d-block metals with one charge take no numeral */
+    ['ZnO', 'zinc oxide'], ['AgCl', 'silver chloride'], ['CdS', 'cadmium sulfide'],
+    /* polyatomic anions, and a polyatomic cation */
+    ['CaSO4', 'calcium sulfate'], ['Na2CO3', 'sodium carbonate'],
+    ['Mg(NO3)2', 'magnesium nitrate'], ['Ca3(PO4)2', 'calcium phosphate'],
+    ['NaOH', 'sodium hydroxide'], ['NaHCO3', 'sodium hydrogen carbonate'],
+    ['NH4Cl', 'ammonium chloride'], ['(NH4)2SO4', 'ammonium sulfate'],
+    /* a metal inside the anion */
+    ['KMnO4', 'potassium permanganate'], ['K2Cr2O7', 'potassium dichromate'],
+    /* covalent, with prefixes */
+    ['CO', 'carbon monoxide'], ['CO2', 'carbon dioxide'],
+    ['N2O', 'dinitrogen monoxide'], ['NO2', 'nitrogen dioxide'],
+    ['N2O5', 'dinitrogen pentoxide'], ['SF6', 'sulfur hexafluoride'],
+    ['PCl5', 'phosphorus pentachloride'], ['CCl4', 'carbon tetrachloride'],
+    /* acids */
+    ['HCl', 'hydrochloric acid'], ['HBr', 'hydrobromic acid'], ['H2S', 'hydrosulfuric acid'],
+    ['HNO3', 'nitric acid'], ['HNO2', 'nitrous acid'],
+    ['H2SO4', 'sulfuric acid'], ['H2SO3', 'sulfurous acid'],
+    ['H3PO4', 'phosphoric acid'], ['H2CO3', 'carbonic acid'],
+    ['HClO4', 'perchloric acid'], ['HClO', 'hypochlorous acid'],
+    /* hydrates */
+    ['CuSO4.5H2O', 'copper(II) sulfate pentahydrate'],
+    ['Na2CO3.10H2O', 'sodium carbonate decahydrate'],
+  ];
+
+  test('every formula gets the right name', async () => {
+    const got = await run((list) => list.map((c) => {
+      const r = window.ME.naming.nameOf(c[0]);
+      return r.ok ? r.name : 'FAILED: ' + r.error;
+    }), NAMES);
+    NAMES.forEach((c, i) => {
+      /* the element table spells it aluminium; either spelling is the name */
+      const norm = (x) => String(x).toLowerCase().replace(/aluminum/g, 'aluminium');
+      assert.equal(norm(got[i]), norm(c[1]), `${c[0]}: got "${got[i]}", expected "${c[1]}"`);
+    });
+  });
+
+  test('every name gives back a formula with the same atoms', async () => {
+    const bad = await run((list) => {
+      const out = [];
+      list.forEach((c) => {
+        const back = window.ME.naming.formulaOf(c[1]);
+        if (!back.ok) { out.push([c[1], back.error]); return; }
+        const a = window.ME.formula.parse(c[0]);
+        const b = window.ME.formula.parse(back.formula);
+        if (!b.ok) { out.push([c[1], back.formula, b.error]); return; }
+        if (a.text !== b.text) out.push([c[1], 'wanted ' + a.text + ', got ' + b.text]);
+      });
+      return out;
+    }, NAMES);
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('every name carries its reasoning, not just the answer', async () => {
+    const bad = await run((list) => list.map((c) => {
+      const r = window.ME.naming.nameOf(c[0]);
+      if (!r.ok || !r.steps || !r.steps.length) return [c[0], 'no steps'];
+      const thin = r.steps.filter((s) => !s.text || s.text.length < 25);
+      return thin.length ? [c[0], 'a step with no explanation'] : null;
+    }).filter(Boolean), NAMES);
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('the Roman numeral is derived from charge balance, and explained', async () => {
+    const got = await run(() => {
+      const r = window.ME.naming.nameOf('Fe2(SO4)3');
+      return { name: r.name, charge: r.cation.charge, why: r.steps[0].text };
+    });
+    assert.equal(got.name, 'iron(III) sulfate');
+    assert.equal(got.charge, 3);
+    /* the reasoning has to show the cancellation, not just assert the answer */
+    assert.match(got.why, /no overall charge|neutral/);
+    assert.match(got.why, /-6|6/);
+  });
+
+  test('criss-crossing is explained as the lowest common multiple', async () => {
+    const got = await run(() => window.ME.naming.formulaOf('aluminium oxide'));
+    assert.equal(got.formula, 'Al2O3');
+    assert.ok(got.steps.some((s) => /criss-cross/.test(s)), JSON.stringify(got.steps));
+    assert.ok(got.steps.some((s) => /smallest number that/.test(s)), JSON.stringify(got.steps));
+  });
+
+  test('a variable metal with no Roman numeral is refused, helpfully', async () => {
+    const got = await run(() => ['iron chloride', 'copper oxide', 'lead oxide']
+      .map((n) => window.ME.naming.formulaOf(n)));
+    got.forEach((g) => {
+      assert.equal(g.ok, false);
+      assert.match(g.error, /Roman numeral/);
+    });
+  });
+
+  test('a polyatomic ion gets brackets when there is more than one of it', async () => {
+    const got = await run(() => ['magnesium nitrate', 'calcium phosphate', 'ammonium sulfate',
+      'sodium nitrate', 'sulfuric acid']
+      .map((n) => window.ME.naming.formulaOf(n).formula));
+    assert.deepEqual(got, ['Mg(NO3)2', 'Ca3(PO4)2', '(NH4)2SO4', 'NaNO3', 'H2SO4']);
+  });
+
+  test('organic compounds are declined rather than guessed at', async () => {
+    const got = await run(() => ['C6H12O6', 'CH3CH2OH', 'C8H10N4O2']
+      .map((f) => window.ME.naming.nameOf(f)));
+    got.forEach((g) => {
+      if (g.ok) assert.notMatch(g.name, /^[a-z]*ane|ol$/, 'should not attempt an organic name: ' + g.name);
+      else assert.match(g.error, /organic|does not fit/);
+    });
+  });
+});

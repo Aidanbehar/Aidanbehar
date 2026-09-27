@@ -66,15 +66,66 @@ network switched off.
 - Balanced equations were printed in Hill order, turning `Ca(OH)2` into
   `CaH2O2`. Correct, canonical, and unrecognisable to a learner.
 
+**`src/data/ions.js` + `src/js/13-refdata.js` — the reference tables**
+- 34 polyatomic ions, every one resolved against PubChem at build time with
+  **both** formula and charge cross-checked. Four of my guessed CIDs were wrong
+  and the tripwires caught all four (phosphine for peroxide, bromic acid for
+  thiosulfate). PubChem has no record for the peroxide(2−) ion at all — only
+  superoxide O₂⁻ and O₂⁴⁻ — so peroxide is **dropped** rather than invented, and
+  silicate and borate became the forms PubChem actually has (SiO₄⁴⁻, B₄O₇²⁻).
+- Monatomic ion charges are **derived** from an element's group, not listed, so
+  they cannot disagree with the periodic table. Each comes with its reason.
+- Everything that genuinely has no free machine-readable source is marked
+  `LITERATURE` in the file and states its provenance in the app: solubility
+  rules, activity series, strong acid and base lists, specific heats, latent
+  heats, the −ide stems, and the handful of d-block metals named without a
+  Roman numeral.
+
+**`src/js/16-calc-naming.js` — inorganic naming, both directions**
+- Formula → name for ionic compounds (fixed and variable charge), covalent
+  compounds with Greek prefixes, acids, hydrates, and bare ions. 47/47 on the
+  test set.
+- Name → formula, including criss-crossing charges. 20/20, and 27/27 full
+  round-trips.
+- Every answer carries its reasoning: the Roman numeral is *worked out* from
+  charge balance and the working is shown, and criss-crossing is explained as
+  the lowest common multiple arrived at sideways rather than a trick.
+- Declines organic names rather than guessing — see the note on naming below.
+
+### More bugs found while building this
+- Aluminium read as a variable-charge transition metal, because PubChem's block
+  for it is "post-transition metal" and a substring test for "transition"
+  matched. Al is always 3+.
+- `splitIonic` looked for the metal to decide what the cation was. KMnO₄ has a
+  metal inside its *anion* and NH₄Cl has no metal at all, so both failed. It now
+  works from the anion outwards, trying polyatomic ions biggest-first so NaHCO₃
+  finds hydrogen carbonate rather than carbonate with a spare hydrogen.
+- "carbon monoxide" gave CO with no oxygen: `mono` ate the `o` of `oxide`,
+  leaving the stem `xide`. Prefixes are now tried both ways round.
+- "dinitrogen pentoxide" gave N₂O, because only `penta` was readable and not the
+  elided `pent`.
+- Names came out capitalised ("Iron(III) sulfate") from the element table.
+- `hydrosulfuric acid` would not read back to H₂S — its acid stem is longer than
+  its −ide stem.
+
 ### Next, in order
 1. Course map + long-form lesson format (multi-page, checkpoints between pages)
 2. New question types: numeric, balance, name/formula, order, match, sort,
    fillstep, build-in-Draw
 3. Glossary, practice-generator framework
-4. `16-calc-naming.js` (inorganic name ⇄ formula), `17-calc-stoich.js`,
-   `18-calc-gas.js`, `19-calc-solution.js`
+4. `17-calc-stoich.js`, `18-calc-gas.js`, `19-calc-solution.js`
 5. Balancer tab → Gas Simulator tab → Tools + Reference tabs
 6. Units 1–15, one commit each
 
 Phone and tablet layout is deliberately **not** being done yet, at the user's
 request. Seven-plus tabs will need a scrollable tab row before release.
+
+---
+
+## Note on organic naming
+
+OpenChemLib has no IUPAC name generator, and writing a correct one is a
+research-grade problem, so the app does not pretend to have one. Organic naming
+practice will draw on a build-time pool verified against PubChem instead — 684
+of the 688 database molecules already carry PubChem's own IUPAC name. Inorganic
+naming, which really is just rules, has a genuine bidirectional engine.
