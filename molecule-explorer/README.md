@@ -64,13 +64,13 @@ PubChem module fails the build.
 
 **`npm test`** runs both suites:
 
-- `test/unit.mjs` — 51 logic tests (search by case, typo, synonym, formula and
+- `test/unit.mjs` — 56 logic tests (search by case, typo, synonym, formula and
   SMILES; the five-bond-carbon message; twenty-odd valid ions and hypervalent
   species that must *not* be flagged; formula and molar mass against known
   values; drawing → recognition; label spacing in the drawings; crowding in the
   editor; plus a sweep confirming every database entry's stored formula and mass
   agree with its structure).
-- `test/smoke.mjs` — 81 checks in a real browser, loaded from `file://` with
+- `test/smoke.mjs` — 102 checks in a real browser, loaded from `file://` with
   the network switched off, covering all eleven lessons, the X-ray slider, the
   molecule page, the gallery, the drawing editor, the periodic table and dark
   mode. It asserts the page makes **zero** network requests. A final phase
@@ -108,6 +108,7 @@ src/
   js/45-pubchem.js      the only module that touches the network
   js/50-molpage.js      the molecule page
   js/60/61/62-draw-*.js the editor's model, its canvas painter, and its UI
+  js/68-elements.js     the periodic table and the element pages
   js/70-gallery.js      the gallery
   js/72-searchview.js   search results and the suggestion dropdown
   js/80-learn.js        the eleven lessons
@@ -127,6 +128,29 @@ Each JS file is its own IIFE hanging off a shared `ME` namespace, so
 concatenation order is the only coupling between them.
 
 ---
+
+## The periodic table
+
+A section of its own between Draw and Gallery. All 118 elements laid out in the
+conventional 18 columns, colour-coded by category, with the f-block on its own
+two rows. Clicking an element gives its atomic number and mass, electron
+configuration, usual charges, electronegativity, atomic radius, ionization
+energy, electron affinity, melting and boiling points (kelvin and celsius),
+density and year of discovery — plus how many bonds it wants, read off the same
+table the drawing validator uses, and every molecule in the built-in database
+that contains it, each one a link to its page.
+
+None of those numbers is typed from memory. `build-db.js` fetches PubChem's own
+periodic table, cross-checks all 118 symbols against the chemistry library that
+ships in the app, and fails the build on any disagreement or on anything other
+than 118 rows. Only the prose is the app's own: a "where you have met this"
+line for the ~45 elements a beginner is likely to run into, and a sentence on
+what each category means. Elements without a note simply show their data rather
+than being given invented colour.
+
+Deep links work: `#/elements/Fe` and `#/elements/26` both open iron. The Draw
+tool's element picker shares the same layout, categories and data, so the two
+tables cannot drift apart.
 
 ## The lessons
 

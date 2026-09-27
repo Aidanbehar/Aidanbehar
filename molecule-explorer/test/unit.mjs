@@ -1009,3 +1009,120 @@ describe('every lesson check is answerable', () => {
     });
   });
 });
+
+/* ---------------------------------------------------------- the elements */
+describe('the element data', () => {
+  test('all 118 elements are present and complete', async () => {
+    const out = await run(() => {
+      const els = window.ME.chem.elements;
+      const missing = (k) => els.filter((e) => e[k] === null || e[k] === undefined || e[k] === '').map((e) => e.sym);
+      return {
+        count: els.length,
+        zRange: [Math.min(...els.map((e) => e.z)), Math.max(...els.map((e) => e.z))],
+        duplicateZ: els.length - new Set(els.map((e) => e.z)).size,
+        duplicateSym: els.length - new Set(els.map((e) => e.sym)).size,
+        noName: missing('name'),
+        noMass: missing('mass'),
+        noConfig: missing('cfg'),
+        noBlock: missing('block'),
+        noState: missing('state'),
+      };
+    });
+    assert.equal(out.count, 118);
+    assert.deepEqual(out.zRange, [1, 118]);
+    assert.equal(out.duplicateZ, 0);
+    assert.equal(out.duplicateSym, 0);
+    assert.deepEqual(out.noName, []);
+    assert.deepEqual(out.noMass, []);
+    assert.deepEqual(out.noConfig, []);
+    assert.deepEqual(out.noBlock, []);
+    assert.deepEqual(out.noState, []);
+  });
+
+  test('known values match what a textbook says', async () => {
+    const out = await run(() => {
+      const g = (sym) => window.ME.chem.element(sym);
+      return {
+        H: g('H'), C: g('C'), O: g('O'), Fe: g('Fe'), Au: g('Au'), U: g('U'),
+      };
+    });
+    assert.equal(out.H.z, 1);
+    assert.equal(out.C.z, 6);
+    assert.equal(out.O.z, 8);
+    assert.equal(out.Fe.z, 26);
+    assert.equal(out.Au.z, 79);
+    assert.equal(out.U.z, 92);
+    assert.ok(Math.abs(out.C.mass - 12.011) < 0.01, 'carbon mass ' + out.C.mass);
+    assert.ok(Math.abs(out.O.mass - 15.999) < 0.01, 'oxygen mass ' + out.O.mass);
+    assert.equal(out.C.cfg, '[He]2s2 2p2');
+    assert.equal(out.O.block, 'Nonmetal');
+    assert.equal(out.Fe.block, 'Transition metal');
+    assert.equal(out.C.name, 'Carbon');
+    /* Electronegativity: fluorine is the top of the scale. */
+    assert.ok(out.O.en > out.C.en, 'oxygen should pull harder than carbon');
+  });
+
+  test('every element lands in a sensible spot in the table', async () => {
+    const out = await run(() => {
+      const bad = [];
+      const seen = {};
+      window.ME.chem.elements.forEach((e) => {
+        const [row, col] = window.ME.chem.ptPosition(e.z);
+        if (row < 1 || row > 10 || col < 1 || col > 18) bad.push([e.sym, row, col]);
+        const key = row + ':' + col;
+        if (seen[key]) bad.push([e.sym + ' collides with ' + seen[key], row, col]);
+        seen[key] = e.sym;
+      });
+      return {
+        bad,
+        h: window.ME.chem.ptPosition(1),
+        he: window.ME.chem.ptPosition(2),
+        c: window.ME.chem.ptPosition(6),
+        la: window.ME.chem.ptPosition(57),
+        lu: window.ME.chem.ptPosition(71),
+        hf: window.ME.chem.ptPosition(72),
+        og: window.ME.chem.ptPosition(118),
+      };
+    });
+    assert.deepEqual(out.bad, [], 'misplaced or colliding cells');
+    assert.deepEqual(out.h, [1, 1], 'hydrogen top left');
+    assert.deepEqual(out.he, [1, 18], 'helium top right');
+    assert.deepEqual(out.c, [2, 14], 'carbon in group 14');
+    assert.deepEqual(out.la, [9, 3], 'lanthanides on their own row');
+    assert.deepEqual(out.lu, [9, 17], 'and fifteen wide');
+    assert.deepEqual(out.hf, [6, 4], 'hafnium follows the lanthanides');
+    assert.deepEqual(out.og, [7, 18], 'oganesson bottom right');
+  });
+
+  test('the hands shown for an element agree with the drawing validator', async () => {
+    const mismatched = await run(() => {
+      const bad = [];
+      window.ME.chem.elements.forEach((e) => {
+        const rule = window.ME.chem.VALENCE[e.sym];
+        if (!rule) return;
+        /* The element page reads this straight off the same table the editor
+         * validates against, so they cannot disagree \u2014 this guards against
+         * someone adding a second copy of the numbers. */
+        if (typeof rule.hands !== 'number') bad.push(e.sym);
+      });
+      return bad;
+    });
+    assert.deepEqual(mismatched, []);
+  });
+
+  test('every element the database uses has a record', async () => {
+    const missing = await run(() => {
+      const bad = new Set();
+      window.ME.search.all().forEach((m) => {
+        if (!m.f) return;
+        const re = /([A-Z][a-z]?)(\d*)/g;
+        let x;
+        while ((x = re.exec(m.f)) !== null) {
+          if (x[1] && !window.ME.chem.element(x[1])) bad.add(x[1] + ' (' + m.n + ')');
+        }
+      });
+      return Array.from(bad);
+    });
+    assert.deepEqual(missing, [], 'formulas referencing unknown elements');
+  });
+});

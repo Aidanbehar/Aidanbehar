@@ -1,0 +1,136 @@
+/* --------------------------------------------------------- periodic table */
+/* Category colours. Each is mixed into the surface so the table stays legible
+   in both themes rather than being a block of saturated colour.
+   No blanket fallback rule here: `.pt-full [data-block]` would out-specify
+   every one of the single-attribute selectors below and grey the whole table
+   out. The default lives in the var() calls instead. */
+[data-block="nonmetal"]              { --b: #3fa06e; }
+[data-block="noble-gas"]             { --b: #9b59b6; }
+[data-block="alkali-metal"]          { --b: #e0523f; }
+[data-block="alkaline-earth-metal"]  { --b: #e08b2f; }
+[data-block="metalloid"]             { --b: #c9a227; }
+[data-block="halogen"]               { --b: #16a085; }
+[data-block="post-transition-metal"] { --b: #5f8fb0; }
+[data-block="transition-metal"]      { --b: #4a6fd6; }
+[data-block="lanthanide"]            { --b: #8a5fd6; }
+[data-block="actinide"]              { --b: #d64f9e; }
+
+.pt-legend {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 16px;
+  font-size: .78rem; color: var(--text-soft);
+}
+.pt-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.pt-legend i {
+  width: 11px; height: 11px; border-radius: 3px; display: inline-block;
+  background: color-mix(in srgb, var(--b, var(--text-faint)) 45%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--b, var(--text-faint)) 70%, var(--surface));
+}
+
+.pt-full {
+  display: grid;
+  grid-template-columns: repeat(18, minmax(0, 1fr));
+  gap: 3px;
+  margin-bottom: 26px;
+}
+
+.pt-el {
+  position: relative; aspect-ratio: 1; min-width: 0; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 2px; cursor: pointer; border-radius: 5px;
+  background: color-mix(in srgb, var(--b, var(--text-faint)) 16%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--b, var(--text-faint)) 34%, var(--surface));
+  color: var(--text); font: inherit; line-height: 1.05;
+  transition: transform .1s, box-shadow .1s, border-color .1s;
+}
+.pt-el:hover {
+  border-color: var(--b, var(--text-faint));
+  background: color-mix(in srgb, var(--b, var(--text-faint)) 30%, var(--surface));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+  z-index: 2;
+}
+.pt-el.on {
+  border-color: var(--b, var(--text-faint));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--b, var(--text-faint)) 55%, transparent);
+  background: color-mix(in srgb, var(--b, var(--text-faint)) 46%, var(--surface));
+}
+.pt-el .pt-z { font-size: .5rem; color: var(--text-faint); font-weight: 600; }
+.pt-el .pt-sym { font-size: .95rem; font-weight: 700; letter-spacing: -.01em; }
+.pt-el .pt-name {
+  font-size: .42rem; color: var(--text-soft); text-align: center;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pt-rowlabel {
+  display: flex; align-items: center; font-size: .66rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint);
+  padding-right: 4px; justify-content: flex-end;
+}
+
+/* the grid gets dense on small screens; drop the names, then the numbers */
+@media (max-width: 1000px) {
+  .pt-el .pt-name { display: none; }
+  .pt-el .pt-sym { font-size: .8rem; }
+}
+/* Shown only on the narrow layout, where the table scrolls. Declared before
+   the media query so the query's display:block is the later rule and wins. */
+.pt-hint { display: none; font-size: .76rem; color: var(--text-faint); margin: 0 0 10px; }
+
+/* Below this the cells would shrink to about fifteen pixels, which is not a
+   tappable target. Scroll the table sideways instead and keep them usable. */
+@media (max-width: 720px) {
+  .pt-scroll {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    margin: 0 -16px; padding: 0 16px 6px;
+    scrollbar-width: thin;
+  }
+  .pt-full { gap: 2px; min-width: 580px; }
+  .pt-el { border-radius: 3px; }
+  .pt-el .pt-z { display: none; }
+  .pt-el .pt-sym { font-size: .68rem; }
+  .pt-rowlabel { font-size: .55rem; padding-right: 2px; }
+  .pt-hint { display: block; }
+}
+
+/* ------------------------------------------------------------- the detail */
+.pt-detail {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 20px; box-shadow: var(--shadow-sm);
+}
+.pt-detail-head { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.pt-bigtile {
+  width: 86px; height: 86px; flex: none; border-radius: var(--r);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--b, var(--text-faint)) 24%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--b, var(--text-faint)) 50%, var(--surface));
+}
+.pt-bigtile .pt-z { font-size: .72rem; color: var(--text-soft); font-weight: 600; }
+.pt-bigtile .pt-sym { font-size: 2.1rem; font-weight: 700; line-height: 1.1; }
+
+.pt-note {
+  margin: 16px 0 0; font-size: 1rem; line-height: 1.6;
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  padding: 12px 15px; border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+
+.pt-facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0 24px; margin-top: 18px;
+}
+.pt-fact {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .89rem;
+}
+.pt-fact .k { color: var(--text-soft); }
+.pt-fact .v { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+.pt-molecules { margin-top: 6px; }
+.pt-mol-list { display: flex; flex-wrap: wrap; gap: 7px; }
+.pt-mol {
+  display: inline-flex; align-items: baseline; gap: 7px; cursor: pointer;
+  padding: 5px 11px; border-radius: 99px; font: inherit; color: inherit;
+  background: var(--surface-2); border: 1px solid var(--border);
+  transition: border-color .12s, background .12s;
+}
+.pt-mol:hover { border-color: var(--accent); background: var(--accent-soft); }
+.pt-mol .nm { font-size: .86rem; font-weight: 550; }
+.pt-mol .fm { font-size: .74rem; color: var(--text-faint); font-family: var(--font-mono); }

@@ -82,11 +82,7 @@
 @media (max-width: 800px) { .ptable { grid-template-columns: repeat(18, minmax(19px, 1fr)); gap: 2px; }
   .pt-cell { font-size: .55rem; } .pt-cell .z { display: none; } }
 
-/* element colour families, CPK-ish groupings for the picker only */
-.pt-cell[data-fam="nonmetal"] { background: color-mix(in srgb, var(--ok) 14%, var(--surface-2)); }
-.pt-cell[data-fam="noble"] { background: color-mix(in srgb, #9b59b6 16%, var(--surface-2)); }
-.pt-cell[data-fam="halogen"] { background: color-mix(in srgb, #16a085 16%, var(--surface-2)); }
-.pt-cell[data-fam="alkali"] { background: color-mix(in srgb, #e74c3c 15%, var(--surface-2)); }
-.pt-cell[data-fam="alkaline"] { background: color-mix(in srgb, #e67e22 15%, var(--surface-2)); }
-.pt-cell[data-fam="metalloid"] { background: color-mix(in srgb, #f1c40f 18%, var(--surface-2)); }
-.pt-cell[data-fam="lanth"], .pt-cell[data-fam="act"] { background: color-mix(in srgb, #3498db 14%, var(--surface-2)); }
+/* The picker reuses the Elements section's category colours (08-elements.css),
+   keyed off the same data-block attribute. */
+.pt-cell { background: color-mix(in srgb, var(--b, var(--text-faint)) 18%, var(--surface-2)); }
+.pt-cell:hover { background: color-mix(in srgb, var(--b, var(--text-faint)) 34%, var(--surface-2)); }

@@ -107,6 +107,81 @@ function packSDF(sdf) {
   return { e: el.join(' '), c: xyz, b: bonds };
 }
 
+/* --------------------------------------------------------------- elements */
+/* PubChem publishes the whole periodic table in one request. Every field the
+ * element pages show comes from here; the only check is that its symbols line
+ * up with the chemistry library that ships in the app, which would catch a
+ * shifted or truncated table. */
+async function buildElements() {
+  const raw = await get(`${BASE}/periodictable/JSON`);
+  const table = JSON.parse(raw).Table;
+  const cols = table.Columns.Column;
+  const rows = table.Row.map((r) => {
+    const o = {};
+    cols.forEach((c, i) => { o[c] = r.Cell[i]; });
+    return o;
+  });
+
+  if (rows.length !== 118) {
+    console.error(`\u2716 PubChem returned ${rows.length} elements, expected 118.`);
+    process.exit(1);
+  }
+
+  const num = (v) => {
+    if (v === undefined || v === null || v === '') return null;
+    const n = parseFloat(String(v).replace(/[^\d.eE+-]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const problems = [];
+  const out = rows.map((r) => {
+    const z = parseInt(r.AtomicNumber, 10);
+
+    /* Cross-check: the library's own label for this atomic number must be the
+     * symbol PubChem gives it. */
+    const m = new OCL.Molecule(1, 0);
+    m.addAtom(z);
+    const label = m.getAtomLabel(0);
+    if (label && label !== '?' && label !== r.Symbol) {
+      problems.push(`atomic number ${z}: PubChem says ${r.Symbol}, OpenChemLib says ${label}`);
+    }
+    const oclMass = m.getMolecularFormula().relativeWeight;
+    const pcMass = num(r.AtomicMass);
+    if (pcMass && oclMass && Math.abs(oclMass - pcMass) / pcMass > 0.02) {
+      WARNINGS.push(`${r.Name}: atomic mass ${pcMass} from PubChem vs ${oclMass.toFixed(3)} from OpenChemLib`);
+    }
+
+    return {
+      z,
+      sym: r.Symbol,
+      name: r.Name,
+      mass: pcMass,
+      cpk: r.CPKHexColor || null,
+      cfg: r.ElectronConfiguration || null,
+      en: num(r.Electronegativity),
+      radius: num(r.AtomicRadius),
+      ion: num(r.IonizationEnergy),
+      affinity: num(r.ElectronAffinity),
+      ox: r.OxidationStates || null,
+      state: r.StandardState || null,
+      melt: num(r.MeltingPoint),
+      boil: num(r.BoilingPoint),
+      density: num(r.Density),
+      block: r.GroupBlock || null,
+      year: r.YearDiscovered || null,
+    };
+  });
+
+  if (problems.length) {
+    console.error('\n\u2716 The periodic table does not line up with the chemistry library:');
+    problems.forEach((p) => console.error('  \u2716 ' + p));
+    process.exit(1);
+  }
+
+  console.log(`\u2713 ${out.length} elements from PubChem's periodic table, symbols cross-checked.`);
+  return out;
+}
+
 /* ---------------------------------------------------------------- checking */
 /* OpenChemLib reads the compact "[HH]" form PubChem uses for molecular hydrogen
  * as a single atom. Writing it the long way round fixes it without changing
@@ -278,23 +353,14 @@ async function fetchSynonyms(cid) {
     process.exit(1);
   }
 
-  /* Element reference data, read out of the shipped library rather than typed
-   * from memory: atomic number, symbol and mass for everything it knows. */
-  const elements = [];
-  for (let z = 1; z <= 118; z++) {
-    const m = new OCL.Molecule(1, 0);
-    m.addAtom(z);
-    const label = m.getAtomLabel(0);
-    if (!label || label === '?') continue;
-    const mass = m.getMolecularFormula().relativeWeight;
-    elements.push([z, label, Math.round(mass * 1000) / 1000]);
-  }
+  /* Element reference data from PubChem's own periodic table, cross-checked
+   * against the shipped chemistry library. Nothing here is typed from memory. */
+  const elements = await buildElements();
 
   const db = { v: 1, built: new Date().toISOString().slice(0, 10), elements, molecules: out };
   const dest = path.join(ROOT, 'src/data/molecules.json');
   fs.writeFileSync(dest, JSON.stringify(db));
   const with3d = out.filter((m) => m.d).length;
   console.log(`\n✓ ${out.length} molecules verified, ${with3d} with PubChem 3D coordinates.`);
-  console.log(`✓ ${elements.length} elements read from OpenChemLib.`);
   console.log(`✓ Wrote ${dest} (${(fs.statSync(dest).size / 1048576).toFixed(2)} MB)`);
 })();

@@ -6,10 +6,11 @@
   const ME = window.ME;
   const el = ME.el;
 
-  const VIEWS = ['learn', 'draw', 'gallery', 'search', 'molecule'];
+  const VIEWS = ['learn', 'draw', 'elements', 'gallery', 'search', 'molecule'];
   const TABS = [
     { k: 'learn', label: 'Learn', icon: 'book' },
     { k: 'draw', label: 'Draw', icon: 'pencil' },
+    { k: 'elements', label: 'Elements', icon: 'grid' },
     { k: 'gallery', label: 'Gallery', icon: 'grid' },
     { k: 'search', label: 'Search', icon: 'search' },
   ];
@@ -190,6 +191,16 @@
       setView('draw');
       ME.draw.ensureBuilt(ME.$('#view-draw'));
       ME.draw.resize();
+      return;
+    }
+    if (parts[0] === 'elements') {
+      setView('elements');
+      ME.elements.ensureBuilt(ME.$('#view-elements'));
+      /* #/elements/Fe or #/elements/26 opens straight onto that element. */
+      if (parts[1]) {
+        const key = decodeURIComponent(parts[1]);
+        ME.elements.show(/^\d+$/.test(key) ? parseInt(key, 10) : key);
+      }
       return;
     }
     if (parts[0] === 'gallery') {

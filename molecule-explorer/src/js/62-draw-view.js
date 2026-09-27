@@ -104,9 +104,11 @@
       bar.appendChild(b);
     });
 
-    const more = el('button', { class: 'tool', title: 'Every other element' }, ['…']);
+    const more = el('button', { class: 'tool el', title: 'Every other element' }, ['…']);
+    more.dataset.tool = 'more-elements';
     more.addEventListener('click', openPeriodicTable);
     bar.appendChild(more);
+    S.moreBtn = more;
 
     bar.appendChild(el('div', { class: 'tool-sep' }));
 
@@ -227,9 +229,20 @@
 
   function syncTools() {
     if (!S.toolbar) return;
+    /* An element picked from the periodic table has no button of its own, so
+     * the "…" button wears its symbol instead. Without this you could pick,
+     * say, sodium and find no sign anywhere of what you were about to draw. */
+    const exotic = QUICK.indexOf(S.element) < 0;
+    if (S.moreBtn) {
+      S.moreBtn.textContent = exotic ? S.element : '…';
+      S.moreBtn.title = exotic
+        ? ME.chem.elementName(S.element) + ' selected — click for the periodic table'
+        : 'Every other element';
+    }
     ME.$$('.tool', S.toolbar).forEach((b) => {
       let on = false;
-      if (b.dataset.el) on = S.tool === 'atom' && S.element === b.dataset.el;
+      if (b.dataset.tool === 'more-elements') on = S.tool === 'atom' && exotic;
+      else if (b.dataset.el) on = S.tool === 'atom' && S.element === b.dataset.el;
       else if (b.dataset.tool === 'ring') on = S.tool === 'ring' && !S.aromatic && Number(b.dataset.ring) === S.ringSize;
       else if (b.dataset.tool === 'benzene') on = S.tool === 'ring' && S.aromatic;
       else if (b.dataset.tool) on = S.tool === b.dataset.tool;
@@ -757,32 +770,8 @@
   }
 
   /* ----------------------------------------------------- periodic table */
-  function ptPosition(z) {
-    if (z === 1) return [1, 1];
-    if (z === 2) return [1, 18];
-    if (z <= 10) return [2, z <= 4 ? z - 2 : z + 8];
-    if (z <= 18) return [3, z <= 12 ? z - 10 : z];
-    if (z <= 36) return [4, z - 18];
-    if (z <= 54) return [5, z - 36];
-    if (z <= 56) return [6, z - 54];
-    if (z <= 71) return [9, z - 57 + 3];
-    if (z <= 86) return [6, z - 72 + 4];
-    if (z <= 88) return [7, z - 86];
-    if (z <= 103) return [10, z - 89 + 3];
-    return [7, z - 104 + 4];
-  }
-
-  function ptFamily(z) {
-    if ([2, 10, 18, 36, 54, 86, 118].indexOf(z) >= 0) return 'noble';
-    if ([9, 17, 35, 53, 85, 117].indexOf(z) >= 0) return 'halogen';
-    if ([1, 6, 7, 8, 15, 16, 34].indexOf(z) >= 0) return 'nonmetal';
-    if ([5, 14, 32, 33, 51, 52, 84].indexOf(z) >= 0) return 'metalloid';
-    if ([3, 11, 19, 37, 55, 87].indexOf(z) >= 0) return 'alkali';
-    if ([4, 12, 20, 38, 56, 88].indexOf(z) >= 0) return 'alkaline';
-    if (z >= 57 && z <= 71) return 'lanth';
-    if (z >= 89 && z <= 103) return 'act';
-    return 'metal';
-  }
+  /* Layout and colour coding are shared with the Elements section, so the two
+   * tables can never drift apart. */
 
   let ptModal = null;
   function openPeriodicTable() {
@@ -807,22 +796,22 @@
 
     const grid = el('div', { class: 'ptable' });
     const cells = {};
-    ME.chem.elements.forEach(([z, sym]) => {
-      const [row, col] = ptPosition(z);
+    ME.chem.elements.forEach((e) => {
+      const [row, col] = ME.chem.ptPosition(e.z);
       const b = el('button', {
-        class: 'pt-cell', title: `${ME.chem.elementName(sym)} (${z})`,
+        class: 'pt-cell', title: `${e.name} (${e.z})`,
         style: { gridRow: String(row), gridColumn: String(col) },
       });
-      b.dataset.fam = ptFamily(z);
-      b.appendChild(el('span', { class: 'z', text: String(z) }));
-      b.appendChild(el('span', { text: sym }));
+      b.dataset.block = ME.chem.blockKey(e.block);
+      b.appendChild(el('span', { class: 'z', text: String(e.z) }));
+      b.appendChild(el('span', { text: e.sym }));
       b.addEventListener('click', () => {
-        S.tool = 'atom'; S.element = sym;
+        S.tool = 'atom'; S.element = e.sym;
         syncTools();
         back.classList.remove('open');
-        ME.toast(ME.chem.elementName(sym) + ' selected');
+        ME.toast(e.name + ' selected');
       });
-      cells[z] = b;
+      cells[e.z] = b;
       grid.appendChild(b);
     });
     modal.appendChild(grid);

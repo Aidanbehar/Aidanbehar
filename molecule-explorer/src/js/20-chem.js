@@ -69,15 +69,48 @@
     Na: 1, Mg: 2, Al: 3, Si: 4, P: 5, S: 6, Cl: 7, Ar: 8, K: 1, Ca: 2,
     Ga: 3, Ge: 4, As: 5, Se: 6, Br: 7, Kr: 8, In: 3, Sn: 4, Sb: 5, Te: 6, I: 7, Xe: 8 };
 
-  let ELEMENTS = [];           /* [z, symbol, mass] from the built database */
-  const SYM_TO_Z = {};
-  const Z_TO_SYM = {};
+  /* One record per element, straight from PubChem's periodic table and baked
+   * in at build time. See scripts/build-db.js. */
+  let ELEMENTS = [];
+  const BY_Z = {};
+  const BY_SYM = {};
   function setElements(list) {
     ELEMENTS = list || [];
-    ELEMENTS.forEach(([z, sym]) => { SYM_TO_Z[sym] = z; Z_TO_SYM[z] = sym; });
+    ELEMENTS.forEach((e) => { BY_Z[e.z] = e; BY_SYM[e.sym] = e; });
   }
-  function symbolFor(z) { return Z_TO_SYM[z] || Mol.cAtomLabel?.[z] || '?'; }
-  function atomicNumber(sym) { return SYM_TO_Z[sym] || 0; }
+  function element(idOrSym) {
+    return typeof idOrSym === 'number' ? (BY_Z[idOrSym] || null) : (BY_SYM[idOrSym] || null);
+  }
+  function symbolFor(z) {
+    const e = BY_Z[z];
+    return e ? e.sym : (Mol.cAtomLabel && Mol.cAtomLabel[z]) || '?';
+  }
+  function atomicNumber(sym) {
+    const e = BY_SYM[sym];
+    return e ? e.z : 0;
+  }
+
+  /* Where an element sits in the conventional 18-column layout. The f-block
+   * goes on its own two rows below the table, as it is normally printed. */
+  function ptPosition(z) {
+    if (z === 1) return [1, 1];
+    if (z === 2) return [1, 18];
+    if (z <= 10) return [2, z <= 4 ? z - 2 : z + 8];
+    if (z <= 18) return [3, z <= 12 ? z - 10 : z];
+    if (z <= 36) return [4, z - 18];
+    if (z <= 54) return [5, z - 36];
+    if (z <= 56) return [6, z - 54];
+    if (z <= 71) return [9, z - 57 + 3];      /* lanthanides */
+    if (z <= 86) return [6, z - 72 + 4];
+    if (z <= 88) return [7, z - 86];
+    if (z <= 103) return [10, z - 89 + 3];    /* actinides */
+    return [7, z - 104 + 4];
+  }
+
+  /* A short key for PubChem's GroupBlock, used for the colour coding. */
+  function blockKey(block) {
+    return String(block || 'other').toLowerCase().replace(/[^a-z]+/g, '-');
+  }
 
   /* ------------------------------------------------------------- parsing */
   /* OpenChemLib reads PubChem's compact "[HH]" for molecular hydrogen as one
@@ -460,30 +493,12 @@
     return `${name} can manage at most ${max} bonds here, and this one has ${used}.`;
   }
 
-  const ELEMENT_NAMES = {
-    H: 'Hydrogen', He: 'Helium', Li: 'Lithium', Be: 'Beryllium', B: 'Boron', C: 'Carbon',
-    N: 'Nitrogen', O: 'Oxygen', F: 'Fluorine', Ne: 'Neon', Na: 'Sodium', Mg: 'Magnesium',
-    Al: 'Aluminium', Si: 'Silicon', P: 'Phosphorus', S: 'Sulfur', Cl: 'Chlorine', Ar: 'Argon',
-    K: 'Potassium', Ca: 'Calcium', Sc: 'Scandium', Ti: 'Titanium', V: 'Vanadium', Cr: 'Chromium',
-    Mn: 'Manganese', Fe: 'Iron', Co: 'Cobalt', Ni: 'Nickel', Cu: 'Copper', Zn: 'Zinc',
-    Ga: 'Gallium', Ge: 'Germanium', As: 'Arsenic', Se: 'Selenium', Br: 'Bromine', Kr: 'Krypton',
-    Rb: 'Rubidium', Sr: 'Strontium', Y: 'Yttrium', Zr: 'Zirconium', Nb: 'Niobium', Mo: 'Molybdenum',
-    Tc: 'Technetium', Ru: 'Ruthenium', Rh: 'Rhodium', Pd: 'Palladium', Ag: 'Silver', Cd: 'Cadmium',
-    In: 'Indium', Sn: 'Tin', Sb: 'Antimony', Te: 'Tellurium', I: 'Iodine', Xe: 'Xenon',
-    Cs: 'Caesium', Ba: 'Barium', La: 'Lanthanum', Ce: 'Cerium', Pr: 'Praseodymium', Nd: 'Neodymium',
-    Pm: 'Promethium', Sm: 'Samarium', Eu: 'Europium', Gd: 'Gadolinium', Tb: 'Terbium', Dy: 'Dysprosium',
-    Ho: 'Holmium', Er: 'Erbium', Tm: 'Thulium', Yb: 'Ytterbium', Lu: 'Lutetium', Hf: 'Hafnium',
-    Ta: 'Tantalum', W: 'Tungsten', Re: 'Rhenium', Os: 'Osmium', Ir: 'Iridium', Pt: 'Platinum',
-    Au: 'Gold', Hg: 'Mercury', Tl: 'Thallium', Pb: 'Lead', Bi: 'Bismuth', Po: 'Polonium',
-    At: 'Astatine', Rn: 'Radon', Fr: 'Francium', Ra: 'Radium', Ac: 'Actinium', Th: 'Thorium',
-    Pa: 'Protactinium', U: 'Uranium', Np: 'Neptunium', Pu: 'Plutonium', Am: 'Americium',
-    Cm: 'Curium', Bk: 'Berkelium', Cf: 'Californium', Es: 'Einsteinium', Fm: 'Fermium',
-    Md: 'Mendelevium', No: 'Nobelium', Lr: 'Lawrencium', Rf: 'Rutherfordium', Db: 'Dubnium',
-    Sg: 'Seaborgium', Bh: 'Bohrium', Hs: 'Hassium', Mt: 'Meitnerium', Ds: 'Darmstadtium',
-    Rg: 'Roentgenium', Cn: 'Copernicium', Nh: 'Nihonium', Fl: 'Flerovium', Mc: 'Moscovium',
-    Lv: 'Livermorium', Ts: 'Tennessine', Og: 'Oganesson',
-  };
-  function elementName(sym) { return ELEMENT_NAMES[sym] || sym; }
+  /* Names come from the verified element data rather than a second, hand-typed
+   * copy of the periodic table. */
+  function elementName(sym) {
+    const e = BY_SYM[sym];
+    return e ? e.name : sym;
+  }
 
   /* Validate a parsed OpenChemLib molecule by projecting it onto the same
    * neutral description the editor uses. */
@@ -530,7 +545,8 @@
 
   ME.chem = {
     OCL, Mol, CPK, colorOf, labelColorOf, radiusOf, VALENCE, METALS, OUTER, GROUPS,
-    setElements, get elements() { return ELEMENTS; }, symbolFor, atomicNumber, elementName,
+    setElements, get elements() { return ELEMENTS; }, element, ptPosition, blockKey,
+    symbolFor, atomicNumber, elementName,
     fromSmiles, fromMolfile, tryParse, normaliseSmiles, ensureCoordinates, canonicalID,
     analyse, safeSmiles, isOrganic, skeletalMakesSense, lonePairs,
     findGroups, condensed, validateGraph, validateMolecule, hasCarbon, fragmentCount,

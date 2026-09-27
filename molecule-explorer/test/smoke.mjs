@@ -62,7 +62,10 @@ await page.waitForTimeout(1200);
 
 check('page loads with no script errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 check('no network requests attempted on load', attempted.length === 0, attempted.slice(0, 3).join(', '));
-check('navigation rendered', await page.locator('.nav .tab').count() === 4);
+check('navigation rendered', await page.locator('.nav .tab').count() === 5);
+check('Elements sits between Draw and Gallery',
+  (await page.locator('.nav .tab').allInnerTexts()).join('|') === 'Learn|Draw|Elements|Gallery|Search',
+  (await page.locator('.nav .tab').allInnerTexts()).join('|'));
 check('Learn is the default view', await page.locator('#view-learn.active').count() === 1);
 check('lesson 1 rendered', (await page.locator('.lesson h2').innerText()).includes('Why draw'));
 check('lesson figures drew molecules', await page.locator('#view-learn svg.molcanvas').count() >= 2);
@@ -194,6 +197,60 @@ await page.screenshot({ path: path.join(SHOTS, '08-gallery.png') });
 await page.locator('.gal-filters .btn', { hasText: 'Medicines' }).click();
 await page.waitForTimeout(400);
 check('gallery filter narrows the grid', await page.locator('.gal-card').count() < cards);
+
+/* -------------------------------------------------------- periodic table */
+await page.locator('.tab[data-view=elements]').click();
+await page.waitForTimeout(700);
+check('the periodic table shows all 118 elements', await page.locator('.pt-el').count() === 118,
+  'got ' + (await page.locator('.pt-el').count()));
+check('every category has a legend entry', await page.locator('.pt-legend-item').count() === 10);
+check('an element is open by default', (await page.locator('.pt-detail h2').innerText()) === 'Carbon',
+  await page.locator('.pt-detail h2').innerText());
+check('the open element lists its numbers', await page.locator('.pt-fact').count() >= 10,
+  (await page.locator('.pt-fact').count()) + ' facts');
+{
+  const txt = await page.locator('.pt-detail').innerText();
+  check('carbon shows its electron configuration', /\[He\]2s2 2p2/.test(txt));
+  check('carbon shows how many bonds it wants', /4 hands/.test(txt));
+  check('carbon shows a plain-language note', /backbone of every molecule/i.test(txt));
+  check('temperatures are given in celsius too', /\u00b0C\)/.test(txt), txt.slice(0, 120));
+}
+check('molecules containing the element are linked', await page.locator('.pt-mol').count() > 0);
+
+/* clicking another element swaps the panel */
+await page.locator('.pt-el:has(.pt-sym:text-is("Fe"))').first().click();
+await page.waitForTimeout(300);
+check('clicking an element opens it', (await page.locator('.pt-detail h2').innerText()) === 'Iron',
+  await page.locator('.pt-detail h2').innerText());
+{
+  const txt = await page.locator('.pt-detail').innerText();
+  check('iron is labelled a transition metal', /Transition metal/.test(txt));
+  check('iron lists the molecules it appears in', /Heme B/.test(txt), txt.slice(-160));
+}
+await page.screenshot({ path: path.join(SHOTS, '14-elements.png'), fullPage: true });
+
+/* an element with almost no data still renders rather than breaking */
+await page.locator('.pt-el:has(.pt-sym:text-is("Og"))').first().click();
+await page.waitForTimeout(300);
+check('a barely-studied element still renders',
+  (await page.locator('.pt-detail h2').innerText()) === 'Oganesson' && await page.locator('.pt-fact').count() > 0);
+check('and says plainly that nothing in the set contains it',
+  /No built-in molecule contains oganesson/i.test(await page.locator('.pt-detail').innerText()));
+
+/* a molecule chip opens the molecule page */
+await page.locator('.pt-el:has(.pt-sym:text-is("O"))').first().click();
+await page.waitForTimeout(300);
+await page.locator('.pt-mol').first().click();
+await page.waitForTimeout(700);
+check('a linked molecule opens its page', await page.locator('#view-molecule.active h1').count() === 1);
+
+/* deep links, by symbol and by atomic number */
+for (const [frag, want] of [['Fe', 'Iron'], ['26', 'Iron'], ['Na', 'Sodium']]) {
+  await page.evaluate((f) => { location.hash = '#/elements/' + f; }, frag);
+  await page.waitForTimeout(350);
+  check(`#/elements/${frag} opens ${want}`, (await page.locator('.pt-detail h2').innerText()) === want,
+    await page.locator('.pt-detail h2').innerText());
+}
 
 /* ------------------------------------------------------------------ draw */
 await page.locator('.tab[data-view=draw]').click();
@@ -342,6 +399,23 @@ await page.locator('.draw-toolbar .tool', { hasText: '…' }).click();
 await page.waitForTimeout(300);
 const ptCells = await page.locator('.pt-cell').count();
 check('periodic table has every element', ptCells === 118, 'got ' + ptCells);
+check('the picker is colour-coded by category', await page.evaluate(() => {
+  const cells = Array.from(document.querySelectorAll('.pt-cell'));
+  return cells.every((c) => c.dataset.block)
+    && new Set(cells.map((c) => getComputedStyle(c).backgroundColor)).size >= 8;
+}));
+{
+  /* picking an element with no button of its own must still show somewhere */
+  await page.locator('.pt-cell[title^="Sodium"]').click();
+  await page.waitForTimeout(300);
+  const shown = await page.evaluate(() => {
+    const on = document.querySelector('.draw-toolbar .tool.on');
+    return on ? on.textContent.trim() : 'none';
+  });
+  check('picking an exotic element shows it on the toolbar', shown === 'Na', shown);
+  await page.locator('.draw-toolbar .tool.el', { hasText: /^C$/ }).click();
+  await page.waitForTimeout(150);
+}
 await page.screenshot({ path: path.join(SHOTS, '11-ptable.png') });
 await page.keyboard.press('Escape');
 
