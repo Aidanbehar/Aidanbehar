@@ -170,9 +170,9 @@
     atoms.forEach((a) => {
       if (!a.hydrogens || a.hAlpha <= 0.001) return;
       const ax = PX(a), ay = PY(a);
+      const near = ME.render2d.collapsedRadius(a, fs);
+      const far = S * ME.render2d.H_BOND_FRACTION;
       a.hDirs.forEach((ang) => {
-        const near = fs * 0.78 + trimFor(a) * 0.15;
-        const far = S * ME.render2d.H_BOND_FRACTION;
         const dist = near + (far - near) * xray;
         const hx = ax + Math.cos(ang) * dist, hy = ay + Math.sin(ang) * dist;
         const bondAlpha = Math.max(0, Math.min(1, (xray - 0.28) / 0.55)) * a.hAlpha;

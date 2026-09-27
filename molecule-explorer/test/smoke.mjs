@@ -190,6 +190,76 @@ info = await page.locator('.draw-side').innerText();
 check('ethanol recognised from the drawing', info.includes('You drew Ethanol'), info.slice(0, 200));
 await page.screenshot({ path: path.join(SHOTS, '09-draw-ethanol.png') });
 
+/* Adding standalone atoms. A tap always wobbles a little — on a trackpad or a
+   touchscreen, several pixels — and that must never be read as a drag, or every
+   attempt to place a single atom produces a bonded pair instead. */
+async function tapWithWobble(x, y, px) {
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  if (px) await page.mouse.move(x + px, y + px, { steps: 3 });
+  await page.mouse.up();
+  await page.waitForTimeout(220);
+}
+const drawState = () => page.evaluate(() => ({
+  n: window.ME.draw.graph.atoms.length, b: window.ME.draw.graph.bonds.length,
+}));
+const clearDraw = () => page.evaluate(() => window.ME.draw.setGraph(window.ME.drawModel.emptyGraph()));
+
+for (const wobble of [0, 5, 10, 15]) {
+  await clearDraw();
+  await page.waitForTimeout(120);
+  await tapWithWobble(box.x + 330, box.y + 220, wobble);
+  const st = await drawState();
+  check(`a tap with ${wobble}px of wobble makes one lone atom`,
+    st.n === 1 && st.b === 0, `got ${st.n} atoms and ${st.b} bonds`);
+}
+
+await clearDraw();
+await page.waitForTimeout(120);
+await page.mouse.move(box.x + 330, box.y + 220);
+await page.mouse.down();
+await page.mouse.move(box.x + 430, box.y + 220, { steps: 6 });
+await page.mouse.up();
+await page.waitForTimeout(250);
+{
+  const st = await drawState();
+  check('a deliberate drag still makes a bond', st.n === 2 && st.b === 1,
+    `got ${st.n} atoms and ${st.b} bonds`);
+}
+
+/* several separate atoms of different elements, none of them bonded */
+await clearDraw();
+await page.waitForTimeout(120);
+/* an earlier step left a different element selected */
+await page.locator('.draw-toolbar .tool.el', { hasText: /^C$/ }).click();
+await page.mouse.click(box.x + 180, box.y + 150);
+await page.waitForTimeout(180);
+await page.locator('.draw-toolbar .tool.el', { hasText: /^O$/ }).click();
+await page.mouse.click(box.x + 420, box.y + 150);
+await page.waitForTimeout(180);
+await page.locator('.draw-toolbar .tool.el', { hasText: /^N$/ }).click();
+await page.mouse.click(box.x + 180, box.y + 330);
+await page.waitForTimeout(300);
+{
+  const st = await drawState();
+  const syms = await page.evaluate(() => window.ME.draw.graph.atoms.map((a) => a.sym).join(''));
+  check('three separate atoms of different elements stay separate',
+    st.n === 3 && st.b === 0 && syms === 'CON', `${syms}, ${st.n} atoms, ${st.b} bonds`);
+}
+const sep = await page.evaluate(() => {
+  const g = window.ME.draw.graph;
+  let m = Infinity;
+  for (let i = 0; i < g.atoms.length; i++) {
+    for (let j = i + 1; j < g.atoms.length; j++) {
+      m = Math.min(m, Math.hypot(g.atoms[i].x - g.atoms[j].x, g.atoms[i].y - g.atoms[j].y));
+    }
+  }
+  return +m.toFixed(2);
+});
+check('separate atoms are far enough apart to read', sep >= 0.79, `closest pair ${sep} bond lengths`);
+await clearDraw();
+await page.waitForTimeout(150);
+
 /* validation: five bonds on one carbon */
 await page.evaluate(() => {
   const ME = window.ME, M = ME.drawModel;

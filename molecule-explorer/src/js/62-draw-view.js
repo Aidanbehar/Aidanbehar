@@ -329,8 +329,9 @@
     }
   }
 
-  const HIT = 0.42;     /* how close a click counts as hitting an atom */
-  const SNAP_TO = 0.66; /* how close a drag has to end to bond to an atom */
+  const HIT = 0.42;       /* how close a click counts as hitting an atom */
+  const SNAP_TO = 0.66;   /* how close a drag has to end to bond to an atom */
+  const DRAG_START = 0.5; /* how far the pointer must travel to count as a drag */
 
   function onHover(p) {
     const m = toModel(p.x, p.y);
@@ -439,7 +440,10 @@
     if (S.drag.kind === 'bondFrom') {
       const from = S.graph.atoms[S.drag.atom];
       const dist = Math.hypot(m.x - from.x, m.y - from.y);
-      if (dist > 0.25) S.drag.moved = true;
+      /* Well over any wobble a trackpad or a fingertip introduces, and still
+       * comfortably under the 0.7 minimum length of a dragged bond. Below this
+       * it is a click, and a click must never grow a second atom. */
+      if (dist > DRAG_START) S.drag.moved = true;
       /* A generous snap radius here: releasing near an atom means "bond to
        * that one", which is almost always what was meant, and it stops a new
        * atom being created on top of it. */

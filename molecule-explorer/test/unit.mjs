@@ -552,6 +552,49 @@ describe('drawings stay readable', () => {
     assert.ok(worst >= 0.9, `closest pair of hydrogens was ${worst} font-sizes apart`);
   });
 
+  test('a lone atom does not sit under its own hydrogens', async () => {
+    /* Water and ammonia dropped on their own into the editor: in the skeletal
+     * state their hydrogens tuck in beside the letter, and used to end up
+     * underneath the disc that masks bonds behind it. */
+    const out = await run(() => {
+      const res = {};
+      ['O', 'N', 'C', 'S'].forEach((smi) => {
+        const svg = window.ME.render2d.render(window.ME.chem.fromSmiles(smi),
+          { xray: 0, width: 300, height: 200, interactive: false });
+        const texts = Array.from(svg.querySelectorAll('text'));
+        const fs = parseFloat(texts[0].getAttribute('font-size'));
+        let worst = Infinity;
+        for (let i = 0; i < texts.length; i++) {
+          for (let j = i + 1; j < texts.length; j++) {
+            const d = Math.hypot(texts[i].getAttribute('x') - texts[j].getAttribute('x'),
+              texts[i].getAttribute('y') - texts[j].getAttribute('y')) / fs;
+            if (d < worst) worst = d;
+          }
+        }
+        res[smi] = texts.length < 2 ? 99 : +worst.toFixed(2);
+      });
+      return res;
+    });
+    Object.entries(out).forEach(([smi, d]) => {
+      assert.ok(d >= 1.15, `a lone ${smi} has labels only ${d} font-sizes apart`);
+    });
+  });
+
+  test('a lone water molecule reads as H O H, not both hydrogens on one side', async () => {
+    const apart = await run(() => {
+      const mol = window.ME.chem.fromSmiles('O');
+      const svg = window.ME.render2d.render(mol, { xray: 0, width: 300, height: 200, interactive: false });
+      const hs = Array.from(svg.querySelectorAll('text')).filter((t) => t.textContent === 'H');
+      const o = Array.from(svg.querySelectorAll('text')).find((t) => t.textContent === 'O');
+      const ang = hs.map((h) => Math.atan2(h.getAttribute('y') - o.getAttribute('y'),
+        h.getAttribute('x') - o.getAttribute('x')));
+      let d = Math.abs(ang[0] - ang[1]);
+      if (d > Math.PI) d = 2 * Math.PI - d;
+      return +(d * 180 / Math.PI).toFixed(0);
+    });
+    assert.ok(apart >= 120, `the two hydrogens are only ${apart} degrees apart`);
+  });
+
   test('an explicit hydrogen is drawn in a colour you can see', async () => {
     const fill = await run(() => {
       const M = window.ME.drawModel;

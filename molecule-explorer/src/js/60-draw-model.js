@@ -130,9 +130,9 @@
   const SNAP = Math.PI / 6;     /* 30 degrees, the angle a zig-zag chain uses */
 
   /* The closest two atoms are allowed to sit before the drawing gets hard to
-   * read. A bond is 1.0, and a drawn label is about 0.3 across, so anything
-   * under about two thirds of a bond starts to look like a smudge. */
-  const MIN_SEP = 0.62;
+   * read. A bond is 1.0. Two atoms that both carry a written label need most of
+   * that: each label is about 0.3 across, so at 0.6 apart the letters touch. */
+  const MIN_SEP = 0.8;
 
   /* Where should a new bond from this atom point?
    *

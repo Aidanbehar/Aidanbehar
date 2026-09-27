@@ -64,13 +64,13 @@ PubChem module fails the build.
 
 **`npm test`** runs both suites:
 
-- `test/unit.mjs` — 37 logic tests (search by case, typo, synonym, formula and
+- `test/unit.mjs` — 39 logic tests (search by case, typo, synonym, formula and
   SMILES; the five-bond-carbon message; twenty-odd valid ions and hypervalent
   species that must *not* be flagged; formula and molar mass against known
   values; drawing → recognition; label spacing in the drawings; crowding in the
   editor; plus a sweep confirming every database entry's stored formula and mass
   agree with its structure).
-- `test/smoke.mjs` — 50 checks in a real browser, loaded from `file://` with
+- `test/smoke.mjs` — 57 checks in a real browser, loaded from `file://` with
   the network switched off, covering all eleven lessons, the X-ray slider, the
   molecule page, the gallery, the drawing editor, the periodic table and dark
   mode. It asserts the page makes **zero** network requests. A final phase
@@ -155,6 +155,15 @@ Two things that are easy to get wrong and are pinned down by tests:
   put a hydrogen in it, and the letters land on top of each other.
   `placeAllHydrogens` scores every candidate direction against a shared map of
   what is already on the page, placing the most constrained atoms first.
+- **A tap is never a drag.** The pointer has to travel half a bond length
+  before the editor treats a click as a drag. Below that threshold every wobble
+  from a trackpad or a fingertip used to spawn a second, bonded atom, which made
+  it almost impossible to place a single atom on purpose.
+- **A hydrogen tucked in beside its atom still clears it.** Every label sits on
+  a small disc that masks the bonds behind it, so a hydrogen placed too close
+  disappears under its own atom's disc. The collapsed distance is computed from
+  how much angular room the hydrogens actually got, so a lone water molecule
+  reads as H O H rather than a smudge.
 - **The editor refuses to stack atoms.** New atoms, dropped atoms and dropped
   rings are all pushed out to a minimum separation, a drag that ends near an
   existing atom bonds to it rather than landing on top of it, and the

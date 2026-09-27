@@ -90,6 +90,28 @@
    * 0.46 of a bond and the label disc about 0.62 of the font. */
   const LABEL_R = 0.3;
 
+  /* How far the hydrogens sit from their atom in the collapsed, skeletal state.
+   *
+   * Every label is drawn on a small disc that masks the bonds behind it, so two
+   * labels whose centres are closer than about 1.2 font sizes will clip each
+   * other. One hydrogen tucks in right beside its atom, so that an O-H reads as
+   * "OH"; two or more also have to clear one another, which needs more room the
+   * closer together their directions ended up. */
+  function collapsedRadius(a, fs) {
+    const clear = fs * 1.2;
+    if (!a.hDirs || a.hDirs.length < 2) return clear;
+    let minGap = Math.PI;
+    for (let i = 0; i < a.hDirs.length; i++) {
+      for (let j = i + 1; j < a.hDirs.length; j++) {
+        const d = Math.abs(angleDiff(a.hDirs[i], a.hDirs[j]));
+        if (d < minGap) minGap = d;
+      }
+    }
+    const needed = minGap > 0.02 ? clear / (2 * Math.sin(minGap / 2)) : clear * 2;
+    /* never further out than a hydrogen sits when fully expanded */
+    return Math.max(clear, Math.min(needed, fs * 2.1));
+  }
+
   function placeAllHydrogens(atoms) {
     const occupied = [];
     atoms.forEach((a) => {
@@ -141,6 +163,14 @@
             const horiz = Math.min(Math.abs(angleDiff(th, 0)), Math.abs(angleDiff(th, Math.PI)));
             score += horiz * 0.35;
           }
+          /* Among directions that are equally free, take the one furthest from
+           * everything else. Without this the search settles on the first angle
+           * that merely clears its neighbours, which leaves a lone water
+           * molecule with both hydrogens bunched to one side. */
+          let spread = Math.PI;
+          for (const t of bondAngles) spread = Math.min(spread, Math.abs(angleDiff(th, t)));
+          for (const t of a.hDirs) spread = Math.min(spread, Math.abs(angleDiff(th, t)));
+          score -= spread * 0.25;
           if (score < bestScore) { bestScore = score; best = th; }
         }
         a.hDirs.push(best);
@@ -310,10 +340,10 @@
     atoms.forEach((a) => {
       if (!a.hydrogens || a.hAlpha <= 0.001) return;
       const ax = PX(a), ay = PY(a);
+      /* beside the label when collapsed, at bond length when expanded */
+      const near = collapsedRadius(a, fs);
+      const far = scale * H_BOND_FRACTION;
       a.hDirs.forEach((ang) => {
-        /* beside the label when collapsed, at bond length when expanded */
-        const near = fs * 0.78 + trimFor(a) * 0.15;
-        const far = scale * H_BOND_FRACTION;
         const dist = lerp(near, far, xray);
         const hx = ax + Math.cos(ang) * dist;
         const hy = ay + Math.sin(ang) * dist;
@@ -581,7 +611,7 @@
   ME.render2d = {
     render, mountXray, describe, toStandaloneSVG, svgToPNG, atomDescription, svgEl,
     /* shared with the drawing editor's canvas painter so both obey the same rules */
-    placeAllHydrogens, carbonNeedsLabel, angleDiff, lerp, clamp01,
+    placeAllHydrogens, collapsedRadius, carbonNeedsLabel, angleDiff, lerp, clamp01,
     H_BOND_FRACTION, LABEL_R,
   };
 })();
