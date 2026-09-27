@@ -454,3 +454,38 @@
 .sim-workval {
   font-weight: 650; margin-left: 8px; font-variant-numeric: tabular-nums;
 }
+
+/* the stoichiometry road map */
+.sim-eq {
+  font-family: var(--font-mono); font-size: 1rem; text-align: center;
+  padding: 10px 0 4px; color: var(--text);
+}
+.sim-roadmap {
+  display: flex; align-items: stretch; justify-content: center;
+  flex-wrap: nowrap; padding: 8px 2px 12px;
+}
+.sim-rm-station {
+  flex: none; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 8px 11px; text-align: center; min-width: 86px;
+}
+.sim-rm-station .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+.sim-rm-station .k { font-size: .8rem; color: var(--text-soft); margin-top: 2px; }
+.sim-rm-arrow {
+  flex: none; display: flex; flex-direction: column; justify-content: center;
+  width: 118px; padding: 0 3px; text-align: center;
+}
+.sim-rm-op { font-size: .8rem; font-weight: 650; color: var(--accent-text); }
+.sim-rm-glyph {
+  color: var(--text-faint); font-size: 1.1rem; line-height: 1.2;
+}
+.sim-rm-glyph::before { content: '\2192'; }
+.sim-rm-why { font-size: .71rem; color: var(--text-faint); line-height: 1.35; }
+
+/* Below the width where four stations and three arrows fit, the road turns
+ * the corner and runs downwards rather than scrolling out of sight. */
+@media (max-width: 860px) {
+  .sim-roadmap { flex-direction: column; align-items: center; }
+  .sim-rm-station { min-width: 150px; }
+  .sim-rm-arrow { width: auto; max-width: 300px; padding: 3px 0; }
+  .sim-rm-glyph::before { content: '\2193'; }
+}

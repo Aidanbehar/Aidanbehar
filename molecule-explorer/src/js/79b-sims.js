@@ -1166,9 +1166,115 @@
       'Pick one, or type any formula — including ones that cannot exist, which it will tell you about.', body);
   }
 
+  /* ============================================== the stoichiometry road map */
+  /* Grams, moles, moles, grams. Drag the mass and watch the value travel the
+   * four stations, with each conversion written on the arrow that performs it.
+   * Everything comes from ME.stoich.massToMass, which is also what the Tools
+   * tab and the graders use, so the picture cannot drift from the arithmetic. */
+  function stoichMap(opts) {
+    opts = opts || {};
+    const SCENARIOS = opts.scenarios || [
+      { eq: 'CH4 + 2 O2 -> CO2 + 2 H2O', from: 'CH4', to: 'CO2',
+        note: 'Burning natural gas. How much carbon dioxide does a given mass of methane make?' },
+      { eq: '2 H2 + O2 -> 2 H2O', from: 'H2', to: 'H2O',
+        note: 'The simplest case, and the ratio is not 1:1 \u2014 which is the whole point of step three.' },
+      { eq: 'N2 + 3 H2 -> 2 NH3', from: 'N2', to: 'NH3',
+        note: 'Ammonia synthesis. Roughly half the nitrogen in your body passed through this reaction.' },
+      { eq: 'Fe2O3 + 3 CO -> 2 Fe + 3 CO2', from: 'Fe2O3', to: 'Fe',
+        note: 'Smelting iron. How much iron do you get from a mass of ore?' },
+      { eq: 'CaCO3 -> CaO + CO2', from: 'CaCO3', to: 'CaO',
+        note: 'Making quicklime from limestone \u2014 one of the oldest industrial reactions there is.' },
+    ];
+    let scenario = SCENARIOS[0];
+    let grams = 10;
+
+    const body = el('div');
+    const chips = el('div', { class: 'sim-buttons' });
+    body.appendChild(chips);
+    SCENARIOS.forEach((sc) => {
+      const parsed = ME.formula.parse(sc.from);
+      const btn = el('button', { class: 'btn btn-sm' + (sc === scenario ? ' on' : '') });
+      /* One span, because .btn is a flex row and separate text nodes would be
+       * spaced apart by its gap — which puts a gap before every subscript. */
+      btn.appendChild(el('span', { html: ME.chemHTML((parsed.ok ? parsed.display : sc.from) +
+        ' \u2192 ' + (ME.formula.parse(sc.to).display || sc.to)) }));
+      btn.addEventListener('click', () => {
+        scenario = sc;
+        ME.$$('.btn', chips).forEach((x, i) => x.classList.toggle('on', SCENARIOS[i] === sc));
+        draw();
+      });
+      chips.appendChild(btn);
+    });
+
+    const massSlider = slider('Mass you start with', 1, 200, grams, 1,
+      (v) => { grams = v; draw(); }, (v) => v + ' g');
+    body.appendChild(massSlider.node);
+
+    const eqLine = el('div', { class: 'sim-eq' });
+    body.appendChild(eqLine);
+    const map = el('div', { class: 'sim-roadmap' });
+    body.appendChild(map);
+    const note = el('div', { class: 'sim-note' });
+    body.appendChild(note);
+    const work = el('div', { class: 'sim-steps' });
+    body.appendChild(work);
+
+    function station(top, bottom) {
+      return el('div', { class: 'sim-rm-station' }, [
+        el('div', { class: 'v', text: top }),
+        el('div', { class: 'k', html: ME.chemHTML(bottom) }),
+      ]);
+    }
+    function arrow(label, why) {
+      /* The direction glyph is drawn by CSS, so the same markup reads as a row
+       * of four on a wide screen and a column of four on a narrow one. */
+      return el('div', { class: 'sim-rm-arrow' }, [
+        el('div', { class: 'sim-rm-op', text: label }),
+        el('div', { class: 'sim-rm-glyph', 'aria-hidden': 'true' }),
+        el('div', { class: 'sim-rm-why', html: ME.chemHTML(why) }),
+      ]);
+    }
+
+    function draw() {
+      ME.clear(eqLine); ME.clear(map); ME.clear(work);
+      const r = ME.stoich.massToMass(scenario.eq, scenario.from, grams, scenario.to);
+      if (!r.ok) { note.textContent = r.error; return; }
+
+      eqLine.innerHTML = ME.chemHTML(r.equation.text);
+      const Mfrom = r.from.species.formula.mass, Mto = r.to.species.formula.mass;
+      const fd = r.from.species.formula.display, td = r.to.species.formula.display;
+
+      map.appendChild(station(ME.fmt.fmt(grams, 4) + ' g', fd));
+      map.appendChild(arrow('\u00f7 ' + ME.fmt.fmt(Mfrom, 5),
+        'the molar mass of ' + fd + ', because grams cannot talk to grams'));
+      map.appendChild(station(ME.fmt.fmt(r.molesFrom, 4) + ' mol', fd));
+      map.appendChild(arrow('\u00d7 ' + r.to.coefficient + '/' + r.from.coefficient,
+        'the only step that uses the equation'));
+      map.appendChild(station(ME.fmt.fmt(r.molesTo, 4) + ' mol', td));
+      map.appendChild(arrow('\u00d7 ' + ME.fmt.fmt(Mto, 5),
+        'the molar mass of ' + td + ', to get back to something you can weigh'));
+      map.appendChild(station(ME.fmt.fmt(r.grams, 4) + ' g', td));
+
+      note.textContent = scenario.note + ' Move the slider: the two outer numbers change and the middle ratio never does, because the ratio is the chemistry and the masses are just units.';
+
+      const ol = el('ol', { class: 'sim-worklist' });
+      r.steps.forEach((st) => {
+        const li = el('li');
+        li.appendChild(el('span', { html: ME.chemHTML(st.text) }));
+        if (st.maths) li.appendChild(el('div', { class: 'sim-workval', text: st.maths }));
+        ol.appendChild(li);
+      });
+      work.appendChild(ol);
+    }
+
+    draw();
+    return shell('The four stations of every stoichiometry problem',
+      'Grams, moles, moles, grams. Only the middle arrow needs the balanced equation.', body);
+  }
+
   ME.sims = {
     statesOfMatter, heatingCurve, buildAtom, trendMap, phScale, titration, lewis,
-    energyDiagram, equilibrium, solutionMixer, bondRotation,
+    energyDiagram, equilibrium, solutionMixer, bondRotation, stoichMap,
     shell, slider, whenVisible, css,
   };
 })();

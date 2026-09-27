@@ -174,10 +174,13 @@ network switched off.
 - **Unit 8 — Chemical reactions** (3 lessons: what a reaction is and
   conservation of mass, balancing, and the five reaction types with the
   activity series and solubility rules used to predict products)
+- **Unit 9 — The mole and stoichiometry** (3 lessons: the mole, molar mass and
+  formulas from analysis, and stoichiometry with limiting reactant and percent
+  yield; embeds the new road-map simulation)
 - **Unit 15 — Organic chemistry: reading structures** (the original 12 lessons,
   kept working unchanged)
 
-46 lessons, 105 pages, 341 questions, about 8.5 hours of reading.
+49 lessons, 113 pages, 364 questions, about 10 hours of reading.
 
 **`src/js/20-calc-lewis.js` — Lewis structures and VSEPR**
 - Runs the counting method and returns electron totals, bond orders, lone
@@ -190,6 +193,14 @@ network switched off.
 - 27 molecules with settled textbook answers are pinned in the engine tests,
   along with electron conservation, formal charges summing to the species
   charge, and resonance detection.
+
+**Simulations added for these units**
+- The Lewis-structure builder: type any formula, including impossible ones,
+  and it refuses with a reason rather than drawing something wrong.
+- The stoichiometry road map: four stations, with each conversion written on
+  the arrow that performs it, computed by `ME.stoich.massToMass` — the same
+  code the Tools tab and the graders use. It runs across on a wide screen and
+  turns the corner downwards on a narrow one.
 
 ### Bugs found and fixed
 - The practice generators loaded *before* the course engine, because the
@@ -218,6 +229,10 @@ network switched off.
   hyphenated words are left alone. Every lesson, question, table, worked
   example and Tools step now goes through it, and a test pins both what must
   be marked up and what must not.
+- Two numbers in Unit 9's worked examples were wrong by hand: the leftover
+  hydrogen in the limiting-reactant example (9.7 g, actually 8.74) and
+  calcium nitrate's molar mass in the last decimal. Every number those
+  worked examples print is now checked against the engine in a test.
 - A lesson linking to `#/m/sodium-chloride` reached nothing: molecule links
   need `cid:` or `n:` because the database is keyed by neither a slug nor a
   title. A test now renders every lesson and checks that every hand-written
@@ -225,14 +240,13 @@ network switched off.
   it names exists too.
 
 ### Next, in order
-1. Unit 9 the mole and stoichiometry,
-   10 gases, 11 solutions, 12 acids and bases, 13 thermochemistry,
+1. Unit 10 gases, 11 solutions, 12 acids and bases, 13 thermochemistry,
    14 rates and equilibrium — one commit each
 2. The nine remaining Unit 15 organic lessons (IUPAC naming, functional groups
    in depth, isomers, cis/trans and E/Z, chirality, reaction types, polymers,
    biomolecules)
-3. Remaining simulations embedded in their lessons; Lewis/VSEPR builder,
-   stoichiometry road map, calorimetry
+3. Remaining simulations embedded in their lessons; reaction-type animations
+   and a calorimetry sim
 4. Lessons, tools, reference sections and glossary terms findable from the top
    search bar
 

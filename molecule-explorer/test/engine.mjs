@@ -887,6 +887,44 @@ describe('generated practice problems', () => {
     });
     assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 5)));
   });
+
+  /* The numbers printed in a lesson's worked examples are written by hand, so
+   * they can drift away from what the engine computes without anything
+   * complaining. These are the ones Unit 9 shows the reader. */
+  test('the worked examples in the mole unit still match the engine', async () => {
+    const got = await run(() => {
+      const M = (f) => window.ME.formula.parse(f).mass;
+      const s = window.ME.stoich.massToMass('CH4 + 2 O2 -> CO2 + 2 H2O', 'CH4', 100, 'CO2');
+      const lim = window.ME.stoich.limiting('2 H2 + O2 -> 2 H2O',
+        [{ name: 'H2', grams: 10 }, { name: 'O2', grams: 10 }]);
+      return {
+        caNO3: M('Ca(NO3)2'), caOH: M('Ca(OH)2'), h2so4: M('H2SO4'), al2so43: M('Al2(SO4)3'),
+        oPercent: 6 * 15.999 / M('Ca(NO3)2') * 100,
+        waterMoles: 25 / M('H2O'),
+        naclHalf: 0.5 * M('NaCl'),
+        co2Grams: s.grams, ch4Moles: s.molesFrom,
+        limiting: lim.limiting.name,
+        waterGrams: lim.products[0].grams,
+        leftoverName: lim.leftovers[0].name, leftoverGrams: lim.leftovers[0].grams,
+        propeneMultiplier: 42.08 / M('CH2'),
+      };
+    });
+    const near = (a, b, tol, what) => assert.ok(Math.abs(a - b) < tol, what + ': engine says ' + a + ', the lesson prints ' + b);
+    near(got.caNO3, 164.088, 0.002, 'Ca(NO3)2 molar mass');
+    near(got.caOH, 74.09, 0.01, 'Ca(OH)2 molar mass');
+    near(got.h2so4, 98.08, 0.01, 'H2SO4 molar mass');
+    near(got.al2so43, 342.16, 0.01, 'Al2(SO4)3 molar mass');
+    near(got.oPercent, 58.5, 0.05, 'oxygen percentage in calcium nitrate');
+    near(got.waterMoles, 1.388, 0.001, '25 g of water in moles');
+    near(got.naclHalf, 29.22, 0.01, 'half a mole of NaCl');
+    near(got.co2Grams, 274, 0.5, 'CO2 from 100 g of methane');
+    near(got.ch4Moles, 6.23, 0.01, 'moles in 100 g of methane');
+    assert.equal(got.limiting, 'O2', 'the limiting reactant in the 10 g / 10 g example');
+    near(got.waterGrams, 11.26, 0.01, 'water produced in the limiting example');
+    assert.equal(got.leftoverName, 'H2');
+    near(got.leftoverGrams, 8.74, 0.01, 'hydrogen left over');
+    near(got.propeneMultiplier, 3, 0.01, 'the CH2 to C3H6 multiplier');
+  });
 });
 
 /* ---------------------------------------------------- prose with formulas in */
