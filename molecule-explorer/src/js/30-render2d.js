@@ -1,0 +1,537 @@
+/* The 2D drawing engine.
+ *
+ * The whole point of this renderer (rather than using OpenChemLib's own SVG
+ * export) is the X-ray slider: one continuous parameter that morphs a skeletal
+ * line-angle drawing into a full structural formula. Nothing pops in or out.
+ *
+ *   xray = 0   carbons are bare vertices, hydrogens on carbon are invisible,
+ *              an O-H reads as a compact "OH"
+ *   xray = 1   every atom carries a label, every hydrogen sits at the end of
+ *              its own bond line
+ *
+ * Between those, labels fade up, bonds retract from the growing labels, and
+ * hydrogens slide outwards from beside their atom to the end of a bond.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  function svgEl(tag, attrs) {
+    const n = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) if (attrs[k] !== null && attrs[k] !== undefined) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
+
+  /* --------------------------------------------------- geometry extraction */
+  /* Turn an OpenChemLib molecule into the flat description the drawing code
+   * works from, so the renderer never has to query the library mid-draw. */
+  function describe(mol, opts) {
+    const chem = ME.chem;
+    chem.ensureCoordinates(mol);
+    const n = mol.getAllAtoms();
+    const atoms = [];
+    for (let a = 0; a < n; a++) {
+      const z = mol.getAtomicNo(a);
+      const sym = chem.symbolFor(z);
+      atoms.push({
+        i: a, x: mol.getAtomX(a), y: mol.getAtomY(a), z, sym,
+        charge: mol.getAtomCharge(a),
+        hydrogens: mol.getImplicitHydrogens(a),
+        isCarbon: z === 6,
+        aromatic: mol.isAromaticAtom(a),
+        ring: mol.isRingAtom(a),
+        bonds: [],
+        lonePairs: opts && opts.lonePairs ? chem.lonePairs(mol, a) : 0,
+      });
+    }
+    const bonds = [];
+    for (let b = 0; b < mol.getAllBonds(); b++) {
+      const a1 = mol.getBondAtom(0, b), a2 = mol.getBondAtom(1, b);
+      const bd = { i: b, a: a1, b: a2, order: mol.getBondOrder(b), ring: mol.isRingBond(b), aromatic: mol.isAromaticBond(b) };
+      bonds.push(bd);
+      atoms[a1].bonds.push(bd);
+      atoms[a2].bonds.push(bd);
+    }
+    return { atoms, bonds };
+  }
+
+  /* A carbon is normally invisible in a skeletal drawing. It has to be drawn
+   * anyway when there is nothing else to mark its position. */
+  function carbonNeedsLabel(atom, atoms) {
+    if (atom.bonds.length === 0) return true;
+    if (atom.bonds.length === 1) {
+      /* A lone C-C pair (ethane) would otherwise be a bare line with nothing
+       * to say what its ends are; a CH3 on a longer chain is fine as a vertex. */
+      const other = atom.bonds[0].a === atom.i ? atom.bonds[0].b : atom.bonds[0].a;
+      if (atoms[other].bonds.length === 1) return true;
+    }
+    return false;
+  }
+
+  /* Where do this atom's hydrogens go? Pick directions that stay clear of the
+   * bonds already leaving the atom. */
+  function hydrogenDirections(atom, atoms, count, preferHorizontal) {
+    if (count <= 0) return [];
+    const occupied = atom.bonds.map((bd) => {
+      const o = bd.a === atom.i ? bd.b : bd.a;
+      return Math.atan2(atoms[o].y - atom.y, atoms[o].x - atom.x);
+    });
+    const chosen = [];
+    const candidates = [];
+    for (let k = 0; k < 36; k++) candidates.push((k * 10 * Math.PI) / 180 - Math.PI);
+
+    for (let h = 0; h < count; h++) {
+      let best = null, bestScore = -Infinity;
+      for (const c of candidates) {
+        let score = Infinity;
+        for (const o of occupied.concat(chosen)) {
+          let d = Math.abs(angleDiff(c, o));
+          if (d < score) score = d;
+        }
+        if (score === Infinity) score = Math.PI;
+        /* Prefer a horizontal H so an O-H reads as "OH" rather than stacking. */
+        if (preferHorizontal && h === 0) {
+          const horiz = Math.min(Math.abs(angleDiff(c, 0)), Math.abs(angleDiff(c, Math.PI)));
+          score += (Math.PI - horiz) * 0.55;
+          if (Math.abs(angleDiff(c, 0)) < 0.01) score += 0.25;
+        }
+        if (score > bestScore) { bestScore = score; best = c; }
+      }
+      chosen.push(best);
+    }
+    return chosen;
+  }
+
+  function angleDiff(a, b) {
+    let d = a - b;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    return d;
+  }
+
+  /* --------------------------------------------------------------- drawing */
+  /* opts:
+   *   xray       0..1
+   *   width/height  target box in px (the SVG is responsive via viewBox)
+   *   lonePairs  draw non-bonding electron dots on heteroatoms
+   *   highlight  [{ atoms:[i], color }]
+   *   interactive  attach hover targets and tooltips
+   *   onAtomClick  callback(atomIndex)
+   *   selectable   atoms that respond to a click
+   */
+  function render(mol, opts) {
+    opts = opts || {};
+    const xray = clamp01(opts.xray === undefined ? 0 : opts.xray);
+    const chem = ME.chem;
+    const { atoms } = describe(mol, opts);
+    const desc = { atoms, bonds: [] };
+    atoms.forEach((a) => a.bonds.forEach((b) => { if (desc.bonds.indexOf(b) < 0) desc.bonds.push(b); }));
+
+    /* ---- decide what each atom shows ---- */
+    atoms.forEach((a) => {
+      a.forceLabel = !a.isCarbon || carbonNeedsLabel(a, atoms);
+      /* opacity of this atom's own element label */
+      a.labelAlpha = a.forceLabel ? 1 : xray;
+      a.preferH = !a.isCarbon;
+      a.hDirs = hydrogenDirections(a, atoms, a.hydrogens, a.preferH);
+      /* Hydrogens on a heteroatom are visible even in skeletal form (as "OH"),
+       * hydrogens on a carbon are the ones the shorthand hides. */
+      a.hAlpha = a.isCarbon ? xray : 1;
+    });
+
+    /* ---- layout ---- */
+    const pad = 1.0;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    atoms.forEach((a) => {
+      const reach = (a.hydrogens > 0 ? 1.0 : 0.35);
+      minX = Math.min(minX, a.x - reach); maxX = Math.max(maxX, a.x + reach);
+      minY = Math.min(minY, a.y - reach); maxY = Math.max(maxY, a.y + reach);
+    });
+    if (!isFinite(minX)) { minX = maxX = minY = maxY = 0; }
+    const unitW = (maxX - minX) + pad * 2;
+    const unitH = (maxY - minY) + pad * 2;
+
+    const boxW = opts.width || 440;
+    const boxH = opts.height || 300;
+    let scale = Math.min(boxW / unitW, boxH / unitH);
+    scale = Math.max(14, Math.min(scale, opts.maxScale || 52));
+
+    const w = Math.max(unitW * scale, boxW * 0.35);
+    const h = Math.max(unitH * scale, boxH * 0.35);
+    const offX = (w - (maxX - minX) * scale) / 2 - minX * scale;
+    const offY = (h - (maxY - minY) * scale) / 2 - minY * scale;
+    const PX = (a) => a.x * scale + offX;
+    const PY = (a) => a.y * scale + offY;
+
+    const fs = Math.max(9, scale * 0.46);
+    const lw = Math.max(1.3, scale / 15);
+    const bondColor = opts.bondColor || 'var(--bond)';
+
+    const svg = svgEl('svg', {
+      xmlns: SVGNS, viewBox: `0 0 ${round(w)} ${round(h)}`,
+      class: 'molcanvas', role: 'img',
+      'aria-label': opts.label || 'Molecular structure drawing',
+      preserveAspectRatio: 'xMidYMid meet',
+    });
+    svg.style.maxHeight = boxH + 'px';
+
+    const gHighlight = svgEl('g', {});
+    const gBonds = svgEl('g', { 'stroke-linecap': 'round' });
+    const gAtoms = svgEl('g', {});
+    const gHits = svgEl('g', {});
+    svg.appendChild(gHighlight); svg.appendChild(gBonds); svg.appendChild(gAtoms); svg.appendChild(gHits);
+
+    /* ---- functional group haloes ---- */
+    if (opts.highlight) {
+      opts.highlight.forEach((hl) => {
+        (hl.atoms || []).forEach((ai) => {
+          const a = atoms[ai];
+          if (!a) return;
+          gHighlight.appendChild(svgEl('circle', {
+            cx: round(PX(a)), cy: round(PY(a)), r: round(scale * 0.40),
+            fill: hl.color, opacity: 0.22,
+          }));
+        });
+        /* join adjacent highlighted atoms with a thick soft stroke */
+        const set = new Set(hl.atoms || []);
+        desc.bonds.forEach((bd) => {
+          if (!set.has(bd.a) || !set.has(bd.b)) return;
+          gHighlight.appendChild(svgEl('line', {
+            x1: round(PX(atoms[bd.a])), y1: round(PY(atoms[bd.a])),
+            x2: round(PX(atoms[bd.b])), y2: round(PY(atoms[bd.b])),
+            stroke: hl.color, 'stroke-width': round(scale * 0.8),
+            'stroke-linecap': 'round', opacity: 0.22,
+          }));
+        });
+      });
+    }
+
+    /* ---- how far a bond stops short of each end ---- */
+    /* The gap tracks the label's opacity, so in skeletal mode lines meet at a
+     * clean point and in full mode they stop politely outside the letters. */
+    function trimFor(a) {
+      const base = a.labelAlpha * (fs * 0.62);
+      const extra = a.charge !== 0 ? fs * 0.2 * a.labelAlpha : 0;
+      const wide = a.sym.length > 1 ? fs * 0.14 * a.labelAlpha : 0;
+      return base + extra + wide;
+    }
+
+    /* ---- bonds ---- */
+    desc.bonds.forEach((bd) => {
+      const A = atoms[bd.a], B = atoms[bd.b];
+      const x1 = PX(A), y1 = PY(A), x2 = PX(B), y2 = PY(B);
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const tA = trimFor(A), tB = trimFor(B);
+      const sx = x1 + ux * tA, sy = y1 + uy * tA;
+      const ex = x2 - ux * tB, ey = y2 - uy * tB;
+      if (Math.hypot(ex - sx, ey - sy) < 1) return;
+
+      const px = -uy, py = ux;                 /* perpendicular */
+      const sep = scale * 0.16;
+
+      if (bd.order === 2) {
+        const dir = doubleBondSide(bd, A, B, atoms, px, py, PX, PY);
+        if (dir === 0) {
+          /* symmetric pair, used for an isolated C=C or C=O */
+          line(gBonds, sx + px * sep / 2, sy + py * sep / 2, ex + px * sep / 2, ey + py * sep / 2, lw, bondColor);
+          line(gBonds, sx - px * sep / 2, sy - py * sep / 2, ex - px * sep / 2, ey - py * sep / 2, lw, bondColor);
+        } else {
+          line(gBonds, sx, sy, ex, ey, lw, bondColor);
+          const inset = 0.16;
+          const ix1 = lerp(sx, ex, inset) + px * sep * dir;
+          const iy1 = lerp(sy, ey, inset) + py * sep * dir;
+          const ix2 = lerp(sx, ex, 1 - inset) + px * sep * dir;
+          const iy2 = lerp(sy, ey, 1 - inset) + py * sep * dir;
+          line(gBonds, ix1, iy1, ix2, iy2, lw, bondColor);
+        }
+      } else if (bd.order === 3) {
+        line(gBonds, sx, sy, ex, ey, lw, bondColor);
+        line(gBonds, sx + px * sep, sy + py * sep, ex + px * sep, ey + py * sep, lw, bondColor);
+        line(gBonds, sx - px * sep, sy - py * sep, ex - px * sep, ey - py * sep, lw, bondColor);
+      } else {
+        line(gBonds, sx, sy, ex, ey, lw, bondColor);
+      }
+    });
+
+    /* ---- hydrogens (they slide out as the slider moves) ---- */
+    atoms.forEach((a) => {
+      if (!a.hydrogens || a.hAlpha <= 0.001) return;
+      const ax = PX(a), ay = PY(a);
+      a.hDirs.forEach((ang) => {
+        /* beside the label when collapsed, at bond length when expanded */
+        const near = fs * 0.78 + trimFor(a) * 0.15;
+        const far = scale * 0.92;
+        const dist = lerp(near, far, xray);
+        const hx = ax + Math.cos(ang) * dist;
+        const hy = ay + Math.sin(ang) * dist;
+
+        /* the bond line to the hydrogen only exists once it has moved out */
+        const bondAlpha = clamp01((xray - 0.28) / 0.55);
+        if (bondAlpha > 0.01) {
+          const tA = trimFor(a);
+          const ux = Math.cos(ang), uy = Math.sin(ang);
+          const l = line(gBonds, ax + ux * tA, ay + uy * tA,
+            hx - ux * fs * 0.58, hy - uy * fs * 0.58, lw, bondColor);
+          l.setAttribute('opacity', round3(bondAlpha * a.hAlpha));
+        }
+        const t = svgEl('text', {
+          x: round(hx), y: round(hy), 'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': round(fs), 'font-family': 'var(--font-sans)', 'font-weight': 500,
+          fill: 'var(--text)', opacity: round3(a.hAlpha),
+        });
+        t.textContent = 'H';
+        gAtoms.appendChild(t);
+      });
+    });
+
+    /* ---- atom labels ---- */
+    atoms.forEach((a) => {
+      const x = PX(a), y = PY(a);
+      if (a.labelAlpha > 0.001) {
+        const g = svgEl('g', { opacity: round3(a.labelAlpha) });
+        /* a disc of background behind the letter so bonds never touch it */
+        g.appendChild(svgEl('circle', {
+          cx: round(x), cy: round(y), r: round(fs * 0.62),
+          fill: opts.bg || 'var(--surface)',
+        }));
+        const t = svgEl('text', {
+          x: round(x), y: round(y), 'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': round(fs), 'font-family': 'var(--font-sans)', 'font-weight': 620,
+          fill: opts.mono ? 'var(--text)' : ME.chem.colorOf(a.sym),
+        });
+        t.textContent = a.sym;
+        g.appendChild(t);
+        gAtoms.appendChild(g);
+      }
+      /* charges are never hidden: they change what the molecule is */
+      if (a.charge !== 0) {
+        const cx = x + fs * 0.66, cy = y - fs * 0.58;
+        const badge = svgEl('text', {
+          x: round(cx), y: round(cy), 'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': round(fs * 0.72), 'font-family': 'var(--font-sans)', 'font-weight': 700,
+          fill: a.charge > 0 ? '#d93b32' : '#2f6df6',
+        });
+        badge.textContent = (Math.abs(a.charge) > 1 ? Math.abs(a.charge) : '') + (a.charge > 0 ? '+' : '−');
+        gAtoms.appendChild(badge);
+      }
+      /* lone pairs */
+      if (a.lonePairs > 0) {
+        const dirs = hydrogenDirections(
+          { i: a.i, x: a.x, y: a.y, bonds: a.bonds.concat(a.hDirs.map((ang) => null)).filter(Boolean) },
+          atoms, a.lonePairs, false
+        );
+        const used = a.hDirs.slice();
+        for (let p = 0; p < a.lonePairs; p++) {
+          const ang = pickFreeAngle(a, atoms, used);
+          used.push(ang);
+          const r = fs * 0.92;
+          const ox = x + Math.cos(ang) * r, oy = y + Math.sin(ang) * r;
+          const pxp = -Math.sin(ang), pyp = Math.cos(ang);
+          const d = fs * 0.17;
+          [[-1], [1]].forEach(([s]) => {
+            gAtoms.appendChild(svgEl('circle', {
+              cx: round(ox + pxp * d * s), cy: round(oy + pyp * d * s),
+              r: round(Math.max(1.1, fs * 0.095)), fill: 'var(--text-soft)', opacity: 0.85,
+            }));
+          });
+        }
+      }
+    });
+
+    /* ---- invisible hover / click targets ---- */
+    if (opts.interactive !== false) {
+      atoms.forEach((a) => {
+        const hit = svgEl('circle', {
+          cx: round(PX(a)), cy: round(PY(a)), r: round(Math.max(11, scale * 0.44)),
+          fill: 'transparent', class: 'hit',
+        });
+        hit.style.cursor = opts.onAtomClick ? 'pointer' : 'help';
+        const text = atomDescription(a);
+        const show = (ev) => {
+          const pt = ev.touches ? ev.touches[0] : ev;
+          ME.showTip(text, pt.clientX, pt.clientY - 6);
+        };
+        hit.addEventListener('mouseenter', show);
+        hit.addEventListener('mousemove', show);
+        hit.addEventListener('mouseleave', ME.hideTip);
+        hit.addEventListener('touchstart', (ev) => { show(ev); setTimeout(ME.hideTip, 2400); }, { passive: true });
+        if (opts.onAtomClick) {
+          hit.addEventListener('click', (ev) => { ev.stopPropagation(); opts.onAtomClick(a.i, a, hit); });
+        }
+        gHits.appendChild(hit);
+      });
+    }
+
+    svg.__atoms = atoms;
+    svg.__scale = scale;
+    svg.__project = (a) => ({ x: PX(a), y: PY(a) });
+    return svg;
+  }
+
+  function pickFreeAngle(atom, atoms, used) {
+    const occupied = atom.bonds.map((bd) => {
+      const o = bd.a === atom.i ? bd.b : bd.a;
+      return Math.atan2(atoms[o].y - atom.y, atoms[o].x - atom.x);
+    }).concat(used);
+    let best = 0, bestScore = -Infinity;
+    for (let k = 0; k < 36; k++) {
+      const c = (k * 10 * Math.PI) / 180 - Math.PI;
+      let score = Infinity;
+      for (const o of occupied) score = Math.min(score, Math.abs(angleDiff(c, o)));
+      if (score === Infinity) score = Math.PI;
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    return best;
+  }
+
+  /* The tooltip line the lessons promise: "Carbon, with 2 hidden hydrogens." */
+  function atomDescription(a) {
+    const name = ME.chem.elementName(a.sym);
+    let s = name;
+    if (a.charge !== 0) s += `, charge ${a.charge > 0 ? '+' + a.charge : a.charge}`;
+    if (a.hydrogens > 0) {
+      const hidden = a.isCarbon ? 'hidden ' : '';
+      s += `, with ${a.hydrogens} ${hidden}hydrogen${a.hydrogens === 1 ? '' : 's'}`;
+    } else if (a.isCarbon) {
+      s += ', with no hydrogens — its four bonds are all used up';
+    }
+    return s + '.';
+  }
+
+  /* Which side does the second line of a double bond sit on? Inside a ring,
+   * always inwards; otherwise centre it. */
+  function doubleBondSide(bd, A, B, atoms, px, py, PX, PY) {
+    if (!bd.ring) {
+      const neighbours = [];
+      [A, B].forEach((at) => at.bonds.forEach((o) => {
+        if (o === bd) return;
+        const other = o.a === at.i ? o.b : o.a;
+        neighbours.push(atoms[other]);
+      }));
+      if (neighbours.length === 0) return 0;
+      const mx = (PX(A) + PX(B)) / 2, my = (PY(A) + PY(B)) / 2;
+      let sum = 0;
+      neighbours.forEach((nb) => { sum += (PX(nb) - mx) * px + (PY(nb) - my) * py; });
+      if (Math.abs(sum) < 1e-6) return 0;
+      return sum > 0 ? 1 : -1;
+    }
+    /* ring bond: aim at the average of the other ring atoms nearby */
+    const mx = (PX(A) + PX(B)) / 2, my = (PY(A) + PY(B)) / 2;
+    let cx = 0, cy = 0, count = 0;
+    atoms.forEach((at) => {
+      if (!at.ring || at === A || at === B) return;
+      const d = Math.hypot(PX(at) - mx, PY(at) - my);
+      if (d < 200) { cx += PX(at); cy += PY(at); count++; }
+    });
+    if (!count) return 0;
+    cx /= count; cy /= count;
+    const dot = (cx - mx) * px + (cy - my) * py;
+    return dot > 0 ? 1 : -1;
+  }
+
+  function line(parent, x1, y1, x2, y2, w, color) {
+    const l = svgEl('line', {
+      x1: round(x1), y1: round(y1), x2: round(x2), y2: round(y2),
+      stroke: color, 'stroke-width': round3(w),
+    });
+    parent.appendChild(l);
+    return l;
+  }
+
+  const round = (v) => Math.round(v * 100) / 100;
+  const round3 = (v) => Math.round(v * 1000) / 1000;
+
+  /* ------------------------------------------------- slider-backed viewer */
+  /* Mounts a drawing plus its X-ray slider, re-rendering as the slider moves. */
+  function mountXray(container, mol, opts) {
+    opts = opts || {};
+    const holder = ME.el('div', { class: 'xray-holder' });
+    const target = ME.el('div');
+    holder.appendChild(target);
+
+    let value = opts.xray === undefined ? 0 : opts.xray;
+
+    const slider = ME.el('input', {
+      type: 'range', min: '0', max: '100', value: String(Math.round(value * 100)),
+      'aria-label': 'X-ray slider: slide from the skeletal shorthand to the full structural formula',
+    });
+    const row = ME.el('div', { class: 'xray' }, [
+      ME.el('label', { text: 'Skeletal' }),
+      slider,
+      ME.el('label', { text: 'Full structure' }),
+    ]);
+
+    function paint() {
+      slider.style.setProperty('--pct', Math.round(value * 100) + '%');
+      ME.clear(target);
+      target.appendChild(render(mol, Object.assign({}, opts, { xray: value })));
+    }
+    slider.addEventListener('input', () => { value = slider.value / 100; paint(); });
+    paint();
+
+    if (opts.hideSlider !== true) holder.appendChild(row);
+    container.appendChild(holder);
+    return {
+      node: holder,
+      set(v) { value = clamp01(v); slider.value = String(Math.round(value * 100)); paint(); },
+      get() { return value; },
+      repaint: paint,
+    };
+  }
+
+  /* Serialise an SVG for download, inlining the theme colours it resolves. */
+  function toStandaloneSVG(svg) {
+    const clone = svg.cloneNode(true);
+    const cs = getComputedStyle(document.body);
+    const map = {
+      'var(--bond)': cs.getPropertyValue('--bond').trim() || '#2b2f38',
+      'var(--text)': cs.getPropertyValue('--text').trim() || '#16181d',
+      'var(--text-soft)': cs.getPropertyValue('--text-soft').trim() || '#565c69',
+      'var(--surface)': cs.getPropertyValue('--surface').trim() || '#ffffff',
+    };
+    clone.querySelectorAll('*').forEach((n) => {
+      ['stroke', 'fill'].forEach((attr) => {
+        const v = n.getAttribute(attr);
+        if (v && map[v]) n.setAttribute(attr, map[v]);
+      });
+      const f = n.getAttribute('font-family');
+      if (f && f.includes('var(')) n.setAttribute('font-family', 'Helvetica, Arial, sans-serif');
+    });
+    clone.setAttribute('xmlns', SVGNS);
+    clone.removeAttribute('class');
+    const bg = svgEl('rect', { x: 0, y: 0, width: '100%', height: '100%', fill: map['var(--surface)'] });
+    clone.insertBefore(bg, clone.firstChild);
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+  }
+
+  function svgToPNG(svg, scale, cb) {
+    const src = toStandaloneSVG(svg);
+    const vb = (svg.getAttribute('viewBox') || '0 0 400 300').split(/\s+/).map(Number);
+    const w = Math.max(1, vb[2]) * (scale || 2);
+    const h = Math.max(1, vb[3]) * (scale || 2);
+    const img = new Image();
+    const url = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(src)));
+    img.onload = function () {
+      const c = document.createElement('canvas');
+      c.width = Math.round(w); c.height = Math.round(h);
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob((blob) => cb(blob), 'image/png');
+    };
+    img.onerror = function () { cb(null); };
+    img.src = url;
+  }
+
+  ME.render2d = {
+    render, mountXray, describe, toStandaloneSVG, svgToPNG, atomDescription, svgEl,
+    /* shared with the drawing editor's canvas painter so both obey the same rules */
+    hydrogenDirections, carbonNeedsLabel, angleDiff, lerp, clamp01,
+  };
+})();

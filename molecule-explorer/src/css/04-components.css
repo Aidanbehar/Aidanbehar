@@ -1,0 +1,112 @@
+/* ------------------------------------------------------------ components */
+.view { display: none; padding: 26px 0 80px; }
+.view.active { display: block; animation: fade .18s ease-out; }
+@keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-sm);
+}
+.card-pad { padding: 20px; }
+
+.btn {
+  appearance: none; cursor: pointer; border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong); background: var(--surface);
+  padding: 7px 13px; font-size: .89rem; font-weight: 550; color: var(--text);
+  display: inline-flex; align-items: center; gap: 7px; line-height: 1.35;
+  transition: background .13s, border-color .13s, transform .06s;
+}
+.btn:hover { background: var(--surface-2); border-color: var(--text-faint); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn svg { width: 15px; height: 15px; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: color-mix(in srgb, var(--accent) 86%, #000); border-color: color-mix(in srgb, var(--accent) 86%, #000); }
+.btn-sm { padding: 4px 9px; font-size: .81rem; }
+.btn-ghost { border-color: transparent; background: transparent; }
+.btn-ghost:hover { background: var(--surface-2); border-color: var(--border); }
+.btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 9px; border-radius: 99px; font-size: .76rem; font-weight: 600;
+  background: var(--surface-2); color: var(--text-soft); border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.chip-organic { background: var(--ok-soft); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+.chip-inorganic { background: var(--accent-soft); color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* a dotted-underline term that reveals a plain-language definition */
+.term {
+  border-bottom: 1px dotted var(--text-faint); cursor: help;
+  text-decoration: none; color: inherit;
+}
+
+.tip {
+  position: fixed; z-index: 200; pointer-events: none;
+  background: var(--text); color: var(--bg);
+  padding: 6px 10px; border-radius: var(--r-sm); font-size: .82rem;
+  line-height: 1.45; max-width: 260px; box-shadow: var(--shadow-md);
+  opacity: 0; transition: opacity .12s; font-weight: 500;
+}
+.tip.show { opacity: 1; }
+
+.note {
+  font-size: .87rem; color: var(--text-soft); line-height: 1.55;
+}
+.callout {
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  padding: 12px 15px; border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  font-size: .92rem; color: var(--text);
+}
+.callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+.callout.danger { border-color: var(--danger); background: var(--danger-soft); }
+.callout.ok { border-color: var(--ok); background: var(--ok-soft); }
+
+/* the X-ray slider */
+.xray { display: flex; align-items: center; gap: 12px; padding: 10px 2px 2px; }
+.xray label { font-size: .78rem; color: var(--text-faint); font-weight: 600; white-space: nowrap; }
+.xray input[type=range] {
+  flex: 1; appearance: none; height: 4px; border-radius: 99px; outline: none;
+  background: linear-gradient(90deg, var(--accent) var(--pct, 0%), var(--border) var(--pct, 0%));
+}
+.xray input[type=range]::-webkit-slider-thumb {
+  appearance: none; width: 17px; height: 17px; border-radius: 99px;
+  background: var(--surface); border: 2px solid var(--accent); cursor: grab;
+  box-shadow: var(--shadow-sm);
+}
+.xray input[type=range]::-moz-range-thumb {
+  width: 15px; height: 15px; border-radius: 99px;
+  background: var(--surface); border: 2px solid var(--accent); cursor: grab;
+}
+
+.molcanvas {
+  /* transparent, so a drawing sits on whatever card or thumbnail holds it */
+  background: transparent; border-radius: var(--r);
+  display: block; width: 100%; touch-action: manipulation;
+}
+.molcanvas text { user-select: none; }
+
+.spin {
+  width: 15px; height: 15px; border-radius: 99px; flex: none;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: spin .7s linear infinite; display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.skel {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%; animation: shim 1.3s infinite; border-radius: var(--r-sm);
+}
+@keyframes shim { to { background-position: -200% 0; } }
+
+.toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(14px);
+  background: var(--text); color: var(--bg); padding: 9px 17px; border-radius: 99px;
+  font-size: .88rem; font-weight: 550; box-shadow: var(--shadow-lg);
+  opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; z-index: 300;
+}
+.toast.show { opacity: 1; transform: translateX(-50%); }
+
+.empty { text-align: center; padding: 60px 20px; color: var(--text-soft); }
+.empty h3 { color: var(--text); }

@@ -1,0 +1,78 @@
+/* ----------------------------------------------------------------- learn */
+.learn-layout { display: grid; grid-template-columns: 262px minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 900px) { .learn-layout { grid-template-columns: minmax(0, 1fr); } }
+
+.lesson-nav {
+  position: sticky; top: calc(var(--nav-h) + 16px);
+  display: flex; flex-direction: column; gap: 3px;
+  max-height: calc(100vh - var(--nav-h) - 40px); overflow-y: auto; padding-right: 4px;
+}
+@media (max-width: 900px) { .lesson-nav { position: static; max-height: none; flex-direction: row; overflow-x: auto; padding-bottom: 6px; } }
+.lesson-link {
+  display: flex; gap: 10px; align-items: center; text-align: left;
+  padding: 8px 11px; border-radius: var(--r-sm); border: 1px solid transparent;
+  background: none; cursor: pointer; color: var(--text-soft); font-size: .88rem;
+  line-height: 1.35; width: 100%; white-space: normal;
+}
+@media (max-width: 900px) { .lesson-link { width: auto; white-space: nowrap; flex: none; } }
+.lesson-link:hover { background: var(--surface-2); color: var(--text); }
+.lesson-link.on { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; border-color: color-mix(in srgb, var(--accent) 32%, transparent); }
+.lesson-num {
+  width: 22px; height: 22px; border-radius: 99px; flex: none; display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--border);
+  font-size: .72rem; font-weight: 700; color: var(--text-faint);
+}
+.lesson-link.done .lesson-num { background: var(--ok); border-color: var(--ok); color: #fff; }
+.lesson-link.on .lesson-num { border-color: var(--accent); color: var(--accent-text); }
+
+.progress-wrap { margin-bottom: 14px; }
+.progress-bar { height: 5px; background: var(--border); border-radius: 99px; overflow: hidden; }
+.progress-bar i { display: block; height: 100%; background: var(--ok); border-radius: 99px; transition: width .3s; }
+
+.lesson { max-width: 720px; }
+.lesson-body { font-size: 1.02rem; line-height: 1.68; }
+.lesson-body p { margin-bottom: 1.05em; }
+.lesson-body h2 { margin-top: 0; }
+.lesson-body h3 { margin-top: 1.6em; }
+.lesson-body ul { padding-left: 1.15em; margin: 0 0 1.05em; }
+.lesson-body li { margin-bottom: .45em; }
+.lesson-body strong { font-weight: 640; }
+
+.figure {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 14px; margin: 18px 0;
+}
+.figure figcaption { font-size: .84rem; color: var(--text-soft); margin-top: 9px; text-align: center; }
+.figure-2up { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .figure-2up { grid-template-columns: 1fr; } }
+.figure-2up > div { text-align: center; }
+.figure-2up .lbl { font-size: .8rem; color: var(--text-soft); font-weight: 600; margin-top: 4px; }
+
+.quiz {
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--r) var(--r) 0; padding: 18px; margin: 26px 0 0;
+}
+.quiz h3 { margin-top: 0; display: flex; align-items: center; gap: 8px; }
+.quiz-q { font-weight: 550; margin-bottom: 12px; }
+.quiz-opts { display: flex; flex-direction: column; gap: 7px; }
+.quiz-opt {
+  text-align: left; padding: 9px 13px; border-radius: var(--r-sm);
+  border: 1px solid var(--border); background: var(--surface-2); cursor: pointer;
+  font-size: .93rem; color: inherit; transition: border-color .12s, background .12s;
+}
+.quiz-opt:hover:not(:disabled) { border-color: var(--accent); }
+.quiz-opt:disabled { cursor: default; }
+.quiz-opt.right { background: var(--ok-soft); border-color: var(--ok); font-weight: 600; }
+.quiz-opt.wrong { background: var(--danger-soft); border-color: var(--danger); }
+.quiz-feedback { margin-top: 12px; font-size: .9rem; line-height: 1.55; display: none; }
+.quiz-feedback.show { display: block; }
+.quiz-count { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.quiz-count input {
+  width: 74px; padding: 6px 10px; border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong); background: var(--surface-2); text-align: center;
+}
+.lesson-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 30px; }
+
+.clickmol { cursor: pointer; }
+.clickmol .hit { cursor: pointer; }

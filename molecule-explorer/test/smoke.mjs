@@ -1,0 +1,290 @@
+/* Opens the built file from file:// with the network switched off and checks
+ * that every offline feature actually works in a real browser. */
+import { chromium } from 'playwright';
+import path from 'node:path';
+import fs from 'node:fs';
+
+const FILE = 'file://' + path.resolve('dist/molecule-explorer.html');
+const SHOTS = process.env.SHOT_DIR || '/tmp/claude-0/-home-user-Aidanbehar/599462a2-a79b-540a-93a2-adc4ca3b1ef8/scratchpad/shots';
+fs.mkdirSync(SHOTS, { recursive: true });
+
+let pass = 0, fail = 0;
+const failures = [];
+function check(name, ok, detail) {
+  if (ok) { pass++; console.log('  ✓ ' + name); }
+  else { fail++; failures.push(name + (detail ? ' — ' + detail : '')); console.log('  ✖ ' + name + (detail ? ' — ' + detail : '')); }
+}
+
+const EXEC = process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+/* Honour an outbound proxy when the machine has one; on an ordinary machine
+ * there is none and this is simply omitted. */
+const PROXY = process.env.HTTPS_PROXY || process.env.https_proxy || null;
+const browser = await chromium.launch({
+  executablePath: fs.existsSync(EXEC) ? EXEC : undefined,
+  args: [
+    '--no-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader',
+    /* Some CI machines route outbound HTTPS through a TLS-terminating proxy.
+     * Trusting that one certificate by its public-key hash keeps normal
+     * certificate checking on for every other host. Test-only; the app itself
+     * never sees this. */
+    ...(process.env.TEST_PROXY_CA_SPKI ? ['--ignore-certificate-errors-spki-list=' + process.env.TEST_PROXY_CA_SPKI] : []),
+  ],
+  proxy: PROXY ? { server: PROXY } : undefined,
+});
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+/* setOffline is what makes navigator.onLine false; route-blocking alone does
+ * not, and the app keys its "you are offline" behaviour off navigator.onLine. */
+await ctx.setOffline(true);
+
+/* Block every network request: the page must not need one. */
+const attempted = [];
+await ctx.route('**/*', (route) => {
+  const url = route.request().url();
+  if (url.startsWith('file://') || url.startsWith('data:') || url.startsWith('blob:')) return route.continue();
+  attempted.push(url);
+  return route.abort();
+});
+
+const page = await ctx.newPage();
+const errors = [];
+page.on('pageerror', (e) => errors.push(String(e)));
+page.on('console', (m) => {
+  if (m.type() !== 'error') return;
+  /* A blocked request logs a resource error in the console; that is the network
+   * being off, not the app misbehaving. */
+  if (/Failed to load resource/.test(m.text())) return;
+  errors.push('console: ' + m.text());
+});
+
+console.log('\nLoading ' + FILE);
+await page.goto(FILE, { waitUntil: 'load' });
+await page.waitForTimeout(1200);
+
+check('page loads with no script errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+check('no network requests attempted on load', attempted.length === 0, attempted.slice(0, 3).join(', '));
+check('navigation rendered', await page.locator('.nav .tab').count() === 4);
+check('Learn is the default view', await page.locator('#view-learn.active').count() === 1);
+check('lesson 1 rendered', (await page.locator('.lesson h2').innerText()).includes('Why draw'));
+check('lesson figures drew molecules', await page.locator('#view-learn svg.molcanvas').count() >= 2);
+
+await page.screenshot({ path: path.join(SHOTS, '01-learn.png'), fullPage: false });
+
+/* ------------------------------------------------------------- lessons */
+const lessonCount = await page.locator('.lesson-link').count();
+check('eleven lessons listed', lessonCount === 11, 'got ' + lessonCount);
+
+/* answer lesson 1's quiz correctly */
+await page.locator('.quiz-opt').nth(1).click();
+await page.waitForTimeout(250);
+check('quiz accepts the right answer', await page.locator('.quiz-feedback.show .callout.ok').count() === 1);
+check('progress recorded', (await page.locator('.progress-wrap .note').innerText()).startsWith('1 of 11'));
+
+/* walk every lesson to be sure none of them throws */
+for (let i = 0; i < lessonCount; i++) {
+  await page.locator('.lesson-link').nth(i).click();
+  await page.waitForTimeout(160);
+}
+check('all eleven lessons render without error', errors.length === 0, errors.slice(0, 2).join(' | '));
+await page.screenshot({ path: path.join(SHOTS, '02-lesson-caffeine.png') });
+
+/* --------------------------------------------------------------- search */
+await page.fill('.searchbox input', 'caffiene');
+await page.waitForTimeout(350);
+const sugg = await page.locator('.suggest-item .nm').first().innerText();
+check('typo "caffiene" suggests Caffeine', sugg.toLowerCase().includes('caffeine'), sugg);
+await page.screenshot({ path: path.join(SHOTS, '03-suggest.png') });
+
+await page.locator('.suggest-item').first().click();
+await page.waitForTimeout(900);
+check('molecule page opens', await page.locator('#view-molecule.active h1').count() === 1);
+check('molecule page title is Caffeine', (await page.locator('#view-molecule h1').innerText()) === 'Caffeine');
+
+const repTitles = await page.locator('#view-molecule .rep h3').allInnerTexts();
+check('all representation cards present',
+  ['Molecular formula', 'Condensed formula', 'Full structural formula', 'Skeletal', '3D shape', 'Functional groups', 'Machine-readable'].every(
+    (t) => repTitles.some((r) => r.includes(t))), repTitles.join(' / '));
+check('formula shown with subscripts', (await page.locator('.formula-big').first().innerHTML()).includes('<sub>'));
+check('functional groups detected', await page.locator('.fg-item').count() > 0);
+check('3D viewer produced a canvas', await page.locator('.viewer3d canvas').count() > 0);
+await page.waitForTimeout(600);
+await page.screenshot({ path: path.join(SHOTS, '04-caffeine.png'), fullPage: true });
+
+/* X-ray slider */
+const before = await page.locator('#view-molecule .xray-holder svg').first().innerHTML();
+await page.locator('#view-molecule .xray input[type=range]').first().fill('100');
+await page.waitForTimeout(250);
+const after = await page.locator('#view-molecule .xray-holder svg').first().innerHTML();
+check('X-ray slider changes the drawing', before !== after);
+check('full view shows hydrogens', (after.match(/>H</g) || []).length > 4, (after.match(/>H</g) || []).length + ' H labels');
+await page.screenshot({ path: path.join(SHOTS, '05-xray-full.png') });
+
+/* offline notice in the online section */
+await page.fill('.searchbox input', 'zzzznotreal');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(600);
+const searchText = await page.locator('#view-search').innerText();
+check('search view marks the PubChem section', /search online \(pubchem\)/i.test(searchText), searchText.slice(0, 160));
+check('offline is explained gracefully, not as a failure',
+  /you are offline/i.test(searchText), searchText.slice(0, 260));
+check('offline notice says the rest still works',
+  /works exactly the same|built into this page|part of this file/i.test(searchText));
+await page.screenshot({ path: path.join(SHOTS, '06-search-offline.png'), fullPage: true });
+
+/* inorganic molecule: skeletal should be skipped with a reason */
+await page.fill('.searchbox input', 'table salt');
+await page.waitForTimeout(400);
+const saltSugg = await page.locator('.suggest-item .nm').first().innerText();
+check('synonym "table salt" finds sodium chloride', saltSugg.toLowerCase().includes('sodium chloride'), saltSugg);
+await page.locator('.suggest-item').first().click();
+await page.waitForTimeout(800);
+const saltText = await page.locator('#view-molecule').innerText();
+check('inorganic badge shown', saltText.includes('Inorganic'));
+check('skeletal view explained away for a salt', /no carbon-carbon backbone|shortcut for carbon chains/i.test(saltText));
+await page.screenshot({ path: path.join(SHOTS, '07-salt.png'), fullPage: true });
+
+/* --------------------------------------------------------------- gallery */
+await page.locator('.tab[data-view=gallery]').click();
+await page.waitForTimeout(900);
+const cards = await page.locator('.gal-card').count();
+check('gallery shows ~60 molecules', cards >= 55, 'got ' + cards);
+check('gallery thumbnails drew', await page.locator('.gal-card .thumb svg').count() > 5);
+await page.screenshot({ path: path.join(SHOTS, '08-gallery.png') });
+await page.locator('.gal-filters .btn', { hasText: 'Medicines' }).click();
+await page.waitForTimeout(400);
+check('gallery filter narrows the grid', await page.locator('.gal-card').count() < cards);
+
+/* ------------------------------------------------------------------ draw */
+await page.locator('.tab[data-view=draw]').click();
+await page.waitForTimeout(600);
+check('draw canvas present', await page.locator('#drawCanvas').count() === 1);
+
+const box = await page.locator('#drawCanvas').boundingBox();
+/* draw ethanol: C, then C, then switch to O and add it */
+await page.mouse.click(box.x + 260, box.y + 240);
+await page.waitForTimeout(250);
+await page.mouse.click(box.x + 260, box.y + 240);   /* grow the chain */
+await page.waitForTimeout(250);
+let info = await page.locator('.draw-side').innerText();
+check('two carbons give C2H6', info.includes('C2H6') || info.includes('C₂H₆') || /C\s*2\s*H\s*6/.test(info), info.slice(0, 120));
+
+await page.locator('.tool.el', { hasText: /^O$/ }).click();
+const atoms = await page.evaluate(() => window.ME.draw.graph.atoms.length);
+check('graph has two atoms before adding oxygen', atoms === 2, 'got ' + atoms);
+await page.evaluate(() => {
+  /* click the second carbon precisely, in model coordinates */
+  const g = window.ME.draw.graph;
+  window.__second = g.atoms[1];
+});
+await page.waitForTimeout(150);
+/* place the oxygen by clicking the second atom (changes element) is wrong:
+   instead grow a new atom from it using the model API the UI also uses */
+await page.evaluate(() => {
+  const ME = window.ME, M = ME.drawModel, g = ME.draw.graph;
+  const ang = M.suggestAngle(g, 1);
+  const ni = M.addAtom(g, g.atoms[1].x + Math.cos(ang), g.atoms[1].y + Math.sin(ang), 'O');
+  M.addBond(g, 1, ni, 1);
+  ME.draw.refresh();
+});
+await page.waitForTimeout(400);
+info = await page.locator('.draw-side').innerText();
+check('ethanol recognised from the drawing', info.includes('You drew Ethanol'), info.slice(0, 200));
+await page.screenshot({ path: path.join(SHOTS, '09-draw-ethanol.png') });
+
+/* validation: five bonds on one carbon */
+await page.evaluate(() => {
+  const ME = window.ME, M = ME.drawModel;
+  const g = M.emptyGraph();
+  const c = M.addAtom(g, 0, 0, 'C');
+  for (let k = 0; k < 5; k++) {
+    const a = M.addAtom(g, Math.cos(k * 1.2) * 1, Math.sin(k * 1.2) * 1, 'C');
+    M.addBond(g, c, a, 1);
+  }
+  ME.draw.setGraph(g);
+});
+await page.waitForTimeout(450);
+const vtext = await page.locator('.draw-side').innerText();
+check('five-bond carbon is flagged', /Carbon with 5 bonds/i.test(vtext), vtext.slice(0, 160));
+check('five-bond message explains why', /four electrons to share|four hands/i.test(vtext));
+await page.screenshot({ path: path.join(SHOTS, '10-draw-validation.png') });
+
+/* valid ions must NOT be flagged */
+const ionResults = await page.evaluate(() => {
+  const out = {};
+  const cases = {
+    ammonium: '[NH4+]', sulfate: '[O-]S(=O)(=O)[O-]', nitrate: '[N+](=O)([O-])[O-]',
+    permanganate: '[O-][Mn](=O)(=O)=O', dmso: 'CS(C)=O', phosphate: 'OP(=O)(O)O',
+    carbonate: '[O-]C(=O)[O-]', hydroxide: '[OH-]', sf6: 'FS(F)(F)(F)(F)F',
+  };
+  for (const k in cases) {
+    try {
+      const mol = window.ME.chem.fromSmiles(cases[k]);
+      out[k] = window.ME.chem.validateMolecule(mol).length;
+    } catch (e) { out[k] = 'parse error: ' + e.message; }
+  }
+  return out;
+});
+Object.entries(ionResults).forEach(([k, v]) => check(`${k} not flagged`, v === 0, 'problems: ' + v));
+
+/* periodic table */
+await page.locator('.draw-toolbar .tool', { hasText: '…' }).click();
+await page.waitForTimeout(300);
+const ptCells = await page.locator('.pt-cell').count();
+check('periodic table has every element', ptCells === 118, 'got ' + ptCells);
+await page.screenshot({ path: path.join(SHOTS, '11-ptable.png') });
+await page.keyboard.press('Escape');
+
+/* ------------------------------------------------------------ dark mode */
+await page.locator('.nav .icon-btn').click();   /* system -> light */
+await page.locator('.nav .icon-btn').click();   /* light -> dark */
+await page.waitForTimeout(400);
+check('dark mode applied', await page.getAttribute('html', 'data-theme') === 'dark');
+await page.locator('.tab[data-view=gallery]').click();
+await page.waitForTimeout(700);
+await page.screenshot({ path: path.join(SHOTS, '12-dark-gallery.png') });
+
+/* -------------------------------------------------------------- summary */
+check('still no script errors at the end', errors.length === 0, errors.slice(0, 4).join(' | '));
+check('never touched the network in the whole offline run', attempted.length === 0, attempted.slice(0, 5).join(', '));
+
+/* ============================ online phase ============================ */
+/* The one optional feature. Skipped (not failed) when this machine has no
+ * connection, since the point of the app is that it does not need one. */
+console.log('\nOnline phase (PubChem):');
+await ctx.setOffline(false);
+await ctx.unroute('**/*');
+const online = await page.evaluate(async () => {
+  try {
+    const r = await fetch('https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/2519/property/Title/JSON');
+    return r.ok;
+  } catch (e) { return false; }
+});
+
+if (!online) {
+  console.log('  ~ no internet from this machine, skipping the online checks');
+} else {
+  await page.fill('.searchbox input', 'ibuprofen lysine');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(3500);
+  const t = await page.locator('#view-search').innerText();
+  check('PubChem autocomplete returns suggestions',
+    /from pubchem/i.test(t) && !/could not reach/i.test(t), t.slice(0, 220));
+
+  const onlineRow = page.locator('#view-search .res', { hasText: 'from PubChem' }).first();
+  if (await onlineRow.count()) {
+    await onlineRow.click();
+    await page.waitForTimeout(4000);
+    const molText = await page.locator('#view-molecule').innerText();
+    check('a PubChem molecule opens its full page',
+      /Molecular formula/i.test(molText) && /From PubChem/i.test(molText), molText.slice(0, 200));
+    check('PubChem molecule got a 3D view or an explanation',
+      (await page.locator('.viewer3d canvas').count()) > 0 ||
+      /No 3D shape available/i.test(molText));
+    await page.screenshot({ path: path.join(SHOTS, '13-pubchem.png'), fullPage: true });
+  } else {
+    check('a PubChem result row appeared', false, 'no rows rendered');
+  }
+}
+
+await browser.close();
+console.log(`\n${pass} passed, ${fail} failed`);
+if (fail) { console.log('\nFailures:'); failures.forEach((f) => console.log('  - ' + f)); process.exit(1); }
