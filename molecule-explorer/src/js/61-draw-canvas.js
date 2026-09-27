@@ -31,6 +31,8 @@
       a.labelAlpha = a.forceLabel ? 1 : xray;
       a.hAlpha = a.isCarbon ? xray : 1;
       a.preferH = !a.isCarbon;
+      /* hands left empty because this atom's hydrogens were switched off */
+      a.openHands = (g.atoms[a.i].noH || g.atoms[a.i].rad) ? Math.min(4, M.autoH(g, a.i)) : 0;
     });
     /* One pass for the whole structure, so hydrogens on neighbouring atoms
      * cannot be placed on top of each other. */
@@ -219,6 +221,29 @@
         ctx.arc(x, y, 1.6, 0, Math.PI * 2);
         ctx.fillStyle = colFaint;
         ctx.fill();
+      }
+      if (a.openHands > 0) {
+        /* one dot per empty hand, so a bare atom cannot be mistaken for a
+         * filled one in the skeletal view */
+        const taken = a.bonds.map((bd) => {
+          const o = bd.a === a.i ? bd.b : bd.a;
+          return Math.atan2(atoms[o].y - a.y, atoms[o].x - a.x);
+        }).concat(a.hDirs);
+        for (let k = 0; k < a.openHands; k++) {
+          let best = 0, bestGap = -1;
+          for (let q = 0; q < 24; q++) {
+            const th = -Math.PI + (q * Math.PI) / 12;
+            let gap = Math.PI;
+            for (const t of taken) gap = Math.min(gap, Math.abs(ME.render2d.angleDiff(th, t)));
+            if (gap > bestGap) { bestGap = gap; best = th; }
+          }
+          taken.push(best);
+          ctx.beginPath();
+          ctx.arc(x + Math.cos(best) * fs * 0.85, y + Math.sin(best) * fs * 0.85,
+            Math.max(1.2, fs * 0.11), 0, Math.PI * 2);
+          ctx.fillStyle = colFaint;
+          ctx.fill();
+        }
       }
       if (a.charge) {
         ctx.save();

@@ -64,7 +64,7 @@ PubChem module fails the build.
 
 **`npm test`** runs both suites:
 
-- `test/unit.mjs` — 39 logic tests (search by case, typo, synonym, formula and
+- `test/unit.mjs` — 46 logic tests (search by case, typo, synonym, formula and
   SMILES; the five-bond-carbon message; twenty-odd valid ions and hypervalent
   species that must *not* be flagged; formula and molar mass against known
   values; drawing → recognition; label spacing in the drawings; crowding in the
@@ -139,6 +139,17 @@ concatenation order is the only coupling between them.
   twenty-odd species that must stay unflagged.
 - **Skeletal drawings are refused** where they would mean nothing. A molecule
   with no carbon–carbon backbone gets an explanation instead of a picture.
+- **Spare bonds are filled with hydrogens**, so a lone carbon is methane and a
+  lone oxygen is water. That is the convention every structure editor uses, and
+  it is what lesson 2 teaches. The crossed-out **H** tool overrides it per atom:
+  click an atom to strip its hydrogens or put them back, or click empty space to
+  drop a bare atom. A stripped atom shows a dot for each hand left empty, which
+  is how an unpaired electron is drawn.
+- **Radicals keep their unpaired electron.** Nitric oxide, nitrogen dioxide and
+  one carbon in vitamin B12 are radicals, and opening them in the editor used to
+  fill the gap with a hydrogen — NO silently became HNO. The editor now carries
+  the radical state across, and a test checks all 513 database molecules survive
+  a round trip through it with their formula unchanged.
 - **3D is not invented.** For a salt, whose ions have no fixed arrangement
   relative to one another, the viewer says so rather than generating a shape.
 - **Benzene** is drawn Kekulé (alternating double bonds) rather than with a

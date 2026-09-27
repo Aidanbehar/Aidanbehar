@@ -1536,6 +1536,9 @@ window.ME = window.ME || {};
         ring: mol.isRingAtom(a),
         bonds: [],
         lonePairs: opts && opts.lonePairs ? chem.lonePairs(mol, a) : 0,
+        /* Hands left empty because the hydrogens were deliberately switched
+         * off, rather than because the atom is full. Drawn as dots. */
+        openHands: opts && opts.radicalDots ? openHandCount(mol, a) : 0,
       });
     }
     const bonds = [];
@@ -1547,6 +1550,25 @@ window.ME = window.ME || {};
       atoms[a2].bonds.push(bd);
     }
     return { atoms, bonds };
+  }
+
+  /* An atom whose valence has been pinned to exactly what is drawn has had its
+   * hydrogens suppressed; the difference from its normal valence is how many
+   * unpaired electrons it is left holding. */
+  function openHandCount(mol, a) {
+    if (mol.getAtomAbnormalValence(a) < 0) return 0;
+    if (mol.getImplicitHydrogens(a) > 0) return 0;
+    const sym = ME.chem.symbolFor(mol.getAtomicNo(a));
+    const rule = ME.chem.VALENCE[sym];
+    if (!rule || ME.chem.METALS.has(sym)) return 0;
+    let used = 0;
+    for (let k = 0; k < mol.getAllConnAtoms(a); k++) used += mol.getConnBondOrder(a, k);
+    let cap = null;
+    for (const v of rule.allowed.slice().sort((x, y) => x - y)) {
+      if (v >= used) { cap = v; break; }
+    }
+    if (cap === null) return 0;
+    return Math.max(0, Math.min(4, cap - used));
   }
 
   /* A carbon is normally invisible in a skeletal drawing. It has to be drawn
@@ -1685,6 +1707,7 @@ window.ME = window.ME || {};
    *   width/height  target box in px (the SVG is responsive via viewBox)
    *   lonePairs  draw non-bonding electron dots on heteroatoms
    *   highlight  [{ atoms:[i], color }]
+   *   radicalDots  mark hands left empty by switching hydrogens off
    *   interactive  attach hover targets and tooltips
    *   onAtomClick  callback(atomIndex)
    *   selectable   atoms that respond to a click
@@ -1892,6 +1915,20 @@ window.ME = window.ME || {};
         });
         badge.textContent = (Math.abs(a.charge) > 1 ? Math.abs(a.charge) : '') + (a.charge > 0 ? '+' : '−');
         gAtoms.appendChild(badge);
+      }
+      /* unpaired electrons where hydrogens were switched off: single dots, so
+       * they read differently from the paired dots of a lone pair */
+      if (a.openHands > 0) {
+        const used = a.hDirs.slice();
+        for (let k = 0; k < a.openHands; k++) {
+          const ang = pickFreeAngle(a, atoms, used);
+          used.push(ang);
+          gAtoms.appendChild(svgEl('circle', {
+            cx: round(x + Math.cos(ang) * fs * 0.85),
+            cy: round(y + Math.sin(ang) * fs * 0.85),
+            r: round(Math.max(1.2, fs * 0.11)), fill: 'var(--text-soft)',
+          }));
+        }
       }
       /* lone pairs */
       if (a.lonePairs > 0) {
@@ -3047,13 +3084,15 @@ window.ME = window.ME || {};
 
   function cloneGraph(g) {
     return {
-      atoms: g.atoms.map((a) => ({ x: a.x, y: a.y, sym: a.sym, charge: a.charge || 0 })),
+      atoms: g.atoms.map((a) => ({ x: a.x, y: a.y, sym: a.sym, charge: a.charge || 0, noH: !!a.noH, rad: a.rad || 0 })),
       bonds: g.bonds.map((b) => ({ a: b.a, b: b.b, order: b.order })),
     };
   }
 
-  function addAtom(g, x, y, sym) {
-    g.atoms.push({ x, y, sym: sym || 'C', charge: 0 });
+  function addAtom(g, x, y, sym, noH) {
+    /* noH marks an atom whose hydrogens are switched off: a bare atom rather
+     * than one with its spare hands quietly filled in. */
+    g.atoms.push({ x, y, sym: sym || 'C', charge: 0, noH: !!noH, rad: 0 });
     return g.atoms.length - 1;
   }
 
@@ -3099,6 +3138,7 @@ window.ME = window.ME || {};
    * normal capacity after its drawn bonds are counted. */
   function implicitH(g, i) {
     const at = g.atoms[i];
+    if (at.noH) return 0;
     const rule = ME.chem.VALENCE[at.sym];
     if (!rule || ME.chem.METALS.has(at.sym)) return 0;
     const charge = at.charge || 0;
@@ -3115,6 +3155,17 @@ window.ME = window.ME || {};
     }
     if (target === null) return 0;
     return Math.max(0, target - used);
+  }
+
+  /* The hydrogens an atom would hold if they were being filled in. Used to
+   * show how many are being suppressed, and to restore them. */
+  function autoH(g, i) {
+    if (!g.atoms[i].noH) return implicitH(g, i);
+    const saved = g.atoms[i].noH;
+    g.atoms[i].noH = false;
+    const n = implicitH(g, i);
+    g.atoms[i].noH = saved;
+    return n;
   }
 
   /* --------------------------------------------------- graph <-> molecule */
@@ -3135,6 +3186,16 @@ window.ME = window.ME || {};
       const bi = m.addBond(b.a, b.b);
       m.setBondOrder(bi, b.order);
     });
+    /* Pinning the total valence to exactly what is drawn is how OpenChemLib is
+     * told to stop filling in hydrogens. It has to come after the bonds, since
+     * the valence counts them. */
+    g.atoms.forEach((a, i) => {
+      /* A radical carries its own unpaired electron, and that is what stops the
+       * hydrogens being filled in; anything else has its valence pinned to
+       * exactly what is drawn. */
+      if (a.rad) m.setAtomRadical(i, a.rad);
+      else if (a.noH) m.setAtomAbnormalValence(i, usedValence(g, i));
+    });
     try { m.ensureHelperArrays(OCL.Molecule.cHelperRings); } catch (e) { /* partial drawing */ }
     return m;
   }
@@ -3147,6 +3208,13 @@ window.ME = window.ME || {};
         x: mol.getAtomX(a), y: mol.getAtomY(a),
         sym: ME.chem.symbolFor(mol.getAtomicNo(a)),
         charge: mol.getAtomCharge(a),
+        /* Nitric oxide and nitrogen dioxide are radicals: an unpaired electron
+         * sits where a hydrogen otherwise would. Carrying that across is what
+         * stops NO quietly turning into HNO when it is opened in the editor.
+         * A pinned valence means the same thing for drawings made here. */
+        rad: mol.getAtomRadical ? mol.getAtomRadical(a) : 0,
+        noH: (mol.getAtomRadical ? mol.getAtomRadical(a) > 0 : false)
+          || (mol.getAtomAbnormalValence(a) >= 0 && mol.getImplicitHydrogens(a) === 0),
       });
     }
     for (let b = 0; b < mol.getAllBonds(); b++) {
@@ -3342,7 +3410,7 @@ window.ME = window.ME || {};
 
   ME.drawModel = {
     emptyGraph, cloneGraph, addAtom, addBond, findBond, removeAtom, neighbours,
-    usedValence, implicitH, toMolecule, fromMolecule,
+    usedValence, implicitH, autoH, toMolecule, fromMolecule,
     suggestAngle, snapAngle, normalise, ringPoints, addRing, fuseRing, cleanUp, boundingBox,
     crowding, nearestAtom, separate, SNAP, MIN_SEP,
   };
@@ -3383,6 +3451,8 @@ window.ME = window.ME || {};
       a.labelAlpha = a.forceLabel ? 1 : xray;
       a.hAlpha = a.isCarbon ? xray : 1;
       a.preferH = !a.isCarbon;
+      /* hands left empty because this atom's hydrogens were switched off */
+      a.openHands = (g.atoms[a.i].noH || g.atoms[a.i].rad) ? Math.min(4, M.autoH(g, a.i)) : 0;
     });
     /* One pass for the whole structure, so hydrogens on neighbouring atoms
      * cannot be placed on top of each other. */
@@ -3572,6 +3642,29 @@ window.ME = window.ME || {};
         ctx.fillStyle = colFaint;
         ctx.fill();
       }
+      if (a.openHands > 0) {
+        /* one dot per empty hand, so a bare atom cannot be mistaken for a
+         * filled one in the skeletal view */
+        const taken = a.bonds.map((bd) => {
+          const o = bd.a === a.i ? bd.b : bd.a;
+          return Math.atan2(atoms[o].y - a.y, atoms[o].x - a.x);
+        }).concat(a.hDirs);
+        for (let k = 0; k < a.openHands; k++) {
+          let best = 0, bestGap = -1;
+          for (let q = 0; q < 24; q++) {
+            const th = -Math.PI + (q * Math.PI) / 12;
+            let gap = Math.PI;
+            for (const t of taken) gap = Math.min(gap, Math.abs(ME.render2d.angleDiff(th, t)));
+            if (gap > bestGap) { bestGap = gap; best = th; }
+          }
+          taken.push(best);
+          ctx.beginPath();
+          ctx.arc(x + Math.cos(best) * fs * 0.85, y + Math.sin(best) * fs * 0.85,
+            Math.max(1.2, fs * 0.11), 0, Math.PI * 2);
+          ctx.fillStyle = colFaint;
+          ctx.fill();
+        }
+      }
       if (a.charge) {
         ctx.save();
         ctx.fillStyle = a.charge > 0 ? '#d93b32' : '#2f6df6';
@@ -3728,8 +3821,15 @@ window.ME = window.ME || {};
 
     const wrap = el('div', { class: 'wrap' });
     wrap.appendChild(el('h1', { text: 'Draw' }));
-    wrap.appendChild(el('p', { class: 'note', style: { maxWidth: '62ch', marginBottom: '18px' } },
+    const intro = el('div', { style: { maxWidth: '64ch', marginBottom: '18px' } });
+    intro.appendChild(el('p', { class: 'note', style: { marginBottom: '6px' } },
       'Click empty space to drop an atom. Click an atom to grow a chain from it, or drag from one atom to another to bond them. Everything you draw is checked as you go, and if it turns out to be something known you will be told what it is.'));
+    intro.appendChild(el('p', { class: 'note' }, [
+      'Spare bonds are filled with hydrogens automatically, so a lone carbon is methane and a lone oxygen is water. Use the ',
+      el('b', { text: 'crossed-out H' }),
+      ' tool to drop a bare atom instead, or to strip the hydrogens from one you have already drawn.',
+    ]));
+    wrap.appendChild(intro);
 
     const layout = el('div', { class: 'draw-layout' });
     wrap.appendChild(layout);
@@ -3810,6 +3910,12 @@ window.ME = window.ME || {};
       bar.appendChild(b);
     });
 
+    const noh = el('button', { class: 'tool', title: 'Hydrogens on or off: click an atom to strip its hydrogens or put them back, or click empty space to drop a bare atom' });
+    noh.dataset.tool = 'noh';
+    noh.appendChild(noHydrogenGlyph());
+    noh.addEventListener('click', () => { S.tool = 'noh'; syncTools(); });
+    bar.appendChild(noh);
+
     const erase = el('button', { class: 'tool', title: 'Erase' }, [ME.icon('erase')]);
     erase.dataset.tool = 'erase';
     erase.addEventListener('click', () => { S.tool = 'erase'; syncTools(); });
@@ -3838,6 +3944,22 @@ window.ME = window.ME || {};
     S.toolbar = bar;
     setTimeout(syncTools, 0);
     return bar;
+  }
+
+  /* An H with a line through it: hydrogens off. */
+  function noHydrogenGlyph() {
+    const svg = ME.render2d.svgEl('svg', { viewBox: '0 0 24 24', fill: 'none' });
+    const t = ME.render2d.svgEl('text', {
+      x: 12, y: 13, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+      'font-size': 15, 'font-weight': 700, fill: 'currentColor', 'font-family': 'inherit',
+    });
+    t.textContent = 'H';
+    svg.appendChild(t);
+    svg.appendChild(ME.render2d.svgEl('line', {
+      x1: 4, y1: 19, x2: 20, y2: 4, stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round',
+    }));
+    svg.setAttribute('width', '17'); svg.setAttribute('height', '17');
+    return svg;
   }
 
   /* A regular polygon with n sides, matching the ring the button inserts. */
@@ -4021,9 +4143,16 @@ window.ME = window.ME || {};
       const h = M().implicitH(S.graph, a);
       let txt = ME.chem.elementName(at.sym);
       if (at.charge) txt += `, charge ${at.charge > 0 ? '+' + at.charge : at.charge}`;
-      txt += h > 0
-        ? `, with ${h} ${at.sym === 'C' ? 'hidden ' : ''}hydrogen${h === 1 ? '' : 's'}.`
-        : ', with no room left for hydrogens.';
+      if (at.noH) {
+        const would = M().autoH(S.graph, a);
+        txt += would > 0
+          ? `, with its ${would} hydrogen${would === 1 ? '' : 's'} switched off.`
+          : ', with no hydrogens.';
+      } else {
+        txt += h > 0
+          ? `, with ${h} ${at.sym === 'C' ? 'hidden ' : ''}hydrogen${h === 1 ? '' : 's'}.`
+          : ', with no room left for hydrogens.';
+      }
       ME.showTip(txt, p.clientX, p.clientY - 6);
     } else ME.hideTip();
   }
@@ -4044,6 +4173,24 @@ window.ME = window.ME || {};
         S.graph.atoms[ai].charge = (S.graph.atoms[ai].charge || 0) + (S.tool === 'charge+' ? 1 : -1);
         refresh();
       }
+      return;
+    }
+    if (S.tool === 'noh') {
+      snapshot();
+      if (ai >= 0) {
+        const at = S.graph.atoms[ai];
+        at.noH = !at.noH;
+        /* Filling the hydrogens back in means the unpaired electron is gone. */
+        if (!at.noH) at.rad = 0;
+        ME.toast(at.noH
+          ? ME.chem.elementName(at.sym) + ': hydrogens off'
+          : ME.chem.elementName(at.sym) + ': hydrogens filled in again');
+      } else if (bi < 0) {
+        /* empty space: drop a bare atom straight away */
+        const spot = M().separate(S.graph, snapCoord(m.x), snapCoord(m.y), -1);
+        M().addAtom(S.graph, spot.x, spot.y, S.element, true);
+      }
+      refresh();
       return;
     }
     if (S.tool === 'ring') {
@@ -4270,9 +4417,15 @@ window.ME = window.ME || {};
     if (a) {
       S.infoBody.appendChild(kv('Formula', ME.formulaHTML(a.formula), true));
       S.infoBody.appendChild(kv('Molar mass', a.mass.toFixed(2) + ' g/mol'));
-      let hidden = 0;
-      for (let i = 0; i < g.atoms.length; i++) hidden += M().implicitH(g, i);
+      let hidden = 0, suppressed = 0;
+      for (let i = 0; i < g.atoms.length; i++) {
+        hidden += M().implicitH(g, i);
+        if (g.atoms[i].noH) suppressed += M().autoH(g, i);
+      }
       S.infoBody.appendChild(kv('Hidden hydrogens', String(hidden)));
+      if (suppressed > 0) {
+        S.infoBody.appendChild(kv('Hydrogens switched off', String(suppressed)));
+      }
       S.infoBody.appendChild(kv('Atoms drawn', String(g.atoms.length)));
       if (a.smiles) {
         const row = el('div', { class: 'code-row', style: { marginTop: '10px' } });
@@ -4366,7 +4519,7 @@ window.ME = window.ME || {};
   function exportSVG() {
     const mol = currentMolecule();
     if (!mol) { ME.toast('Nothing to export yet'); return; }
-    const svg = ME.render2d.render(mol, { xray: S.xray, width: 600, height: 450, interactive: false });
+    const svg = ME.render2d.render(mol, { xray: S.xray, width: 600, height: 450, interactive: false, radicalDots: true });
     ME.download('molecule.svg', ME.render2d.toStandaloneSVG(svg), 'image/svg+xml');
   }
 

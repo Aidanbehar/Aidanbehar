@@ -18,13 +18,15 @@
 
   function cloneGraph(g) {
     return {
-      atoms: g.atoms.map((a) => ({ x: a.x, y: a.y, sym: a.sym, charge: a.charge || 0 })),
+      atoms: g.atoms.map((a) => ({ x: a.x, y: a.y, sym: a.sym, charge: a.charge || 0, noH: !!a.noH, rad: a.rad || 0 })),
       bonds: g.bonds.map((b) => ({ a: b.a, b: b.b, order: b.order })),
     };
   }
 
-  function addAtom(g, x, y, sym) {
-    g.atoms.push({ x, y, sym: sym || 'C', charge: 0 });
+  function addAtom(g, x, y, sym, noH) {
+    /* noH marks an atom whose hydrogens are switched off: a bare atom rather
+     * than one with its spare hands quietly filled in. */
+    g.atoms.push({ x, y, sym: sym || 'C', charge: 0, noH: !!noH, rad: 0 });
     return g.atoms.length - 1;
   }
 
@@ -70,6 +72,7 @@
    * normal capacity after its drawn bonds are counted. */
   function implicitH(g, i) {
     const at = g.atoms[i];
+    if (at.noH) return 0;
     const rule = ME.chem.VALENCE[at.sym];
     if (!rule || ME.chem.METALS.has(at.sym)) return 0;
     const charge = at.charge || 0;
@@ -86,6 +89,17 @@
     }
     if (target === null) return 0;
     return Math.max(0, target - used);
+  }
+
+  /* The hydrogens an atom would hold if they were being filled in. Used to
+   * show how many are being suppressed, and to restore them. */
+  function autoH(g, i) {
+    if (!g.atoms[i].noH) return implicitH(g, i);
+    const saved = g.atoms[i].noH;
+    g.atoms[i].noH = false;
+    const n = implicitH(g, i);
+    g.atoms[i].noH = saved;
+    return n;
   }
 
   /* --------------------------------------------------- graph <-> molecule */
@@ -106,6 +120,16 @@
       const bi = m.addBond(b.a, b.b);
       m.setBondOrder(bi, b.order);
     });
+    /* Pinning the total valence to exactly what is drawn is how OpenChemLib is
+     * told to stop filling in hydrogens. It has to come after the bonds, since
+     * the valence counts them. */
+    g.atoms.forEach((a, i) => {
+      /* A radical carries its own unpaired electron, and that is what stops the
+       * hydrogens being filled in; anything else has its valence pinned to
+       * exactly what is drawn. */
+      if (a.rad) m.setAtomRadical(i, a.rad);
+      else if (a.noH) m.setAtomAbnormalValence(i, usedValence(g, i));
+    });
     try { m.ensureHelperArrays(OCL.Molecule.cHelperRings); } catch (e) { /* partial drawing */ }
     return m;
   }
@@ -118,6 +142,13 @@
         x: mol.getAtomX(a), y: mol.getAtomY(a),
         sym: ME.chem.symbolFor(mol.getAtomicNo(a)),
         charge: mol.getAtomCharge(a),
+        /* Nitric oxide and nitrogen dioxide are radicals: an unpaired electron
+         * sits where a hydrogen otherwise would. Carrying that across is what
+         * stops NO quietly turning into HNO when it is opened in the editor.
+         * A pinned valence means the same thing for drawings made here. */
+        rad: mol.getAtomRadical ? mol.getAtomRadical(a) : 0,
+        noH: (mol.getAtomRadical ? mol.getAtomRadical(a) > 0 : false)
+          || (mol.getAtomAbnormalValence(a) >= 0 && mol.getImplicitHydrogens(a) === 0),
       });
     }
     for (let b = 0; b < mol.getAllBonds(); b++) {
@@ -313,7 +344,7 @@
 
   ME.drawModel = {
     emptyGraph, cloneGraph, addAtom, addBond, findBond, removeAtom, neighbours,
-    usedValence, implicitH, toMolecule, fromMolecule,
+    usedValence, implicitH, autoH, toMolecule, fromMolecule,
     suggestAngle, snapAngle, normalise, ringPoints, addRing, fuseRing, cleanUp, boundingBox,
     crowding, nearestAtom, separate, SNAP, MIN_SEP,
   };

@@ -54,8 +54,15 @@
 
     const wrap = el('div', { class: 'wrap' });
     wrap.appendChild(el('h1', { text: 'Draw' }));
-    wrap.appendChild(el('p', { class: 'note', style: { maxWidth: '62ch', marginBottom: '18px' } },
+    const intro = el('div', { style: { maxWidth: '64ch', marginBottom: '18px' } });
+    intro.appendChild(el('p', { class: 'note', style: { marginBottom: '6px' } },
       'Click empty space to drop an atom. Click an atom to grow a chain from it, or drag from one atom to another to bond them. Everything you draw is checked as you go, and if it turns out to be something known you will be told what it is.'));
+    intro.appendChild(el('p', { class: 'note' }, [
+      'Spare bonds are filled with hydrogens automatically, so a lone carbon is methane and a lone oxygen is water. Use the ',
+      el('b', { text: 'crossed-out H' }),
+      ' tool to drop a bare atom instead, or to strip the hydrogens from one you have already drawn.',
+    ]));
+    wrap.appendChild(intro);
 
     const layout = el('div', { class: 'draw-layout' });
     wrap.appendChild(layout);
@@ -136,6 +143,12 @@
       bar.appendChild(b);
     });
 
+    const noh = el('button', { class: 'tool', title: 'Hydrogens on or off: click an atom to strip its hydrogens or put them back, or click empty space to drop a bare atom' });
+    noh.dataset.tool = 'noh';
+    noh.appendChild(noHydrogenGlyph());
+    noh.addEventListener('click', () => { S.tool = 'noh'; syncTools(); });
+    bar.appendChild(noh);
+
     const erase = el('button', { class: 'tool', title: 'Erase' }, [ME.icon('erase')]);
     erase.dataset.tool = 'erase';
     erase.addEventListener('click', () => { S.tool = 'erase'; syncTools(); });
@@ -164,6 +177,22 @@
     S.toolbar = bar;
     setTimeout(syncTools, 0);
     return bar;
+  }
+
+  /* An H with a line through it: hydrogens off. */
+  function noHydrogenGlyph() {
+    const svg = ME.render2d.svgEl('svg', { viewBox: '0 0 24 24', fill: 'none' });
+    const t = ME.render2d.svgEl('text', {
+      x: 12, y: 13, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+      'font-size': 15, 'font-weight': 700, fill: 'currentColor', 'font-family': 'inherit',
+    });
+    t.textContent = 'H';
+    svg.appendChild(t);
+    svg.appendChild(ME.render2d.svgEl('line', {
+      x1: 4, y1: 19, x2: 20, y2: 4, stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round',
+    }));
+    svg.setAttribute('width', '17'); svg.setAttribute('height', '17');
+    return svg;
   }
 
   /* A regular polygon with n sides, matching the ring the button inserts. */
@@ -347,9 +376,16 @@
       const h = M().implicitH(S.graph, a);
       let txt = ME.chem.elementName(at.sym);
       if (at.charge) txt += `, charge ${at.charge > 0 ? '+' + at.charge : at.charge}`;
-      txt += h > 0
-        ? `, with ${h} ${at.sym === 'C' ? 'hidden ' : ''}hydrogen${h === 1 ? '' : 's'}.`
-        : ', with no room left for hydrogens.';
+      if (at.noH) {
+        const would = M().autoH(S.graph, a);
+        txt += would > 0
+          ? `, with its ${would} hydrogen${would === 1 ? '' : 's'} switched off.`
+          : ', with no hydrogens.';
+      } else {
+        txt += h > 0
+          ? `, with ${h} ${at.sym === 'C' ? 'hidden ' : ''}hydrogen${h === 1 ? '' : 's'}.`
+          : ', with no room left for hydrogens.';
+      }
       ME.showTip(txt, p.clientX, p.clientY - 6);
     } else ME.hideTip();
   }
@@ -370,6 +406,24 @@
         S.graph.atoms[ai].charge = (S.graph.atoms[ai].charge || 0) + (S.tool === 'charge+' ? 1 : -1);
         refresh();
       }
+      return;
+    }
+    if (S.tool === 'noh') {
+      snapshot();
+      if (ai >= 0) {
+        const at = S.graph.atoms[ai];
+        at.noH = !at.noH;
+        /* Filling the hydrogens back in means the unpaired electron is gone. */
+        if (!at.noH) at.rad = 0;
+        ME.toast(at.noH
+          ? ME.chem.elementName(at.sym) + ': hydrogens off'
+          : ME.chem.elementName(at.sym) + ': hydrogens filled in again');
+      } else if (bi < 0) {
+        /* empty space: drop a bare atom straight away */
+        const spot = M().separate(S.graph, snapCoord(m.x), snapCoord(m.y), -1);
+        M().addAtom(S.graph, spot.x, spot.y, S.element, true);
+      }
+      refresh();
       return;
     }
     if (S.tool === 'ring') {
@@ -596,9 +650,15 @@
     if (a) {
       S.infoBody.appendChild(kv('Formula', ME.formulaHTML(a.formula), true));
       S.infoBody.appendChild(kv('Molar mass', a.mass.toFixed(2) + ' g/mol'));
-      let hidden = 0;
-      for (let i = 0; i < g.atoms.length; i++) hidden += M().implicitH(g, i);
+      let hidden = 0, suppressed = 0;
+      for (let i = 0; i < g.atoms.length; i++) {
+        hidden += M().implicitH(g, i);
+        if (g.atoms[i].noH) suppressed += M().autoH(g, i);
+      }
       S.infoBody.appendChild(kv('Hidden hydrogens', String(hidden)));
+      if (suppressed > 0) {
+        S.infoBody.appendChild(kv('Hydrogens switched off', String(suppressed)));
+      }
       S.infoBody.appendChild(kv('Atoms drawn', String(g.atoms.length)));
       if (a.smiles) {
         const row = el('div', { class: 'code-row', style: { marginTop: '10px' } });
@@ -692,7 +752,7 @@
   function exportSVG() {
     const mol = currentMolecule();
     if (!mol) { ME.toast('Nothing to export yet'); return; }
-    const svg = ME.render2d.render(mol, { xray: S.xray, width: 600, height: 450, interactive: false });
+    const svg = ME.render2d.render(mol, { xray: S.xray, width: 600, height: 450, interactive: false, radicalDots: true });
     ME.download('molecule.svg', ME.render2d.toStandaloneSVG(svg), 'image/svg+xml');
   }
 

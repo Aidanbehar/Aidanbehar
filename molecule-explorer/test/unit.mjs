@@ -721,3 +721,131 @@ describe('lesson 2 teaches what its check asks about', () => {
     assert.ok(out.total >= 6, 'it should look like a molecule, not a bare star');
   });
 });
+
+/* ------------------------------------------------- bare atoms in the editor */
+describe('hydrogens can be switched off', () => {
+  test('a lone atom fills its spare bonds by default', async () => {
+    const out = await run(() => {
+      const M = window.ME.drawModel;
+      const res = {};
+      ['C', 'O', 'N', 'S', 'Cl'].forEach((sym) => {
+        const g = M.emptyGraph();
+        M.addAtom(g, 0, 0, sym);
+        res[sym] = window.ME.chem.analyse(M.toMolecule(g)).formula;
+      });
+      return res;
+    });
+    /* This is the behaviour lesson 2 teaches, so it stays the default. */
+    assert.equal(out.C, 'CH4');
+    assert.equal(out.O, 'H2O');
+    assert.equal(out.N, 'H3N');
+    assert.equal(out.S, 'H2S');
+    /* OpenChemLib writes hydrogen first for this one; PubChem writes "ClH". */
+    assert.equal(out.Cl, 'HCl');
+  });
+
+  test('a bare atom can be placed instead', async () => {
+    const out = await run(() => {
+      const M = window.ME.drawModel;
+      const res = {};
+      ['C', 'O', 'N', 'S'].forEach((sym) => {
+        const g = M.emptyGraph();
+        M.addAtom(g, 0, 0, sym, true);
+        res[sym] = {
+          formula: window.ME.chem.analyse(M.toMolecule(g)).formula,
+          h: M.implicitH(g, 0),
+          wouldBe: M.autoH(g, 0),
+        };
+      });
+      return res;
+    });
+    assert.equal(out.C.formula, 'C');
+    assert.equal(out.C.h, 0);
+    assert.equal(out.C.wouldBe, 4, 'it still knows how many it is suppressing');
+    assert.equal(out.O.formula, 'O');
+    assert.equal(out.N.formula, 'N');
+    assert.equal(out.S.formula, 'S');
+  });
+
+  test('switching them back on restores the hydrogens', async () => {
+    const out = await run(() => {
+      const M = window.ME.drawModel;
+      const g = M.emptyGraph();
+      M.addAtom(g, 0, 0, 'C', true);
+      const bare = window.ME.chem.analyse(M.toMolecule(g)).formula;
+      g.atoms[0].noH = false;
+      const filled = window.ME.chem.analyse(M.toMolecule(g)).formula;
+      return { bare, filled };
+    });
+    assert.equal(out.bare, 'C');
+    assert.equal(out.filled, 'CH4');
+  });
+
+  test('a bonded atom can have its hydrogens stripped too', async () => {
+    const out = await run(() => {
+      const M = window.ME.drawModel;
+      const g = M.emptyGraph();
+      const a = M.addAtom(g, 0, 0, 'C');
+      const b = M.addAtom(g, 1, 0, 'C');
+      M.addBond(g, a, b, 1);
+      const before = window.ME.chem.analyse(M.toMolecule(g)).formula;
+      g.atoms[1].noH = true;
+      return { before, after: window.ME.chem.analyse(M.toMolecule(g)).formula };
+    });
+    assert.equal(out.before, 'C2H6');
+    assert.equal(out.after, 'C2H3', 'stripping one methyl leaves a radical');
+  });
+
+  test('a bare carbon is not mistaken for methane', async () => {
+    const out = await run(() => {
+      const M = window.ME.drawModel;
+      const bare = M.emptyGraph(); M.addAtom(bare, 0, 0, 'C', true);
+      const filled = M.emptyGraph(); M.addAtom(filled, 0, 0, 'C');
+      const hit = (g) => { const r = window.ME.search.recognise(M.toMolecule(g)); return r && r.n; };
+      return { bare: hit(bare), filled: hit(filled) };
+    });
+    assert.equal(out.filled, 'Methane', 'a lone carbon is methane and should be recognised as such');
+    assert.notEqual(out.bare, 'Methane', 'a bare carbon is a different thing');
+  });
+
+  test('every database molecule survives a trip through the editor unchanged', async () => {
+    /* Opening a molecule in Draw and reading it back must not invent or lose
+     * an atom. Radicals like nitric oxide used to gain a hydrogen here. */
+    const bad = await run(() => {
+      const M = window.ME.drawModel;
+      const norm = (f) => {
+        const c = {}; const re = /([A-Z][a-z]?)(\d*)/g; let x;
+        while ((x = re.exec(f)) !== null) { if (x[1]) c[x[1]] = (c[x[1]] || 0) + (x[2] ? +x[2] : 1); }
+        return Object.keys(c).sort().map((k) => k + c[k]).join('');
+      };
+      const out = [];
+      window.ME.search.all().forEach((m) => {
+        if (!m.m) return;
+        try {
+          const mol = window.ME.chem.fromSmiles(m.m);
+          const before = window.ME.chem.analyse(mol).formula;
+          const g = M.fromMolecule(window.ME.chem.fromMolfile(mol.toMolfile()));
+          const after = window.ME.chem.analyse(M.toMolecule(g)).formula;
+          if (norm(before) !== norm(after)) out.push([m.n, before, after]);
+        } catch (e) { out.push([m.n, 'error', String(e.message).slice(0, 50)]); }
+      });
+      return out;
+    });
+    assert.equal(bad.length, 0, 'changed on the round trip: ' + JSON.stringify(bad.slice(0, 6)));
+  });
+
+  test('radicals keep their unpaired electron', async () => {
+    const out = await run(() => {
+      const M = window.ME.drawModel;
+      const rec = window.ME.search.get('Nitric oxide');
+      const mol = window.ME.chem.fromSmiles(rec.m);
+      const g = M.fromMolecule(window.ME.chem.fromMolfile(mol.toMolfile()));
+      return {
+        formula: window.ME.chem.analyse(M.toMolecule(g)).formula,
+        flagged: g.atoms.filter((a) => a.noH).length,
+      };
+    });
+    assert.equal(out.formula, 'NO', 'nitric oxide must not gain a hydrogen');
+    assert.ok(out.flagged >= 1);
+  });
+});

@@ -47,6 +47,9 @@
         ring: mol.isRingAtom(a),
         bonds: [],
         lonePairs: opts && opts.lonePairs ? chem.lonePairs(mol, a) : 0,
+        /* Hands left empty because the hydrogens were deliberately switched
+         * off, rather than because the atom is full. Drawn as dots. */
+        openHands: opts && opts.radicalDots ? openHandCount(mol, a) : 0,
       });
     }
     const bonds = [];
@@ -58,6 +61,25 @@
       atoms[a2].bonds.push(bd);
     }
     return { atoms, bonds };
+  }
+
+  /* An atom whose valence has been pinned to exactly what is drawn has had its
+   * hydrogens suppressed; the difference from its normal valence is how many
+   * unpaired electrons it is left holding. */
+  function openHandCount(mol, a) {
+    if (mol.getAtomAbnormalValence(a) < 0) return 0;
+    if (mol.getImplicitHydrogens(a) > 0) return 0;
+    const sym = ME.chem.symbolFor(mol.getAtomicNo(a));
+    const rule = ME.chem.VALENCE[sym];
+    if (!rule || ME.chem.METALS.has(sym)) return 0;
+    let used = 0;
+    for (let k = 0; k < mol.getAllConnAtoms(a); k++) used += mol.getConnBondOrder(a, k);
+    let cap = null;
+    for (const v of rule.allowed.slice().sort((x, y) => x - y)) {
+      if (v >= used) { cap = v; break; }
+    }
+    if (cap === null) return 0;
+    return Math.max(0, Math.min(4, cap - used));
   }
 
   /* A carbon is normally invisible in a skeletal drawing. It has to be drawn
@@ -196,6 +218,7 @@
    *   width/height  target box in px (the SVG is responsive via viewBox)
    *   lonePairs  draw non-bonding electron dots on heteroatoms
    *   highlight  [{ atoms:[i], color }]
+   *   radicalDots  mark hands left empty by switching hydrogens off
    *   interactive  attach hover targets and tooltips
    *   onAtomClick  callback(atomIndex)
    *   selectable   atoms that respond to a click
@@ -403,6 +426,20 @@
         });
         badge.textContent = (Math.abs(a.charge) > 1 ? Math.abs(a.charge) : '') + (a.charge > 0 ? '+' : '−');
         gAtoms.appendChild(badge);
+      }
+      /* unpaired electrons where hydrogens were switched off: single dots, so
+       * they read differently from the paired dots of a lone pair */
+      if (a.openHands > 0) {
+        const used = a.hDirs.slice();
+        for (let k = 0; k < a.openHands; k++) {
+          const ang = pickFreeAngle(a, atoms, used);
+          used.push(ang);
+          gAtoms.appendChild(svgEl('circle', {
+            cx: round(x + Math.cos(ang) * fs * 0.85),
+            cy: round(y + Math.sin(ang) * fs * 0.85),
+            r: round(Math.max(1.2, fs * 0.11)), fill: 'var(--text-soft)',
+          }));
+        }
       }
       /* lone pairs */
       if (a.lonePairs > 0) {
