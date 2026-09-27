@@ -171,10 +171,13 @@ network switched off.
   between molecules; the Lewis builder appears in three of them)
 - **Unit 7 — Naming compounds** (3 lessons: ionic names and Roman numerals,
   polyatomic ions and the -ate/-ite system, covalent prefixes and acids)
+- **Unit 8 — Chemical reactions** (3 lessons: what a reaction is and
+  conservation of mass, balancing, and the five reaction types with the
+  activity series and solubility rules used to predict products)
 - **Unit 15 — Organic chemistry: reading structures** (the original 12 lessons,
   kept working unchanged)
 
-43 lessons, 96 pages, 308 questions, about 8 hours of reading.
+46 lessons, 105 pages, 341 questions, about 8.5 hours of reading.
 
 **`src/js/20-calc-lewis.js` — Lewis structures and VSEPR**
 - Runs the counting method and returns electron totals, bond orders, lone
@@ -222,7 +225,7 @@ network switched off.
   it names exists too.
 
 ### Next, in order
-1. Unit 8 reactions, 9 the mole and stoichiometry,
+1. Unit 9 the mole and stoichiometry,
    10 gases, 11 solutions, 12 acids and bases, 13 thermochemistry,
    14 rates and equilibrium — one commit each
 2. The nine remaining Unit 15 organic lessons (IUPAC naming, functional groups
