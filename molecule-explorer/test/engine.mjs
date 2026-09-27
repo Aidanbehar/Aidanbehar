@@ -1223,4 +1223,59 @@ describe('the course structure', () => {
     });
     assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 6), null, 1));
   });
+
+  /* A lesson that hands the reader off to another tab is only useful if the
+   * link lands somewhere. These are written by hand in the lesson text, so
+   * they are exactly the kind of thing that rots silently. */
+  test('every link a lesson offers points somewhere real', async () => {
+    const bad = await run(() => {
+      const out = [];
+      const sink = document.createElement('div');
+      sink.style.display = 'none';
+      document.body.appendChild(sink);
+      const seen = [];
+      window.ME.course.allLessons().forEach((l) => {
+        const parts = [];
+        if (l.hook) parts.push(l.hook);
+        (l.pages || []).forEach((pg) => parts.push(pg.body));
+        parts.forEach((fn) => {
+          let node;
+          try { node = fn(); } catch (e) { return; }   /* the render test reports this */
+          const probe = document.createElement('div');
+          probe.appendChild(node);
+          sink.appendChild(probe);
+          Array.prototype.forEach.call(probe.querySelectorAll('[data-goto], a[href^="#/"], .ls-goto'), (n) => {
+            const hash = n.dataset.goto || n.getAttribute('href') || '';
+            if (hash) seen.push([l.id, hash]);
+          });
+        });
+      });
+      sink.remove();
+
+      const views = ['learn', 'draw', 'elements', 'balancer', 'gas', 'tools', 'reference', 'gallery', 'search', 'm'];
+      seen.forEach(([id, hash]) => {
+        const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+        if (!parts.length) { out.push([id, hash, 'empty']); return; }
+        if (views.indexOf(parts[0]) < 0) { out.push([id, hash, 'no such view']); return; }
+        if (parts[0] === 'learn' && parts[1] && !window.ME.course.lesson(parts[1])) out.push([id, hash, 'no such lesson']);
+        if (parts[0] === 'tools' && parts[1] && !window.ME.tools.TOOLS.some((t) => t.key === parts[1])) out.push([id, hash, 'no such tool']);
+        if (parts[0] === 'elements' && parts[1] && !window.ME.chem.element(parts[1])) out.push([id, hash, 'no such element']);
+        if (parts[0] === 'm' && parts[1]) {
+          const key = decodeURIComponent(parts.slice(1).join('/'));
+          const cid = /^cid:(\d+)$/.exec(key);
+          const name = /^n:(.+)$/.exec(key);
+          if (cid) {
+            if (!window.ME.search.all().some((m) => String(m.cid) === cid[1])) out.push([id, hash, 'no molecule with that CID']);
+          } else if (name) {
+            if (!window.ME.search.get(name[1])) out.push([id, hash, 'no molecule with that name']);
+          } else {
+            out.push([id, hash, 'a molecule link must be cid: or n: — a bare slug reaches nothing offline']);
+          }
+        }
+      });
+      if (!seen.length) out.push(['none', '', 'no links found at all, so this test is checking nothing']);
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 8), null, 1));
+  });
 });

@@ -98,7 +98,9 @@
   /* A link into one of the app's other tabs, so a lesson can hand the reader
    * straight to the tool it has just been talking about. */
   function goto(label, hash, note) {
-    const box = el('div', { class: 'ls-goto' });
+    /* The target is also written onto the element, so a test can check that
+     * every hand-written link in the course still lands somewhere. */
+    const box = el('div', { class: 'ls-goto', 'data-goto': hash });
     const btn = el('button', { class: 'btn btn-primary btn-sm' }, [label, ME.icon('chevron')]);
     btn.addEventListener('click', () => ME.router.go(hash));
     box.appendChild(btn);

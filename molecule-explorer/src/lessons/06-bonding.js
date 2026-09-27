@@ -47,7 +47,7 @@
               p('A Na⁺ ion does not attract one particular Cl⁻. It attracts every chloride ion near it, and is repelled by every sodium ion. The result is not a pair but a repeating three-dimensional grid — a ', term('lattice', 'A repeating three-dimensional arrangement of ions, each one surrounded by ions of the opposite charge. An ionic compound is one continuous lattice, not a collection of molecules.'), ' — with each sodium surrounded by six chlorides and each chloride by six sodiums, repeating for the whole crystal.'),
               warnCallout(b('So "NaCl" is a ratio, not a molecule. '), 'It says there is one sodium for every chlorine. A grain of salt is one enormous ionic lattice containing something like 10¹⁸ ions, and the formula is the simplest ratio in it. This is why ionic formulas are called ', em('formula units'), ' rather than molecules.'),
               p('You can see the difference in the Gallery: the covalent entries are molecules you could count, while sodium chloride is a section of an endless grid.'),
-              goto('Sodium chloride in the gallery', '#/m/sodium-chloride', 'The lattice, not a molecule.'));
+              goto('Sodium chloride in the gallery', '#/m/cid:5234', 'The lattice, not a molecule.'));
           },
         },
         {

@@ -169,10 +169,12 @@ network switched off.
 - **Unit 6 — Chemical bonding** (5 lessons: why atoms bond and ionic bonding,
   covalent bonding and Lewis structures, VSEPR shapes, polarity, and forces
   between molecules; the Lewis builder appears in three of them)
+- **Unit 7 — Naming compounds** (3 lessons: ionic names and Roman numerals,
+  polyatomic ions and the -ate/-ite system, covalent prefixes and acids)
 - **Unit 15 — Organic chemistry: reading structures** (the original 12 lessons,
   kept working unchanged)
 
-40 lessons, 85 pages, 266 questions, about 7 hours of reading.
+43 lessons, 96 pages, 308 questions, about 8 hours of reading.
 
 **`src/js/20-calc-lewis.js` — Lewis structures and VSEPR**
 - Runs the counting method and returns electron totals, bond orders, lone
@@ -213,9 +215,14 @@ network switched off.
   hyphenated words are left alone. Every lesson, question, table, worked
   example and Tools step now goes through it, and a test pins both what must
   be marked up and what must not.
+- A lesson linking to `#/m/sodium-chloride` reached nothing: molecule links
+  need `cid:` or `n:` because the database is keyed by neither a slug nor a
+  title. A test now renders every lesson and checks that every hand-written
+  link resolves — the view exists, and the lesson, tool, element or molecule
+  it names exists too.
 
 ### Next, in order
-1. Unit 7 naming, 8 reactions, 9 the mole and stoichiometry,
+1. Unit 8 reactions, 9 the mole and stoichiometry,
    10 gases, 11 solutions, 12 acids and bases, 13 thermochemistry,
    14 rates and equilibrium — one commit each
 2. The nine remaining Unit 15 organic lessons (IUPAC naming, functional groups
