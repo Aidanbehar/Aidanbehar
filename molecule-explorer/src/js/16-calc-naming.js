@@ -168,15 +168,15 @@
     const el = ME.chem.element(cation.sym);
     /* The metal keeps its own name, unchanged apart from the case: a compound
      * name is lower case unless it starts a sentence. */
-    let cationName = el.name.toLowerCase();
+    let cationName = ME.ref.elementNameLower(el.sym);
     let charge = null;
 
     const t = ME.ref.typicalCharge(cation.sym);
     if (t && t.charge !== null && !t.variable) {
       charge = t.charge;
       steps.push({
-        text: 'The metal is ' + el.name.toLowerCase() + ', and a metal keeps its own name unchanged. ' +
-          el.name + ' is always ' + charge + '+, so there is no Roman numeral to work out.',
+        text: 'The metal is ' + ME.ref.elementNameLower(el.sym) + ', and a metal keeps its own name unchanged. ' +
+          ME.ref.elementName(el.sym) + ' is always ' + charge + '+, so there is no Roman numeral to work out.',
       });
     } else {
       /* A variable metal, so the charge has to be worked backwards out of the
@@ -186,15 +186,15 @@
       const perCation = -totalNegative / cation.count;
       if (!Number.isInteger(perCation) || perCation <= 0) return null;
       charge = perCation;
-      cationName = el.name.toLowerCase() + '(' + (ROMAN[perCation] || perCation) + ')';
+      cationName = ME.ref.elementNameLower(el.sym) + '(' + (ROMAN[perCation] || perCation) + ')';
       steps.push({
-        text: 'The metal is ' + el.name.toLowerCase() + ', which takes more than one charge, so the name has to say which. ' +
+        text: 'The metal is ' + ME.ref.elementNameLower(el.sym) + ', which takes more than one charge, so the name has to say which. ' +
           'Work it backwards from the fact that the compound has no overall charge: ' +
           (anion.count === 1 ? 'one ' : anion.count + ' ') + anion.name +
           ' at ' + anion.charge + ' each is ' + totalNegative + ' in total, so the ' +
-          (cation.count === 1 ? 'single ' : cation.count + ' ') + el.name.toLowerCase() +
+          (cation.count === 1 ? 'single ' : cation.count + ' ') + ME.ref.elementNameLower(el.sym) +
           ' must supply ' + (-totalNegative) + ' between them — that is ' + perCation + '+ each, so it is ' +
-          el.name.toLowerCase() + '(' + ROMAN[perCation] + ').',
+          ME.ref.elementNameLower(el.sym) + '(' + ROMAN[perCation] + ').',
       });
     }
 
@@ -202,7 +202,7 @@
       text: anion.ion
         ? 'The negative part is ' + anion.name + ', ' + anion.ion.f + (anion.ion.c === -1 ? '⁻' : '') +
           ', which is a polyatomic ion and keeps its own name exactly as it is.'
-        : 'The negative part is a single ' + ME.chem.element(anion.sym).name.toLowerCase() +
+        : 'The negative part is a single ' + ME.ref.elementNameLower(anion.sym) +
           ' atom. A lone nonmetal anion takes the element name with its ending swapped for -ide, so it becomes ' + anion.name + '.',
     });
     steps.push({ text: 'Positive part first, negative part second, and no prefixes — the charges already fix how many of each there are, so saying it again would be redundant.' });
@@ -242,13 +242,13 @@
     const stem = ME.ref.ideName(second);
     if (/[ao]$/.test(p2) && /^[aeiou]/.test(stem)) p2 = p2.slice(0, -1);
 
-    const name = (p1 + firstEl.name.toLowerCase()) + ' ' + p2 + stem;
+    const name = (p1 + ME.ref.elementNameLower(firstEl.sym)) + ' ' + p2 + stem;
     return {
       name: name, kind: 'covalent',
       steps: [
         { text: 'Both elements are nonmetals, so this is a molecule rather than a lattice of ions. There are no charges doing the bookkeeping for us, which means the name has to say how many of each atom there are — that is what the Greek prefixes are for.' },
-        { text: firstEl.name + ' goes first because it is the less electronegative of the two, which is the convention. ' + (nFirst === 1 ? 'There is one of it, and "mono" is always left off the first element — carbon monoxide, not monocarbon monoxide.' : 'There are ' + nFirst + ' of it, so it takes the prefix ' + PREFIX[nFirst] + '-.') },
-        { text: 'The second element takes a prefix and an -ide ending: ' + nSecond + ' → ' + PREFIX[nSecond] + '-, and ' + secondEl.name.toLowerCase() + ' → ' + stem + '.' + (p2 !== PREFIX[nSecond] ? ' The final vowel of ' + PREFIX[nSecond] + ' drops before the vowel of ' + stem + ', which is why it is ' + p2 + stem + ' rather than ' + PREFIX[nSecond] + stem + '.' : '') },
+        { text: ME.ref.elementName(firstEl.sym) + ' goes first because it is the less electronegative of the two, which is the convention. ' + (nFirst === 1 ? 'There is one of it, and "mono" is always left off the first element — carbon monoxide, not monocarbon monoxide.' : 'There are ' + nFirst + ' of it, so it takes the prefix ' + PREFIX[nFirst] + '-.') },
+        { text: 'The second element takes a prefix and an -ide ending: ' + nSecond + ' → ' + PREFIX[nSecond] + '-, and ' + ME.ref.elementNameLower(secondEl.sym) + ' → ' + stem + '.' + (p2 !== PREFIX[nSecond] ? ' The final vowel of ' + PREFIX[nSecond] + ' drops before the vowel of ' + stem + ', which is why it is ' + p2 + stem + ' rather than ' + PREFIX[nSecond] + stem + '.' : '') },
       ],
     };
   }
@@ -356,7 +356,7 @@
         const mag = Math.abs(parsed.charge);
         if (parsed.charge > 0) {
           return { ok: true, kind: 'ion',
-            name: e.name.toLowerCase() + (isVariableMetal(syms[0]) ? '(' + ROMAN[mag] + ')' : '') + ' ion',
+            name: ME.ref.elementNameLower(e.sym) + (isVariableMetal(syms[0]) ? '(' + ROMAN[mag] + ')' : '') + ' ion',
             steps: [{ text: 'A metal that has lost ' + mag + ' electron' + (mag === 1 ? '' : 's') + ' keeps its own name.' }] };
         }
         return { ok: true, kind: 'ion', name: ME.ref.ideName(syms[0]),
@@ -377,9 +377,9 @@
     if (syms.length === 1) {
       const e = ME.chem.element(syms[0]);
       const n = parsed.counts[syms[0]];
-      return { ok: true, kind: 'element', name: e.name.toLowerCase(),
+      return { ok: true, kind: 'element', name: ME.ref.elementNameLower(e.sym),
         steps: [{ text: n > 1
-          ? 'An element on its own. ' + e.name + ' goes around as ' + parsed.display + ' rather than single atoms, but it is still just ' + e.name.toLowerCase() + '.'
+          ? 'An element on its own. ' + ME.ref.elementName(e.sym) + ' goes around as ' + parsed.display + ' rather than single atoms, but it is still just ' + ME.ref.elementNameLower(e.sym) + '.'
           : 'A single element, so its name is just its name.' }] };
     }
 
@@ -410,7 +410,7 @@
     if (words.length < 2) {
       /* Might be a single element or a lone ion name. */
       const e = elementByName(words[0]);
-      if (e) return { ok: true, formula: e.sym, steps: ['That is an element: ' + e.name + ' is ' + e.sym + '.'] };
+      if (e) return { ok: true, formula: e.sym, steps: ['That is an element: ' + ME.ref.elementName(e.sym) + ' is ' + e.sym + '.'] };
       const ion = ME.ref.ionByName(words[0]);
       if (ion) return { ok: true, formula: ion.f, steps: ['That is the ' + ion.n.toLowerCase() + ' ion, ' + ion.f + '.'] };
       return { ok: false, error: 'A compound name has at least two parts — the positive part and the negative part.' };

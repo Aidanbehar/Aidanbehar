@@ -231,6 +231,35 @@
     why: 'Both are the flat parts of a heating curve: energy going in with the temperature refusing to budge, because it is breaking the particles apart instead of speeding them up.',
   };
 
+  /* Freezing-point and boiling-point constants, for the colligative lesson.
+   * Literature values — there is no free machine-readable source for these,
+   * so they are stated as learned rather than verified, like the solubility
+   * rules and the activity series. */
+  const COLLIGATIVE = {
+    source: 'Standard cryoscopic and ebullioscopic constants, in °C kg mol⁻¹.',
+    solvents: {
+      water: { Kf: 1.86, Kb: 0.512, mp: 0, bp: 100 },
+      benzene: { Kf: 5.12, Kb: 2.53, mp: 5.5, bp: 80.1 },
+      'acetic acid': { Kf: 3.90, Kb: 3.07, mp: 16.6, bp: 118 },
+      cyclohexane: { Kf: 20.0, Kb: 2.79, mp: 6.5, bp: 80.7 },
+    },
+    why: 'Water’s 1.86 means a solution of one mole of particles per kilogram freezes 1.86 °C lower. Cyclohexane’s 20.0 is why it is used to measure molar masses this way — the same solution shifts its freezing point ten times further, so the measurement is ten times easier to read.',
+  };
+
+  /* PubChem's element table uses American spellings, and the rest of the app
+   * is written in British English. Rather than let generated names say
+   * "aluminum sulfate" in the middle of a lesson that says aluminium, the two
+   * differing names are mapped once, here, and every generated name goes
+   * through it. The symbols and all the numbers are untouched. */
+  const SPELLING = { Aluminum: 'Aluminium', Cesium: 'Caesium' };
+  function elementName(sym) {
+    const e = ME.chem.element(sym);
+    if (!e) return sym;
+    return SPELLING[e.name] || e.name;
+  }
+  /* Lower case, for use inside a compound name. */
+  function elementNameLower(sym) { return elementName(sym).toLowerCase(); }
+
   /* SI prefixes, which are definitions rather than measurements. */
   const PREFIXES = [
     ['tera', 'T', 12], ['giga', 'G', 9], ['mega', 'M', 6], ['kilo', 'k', 3],
@@ -243,6 +272,7 @@
     setIons, get ions() { return IONS; }, ionByName, ionByFormula,
     typicalCharge, ideName, IDE_STEM, LATIN, FIXED_D_BLOCK,
     SOLUBILITY, ACTIVITY, moreReactive, STRONG_ACIDS, STRONG_BASES,
-    SPECIFIC_HEAT, LATENT, PREFIXES,
+    SPECIFIC_HEAT, LATENT, COLLIGATIVE, PREFIXES,
+    elementName, elementNameLower, SPELLING,
   };
 })();

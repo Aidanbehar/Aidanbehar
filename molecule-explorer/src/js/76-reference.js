@@ -74,8 +74,32 @@
     { key: 'constants', name: 'Constants', render: constants },
     { key: 'prefixes', name: 'SI prefixes', render: prefixes },
     { key: 'heats', name: 'Specific heats', render: heats },
+    { key: 'colligative', name: 'Freezing and boiling constants', render: colligative },
     { key: 'glossary', name: 'Glossary', render: glossary },
   ];
+
+  /* Cryoscopic and ebullioscopic constants. Literature data, and the table
+   * says so, like the solubility rules and the activity series. */
+  function colligative() {
+    const c = ME.ref.COLLIGATIVE;
+    const box = el('div');
+    box.appendChild(el('p', { class: 'note', text: c.why }));
+    const t = el('table', { class: 'rf-table' });
+    const head = el('tr');
+    ['Solvent', 'Melts at', 'Boils at', 'K_f (\u00b0C/m)', 'K_b (\u00b0C/m)'].forEach((h) =>
+      head.appendChild(el('th', { text: h })));
+    t.appendChild(head);
+    Object.keys(c.solvents).forEach((name) => {
+      const s = c.solvents[name];
+      const tr = el('tr');
+      [name, s.mp + ' \u00b0C', s.bp + ' \u00b0C', String(s.Kf), String(s.Kb)].forEach((x, i) =>
+        tr.appendChild(el('td', { class: i ? 'num' : '', text: x })));
+      t.appendChild(tr);
+    });
+    box.appendChild(t);
+    box.appendChild(el('p', { class: 'note rf-src', text: c.source + ' Literature values, not verified by the build.' }));
+    return box;
+  }
 
   const St = { built: false, host: null, panel: null };
 

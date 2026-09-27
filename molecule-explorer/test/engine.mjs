@@ -958,6 +958,67 @@ describe('generated practice problems', () => {
   });
 });
 
+/* ------------------------------------------------- colligative properties */
+describe('freezing and boiling point shifts', () => {
+  /* The i factor is the whole content of the topic, and it is read off the
+   * formula rather than supplied, so it cannot disagree with the compound. */
+  const PARTICLES = [
+    ['C6H12O6', 1], ['CH3CH2OH', 1], ['NaCl', 2], ['KBr', 2],
+    ['CaCl2', 3], ['MgCl2', 3], ['Na2CO3', 3], ['Na2SO4', 3],
+    ['K3PO4', 4], ['Al2(SO4)3', 5], ['NH4Cl', 2], ['(NH4)2SO4', 3],
+  ];
+
+  test('counts the particles each formula unit gives', async () => {
+    const got = await run((cs) => cs.map((c) => {
+      const r = window.ME.solution.particlesPerUnit(c[0]);
+      return [c[0], r.ok ? r.i : 'refused: ' + r.error];
+    }), PARTICLES);
+    got.forEach((g, i) => assert.deepEqual(g, PARTICLES[i], PARTICLES[i][0] + ': got ' + JSON.stringify(g)));
+  });
+
+  test('gives the shifts the solutions lesson prints', async () => {
+    const got = await run(() => {
+      const S = window.ME.solution;
+      return {
+        kf: window.ME.ref.COLLIGATIVE.solvents.water.Kf,
+        sugar: S.freezingPoint('C6H12O6', 1).temperature,
+        nacl: S.freezingPoint('NaCl', 1).temperature,
+        cacl2: S.freezingPoint('CaCl2', 1).temperature,
+        naclBoil: S.boilingPoint('NaCl', 1).temperature,
+        cyclohexane: S.freezingPoint('C6H12O6', 1, 'cyclohexane').drop,
+      };
+    });
+    assert.equal(got.kf, 1.86);
+    assert.ok(Math.abs(got.sugar + 1.86) < 0.001, 'sugar: ' + got.sugar);
+    assert.ok(Math.abs(got.nacl + 3.72) < 0.001, 'NaCl: ' + got.nacl);
+    assert.ok(Math.abs(got.cacl2 + 5.58) < 0.001, 'CaCl2: ' + got.cacl2);
+    /* Boiling shifts far less than freezing, which is why salting pasta water
+     * does nothing useful to the temperature. */
+    assert.ok(got.naclBoil - 100 < 1.1, 'NaCl boiling shift: ' + (got.naclBoil - 100));
+    /* Cyclohexane is the one used to measure molar masses, because its
+     * constant is ten times water's. */
+    assert.ok(Math.abs(got.cyclohexane - 20) < 0.001, 'cyclohexane: ' + got.cyclohexane);
+  });
+
+  test('every generated name uses one spelling of aluminium and caesium', async () => {
+    const got = await run(() => {
+      const bad = [];
+      ['Al2O3', 'AlCl3', 'Al2(SO4)3', 'Cs2O', 'CsCl', 'Al(OH)3'].forEach((f) => {
+        const r = window.ME.naming.nameOf(f);
+        if (!r.ok) { bad.push([f, r.error]); return; }
+        const blob = r.name + ' ' + (r.steps || []).map((s) => s.text || s).join(' ');
+        if (/aluminum|cesium/i.test(blob)) bad.push([f, r.name]);
+      });
+      /* And the American spellings must still be accepted as input. */
+      ['aluminum oxide', 'aluminium oxide', 'cesium chloride', 'caesium chloride'].forEach((n) => {
+        if (!window.ME.naming.formulaOf(n).ok) bad.push([n, 'no longer readable']);
+      });
+      return bad;
+    });
+    assert.deepEqual(got, [], JSON.stringify(got));
+  });
+});
+
 /* ---------------------------------------------------- prose with formulas in */
 describe('rendering formulas inside teaching prose', () => {
   /* Every lesson page, question, table and worked example goes through

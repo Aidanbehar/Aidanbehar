@@ -144,8 +144,75 @@
     ] };
   }
 
+  /* ------------------------------------------------- colligative properties */
+  /* ΔT = i K m. The interesting parameter is i, the number of particles one
+   * formula unit produces on dissolving — which is read off the formula by
+   * the naming engine rather than supplied, so it cannot disagree with what
+   * the compound actually is. */
+  function particlesPerUnit(formulaText) {
+    const parsed = ME.formula.parse(formulaText);
+    if (!parsed.ok) return { ok: false, error: parsed.error };
+    const split = ME.naming.splitIonic(parsed.counts);
+    if (!split) {
+      return {
+        ok: true, i: 1, ionic: false,
+        why: parsed.display + ' dissolves as whole molecules, so one formula unit gives one particle.',
+      };
+    }
+    const plural = (n) => (n === 1 ? ' ion' : ' ions');
+    const cationName = (split.cation.sym
+      ? ME.ref.elementNameLower(split.cation.sym)
+      : split.cation.name) + plural(split.cation.count);
+    const anionName = split.anion.name + plural(split.anion.count);
+    const i = split.cation.count + split.anion.count;
+    return {
+      ok: true, i: i, ionic: true,
+      why: parsed.display + ' separates into ' + split.cation.count + ' ' + cationName +
+        ' and ' + split.anion.count + ' ' + anionName + ', which is ' + i + ' particles.',
+    };
+  }
+
+  function freezingPoint(formulaText, molality, solventName) {
+    const solvent = (solventName || 'water').toLowerCase();
+    const c = ME.ref.COLLIGATIVE.solvents[solvent];
+    if (!c) return { ok: false, error: 'No constants stored for ' + solvent + '.' };
+    const pp = particlesPerUnit(formulaText);
+    if (!pp.ok) return pp;
+    const drop = pp.i * c.Kf * molality;
+    return {
+      ok: true, i: pp.i, K: c.Kf, molality: molality, drop: drop,
+      temperature: c.mp - drop, solvent: solvent,
+      steps: [
+        { text: 'How many particles does each formula unit give? ' + pp.why },
+        { text: 'The freezing-point constant for ' + solvent + ' is ' + c.Kf + ' °C per molal. That is literature data, not something this app can verify.' },
+        { text: 'ΔT = i × K × m', maths: pp.i + ' × ' + c.Kf + ' × ' + ME.fmt.fmt(molality, 4) + ' = ' + ME.fmt.fmt(drop, 4) + ' °C' },
+        { text: 'So it freezes at ' + ME.fmt.fmtSigned(c.mp - drop, 4) + ' °C instead of ' + c.mp + ' °C.' },
+      ],
+    };
+  }
+
+  function boilingPoint(formulaText, molality, solventName) {
+    const solvent = (solventName || 'water').toLowerCase();
+    const c = ME.ref.COLLIGATIVE.solvents[solvent];
+    if (!c) return { ok: false, error: 'No constants stored for ' + solvent + '.' };
+    const pp = particlesPerUnit(formulaText);
+    if (!pp.ok) return pp;
+    const rise = pp.i * c.Kb * molality;
+    return {
+      ok: true, i: pp.i, K: c.Kb, molality: molality, rise: rise,
+      temperature: c.bp + rise, solvent: solvent,
+      steps: [
+        { text: 'How many particles does each formula unit give? ' + pp.why },
+        { text: 'The boiling-point constant for ' + solvent + ' is ' + c.Kb + ' °C per molal — much smaller than the freezing one, which is why salting pasta water raises its boiling point by a fraction of a degree and does not speed anything up.' },
+        { text: 'ΔT = i × K × m', maths: pp.i + ' × ' + c.Kb + ' × ' + ME.fmt.fmt(molality, 4) + ' = ' + ME.fmt.fmt(rise, 4) + ' °C' },
+        { text: 'So it boils at ' + ME.fmt.fmt(c.bp + rise, 4) + ' °C instead of ' + c.bp + ' °C.' },
+      ],
+    };
+  }
+
   ME.solution = {
     molarity, molarityFromGrams, dilute, massPercent, ppm, molality,
     pHfromH, HfrompH, neutralise, heat, gibbs,
+    particlesPerUnit, freezingPoint, boilingPoint,
   };
 })();

@@ -220,6 +220,12 @@
     return s;
   }
 
+  /* The same number with a real minus sign, for anywhere it is being shown to
+   * a reader rather than fed back into a parser. Keeping it separate from fmt
+   * matters: a generated question rebuilds its own answer from the digits fmt
+   * printed, and U+2212 is not something Number() will read. */
+  function fmtSigned(x, sig) { return fmt(x, sig).replace('-', '\u2212'); }
+
   function sciParts(x, sig) {
     if (x === 0) return { mant: 0, exp: 0, mantText: '0' };
     const exp = Math.floor(Math.log10(Math.abs(x)));
@@ -346,7 +352,7 @@
   ME.fmt = {
     CONST, UNITS, convert, canonicalUnit, dimensionOf, unitsFor, unitLabel,
     sigFigs, sigFigsAmbiguous, roundSig,
-    fmt, sciParts, sciText, sciHTML, withUnit, parseQuantity, checkAnswer,
+    fmt, fmtSigned, sciParts, sciText, sciHTML, withUnit, parseQuantity, checkAnswer,
     /* R in whichever units the reader is working in, derived not looked up. */
     gasConstant(pUnit, vUnit, nUnit) {
       const p = canonicalUnit(pUnit, 'pressure') || 'Pa';

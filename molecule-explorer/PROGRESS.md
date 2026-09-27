@@ -180,10 +180,13 @@ network switched off.
 - **Unit 10 — Gases** (3 lessons: kinetic theory and what pressure is, the
   four gas laws shown to be one law, and PV = nRT with gas stoichiometry and
   partial pressures; embeds the new one-law-at-a-time simulation)
+- **Unit 11 — Solutions** (3 lessons: what dissolving actually is, concentration
+  and dilution, and colligative properties — why salt melts ice and why
+  seawater dehydrates you)
 - **Unit 15 — Organic chemistry: reading structures** (the original 12 lessons,
   kept working unchanged)
 
-52 lessons, 121 pages, 386 questions, about 11 hours of reading.
+55 lessons, 130 pages, 421 questions, about 11.5 hours of reading.
 
 **`src/js/20-calc-lewis.js` — Lewis structures and VSEPR**
 - Runs the counting method and returns electron totals, bond orders, lone
@@ -196,6 +199,19 @@ network switched off.
 - 27 molecules with settled textbook answers are pinned in the engine tests,
   along with electron conservation, formal charges summing to the species
   charge, and resonance detection.
+
+**`ME.solution.particlesPerUnit`, `freezingPoint`, `boilingPoint`**
+- ΔT = i K m, where i — the number of particles one formula unit produces — is
+  read off the formula by the naming engine rather than supplied, so it cannot
+  disagree with what the compound actually is. Twelve solutes are pinned in the
+  tests, from sugar at 1 to Al₂(SO₄)₃ at 5.
+- Cryoscopic and ebullioscopic constants for four solvents, marked LITERATURE,
+  with a new Reference section and a Tools calculator.
+- PubChem's element table spells aluminium and caesium the American way, so
+  generated names read "aluminum sulfate" in the middle of a lesson that says
+  aluminium. `ME.ref.elementName` maps the two differing names once and every
+  generated name goes through it; both spellings are still accepted as input,
+  and a test checks both halves.
 
 **Simulations added for these units**
 - The Lewis-structure builder: type any formula, including impossible ones,

@@ -236,6 +236,39 @@
       },
     },
     {
+      key: 'colligative', name: 'Freezing and boiling points',
+      blurb: 'How far a dissolved solute shifts them — and why it only counts particles.',
+      fields: [
+        { k: 'formula', label: 'Solute', placeholder: 'CaCl2' },
+        { k: 'm', label: 'Molality (mol/kg)', placeholder: '0.5' },
+        { k: 'solvent', label: 'Solvent', type: 'select',
+          options: Object.keys(ME.ref.COLLIGATIVE.solvents).map((k) => [k, k]) },
+      ],
+      run(v) {
+        const m = num(v.m);
+        if (m === null || m < 0) return { error: 'Type a molality — moles of solute per kilogram of solvent.' };
+        const solvent = v.solvent || 'water';
+        const fp = ME.solution.freezingPoint(v.formula, m, solvent);
+        if (!fp.ok) return { error: fp.error };
+        const bp = ME.solution.boilingPoint(v.formula, m, solvent);
+        const c = ME.ref.COLLIGATIVE.solvents[solvent];
+        return {
+          headline: 'Freezes at ' + ME.fmt.fmtSigned(fp.temperature, 4) + ' °C, boils at ' + ME.fmt.fmtSigned(bp.temperature, 5) + ' °C',
+          sub: 'Pure ' + solvent + ' would be ' + c.mp + ' °C and ' + c.bp + ' °C. Each formula unit gives ' +
+            fp.i + ' particle' + (fp.i === 1 ? '' : 's') + ', which is the only thing that matters.',
+          table: {
+            head: ['', 'Pure ' + solvent, 'This solution', 'Shift'],
+            rows: [
+              ['Freezing point', c.mp + ' °C', ME.fmt.fmtSigned(fp.temperature, 4) + ' °C', '−' + ME.fmt.fmt(fp.drop, 4) + ' °C'],
+              ['Boiling point', c.bp + ' °C', ME.fmt.fmtSigned(bp.temperature, 5) + ' °C', '+' + ME.fmt.fmt(bp.rise, 4) + ' °C'],
+            ],
+          },
+          steps: fp.steps.concat(bp.steps.slice(1)),
+          source: ME.ref.COLLIGATIVE.source + ' Literature values — this app cannot verify them the way it verifies formulas.',
+        };
+      },
+    },
+    {
       key: 'ph', name: 'pH and pOH', blurb: 'Between pH, pOH, [H⁺] and [OH⁻].',
       fields: [
         { k: 'mode', label: 'I know', type: 'select', options: [['pH', 'the pH'], ['H', '[H⁺] in mol/L']] },
