@@ -642,6 +642,23 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
 .clickmol { cursor: pointer; }
 .clickmol .hit { cursor: pointer; }
 
+/* small reference tables inside a lesson */
+.lesson-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.lesson-table th {
+  text-align: left; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-faint); font-weight: 700;
+  padding: 0 10px 7px; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.lesson-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.lesson-table tr:last-child td { border-bottom: 0; }
+.lesson-table td:nth-child(2), .lesson-table td:nth-child(3),
+.lesson-table th:nth-child(2), .lesson-table th:nth-child(3) { color: var(--text-soft); }
+.lesson-table td:last-child, .lesson-table th:last-child { text-align: right; }
+@media (max-width: 520px) {
+  .lesson-table { font-size: .82rem; }
+  .lesson-table th, .lesson-table td { padding-left: 5px; padding-right: 5px; }
+}
+
 </style>
 </head>
 <body>
@@ -956,6 +973,11 @@ window.ME = window.ME || {};
   };
   const CPK_DEFAULT = '#8f96a3';
   function colorOf(sym) { return CPK[sym] || CPK_DEFAULT; }
+
+  /* Hydrogen's CPK colour is white, which works for a shaded 3D sphere and is
+   * all but invisible as flat text on a light page. Written-out atom labels use
+   * the ordinary text colour for it instead. */
+  function labelColorOf(sym) { return sym === 'H' ? 'var(--text)' : colorOf(sym); }
 
   /* Covalent-ish radii (Angstrom-scaled, only used for relative 3D sphere and
    * 2D label sizing). */
@@ -1455,7 +1477,7 @@ window.ME = window.ME || {};
   }
 
   ME.chem = {
-    OCL, Mol, CPK, colorOf, radiusOf, VALENCE, METALS, OUTER, GROUPS,
+    OCL, Mol, CPK, colorOf, labelColorOf, radiusOf, VALENCE, METALS, OUTER, GROUPS,
     setElements, get elements() { return ELEMENTS; }, symbolFor, atomicNumber, elementName,
     fromSmiles, fromMolfile, tryParse, normaliseSmiles, ensureCoordinates, canonicalID,
     analyse, safeSmiles, isOrganic, skeletalMakesSense, lonePairs,
@@ -1540,38 +1562,84 @@ window.ME = window.ME || {};
     return false;
   }
 
-  /* Where do this atom's hydrogens go? Pick directions that stay clear of the
-   * bonds already leaving the atom. */
-  function hydrogenDirections(atom, atoms, count, preferHorizontal) {
-    if (count <= 0) return [];
-    const occupied = atom.bonds.map((bd) => {
-      const o = bd.a === atom.i ? bd.b : bd.a;
-      return Math.atan2(atoms[o].y - atom.y, atoms[o].x - atom.x);
-    });
-    const chosen = [];
-    const candidates = [];
-    for (let k = 0; k < 36; k++) candidates.push((k * 10 * Math.PI) / 180 - Math.PI);
+  /* Where do the hydrogens go?
+   *
+   * This has to be decided for the whole molecule at once. Choosing each atom's
+   * hydrogen directions on its own is what produces unreadable drawings: two
+   * bonded carbons will each pick the roomy gap between them, and their
+   * hydrogens land on top of one another. So every hydrogen is placed against a
+   * shared map of what is already on the page — heavy atoms first, then each
+   * hydrogen as it is positioned.
+   */
 
-    for (let h = 0; h < count; h++) {
-      let best = null, bestScore = -Infinity;
-      for (const c of candidates) {
-        let score = Infinity;
-        for (const o of occupied.concat(chosen)) {
-          let d = Math.abs(angleDiff(c, o));
-          if (d < score) score = d;
+  /* How far a hydrogen sits from its atom when fully expanded, as a fraction of
+   * a bond length. One whole bond, the way a structural formula is drawn. */
+  const H_BOND_FRACTION = 1.0;
+  /* Roughly the radius of a drawn label in bond-length units: the font is about
+   * 0.46 of a bond and the label disc about 0.62 of the font. */
+  const LABEL_R = 0.3;
+
+  function placeAllHydrogens(atoms) {
+    const occupied = [];
+    atoms.forEach((a) => {
+      a.hDirs = [];
+      occupied.push({ x: a.x, y: a.y, r: LABEL_R });
+    });
+
+    /* Most-constrained first: an atom with three bonds has almost no choice
+     * about where its one hydrogen goes, so let it claim its spot before the
+     * atoms that have room to move. */
+    const order = atoms.map((a, i) => i)
+      .sort((i, j) => atoms[j].bonds.length - atoms[i].bonds.length);
+
+    order.forEach((i) => {
+      const a = atoms[i];
+      if (!a.hydrogens) return;
+      const bondAngles = a.bonds.map((bd) => {
+        const o = bd.a === a.i ? bd.b : bd.a;
+        return Math.atan2(atoms[o].y - a.y, atoms[o].x - a.x);
+      });
+
+      for (let h = 0; h < a.hydrogens; h++) {
+        let best = 0, bestScore = Infinity;
+        for (let k = 0; k < 72; k++) {
+          const th = -Math.PI + (k * Math.PI) / 36;
+          const hx = a.x + Math.cos(th) * H_BOND_FRACTION;
+          const hy = a.y + Math.sin(th) * H_BOND_FRACTION;
+          let score = 0;
+
+          /* Stay out of the directions the atom's own bonds already use. */
+          for (const b of bondAngles) {
+            const d = Math.abs(angleDiff(th, b));
+            if (d < 0.9) score += (0.9 - d) * 4;
+          }
+          /* Stay clear of every label already placed, including this atom's
+           * own earlier hydrogens. */
+          for (const q of occupied) {
+            const need = q.r + LABEL_R + 0.12;
+            const dx = hx - q.x, dy = hy - q.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < need * need) {
+              const d = Math.sqrt(d2);
+              score += (need - d) * (need - d) * 60;
+            }
+          }
+          /* A heteroatom's first hydrogen prefers to sit beside it, so that an
+           * O with one hydrogen reads as "OH" rather than stacking vertically. */
+          if (a.preferH && h === 0) {
+            const horiz = Math.min(Math.abs(angleDiff(th, 0)), Math.abs(angleDiff(th, Math.PI)));
+            score += horiz * 0.35;
+          }
+          if (score < bestScore) { bestScore = score; best = th; }
         }
-        if (score === Infinity) score = Math.PI;
-        /* Prefer a horizontal H so an O-H reads as "OH" rather than stacking. */
-        if (preferHorizontal && h === 0) {
-          const horiz = Math.min(Math.abs(angleDiff(c, 0)), Math.abs(angleDiff(c, Math.PI)));
-          score += (Math.PI - horiz) * 0.55;
-          if (Math.abs(angleDiff(c, 0)) < 0.01) score += 0.25;
-        }
-        if (score > bestScore) { bestScore = score; best = c; }
+        a.hDirs.push(best);
+        occupied.push({
+          x: a.x + Math.cos(best) * H_BOND_FRACTION,
+          y: a.y + Math.sin(best) * H_BOND_FRACTION,
+          r: LABEL_R,
+        });
       }
-      chosen.push(best);
-    }
-    return chosen;
+    });
   }
 
   function angleDiff(a, b) {
@@ -1605,17 +1673,17 @@ window.ME = window.ME || {};
       /* opacity of this atom's own element label */
       a.labelAlpha = a.forceLabel ? 1 : xray;
       a.preferH = !a.isCarbon;
-      a.hDirs = hydrogenDirections(a, atoms, a.hydrogens, a.preferH);
       /* Hydrogens on a heteroatom are visible even in skeletal form (as "OH"),
        * hydrogens on a carbon are the ones the shorthand hides. */
       a.hAlpha = a.isCarbon ? xray : 1;
     });
+    placeAllHydrogens(atoms);
 
     /* ---- layout ---- */
     const pad = 1.0;
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     atoms.forEach((a) => {
-      const reach = (a.hydrogens > 0 ? 1.0 : 0.35);
+      const reach = a.hydrogens > 0 ? H_BOND_FRACTION + LABEL_R : 0.45;
       minX = Math.min(minX, a.x - reach); maxX = Math.max(maxX, a.x + reach);
       minY = Math.min(minY, a.y - reach); maxY = Math.max(maxY, a.y + reach);
     });
@@ -1734,7 +1802,7 @@ window.ME = window.ME || {};
       a.hDirs.forEach((ang) => {
         /* beside the label when collapsed, at bond length when expanded */
         const near = fs * 0.78 + trimFor(a) * 0.15;
-        const far = scale * 0.92;
+        const far = scale * H_BOND_FRACTION;
         const dist = lerp(near, far, xray);
         const hx = ax + Math.cos(ang) * dist;
         const hy = ay + Math.sin(ang) * dist;
@@ -1748,13 +1816,20 @@ window.ME = window.ME || {};
             hx - ux * fs * 0.58, hy - uy * fs * 0.58, lw, bondColor);
           l.setAttribute('opacity', round3(bondAlpha * a.hAlpha));
         }
+        const hg = svgEl('g', { opacity: round3(a.hAlpha) });
+        /* A disc behind the letter, so a bond passing nearby never runs
+         * through it. */
+        hg.appendChild(svgEl('circle', {
+          cx: round(hx), cy: round(hy), r: round(fs * 0.56), fill: opts.bg || 'var(--surface)',
+        }));
         const t = svgEl('text', {
           x: round(hx), y: round(hy), 'text-anchor': 'middle', 'dominant-baseline': 'central',
           'font-size': round(fs), 'font-family': 'var(--font-sans)', 'font-weight': 500,
-          fill: 'var(--text)', opacity: round3(a.hAlpha),
+          fill: 'var(--text)',
         });
         t.textContent = 'H';
-        gAtoms.appendChild(t);
+        hg.appendChild(t);
+        gAtoms.appendChild(hg);
       });
     });
 
@@ -1771,7 +1846,7 @@ window.ME = window.ME || {};
         const t = svgEl('text', {
           x: round(x), y: round(y), 'text-anchor': 'middle', 'dominant-baseline': 'central',
           'font-size': round(fs), 'font-family': 'var(--font-sans)', 'font-weight': 620,
-          fill: opts.mono ? 'var(--text)' : ME.chem.colorOf(a.sym),
+          fill: opts.mono ? 'var(--text)' : ME.chem.labelColorOf(a.sym),
         });
         t.textContent = a.sym;
         g.appendChild(t);
@@ -1790,10 +1865,6 @@ window.ME = window.ME || {};
       }
       /* lone pairs */
       if (a.lonePairs > 0) {
-        const dirs = hydrogenDirections(
-          { i: a.i, x: a.x, y: a.y, bonds: a.bonds.concat(a.hDirs.map((ang) => null)).filter(Boolean) },
-          atoms, a.lonePairs, false
-        );
         const used = a.hDirs.slice();
         for (let p = 0; p < a.lonePairs; p++) {
           const ang = pickFreeAngle(a, atoms, used);
@@ -1999,7 +2070,8 @@ window.ME = window.ME || {};
   ME.render2d = {
     render, mountXray, describe, toStandaloneSVG, svgToPNG, atomDescription, svgEl,
     /* shared with the drawing editor's canvas painter so both obey the same rules */
-    hydrogenDirections, carbonNeedsLabel, angleDiff, lerp, clamp01,
+    placeAllHydrogens, carbonNeedsLabel, angleDiff, lerp, clamp01,
+    H_BOND_FRACTION, LABEL_R,
   };
 })();
 
@@ -3056,31 +3128,54 @@ window.ME = window.ME || {};
   /* ------------------------------------------------------------- geometry */
   const SNAP = Math.PI / 6;     /* 30 degrees, the angle a zig-zag chain uses */
 
-  /* Where should a new bond from this atom point? Away from everything already
-   * there, snapped to a tidy angle. */
+  /* The closest two atoms are allowed to sit before the drawing gets hard to
+   * read. A bond is 1.0, and a drawn label is about 0.3 across, so anything
+   * under about two thirds of a bond starts to look like a smudge. */
+  const MIN_SEP = 0.62;
+
+  /* Where should a new bond from this atom point?
+   *
+   * Every tidy angle is scored against the whole drawing, not just against this
+   * atom's own bonds. Looking only at the local bonds is what makes a chain
+   * double back on itself and land on an atom three bonds away. */
   function suggestAngle(g, i, preferred) {
     const taken = neighbours(g, i).map((n) =>
       Math.atan2(g.atoms[n.to].y - g.atoms[i].y, g.atoms[n.to].x - g.atoms[i].x));
-    if (!taken.length) return preferred !== undefined ? preferred : -SNAP;
-    if (taken.length === 1) {
-      /* One neighbour: the straight-ahead direction has the biggest gap, but a
-       * chain of carbons zig-zags at about 120 degrees, so offer that instead
-       * and pick whichever side is emptier. */
-      const a1 = normalise(taken[0] + Math.PI - SNAP * 2);
-      const a2 = normalise(taken[0] + Math.PI + SNAP * 2);
-      return crowding(g, i, a1) <= crowding(g, i, a2) ? a1 : a2;
-    }
-    let best = 0, bestGap = -1;
-    for (let k = 0; k < 24; k++) {
-      const ang = -Math.PI + (k * Math.PI) / 12;
-      let gap = Infinity;
-      taken.forEach((t) => { gap = Math.min(gap, Math.abs(ME.render2d.angleDiff(ang, t))); });
-      if (gap > bestGap) { bestGap = gap; best = ang; }
+
+    let best = preferred !== undefined ? preferred : -SNAP;
+    let bestScore = Infinity;
+    /* 30-degree steps, offset by half a step as a fallback set so an atom that
+     * is boxed in on every tidy angle can still find somewhere to go. */
+    for (let pass = 0; pass < 2; pass++) {
+      for (let k = 0; k < 12; k++) {
+        const ang = normalise(k * SNAP + (pass ? SNAP / 2 : 0));
+        let score = crowding(g, i, ang) * 10;
+
+        /* Keep clear of the directions this atom's bonds already use. */
+        for (const t of taken) {
+          const d = Math.abs(normalise(ang - t));
+          if (d < 0.9) score += (0.9 - d) * 3;
+        }
+        /* With one neighbour, prefer the zig-zag a carbon chain actually makes
+         * over carrying straight on. */
+        if (taken.length === 1) {
+          const ideal = Math.min(
+            Math.abs(normalise(ang - normalise(taken[0] + Math.PI - SNAP * 2))),
+            Math.abs(normalise(ang - normalise(taken[0] + Math.PI + SNAP * 2)))
+          );
+          score += ideal * 0.8;
+        }
+        /* Half-step angles are a last resort: they look untidy. */
+        if (pass) score += 0.35;
+
+        if (score < bestScore) { bestScore = score; best = ang; }
+      }
+      if (bestScore < 0.5) break;
     }
     return best;
   }
 
-  /* How close would a new atom in this direction land to existing atoms? */
+  /* How badly would a new atom in this direction crowd what is already drawn? */
   function crowding(g, i, angle) {
     const tx = g.atoms[i].x + Math.cos(angle);
     const ty = g.atoms[i].y + Math.sin(angle);
@@ -3088,10 +3183,39 @@ window.ME = window.ME || {};
     g.atoms.forEach((a, k) => {
       if (k === i) return;
       const d = Math.hypot(a.x - tx, a.y - ty);
-      if (d < 1.2) worst += 1.2 - d;
+      if (d < MIN_SEP * 1.6) worst += (MIN_SEP * 1.6 - d);
     });
     return worst;
   }
+
+  /* The nearest atom to a point, and how far away it is. */
+  function nearestAtom(g, x, y, ignore) {
+    let best = -1, bestD = Infinity;
+    g.atoms.forEach((a, i) => {
+      if (i === ignore) return;
+      const d = Math.hypot(a.x - x, a.y - y);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return { index: best, distance: bestD };
+  }
+
+  /* Nudge a position away from whatever it is sitting on top of, so a stray
+   * click or a dropped atom never lands inside another one. */
+  function separate(g, x, y, ignore) {
+    let px = x, py = y;
+    for (let pass = 0; pass < 6; pass++) {
+      const near = nearestAtom(g, px, py, ignore);
+      if (near.index < 0 || near.distance >= MIN_SEP) break;
+      const a = g.atoms[near.index];
+      let dx = px - a.x, dy = py - a.y;
+      let d = Math.hypot(dx, dy);
+      if (d < 1e-6) { dx = 1; dy = 0; d = 1; }        /* exactly on top of it */
+      px = a.x + (dx / d) * MIN_SEP;
+      py = a.y + (dy / d) * MIN_SEP;
+    }
+    return { x: px, y: py };
+  }
+
   function normalise(a) {
     while (a > Math.PI) a -= 2 * Math.PI;
     while (a < -Math.PI) a += 2 * Math.PI;
@@ -3190,7 +3314,7 @@ window.ME = window.ME || {};
     emptyGraph, cloneGraph, addAtom, addBond, findBond, removeAtom, neighbours,
     usedValence, implicitH, toMolecule, fromMolecule,
     suggestAngle, snapAngle, normalise, ringPoints, addRing, fuseRing, cleanUp, boundingBox,
-    SNAP,
+    crowding, nearestAtom, separate, SNAP, MIN_SEP,
   };
 })();
 
@@ -3228,8 +3352,11 @@ window.ME = window.ME || {};
       a.forceLabel = !a.isCarbon || ME.render2d.carbonNeedsLabel(a, atoms);
       a.labelAlpha = a.forceLabel ? 1 : xray;
       a.hAlpha = a.isCarbon ? xray : 1;
-      a.hDirs = ME.render2d.hydrogenDirections(a, atoms, a.hydrogens, !a.isCarbon);
+      a.preferH = !a.isCarbon;
     });
+    /* One pass for the whole structure, so hydrogens on neighbouring atoms
+     * cannot be placed on top of each other. */
+    ME.render2d.placeAllHydrogens(atoms);
     return { atoms, bonds };
   }
 
@@ -3367,7 +3494,7 @@ window.ME = window.ME || {};
       const ax = PX(a), ay = PY(a);
       a.hDirs.forEach((ang) => {
         const near = fs * 0.78 + trimFor(a) * 0.15;
-        const far = S * 0.92;
+        const far = S * ME.render2d.H_BOND_FRACTION;
         const dist = near + (far - near) * xray;
         const hx = ax + Math.cos(ang) * dist, hy = ay + Math.sin(ang) * dist;
         const bondAlpha = Math.max(0, Math.min(1, (xray - 0.28) / 0.55)) * a.hAlpha;
@@ -3383,6 +3510,11 @@ window.ME = window.ME || {};
         }
         ctx.save();
         ctx.globalAlpha = a.hAlpha;
+        /* a disc behind the letter, so no bond line runs through it */
+        ctx.beginPath();
+        ctx.arc(hx, hy, fs * 0.56, 0, Math.PI * 2);
+        ctx.fillStyle = colSurface;
+        ctx.fill();
         ctx.fillStyle = colText;
         ctx.font = `500 ${fs}px ${css.getPropertyValue('--font-sans') || 'sans-serif'}`;
         ctx.fillText('H', hx, hy);
@@ -3400,7 +3532,7 @@ window.ME = window.ME || {};
         ctx.arc(x, y, fs * 0.62, 0, Math.PI * 2);
         ctx.fillStyle = colSurface;
         ctx.fill();
-        ctx.fillStyle = ME.chem.colorOf(a.sym);
+        ctx.fillStyle = a.sym === 'H' ? colText : ME.chem.colorOf(a.sym);
         ctx.font = `620 ${fs}px ${css.getPropertyValue('--font-sans') || 'sans-serif'}`;
         ctx.fillText(a.sym, x, y);
         ctx.restore();
@@ -3841,7 +3973,8 @@ window.ME = window.ME || {};
     }
   }
 
-  const HIT = 0.42;   /* model units */
+  const HIT = 0.42;     /* how close a click counts as hitting an atom */
+  const SNAP_TO = 0.66; /* how close a drag has to end to bond to an atom */
 
   function onHover(p) {
     const m = toModel(p.x, p.y);
@@ -3886,7 +4019,10 @@ window.ME = window.ME || {};
       snapshot();
       if (bi >= 0) M().fuseRing(S.graph, bi, S.ringSize, S.aromatic);
       else if (ai >= 0) attachRingAtAtom(ai);
-      else M().addRing(S.graph, S.ringSize, m.x, m.y, S.aromatic);
+      else {
+        const spot = M().separate(S.graph, m.x, m.y, -1);
+        M().addRing(S.graph, S.ringSize, spot.x, spot.y, S.aromatic);
+      }
       refresh();
       return;
     }
@@ -3916,7 +4052,10 @@ window.ME = window.ME || {};
     }
     /* empty space */
     snapshot();
-    const idx = M().addAtom(S.graph, snapCoord(m.x), snapCoord(m.y), S.tool === 'atom' ? S.element : 'C');
+    /* A click just outside an atom's hit area would otherwise drop a new atom
+     * half inside it. Push it out to a readable distance first. */
+    const spot = M().separate(S.graph, snapCoord(m.x), snapCoord(m.y), -1);
+    const idx = M().addAtom(S.graph, spot.x, spot.y, S.tool === 'atom' ? S.element : 'C');
     if (S.graph.atoms.length === 1) fitViewSoft();
     refresh();
     S.drag = { kind: 'bondFrom', atom: idx, order, moved: false, rubber: null, downAt: m, fresh: true };
@@ -3937,6 +4076,7 @@ window.ME = window.ME || {};
       if (!S.drag.snapshotTaken) { snapshot(); S.drag.snapshotTaken = true; }
       const a = S.graph.atoms[S.drag.atom];
       a.x = m.x; a.y = m.y;
+      S.drag.overlapping = M().nearestAtom(S.graph, m.x, m.y, S.drag.atom).distance < M().MIN_SEP;
       paint();
       return;
     }
@@ -3944,7 +4084,10 @@ window.ME = window.ME || {};
       const from = S.graph.atoms[S.drag.atom];
       const dist = Math.hypot(m.x - from.x, m.y - from.y);
       if (dist > 0.25) S.drag.moved = true;
-      const target = DC().atomAt(S.graph, m.x, m.y, HIT);
+      /* A generous snap radius here: releasing near an atom means "bond to
+       * that one", which is almost always what was meant, and it stops a new
+       * atom being created on top of it. */
+      const target = DC().atomAt(S.graph, m.x, m.y, SNAP_TO);
       if (target >= 0 && target !== S.drag.atom) {
         const t = S.graph.atoms[target];
         S.drag.rubber = Object.assign(toPx(from.x, from.y), {});
@@ -3969,7 +4112,17 @@ window.ME = window.ME || {};
     S.drag = null;
     if (!d) return;
     if (d.kind === 'pan') return;
-    if (d.kind === 'moveAtom') { refresh(); return; }
+    if (d.kind === 'moveAtom') {
+      /* Let go on top of another atom and it slides clear rather than hiding
+       * inside it. */
+      const a = S.graph.atoms[d.atom];
+      if (a) {
+        const spot = M().separate(S.graph, a.x, a.y, d.atom);
+        a.x = spot.x; a.y = spot.y;
+      }
+      refresh();
+      return;
+    }
     if (d.kind !== 'bondFrom') return;
 
     const from = S.graph.atoms[d.atom];
@@ -3998,7 +4151,8 @@ window.ME = window.ME || {};
     if (d.over >= 0) {
       M().addBond(S.graph, d.atom, d.over, d.order);
     } else if (d.target) {
-      const ni = M().addAtom(S.graph, d.target.x, d.target.y, S.tool === 'atom' ? S.element : 'C');
+      const spot = M().separate(S.graph, d.target.x, d.target.y, -1);
+      const ni = M().addAtom(S.graph, spot.x, spot.y, S.tool === 'atom' ? S.element : 'C');
       M().addBond(S.graph, d.atom, ni, d.order);
     }
     refresh();
@@ -4623,6 +4777,21 @@ window.ME = window.ME || {};
     return ME.render2d.render(molOf(smiles), Object.assign({ width: 400, height: 240, interactive: true }, opts || {}));
   }
 
+  function drawMol(mol, opts) {
+    return ME.render2d.render(mol, Object.assign({ width: 400, height: 240, interactive: true }, opts || {}));
+  }
+
+  /* Two hydrogens sharing one pair, laid out by hand so the bond sits
+   * horizontally instead of at whatever angle the layout engine picks. */
+  function hydrogenMolecule() {
+    const M = ME.drawModel;
+    const g = M.emptyGraph();
+    const a = M.addAtom(g, 0, 0, 'H');
+    const b2 = M.addAtom(g, 1, 0, 'H');
+    M.addBond(g, a, b2, 1);
+    return M.toMolecule(g);
+  }
+
   function twoUp(a, labelA, c, labelC) {
     return el('div', { class: 'figure-2up' }, [
       el('div', {}, [a, el('div', { class: 'lbl', text: labelA })]),
@@ -4669,26 +4838,57 @@ window.ME = window.ME || {};
       title: 'Bonds, and how many "hands" each atom has',
       body() {
         const f = document.createDocumentFragment();
-        f.appendChild(p('Atoms stick together by sharing electrons. Each shared pair is a ', b('bond'), ', and you can draw it as a line between two atoms.'));
-        f.appendChild(p('The useful thing is that each kind of atom wants a fixed number of bonds, and it is remarkably consistent about it. Think of it as ', b('hands'), ': carbon has four hands and will not rest until all four are holding something.'));
+
+        f.appendChild(p('Before you can read a drawing you need to know what the lines mean, and why each atom only ever has a certain number of them.'));
+
+        f.appendChild(h3('What a line actually is'));
+        f.appendChild(p('Atoms hold on to each other by ', b('sharing a pair of electrons'), '. One shared pair is one ', b('bond'), ', and chemists draw it as a single line. That is the whole notation: a line between two letters means those two atoms are sharing a pair.'));
+        f.appendChild(fig('The simplest molecule there is: two hydrogen atoms sharing one pair of electrons. One line, one bond.',
+          drawMol(hydrogenMolecule(), { xray: 1, width: 340, height: 170, maxScale: 64, interactive: false })));
+
+        f.appendChild(h3('Each atom wants a fixed number of bonds'));
+        f.appendChild(p('Here is the part that makes everything else possible. Each kind of atom wants a specific number of bonds, and it is remarkably stubborn about it. Think of it as ', b('hands'), ': carbon has four hands and is not satisfied until all four are holding something.'));
+        f.appendChild(handsFigure());
+
+        f.appendChild(h3('Why those particular numbers'));
+        f.appendChild(p('Atoms are most stable with a full outer shell of electrons. For most of the atoms you will meet, a full shell means ', b('eight'), '. So count how many an atom already brings, subtract from eight, and that is how many it still needs to borrow \u2014 which is how many bonds it makes.'));
+        f.appendChild(handsTable());
+        f.appendChild(p('Hydrogen is the exception, and a simple one: its shell is the small innermost one, which only holds ', b('two'), '. It brings one electron, so it needs one more, so it makes exactly one bond. That is why hydrogen is always at the edge of a molecule and never in the middle \u2014 with only one hand, it can never hold two things at once.'));
         f.appendChild(el('div', { class: 'callout' }, [
-          b('Carbon 4  ·  Nitrogen 3  ·  Oxygen 2  ·  Hydrogen 1  ·  Fluorine, chlorine, bromine, iodine 1'),
+          b('Carbon 4  \u00b7  Nitrogen 3  \u00b7  Oxygen 2  \u00b7  Hydrogen 1  \u00b7  Fluorine, chlorine, bromine and iodine 1'),
         ]));
-        f.appendChild(p('Why those numbers? Atoms are most comfortable with a full outer shell of electrons, which for most of these means eight. Carbon starts with four of its own, so it needs four more, so it makes four bonds. Oxygen starts with six and needs two. Hydrogen is the odd one out — its shell only holds two, it has one, so it needs exactly one.'));
-        f.appendChild(fig('Every atom here has exactly as many lines as it has hands. Hover any atom to check.',
-          drawing('CCO', { xray: 1, lonePairs: false, width: 380, height: 220 })));
-        f.appendChild(p('This is the single most useful rule in the whole subject. Once you know how many hands each atom has, you can look at any drawing and work out what is missing — which is exactly the trick the shorthand drawings rely on.'));
+
+        f.appendChild(h3('Hydrogen is the default filler'));
+        f.appendChild(p('This is the rule that makes the shorthand drawings work later, so it is worth pausing on.'));
+        f.appendChild(p('If an atom has a hand free and nothing more interesting is on offer, a ', b('hydrogen'), ' takes it. Hydrogen is the smallest and most abundant atom around, and it only needs one hand itself, so it is the perfect gap-filler. In practice that means: ', b('any hand not accounted for by a drawn line is holding a hydrogen.')));
+        f.appendChild(p('So a drawing does not have to show you everything. If you can see how many lines an atom has, and you know how many hands it wants, the difference is hydrogens \u2014 and you can work that out yourself without being told.'));
+
+        f.appendChild(h3('Working one out'));
+        f.appendChild(p('Take this molecule, ethylamine. Look at the nitrogen.'));
+        f.appendChild(fig('Ethylamine, with every atom drawn. The nitrogen on the left is holding three things: one carbon and two hydrogens.',
+          drawing('CCN', { xray: 1, width: 420, height: 250 })));
+        f.appendChild(p('Read it step by step. Nitrogen wants ', b('three'), ' bonds. In this molecule it holds one carbon and, once you look, two hydrogens \u2014 three hands, all full. Now cover the hydrogens with your thumb: you would see nitrogen with a single line to a carbon, you would know nitrogen wants three, and you could say with confidence that two hydrogens must be there. Nobody had to draw them.'));
+        f.appendChild(p('The same works for every atom in the picture. The carbon on the left has one line to its neighbour, so three hands are spare, so three hydrogens. The middle carbon has two lines, so two hydrogens. Hover any atom to check yourself.'));
+
+        f.appendChild(h3('One warning about double lines'));
+        f.appendChild(p('Sometimes two atoms share ', el('em', { text: 'two' }), ' pairs of electrons instead of one. That is drawn as two parallel lines, and it uses up ', b('two'), ' hands from each atom, not one. So when you count, count ', b('lines'), ', not neighbours: a carbon with one double bond and two single bonds has used all four hands and has no hydrogens left.'));
+        f.appendChild(fig('Ethene. Both carbons have all four hands used up: two of them in the double bond, and two holding hydrogens.',
+          drawing('C=C', { xray: 1, width: 360, height: 210, interactive: false })));
+        f.appendChild(p('Lesson 7 comes back to double and triple bonds properly. For now, just remember that a double line counts twice.'));
+
+        f.appendChild(h3('Why this is worth memorising'));
+        f.appendChild(p('These five numbers are the single most useful thing in the subject. They let you check whether a drawing is even possible, fill in everything it left out, and spot the moment something unusual is going on. Every shortcut in the next few lessons is built on top of them.'));
         return f;
       },
       quiz: {
-        kind: 'choice',
-        q: 'A nitrogen atom in a molecule has two lines drawn to it. How many hydrogens are hiding there?',
-        options: [
-          { t: 'None.', ok: false, why: 'Nitrogen wants three bonds in total. Two are drawn, so one is unaccounted for.' },
-          { t: 'One.', ok: true, why: 'Right. Nitrogen wants three bonds, two are visible, so there is one hydrogen making up the difference.' },
-          { t: 'Two.', ok: false, why: 'That would give nitrogen four bonds. It can manage four, but only when it carries a positive charge.' },
-          { t: 'Three.', ok: false, why: 'That would be five bonds altogether — far more than nitrogen can hold.' },
-        ],
+        kind: 'clickatom',
+        mol: impossibleCarbon,
+        xray: 0,
+        q: 'Somebody has drawn this molecule wrongly: one atom here has more bonds than it has hands. Click that atom.',
+        test: (a) => a.bondCount === 5,
+        right: 'That is the one. Count the lines meeting there: five. Carbon has only four hands, so there is no way for it to hold five things \u2014 this molecule cannot exist as drawn.',
+        wrong: 'Not that one. Go round the drawing counting the lines that meet at each corner, and find the one where more lines meet than that atom has hands. Every atom here is a carbon, and carbon has four.',
+        note: 'Every corner and line end in this drawing is a carbon.',
       },
     },
 
@@ -4934,6 +5134,83 @@ window.ME = window.ME || {};
     },
   ];
 
+  /* The hands rule, shown rather than asserted: the simplest compound each
+   * atom forms with hydrogen, so the count of lines is the count of hands. */
+  function handsFigure() {
+    const items = [
+      [null, 'Hydrogen', '1 hand'],
+      ['F', 'Fluorine', '1 hand'],
+      ['O', 'Oxygen', '2 hands'],
+      ['N', 'Nitrogen', '3 hands'],
+      ['C', 'Carbon', '4 hands'],
+    ];
+    const grid = el('figure', { class: 'figure' });
+    const row = el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: '10px' } });
+    items.forEach(([smi, name, hands]) => {
+      const cell = el('div', { style: { textAlign: 'center' } });
+      const node = smi === null
+        ? drawMol(hydrogenMolecule(), { xray: 1, width: 150, height: 128, maxScale: 34, interactive: false })
+        : drawing(smi, { xray: 1, width: 150, height: 128, maxScale: 34, interactive: false });
+      cell.appendChild(node);
+      cell.appendChild(el('div', { class: 'lbl', text: name }));
+      cell.appendChild(el('div', { class: 'note', style: { fontSize: '.78rem' }, text: hands }));
+      row.appendChild(cell);
+    });
+    grid.appendChild(row);
+    grid.appendChild(el('figcaption', { text: 'Each atom holding as many hydrogens as it has hands. Count the lines: one, one, two, three, four.' }));
+    return grid;
+  }
+
+  /* Where the numbers come from, rather than a list to memorise. */
+  function handsTable() {
+    const rows = [
+      ['Carbon', 'C', 4, 4],
+      ['Nitrogen', 'N', 5, 3],
+      ['Oxygen', 'O', 6, 2],
+      ['Fluorine', 'F', 7, 1],
+    ];
+    const t = el('table', { class: 'lesson-table' });
+    const head = el('tr');
+    ['Atom', 'Electrons it brings', 'Still needs', 'Hands'].forEach((h) => head.appendChild(el('th', { text: h })));
+    t.appendChild(head);
+    rows.forEach(([name, sym, has, hands]) => {
+      const tr = el('tr');
+      tr.appendChild(el('td', {}, [el('b', { text: sym }), ' ' + name]));
+      tr.appendChild(el('td', { text: String(has) }));
+      tr.appendChild(el('td', { text: '8 \u2212 ' + has + ' = ' + hands }));
+      tr.appendChild(el('td', {}, [el('b', { text: String(hands) })]));
+      t.appendChild(tr);
+    });
+    const fg = el('figure', { class: 'figure' }, [t]);
+    fg.appendChild(el('figcaption', { text: 'Eight minus what the atom already has. That is the whole derivation.' }));
+    return fg;
+  }
+
+  /* A deliberately impossible molecule for the lesson 2 check: a carbon drawn
+   * with five bonds. It has to be built by hand, because no SMILES string can
+   * describe a structure that cannot exist. */
+  function impossibleCarbon() {
+    const M = ME.drawModel;
+    const g = M.emptyGraph();
+    const centre = M.addAtom(g, 0, 0, 'C');
+    /* Five arms, spread out so the crowding is obvious at a glance. */
+    const angles = [150, 210, 30, 330, 90];
+    const arms = angles.map((deg) => {
+      const a = (deg * Math.PI) / 180;
+      const i = M.addAtom(g, Math.cos(a), Math.sin(a), 'C');
+      M.addBond(g, centre, i, 1);
+      return { i, a };
+    });
+    /* Extend two of them, so it reads as a molecule and not as a star. */
+    [0, 1].forEach((k) => {
+      const arm = arms[k];
+      const a = arm.a + (k === 0 ? -0.9 : 0.9);
+      const j = M.addAtom(g, g.atoms[arm.i].x + Math.cos(a), g.atoms[arm.i].y + Math.sin(a), 'C');
+      M.addBond(g, arm.i, j, 1);
+    });
+    return M.toMolecule(g);
+  }
+
   function groupGallery() {
     const items = [
       ['CCO', 'Alcohol', 'O–H on a carbon. Dissolves in water.'],
@@ -5017,12 +5294,14 @@ window.ME = window.ME || {};
       row.appendChild(input); row.appendChild(go);
       box.appendChild(row);
     } else if (q.kind === 'clickatom') {
-      const mol = molOf(q.smiles);
+      /* `mol` lets a lesson supply a structure no SMILES could describe, such
+       * as the deliberately over-bonded carbon in lesson 2. */
+      const mol = q.mol ? q.mol() : molOf(q.smiles);
       const holder = el('div', { class: 'clickmol' });
       let answered = false;
       const info = ME.render2d.describe(mol, {});
       holder.appendChild(ME.render2d.render(mol, {
-        xray: q.xray || 0, width: 420, height: 260,
+        xray: q.xray || 0, width: q.width || 440, height: q.height || 290,
         onAtomClick(i, atom) {
           if (answered) return;
           const enriched = Object.assign({}, atom, { bondCount: info.atoms[i].bonds.length });

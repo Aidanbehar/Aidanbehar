@@ -64,11 +64,12 @@ PubChem module fails the build.
 
 **`npm test`** runs both suites:
 
-- `test/unit.mjs` — 29 logic tests (search by case, typo, synonym, formula and
+- `test/unit.mjs` — 37 logic tests (search by case, typo, synonym, formula and
   SMILES; the five-bond-carbon message; twenty-odd valid ions and hypervalent
   species that must *not* be flagged; formula and molar mass against known
-  values; drawing → recognition; plus a sweep confirming every database entry's
-  stored formula and mass agree with its structure).
+  values; drawing → recognition; label spacing in the drawings; crowding in the
+  editor; plus a sweep confirming every database entry's stored formula and mass
+  agree with its structure).
 - `test/smoke.mjs` — 50 checks in a real browser, loaded from `file://` with
   the network switched off, covering all eleven lessons, the X-ray slider, the
   molecule page, the gallery, the drawing editor, the periodic table and dark
@@ -143,6 +144,28 @@ concatenation order is the only coupling between them.
 - **Benzene** is drawn Kekulé (alternating double bonds) rather than with a
   circle, so the hydrogen-counting rules the lessons teach keep working. Lesson
   9 explains why both conventions exist.
+
+## Notes on legibility
+
+Two things that are easy to get wrong and are pinned down by tests:
+
+- **Hydrogens are placed for the whole molecule at once**, not atom by atom.
+  Deciding each atom's hydrogen directions independently is what makes drawings
+  unreadable: two bonded carbons both see the same roomy gap between them, both
+  put a hydrogen in it, and the letters land on top of each other.
+  `placeAllHydrogens` scores every candidate direction against a shared map of
+  what is already on the page, placing the most constrained atoms first.
+- **The editor refuses to stack atoms.** New atoms, dropped atoms and dropped
+  rings are all pushed out to a minimum separation, a drag that ends near an
+  existing atom bonds to it rather than landing on top of it, and the
+  next-bond-angle suggestion scores every tidy angle against the whole drawing,
+  so a chain cannot fold back onto itself. A 30-carbon chain grown one click at
+  a time keeps every atom a full bond length from every other.
+
+Remaining crowding in a handful of very large structures (insulin, vancomycin,
+the peptide hormones) comes from OpenChemLib's own 2D layout placing heavy atoms
+close together, not from hydrogen placement. Those molecules are better read in
+the 3D viewer.
 
 ## Browser support
 

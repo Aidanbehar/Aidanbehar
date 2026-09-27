@@ -26,6 +26,11 @@
   const CPK_DEFAULT = '#8f96a3';
   function colorOf(sym) { return CPK[sym] || CPK_DEFAULT; }
 
+  /* Hydrogen's CPK colour is white, which works for a shaded 3D sphere and is
+   * all but invisible as flat text on a light page. Written-out atom labels use
+   * the ordinary text colour for it instead. */
+  function labelColorOf(sym) { return sym === 'H' ? 'var(--text)' : colorOf(sym); }
+
   /* Covalent-ish radii (Angstrom-scaled, only used for relative 3D sphere and
    * 2D label sizing). */
   const RADIUS = { H: 0.31, C: 0.76, N: 0.71, O: 0.66, F: 0.57, Cl: 1.02, Br: 1.20, I: 1.39, S: 1.05, P: 1.07 };
@@ -524,7 +529,7 @@
   }
 
   ME.chem = {
-    OCL, Mol, CPK, colorOf, radiusOf, VALENCE, METALS, OUTER, GROUPS,
+    OCL, Mol, CPK, colorOf, labelColorOf, radiusOf, VALENCE, METALS, OUTER, GROUPS,
     setElements, get elements() { return ELEMENTS; }, symbolFor, atomicNumber, elementName,
     fromSmiles, fromMolfile, tryParse, normaliseSmiles, ensureCoordinates, canonicalID,
     analyse, safeSmiles, isOrganic, skeletalMakesSense, lonePairs,

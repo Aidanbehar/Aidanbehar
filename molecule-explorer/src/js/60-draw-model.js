@@ -129,31 +129,54 @@
   /* ------------------------------------------------------------- geometry */
   const SNAP = Math.PI / 6;     /* 30 degrees, the angle a zig-zag chain uses */
 
-  /* Where should a new bond from this atom point? Away from everything already
-   * there, snapped to a tidy angle. */
+  /* The closest two atoms are allowed to sit before the drawing gets hard to
+   * read. A bond is 1.0, and a drawn label is about 0.3 across, so anything
+   * under about two thirds of a bond starts to look like a smudge. */
+  const MIN_SEP = 0.62;
+
+  /* Where should a new bond from this atom point?
+   *
+   * Every tidy angle is scored against the whole drawing, not just against this
+   * atom's own bonds. Looking only at the local bonds is what makes a chain
+   * double back on itself and land on an atom three bonds away. */
   function suggestAngle(g, i, preferred) {
     const taken = neighbours(g, i).map((n) =>
       Math.atan2(g.atoms[n.to].y - g.atoms[i].y, g.atoms[n.to].x - g.atoms[i].x));
-    if (!taken.length) return preferred !== undefined ? preferred : -SNAP;
-    if (taken.length === 1) {
-      /* One neighbour: the straight-ahead direction has the biggest gap, but a
-       * chain of carbons zig-zags at about 120 degrees, so offer that instead
-       * and pick whichever side is emptier. */
-      const a1 = normalise(taken[0] + Math.PI - SNAP * 2);
-      const a2 = normalise(taken[0] + Math.PI + SNAP * 2);
-      return crowding(g, i, a1) <= crowding(g, i, a2) ? a1 : a2;
-    }
-    let best = 0, bestGap = -1;
-    for (let k = 0; k < 24; k++) {
-      const ang = -Math.PI + (k * Math.PI) / 12;
-      let gap = Infinity;
-      taken.forEach((t) => { gap = Math.min(gap, Math.abs(ME.render2d.angleDiff(ang, t))); });
-      if (gap > bestGap) { bestGap = gap; best = ang; }
+
+    let best = preferred !== undefined ? preferred : -SNAP;
+    let bestScore = Infinity;
+    /* 30-degree steps, offset by half a step as a fallback set so an atom that
+     * is boxed in on every tidy angle can still find somewhere to go. */
+    for (let pass = 0; pass < 2; pass++) {
+      for (let k = 0; k < 12; k++) {
+        const ang = normalise(k * SNAP + (pass ? SNAP / 2 : 0));
+        let score = crowding(g, i, ang) * 10;
+
+        /* Keep clear of the directions this atom's bonds already use. */
+        for (const t of taken) {
+          const d = Math.abs(normalise(ang - t));
+          if (d < 0.9) score += (0.9 - d) * 3;
+        }
+        /* With one neighbour, prefer the zig-zag a carbon chain actually makes
+         * over carrying straight on. */
+        if (taken.length === 1) {
+          const ideal = Math.min(
+            Math.abs(normalise(ang - normalise(taken[0] + Math.PI - SNAP * 2))),
+            Math.abs(normalise(ang - normalise(taken[0] + Math.PI + SNAP * 2)))
+          );
+          score += ideal * 0.8;
+        }
+        /* Half-step angles are a last resort: they look untidy. */
+        if (pass) score += 0.35;
+
+        if (score < bestScore) { bestScore = score; best = ang; }
+      }
+      if (bestScore < 0.5) break;
     }
     return best;
   }
 
-  /* How close would a new atom in this direction land to existing atoms? */
+  /* How badly would a new atom in this direction crowd what is already drawn? */
   function crowding(g, i, angle) {
     const tx = g.atoms[i].x + Math.cos(angle);
     const ty = g.atoms[i].y + Math.sin(angle);
@@ -161,10 +184,39 @@
     g.atoms.forEach((a, k) => {
       if (k === i) return;
       const d = Math.hypot(a.x - tx, a.y - ty);
-      if (d < 1.2) worst += 1.2 - d;
+      if (d < MIN_SEP * 1.6) worst += (MIN_SEP * 1.6 - d);
     });
     return worst;
   }
+
+  /* The nearest atom to a point, and how far away it is. */
+  function nearestAtom(g, x, y, ignore) {
+    let best = -1, bestD = Infinity;
+    g.atoms.forEach((a, i) => {
+      if (i === ignore) return;
+      const d = Math.hypot(a.x - x, a.y - y);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return { index: best, distance: bestD };
+  }
+
+  /* Nudge a position away from whatever it is sitting on top of, so a stray
+   * click or a dropped atom never lands inside another one. */
+  function separate(g, x, y, ignore) {
+    let px = x, py = y;
+    for (let pass = 0; pass < 6; pass++) {
+      const near = nearestAtom(g, px, py, ignore);
+      if (near.index < 0 || near.distance >= MIN_SEP) break;
+      const a = g.atoms[near.index];
+      let dx = px - a.x, dy = py - a.y;
+      let d = Math.hypot(dx, dy);
+      if (d < 1e-6) { dx = 1; dy = 0; d = 1; }        /* exactly on top of it */
+      px = a.x + (dx / d) * MIN_SEP;
+      py = a.y + (dy / d) * MIN_SEP;
+    }
+    return { x: px, y: py };
+  }
+
   function normalise(a) {
     while (a > Math.PI) a -= 2 * Math.PI;
     while (a < -Math.PI) a += 2 * Math.PI;
@@ -263,6 +315,6 @@
     emptyGraph, cloneGraph, addAtom, addBond, findBond, removeAtom, neighbours,
     usedValence, implicitH, toMolecule, fromMolecule,
     suggestAngle, snapAngle, normalise, ringPoints, addRing, fuseRing, cleanUp, boundingBox,
-    SNAP,
+    crowding, nearestAtom, separate, SNAP, MIN_SEP,
   };
 })();

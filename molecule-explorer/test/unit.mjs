@@ -494,3 +494,187 @@ describe('presentation helpers', () => {
     assert.equal(out.elements, 118);
   });
 });
+
+/* ------------------------------------------------ legibility of drawings */
+describe('drawings stay readable', () => {
+  test('labels never sit on top of one another in everyday molecules', async () => {
+    const bad = await run(() => {
+      /* Measure how close two drawn letters get, in units of the font size.
+       * Below about 0.85 the glyphs start to touch and the drawing is hard to
+       * read; a bonded pair is normally about 2.2 apart. */
+      const out = [];
+      const names = ['Ethanol', 'Ethylamine', 'Acetic acid', 'Glycerol', 'Caffeine', 'Aspirin',
+        'Glucose', 'Benzene', 'Paracetamol', 'Ibuprofen', 'Alanine', 'Acetone', 'Citric acid',
+        'Menthol', 'Vanillin', 'Urea', 'Isobutane', 'Methane', 'Ammonia', 'Water'];
+      names.forEach((n) => {
+        const m = window.ME.search.get(n);
+        if (!m || !m.m) return;
+        const svg = window.ME.render2d.render(window.ME.chem.fromSmiles(m.m),
+          { xray: 1, width: 420, height: 300, interactive: false });
+        const texts = Array.from(svg.querySelectorAll('text'))
+          .filter((t) => t.textContent && t.textContent.length <= 2 && !/[+\u2212]/.test(t.textContent));
+        if (texts.length < 2) return;
+        const fs = parseFloat(texts[0].getAttribute('font-size'));
+        let worst = Infinity;
+        for (let i = 0; i < texts.length; i++) {
+          for (let j = i + 1; j < texts.length; j++) {
+            const d = Math.hypot(
+              texts[i].getAttribute('x') - texts[j].getAttribute('x'),
+              texts[i].getAttribute('y') - texts[j].getAttribute('y')) / fs;
+            if (d < worst) worst = d;
+          }
+        }
+        if (worst < 0.85) out.push([n, +worst.toFixed(2)]);
+      });
+      return out;
+    });
+    assert.equal(bad.length, 0, 'labels too close together: ' + JSON.stringify(bad));
+  });
+
+  test('hydrogens are placed against the whole molecule, not atom by atom', async () => {
+    /* Two bonded carbons each have a roomy gap pointing at the other one.
+     * Placed independently they both use it and their hydrogens collide. */
+    const worst = await run(() => {
+      const mol = window.ME.chem.fromSmiles('CCCCCC');
+      const svg = window.ME.render2d.render(mol, { xray: 1, width: 420, height: 300, interactive: false });
+      const hs = Array.from(svg.querySelectorAll('text')).filter((t) => t.textContent === 'H');
+      const fs = parseFloat(hs[0].getAttribute('font-size'));
+      let w = Infinity;
+      for (let i = 0; i < hs.length; i++) {
+        for (let j = i + 1; j < hs.length; j++) {
+          const d = Math.hypot(hs[i].getAttribute('x') - hs[j].getAttribute('x'),
+            hs[i].getAttribute('y') - hs[j].getAttribute('y')) / fs;
+          if (d < w) w = d;
+        }
+      }
+      return +w.toFixed(2);
+    });
+    assert.ok(worst >= 0.9, `closest pair of hydrogens was ${worst} font-sizes apart`);
+  });
+
+  test('an explicit hydrogen is drawn in a colour you can see', async () => {
+    const fill = await run(() => {
+      const M = window.ME.drawModel;
+      const g = M.emptyGraph();
+      const a = M.addAtom(g, 0, 0, 'H');
+      const b = M.addAtom(g, 1, 0, 'H');
+      M.addBond(g, a, b, 1);
+      const svg = window.ME.render2d.render(M.toMolecule(g), { xray: 1, width: 300, height: 150, interactive: false });
+      const t = Array.from(svg.querySelectorAll('text')).find((x) => x.textContent === 'H');
+      return t.getAttribute('fill');
+    });
+    /* CPK white would be invisible on a light page. */
+    assert.equal(fill, 'var(--text)');
+  });
+});
+
+/* --------------------------------------------------- crowding in the editor */
+describe('the drawing editor keeps atoms apart', () => {
+  test('a long chain never folds back onto itself', async () => {
+    const min = await run(() => {
+      const M = window.ME.drawModel;
+      const g = M.emptyGraph();
+      let last = M.addAtom(g, 0, 0, 'C');
+      for (let k = 0; k < 29; k++) {
+        const a = M.suggestAngle(g, last);
+        const ni = M.addAtom(g, g.atoms[last].x + Math.cos(a), g.atoms[last].y + Math.sin(a), 'C');
+        M.addBond(g, last, ni, 1);
+        last = ni;
+      }
+      let m = Infinity;
+      for (let i = 0; i < g.atoms.length; i++) {
+        for (let j = i + 1; j < g.atoms.length; j++) {
+          m = Math.min(m, Math.hypot(g.atoms[i].x - g.atoms[j].x, g.atoms[i].y - g.atoms[j].y));
+        }
+      }
+      return +m.toFixed(3);
+    });
+    assert.ok(min >= 0.95, `two atoms in a 30-carbon chain ended up ${min} bond lengths apart`);
+  });
+
+  test('branching heavily off one atom still fans out cleanly', async () => {
+    const min = await run(() => {
+      const M = window.ME.drawModel;
+      const g = M.emptyGraph();
+      const centre = M.addAtom(g, 0, 0, 'C');
+      for (let branch = 0; branch < 3; branch++) {
+        let last = centre;
+        for (let k = 0; k < 4; k++) {
+          const a = M.suggestAngle(g, last);
+          const ni = M.addAtom(g, g.atoms[last].x + Math.cos(a), g.atoms[last].y + Math.sin(a), 'C');
+          M.addBond(g, last, ni, 1);
+          last = ni;
+        }
+      }
+      let m = Infinity;
+      for (let i = 0; i < g.atoms.length; i++) {
+        for (let j = i + 1; j < g.atoms.length; j++) {
+          m = Math.min(m, Math.hypot(g.atoms[i].x - g.atoms[j].x, g.atoms[i].y - g.atoms[j].y));
+        }
+      }
+      return +m.toFixed(3);
+    });
+    assert.ok(min >= 0.95, `branches crowded to ${min} bond lengths`);
+  });
+
+  test('a position on top of an existing atom is pushed clear', async () => {
+    const out = await run(() => {
+      const M = window.ME.drawModel;
+      const g = M.emptyGraph();
+      M.addAtom(g, 0, 0, 'C');
+      const onTop = M.separate(g, 0, 0, -1);
+      const close = M.separate(g, 0.3, 0, -1);
+      const fine = M.separate(g, 1.0, 0, -1);
+      /* squeezed between two atoms: must end up clear of both */
+      const g2 = M.emptyGraph();
+      M.addAtom(g2, 0, 0, 'C'); M.addAtom(g2, 0.8, 0, 'C');
+      const between = M.separate(g2, 0.4, 0.05, -1);
+      return {
+        min: M.MIN_SEP,
+        onTop: +Math.hypot(onTop.x, onTop.y).toFixed(3),
+        close: +Math.hypot(close.x, close.y).toFixed(3),
+        movedWhenFine: +Math.hypot(fine.x - 1, fine.y).toFixed(3),
+        between: [0, 1].map((i) => +Math.hypot(between.x - g2.atoms[i].x, between.y - g2.atoms[i].y).toFixed(3)),
+      };
+    });
+    assert.ok(out.onTop >= out.min - 1e-6, 'an atom dropped exactly on another must move clear');
+    assert.ok(out.close >= out.min - 1e-6, 'a near-miss must be pushed out');
+    assert.equal(out.movedWhenFine, 0, 'a position that is already fine must be left alone');
+    out.between.forEach((d) => assert.ok(d >= out.min - 0.01, 'must clear both neighbours: ' + JSON.stringify(out.between)));
+  });
+});
+
+/* ------------------------------------------------------------- lesson two */
+describe('lesson 2 teaches what its check asks about', () => {
+  test('it states the rule that hydrogen fills any spare hand', async () => {
+    const text = await run(() => {
+      const L = window.ME.learn.LESSONS.find((l) => l.id === 'hands');
+      const d = document.createElement('div');
+      d.appendChild(L.body());
+      return d.textContent;
+    });
+    assert.match(text, /hand not accounted for by a drawn line is holding a hydrogen/i);
+    assert.match(text, /nitrogen/i, 'the check is about nitrogen, so the lesson must cover it');
+    assert.match(text, /double/i, 'counting lines needs the double-bond caveat');
+    assert.ok(text.length > 2500, `lesson body is only ${text.length} characters`);
+  });
+
+  test('its check has exactly one right answer, and it is findable', async () => {
+    const out = await run(() => {
+      const L = window.ME.learn.LESSONS.find((l) => l.id === 'hands');
+      const mol = L.quiz.mol();
+      const desc = window.ME.render2d.describe(mol, {});
+      const atoms = desc.atoms.map((a, i) => ({ i, sym: a.sym, bondCount: a.bonds.length }));
+      return {
+        total: atoms.length,
+        accepted: atoms.filter((a) => L.quiz.test(a)).map((a) => a.i),
+        bondCounts: atoms.map((a) => a.bondCount),
+        allCarbon: atoms.every((a) => a.sym === 'C'),
+      };
+    });
+    assert.equal(out.accepted.length, 1, 'there must be exactly one over-bonded atom');
+    assert.equal(out.bondCounts[out.accepted[0]], 5);
+    assert.ok(out.allCarbon, 'the note tells the reader every atom is a carbon');
+    assert.ok(out.total >= 6, 'it should look like a molecule, not a bare star');
+  });
+});

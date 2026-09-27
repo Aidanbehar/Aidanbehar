@@ -73,38 +73,84 @@
     return false;
   }
 
-  /* Where do this atom's hydrogens go? Pick directions that stay clear of the
-   * bonds already leaving the atom. */
-  function hydrogenDirections(atom, atoms, count, preferHorizontal) {
-    if (count <= 0) return [];
-    const occupied = atom.bonds.map((bd) => {
-      const o = bd.a === atom.i ? bd.b : bd.a;
-      return Math.atan2(atoms[o].y - atom.y, atoms[o].x - atom.x);
-    });
-    const chosen = [];
-    const candidates = [];
-    for (let k = 0; k < 36; k++) candidates.push((k * 10 * Math.PI) / 180 - Math.PI);
+  /* Where do the hydrogens go?
+   *
+   * This has to be decided for the whole molecule at once. Choosing each atom's
+   * hydrogen directions on its own is what produces unreadable drawings: two
+   * bonded carbons will each pick the roomy gap between them, and their
+   * hydrogens land on top of one another. So every hydrogen is placed against a
+   * shared map of what is already on the page — heavy atoms first, then each
+   * hydrogen as it is positioned.
+   */
 
-    for (let h = 0; h < count; h++) {
-      let best = null, bestScore = -Infinity;
-      for (const c of candidates) {
-        let score = Infinity;
-        for (const o of occupied.concat(chosen)) {
-          let d = Math.abs(angleDiff(c, o));
-          if (d < score) score = d;
+  /* How far a hydrogen sits from its atom when fully expanded, as a fraction of
+   * a bond length. One whole bond, the way a structural formula is drawn. */
+  const H_BOND_FRACTION = 1.0;
+  /* Roughly the radius of a drawn label in bond-length units: the font is about
+   * 0.46 of a bond and the label disc about 0.62 of the font. */
+  const LABEL_R = 0.3;
+
+  function placeAllHydrogens(atoms) {
+    const occupied = [];
+    atoms.forEach((a) => {
+      a.hDirs = [];
+      occupied.push({ x: a.x, y: a.y, r: LABEL_R });
+    });
+
+    /* Most-constrained first: an atom with three bonds has almost no choice
+     * about where its one hydrogen goes, so let it claim its spot before the
+     * atoms that have room to move. */
+    const order = atoms.map((a, i) => i)
+      .sort((i, j) => atoms[j].bonds.length - atoms[i].bonds.length);
+
+    order.forEach((i) => {
+      const a = atoms[i];
+      if (!a.hydrogens) return;
+      const bondAngles = a.bonds.map((bd) => {
+        const o = bd.a === a.i ? bd.b : bd.a;
+        return Math.atan2(atoms[o].y - a.y, atoms[o].x - a.x);
+      });
+
+      for (let h = 0; h < a.hydrogens; h++) {
+        let best = 0, bestScore = Infinity;
+        for (let k = 0; k < 72; k++) {
+          const th = -Math.PI + (k * Math.PI) / 36;
+          const hx = a.x + Math.cos(th) * H_BOND_FRACTION;
+          const hy = a.y + Math.sin(th) * H_BOND_FRACTION;
+          let score = 0;
+
+          /* Stay out of the directions the atom's own bonds already use. */
+          for (const b of bondAngles) {
+            const d = Math.abs(angleDiff(th, b));
+            if (d < 0.9) score += (0.9 - d) * 4;
+          }
+          /* Stay clear of every label already placed, including this atom's
+           * own earlier hydrogens. */
+          for (const q of occupied) {
+            const need = q.r + LABEL_R + 0.12;
+            const dx = hx - q.x, dy = hy - q.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < need * need) {
+              const d = Math.sqrt(d2);
+              score += (need - d) * (need - d) * 60;
+            }
+          }
+          /* A heteroatom's first hydrogen prefers to sit beside it, so that an
+           * O with one hydrogen reads as "OH" rather than stacking vertically. */
+          if (a.preferH && h === 0) {
+            const horiz = Math.min(Math.abs(angleDiff(th, 0)), Math.abs(angleDiff(th, Math.PI)));
+            score += horiz * 0.35;
+          }
+          if (score < bestScore) { bestScore = score; best = th; }
         }
-        if (score === Infinity) score = Math.PI;
-        /* Prefer a horizontal H so an O-H reads as "OH" rather than stacking. */
-        if (preferHorizontal && h === 0) {
-          const horiz = Math.min(Math.abs(angleDiff(c, 0)), Math.abs(angleDiff(c, Math.PI)));
-          score += (Math.PI - horiz) * 0.55;
-          if (Math.abs(angleDiff(c, 0)) < 0.01) score += 0.25;
-        }
-        if (score > bestScore) { bestScore = score; best = c; }
+        a.hDirs.push(best);
+        occupied.push({
+          x: a.x + Math.cos(best) * H_BOND_FRACTION,
+          y: a.y + Math.sin(best) * H_BOND_FRACTION,
+          r: LABEL_R,
+        });
       }
-      chosen.push(best);
-    }
-    return chosen;
+    });
   }
 
   function angleDiff(a, b) {
@@ -138,17 +184,17 @@
       /* opacity of this atom's own element label */
       a.labelAlpha = a.forceLabel ? 1 : xray;
       a.preferH = !a.isCarbon;
-      a.hDirs = hydrogenDirections(a, atoms, a.hydrogens, a.preferH);
       /* Hydrogens on a heteroatom are visible even in skeletal form (as "OH"),
        * hydrogens on a carbon are the ones the shorthand hides. */
       a.hAlpha = a.isCarbon ? xray : 1;
     });
+    placeAllHydrogens(atoms);
 
     /* ---- layout ---- */
     const pad = 1.0;
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     atoms.forEach((a) => {
-      const reach = (a.hydrogens > 0 ? 1.0 : 0.35);
+      const reach = a.hydrogens > 0 ? H_BOND_FRACTION + LABEL_R : 0.45;
       minX = Math.min(minX, a.x - reach); maxX = Math.max(maxX, a.x + reach);
       minY = Math.min(minY, a.y - reach); maxY = Math.max(maxY, a.y + reach);
     });
@@ -267,7 +313,7 @@
       a.hDirs.forEach((ang) => {
         /* beside the label when collapsed, at bond length when expanded */
         const near = fs * 0.78 + trimFor(a) * 0.15;
-        const far = scale * 0.92;
+        const far = scale * H_BOND_FRACTION;
         const dist = lerp(near, far, xray);
         const hx = ax + Math.cos(ang) * dist;
         const hy = ay + Math.sin(ang) * dist;
@@ -281,13 +327,20 @@
             hx - ux * fs * 0.58, hy - uy * fs * 0.58, lw, bondColor);
           l.setAttribute('opacity', round3(bondAlpha * a.hAlpha));
         }
+        const hg = svgEl('g', { opacity: round3(a.hAlpha) });
+        /* A disc behind the letter, so a bond passing nearby never runs
+         * through it. */
+        hg.appendChild(svgEl('circle', {
+          cx: round(hx), cy: round(hy), r: round(fs * 0.56), fill: opts.bg || 'var(--surface)',
+        }));
         const t = svgEl('text', {
           x: round(hx), y: round(hy), 'text-anchor': 'middle', 'dominant-baseline': 'central',
           'font-size': round(fs), 'font-family': 'var(--font-sans)', 'font-weight': 500,
-          fill: 'var(--text)', opacity: round3(a.hAlpha),
+          fill: 'var(--text)',
         });
         t.textContent = 'H';
-        gAtoms.appendChild(t);
+        hg.appendChild(t);
+        gAtoms.appendChild(hg);
       });
     });
 
@@ -304,7 +357,7 @@
         const t = svgEl('text', {
           x: round(x), y: round(y), 'text-anchor': 'middle', 'dominant-baseline': 'central',
           'font-size': round(fs), 'font-family': 'var(--font-sans)', 'font-weight': 620,
-          fill: opts.mono ? 'var(--text)' : ME.chem.colorOf(a.sym),
+          fill: opts.mono ? 'var(--text)' : ME.chem.labelColorOf(a.sym),
         });
         t.textContent = a.sym;
         g.appendChild(t);
@@ -323,10 +376,6 @@
       }
       /* lone pairs */
       if (a.lonePairs > 0) {
-        const dirs = hydrogenDirections(
-          { i: a.i, x: a.x, y: a.y, bonds: a.bonds.concat(a.hDirs.map((ang) => null)).filter(Boolean) },
-          atoms, a.lonePairs, false
-        );
         const used = a.hDirs.slice();
         for (let p = 0; p < a.lonePairs; p++) {
           const ang = pickFreeAngle(a, atoms, used);
@@ -532,6 +581,7 @@
   ME.render2d = {
     render, mountXray, describe, toStandaloneSVG, svgToPNG, atomDescription, svgEl,
     /* shared with the drawing editor's canvas painter so both obey the same rules */
-    hydrogenDirections, carbonNeedsLabel, angleDiff, lerp, clamp01,
+    placeAllHydrogens, carbonNeedsLabel, angleDiff, lerp, clamp01,
+    H_BOND_FRACTION, LABEL_R,
   };
 })();

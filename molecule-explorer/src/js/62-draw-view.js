@@ -329,7 +329,8 @@
     }
   }
 
-  const HIT = 0.42;   /* model units */
+  const HIT = 0.42;     /* how close a click counts as hitting an atom */
+  const SNAP_TO = 0.66; /* how close a drag has to end to bond to an atom */
 
   function onHover(p) {
     const m = toModel(p.x, p.y);
@@ -374,7 +375,10 @@
       snapshot();
       if (bi >= 0) M().fuseRing(S.graph, bi, S.ringSize, S.aromatic);
       else if (ai >= 0) attachRingAtAtom(ai);
-      else M().addRing(S.graph, S.ringSize, m.x, m.y, S.aromatic);
+      else {
+        const spot = M().separate(S.graph, m.x, m.y, -1);
+        M().addRing(S.graph, S.ringSize, spot.x, spot.y, S.aromatic);
+      }
       refresh();
       return;
     }
@@ -404,7 +408,10 @@
     }
     /* empty space */
     snapshot();
-    const idx = M().addAtom(S.graph, snapCoord(m.x), snapCoord(m.y), S.tool === 'atom' ? S.element : 'C');
+    /* A click just outside an atom's hit area would otherwise drop a new atom
+     * half inside it. Push it out to a readable distance first. */
+    const spot = M().separate(S.graph, snapCoord(m.x), snapCoord(m.y), -1);
+    const idx = M().addAtom(S.graph, spot.x, spot.y, S.tool === 'atom' ? S.element : 'C');
     if (S.graph.atoms.length === 1) fitViewSoft();
     refresh();
     S.drag = { kind: 'bondFrom', atom: idx, order, moved: false, rubber: null, downAt: m, fresh: true };
@@ -425,6 +432,7 @@
       if (!S.drag.snapshotTaken) { snapshot(); S.drag.snapshotTaken = true; }
       const a = S.graph.atoms[S.drag.atom];
       a.x = m.x; a.y = m.y;
+      S.drag.overlapping = M().nearestAtom(S.graph, m.x, m.y, S.drag.atom).distance < M().MIN_SEP;
       paint();
       return;
     }
@@ -432,7 +440,10 @@
       const from = S.graph.atoms[S.drag.atom];
       const dist = Math.hypot(m.x - from.x, m.y - from.y);
       if (dist > 0.25) S.drag.moved = true;
-      const target = DC().atomAt(S.graph, m.x, m.y, HIT);
+      /* A generous snap radius here: releasing near an atom means "bond to
+       * that one", which is almost always what was meant, and it stops a new
+       * atom being created on top of it. */
+      const target = DC().atomAt(S.graph, m.x, m.y, SNAP_TO);
       if (target >= 0 && target !== S.drag.atom) {
         const t = S.graph.atoms[target];
         S.drag.rubber = Object.assign(toPx(from.x, from.y), {});
@@ -457,7 +468,17 @@
     S.drag = null;
     if (!d) return;
     if (d.kind === 'pan') return;
-    if (d.kind === 'moveAtom') { refresh(); return; }
+    if (d.kind === 'moveAtom') {
+      /* Let go on top of another atom and it slides clear rather than hiding
+       * inside it. */
+      const a = S.graph.atoms[d.atom];
+      if (a) {
+        const spot = M().separate(S.graph, a.x, a.y, d.atom);
+        a.x = spot.x; a.y = spot.y;
+      }
+      refresh();
+      return;
+    }
     if (d.kind !== 'bondFrom') return;
 
     const from = S.graph.atoms[d.atom];
@@ -486,7 +507,8 @@
     if (d.over >= 0) {
       M().addBond(S.graph, d.atom, d.over, d.order);
     } else if (d.target) {
-      const ni = M().addAtom(S.graph, d.target.x, d.target.y, S.tool === 'atom' ? S.element : 'C');
+      const spot = M().separate(S.graph, d.target.x, d.target.y, -1);
+      const ni = M().addAtom(S.graph, spot.x, spot.y, S.tool === 'atom' ? S.element : 'C');
       M().addBond(S.graph, d.atom, ni, d.order);
     }
     refresh();

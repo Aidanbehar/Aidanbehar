@@ -30,8 +30,11 @@
       a.forceLabel = !a.isCarbon || ME.render2d.carbonNeedsLabel(a, atoms);
       a.labelAlpha = a.forceLabel ? 1 : xray;
       a.hAlpha = a.isCarbon ? xray : 1;
-      a.hDirs = ME.render2d.hydrogenDirections(a, atoms, a.hydrogens, !a.isCarbon);
+      a.preferH = !a.isCarbon;
     });
+    /* One pass for the whole structure, so hydrogens on neighbouring atoms
+     * cannot be placed on top of each other. */
+    ME.render2d.placeAllHydrogens(atoms);
     return { atoms, bonds };
   }
 
@@ -169,7 +172,7 @@
       const ax = PX(a), ay = PY(a);
       a.hDirs.forEach((ang) => {
         const near = fs * 0.78 + trimFor(a) * 0.15;
-        const far = S * 0.92;
+        const far = S * ME.render2d.H_BOND_FRACTION;
         const dist = near + (far - near) * xray;
         const hx = ax + Math.cos(ang) * dist, hy = ay + Math.sin(ang) * dist;
         const bondAlpha = Math.max(0, Math.min(1, (xray - 0.28) / 0.55)) * a.hAlpha;
@@ -185,6 +188,11 @@
         }
         ctx.save();
         ctx.globalAlpha = a.hAlpha;
+        /* a disc behind the letter, so no bond line runs through it */
+        ctx.beginPath();
+        ctx.arc(hx, hy, fs * 0.56, 0, Math.PI * 2);
+        ctx.fillStyle = colSurface;
+        ctx.fill();
         ctx.fillStyle = colText;
         ctx.font = `500 ${fs}px ${css.getPropertyValue('--font-sans') || 'sans-serif'}`;
         ctx.fillText('H', hx, hy);
@@ -202,7 +210,7 @@
         ctx.arc(x, y, fs * 0.62, 0, Math.PI * 2);
         ctx.fillStyle = colSurface;
         ctx.fill();
-        ctx.fillStyle = ME.chem.colorOf(a.sym);
+        ctx.fillStyle = a.sym === 'H' ? colText : ME.chem.colorOf(a.sym);
         ctx.font = `620 ${fs}px ${css.getPropertyValue('--font-sans') || 'sans-serif'}`;
         ctx.fillText(a.sym, x, y);
         ctx.restore();

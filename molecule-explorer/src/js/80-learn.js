@@ -36,6 +36,21 @@
     return ME.render2d.render(molOf(smiles), Object.assign({ width: 400, height: 240, interactive: true }, opts || {}));
   }
 
+  function drawMol(mol, opts) {
+    return ME.render2d.render(mol, Object.assign({ width: 400, height: 240, interactive: true }, opts || {}));
+  }
+
+  /* Two hydrogens sharing one pair, laid out by hand so the bond sits
+   * horizontally instead of at whatever angle the layout engine picks. */
+  function hydrogenMolecule() {
+    const M = ME.drawModel;
+    const g = M.emptyGraph();
+    const a = M.addAtom(g, 0, 0, 'H');
+    const b2 = M.addAtom(g, 1, 0, 'H');
+    M.addBond(g, a, b2, 1);
+    return M.toMolecule(g);
+  }
+
   function twoUp(a, labelA, c, labelC) {
     return el('div', { class: 'figure-2up' }, [
       el('div', {}, [a, el('div', { class: 'lbl', text: labelA })]),
@@ -82,26 +97,57 @@
       title: 'Bonds, and how many "hands" each atom has',
       body() {
         const f = document.createDocumentFragment();
-        f.appendChild(p('Atoms stick together by sharing electrons. Each shared pair is a ', b('bond'), ', and you can draw it as a line between two atoms.'));
-        f.appendChild(p('The useful thing is that each kind of atom wants a fixed number of bonds, and it is remarkably consistent about it. Think of it as ', b('hands'), ': carbon has four hands and will not rest until all four are holding something.'));
+
+        f.appendChild(p('Before you can read a drawing you need to know what the lines mean, and why each atom only ever has a certain number of them.'));
+
+        f.appendChild(h3('What a line actually is'));
+        f.appendChild(p('Atoms hold on to each other by ', b('sharing a pair of electrons'), '. One shared pair is one ', b('bond'), ', and chemists draw it as a single line. That is the whole notation: a line between two letters means those two atoms are sharing a pair.'));
+        f.appendChild(fig('The simplest molecule there is: two hydrogen atoms sharing one pair of electrons. One line, one bond.',
+          drawMol(hydrogenMolecule(), { xray: 1, width: 340, height: 170, maxScale: 64, interactive: false })));
+
+        f.appendChild(h3('Each atom wants a fixed number of bonds'));
+        f.appendChild(p('Here is the part that makes everything else possible. Each kind of atom wants a specific number of bonds, and it is remarkably stubborn about it. Think of it as ', b('hands'), ': carbon has four hands and is not satisfied until all four are holding something.'));
+        f.appendChild(handsFigure());
+
+        f.appendChild(h3('Why those particular numbers'));
+        f.appendChild(p('Atoms are most stable with a full outer shell of electrons. For most of the atoms you will meet, a full shell means ', b('eight'), '. So count how many an atom already brings, subtract from eight, and that is how many it still needs to borrow \u2014 which is how many bonds it makes.'));
+        f.appendChild(handsTable());
+        f.appendChild(p('Hydrogen is the exception, and a simple one: its shell is the small innermost one, which only holds ', b('two'), '. It brings one electron, so it needs one more, so it makes exactly one bond. That is why hydrogen is always at the edge of a molecule and never in the middle \u2014 with only one hand, it can never hold two things at once.'));
         f.appendChild(el('div', { class: 'callout' }, [
-          b('Carbon 4  ·  Nitrogen 3  ·  Oxygen 2  ·  Hydrogen 1  ·  Fluorine, chlorine, bromine, iodine 1'),
+          b('Carbon 4  \u00b7  Nitrogen 3  \u00b7  Oxygen 2  \u00b7  Hydrogen 1  \u00b7  Fluorine, chlorine, bromine and iodine 1'),
         ]));
-        f.appendChild(p('Why those numbers? Atoms are most comfortable with a full outer shell of electrons, which for most of these means eight. Carbon starts with four of its own, so it needs four more, so it makes four bonds. Oxygen starts with six and needs two. Hydrogen is the odd one out — its shell only holds two, it has one, so it needs exactly one.'));
-        f.appendChild(fig('Every atom here has exactly as many lines as it has hands. Hover any atom to check.',
-          drawing('CCO', { xray: 1, lonePairs: false, width: 380, height: 220 })));
-        f.appendChild(p('This is the single most useful rule in the whole subject. Once you know how many hands each atom has, you can look at any drawing and work out what is missing — which is exactly the trick the shorthand drawings rely on.'));
+
+        f.appendChild(h3('Hydrogen is the default filler'));
+        f.appendChild(p('This is the rule that makes the shorthand drawings work later, so it is worth pausing on.'));
+        f.appendChild(p('If an atom has a hand free and nothing more interesting is on offer, a ', b('hydrogen'), ' takes it. Hydrogen is the smallest and most abundant atom around, and it only needs one hand itself, so it is the perfect gap-filler. In practice that means: ', b('any hand not accounted for by a drawn line is holding a hydrogen.')));
+        f.appendChild(p('So a drawing does not have to show you everything. If you can see how many lines an atom has, and you know how many hands it wants, the difference is hydrogens \u2014 and you can work that out yourself without being told.'));
+
+        f.appendChild(h3('Working one out'));
+        f.appendChild(p('Take this molecule, ethylamine. Look at the nitrogen.'));
+        f.appendChild(fig('Ethylamine, with every atom drawn. The nitrogen on the left is holding three things: one carbon and two hydrogens.',
+          drawing('CCN', { xray: 1, width: 420, height: 250 })));
+        f.appendChild(p('Read it step by step. Nitrogen wants ', b('three'), ' bonds. In this molecule it holds one carbon and, once you look, two hydrogens \u2014 three hands, all full. Now cover the hydrogens with your thumb: you would see nitrogen with a single line to a carbon, you would know nitrogen wants three, and you could say with confidence that two hydrogens must be there. Nobody had to draw them.'));
+        f.appendChild(p('The same works for every atom in the picture. The carbon on the left has one line to its neighbour, so three hands are spare, so three hydrogens. The middle carbon has two lines, so two hydrogens. Hover any atom to check yourself.'));
+
+        f.appendChild(h3('One warning about double lines'));
+        f.appendChild(p('Sometimes two atoms share ', el('em', { text: 'two' }), ' pairs of electrons instead of one. That is drawn as two parallel lines, and it uses up ', b('two'), ' hands from each atom, not one. So when you count, count ', b('lines'), ', not neighbours: a carbon with one double bond and two single bonds has used all four hands and has no hydrogens left.'));
+        f.appendChild(fig('Ethene. Both carbons have all four hands used up: two of them in the double bond, and two holding hydrogens.',
+          drawing('C=C', { xray: 1, width: 360, height: 210, interactive: false })));
+        f.appendChild(p('Lesson 7 comes back to double and triple bonds properly. For now, just remember that a double line counts twice.'));
+
+        f.appendChild(h3('Why this is worth memorising'));
+        f.appendChild(p('These five numbers are the single most useful thing in the subject. They let you check whether a drawing is even possible, fill in everything it left out, and spot the moment something unusual is going on. Every shortcut in the next few lessons is built on top of them.'));
         return f;
       },
       quiz: {
-        kind: 'choice',
-        q: 'A nitrogen atom in a molecule has two lines drawn to it. How many hydrogens are hiding there?',
-        options: [
-          { t: 'None.', ok: false, why: 'Nitrogen wants three bonds in total. Two are drawn, so one is unaccounted for.' },
-          { t: 'One.', ok: true, why: 'Right. Nitrogen wants three bonds, two are visible, so there is one hydrogen making up the difference.' },
-          { t: 'Two.', ok: false, why: 'That would give nitrogen four bonds. It can manage four, but only when it carries a positive charge.' },
-          { t: 'Three.', ok: false, why: 'That would be five bonds altogether — far more than nitrogen can hold.' },
-        ],
+        kind: 'clickatom',
+        mol: impossibleCarbon,
+        xray: 0,
+        q: 'Somebody has drawn this molecule wrongly: one atom here has more bonds than it has hands. Click that atom.',
+        test: (a) => a.bondCount === 5,
+        right: 'That is the one. Count the lines meeting there: five. Carbon has only four hands, so there is no way for it to hold five things \u2014 this molecule cannot exist as drawn.',
+        wrong: 'Not that one. Go round the drawing counting the lines that meet at each corner, and find the one where more lines meet than that atom has hands. Every atom here is a carbon, and carbon has four.',
+        note: 'Every corner and line end in this drawing is a carbon.',
       },
     },
 
@@ -347,6 +393,83 @@
     },
   ];
 
+  /* The hands rule, shown rather than asserted: the simplest compound each
+   * atom forms with hydrogen, so the count of lines is the count of hands. */
+  function handsFigure() {
+    const items = [
+      [null, 'Hydrogen', '1 hand'],
+      ['F', 'Fluorine', '1 hand'],
+      ['O', 'Oxygen', '2 hands'],
+      ['N', 'Nitrogen', '3 hands'],
+      ['C', 'Carbon', '4 hands'],
+    ];
+    const grid = el('figure', { class: 'figure' });
+    const row = el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: '10px' } });
+    items.forEach(([smi, name, hands]) => {
+      const cell = el('div', { style: { textAlign: 'center' } });
+      const node = smi === null
+        ? drawMol(hydrogenMolecule(), { xray: 1, width: 150, height: 128, maxScale: 34, interactive: false })
+        : drawing(smi, { xray: 1, width: 150, height: 128, maxScale: 34, interactive: false });
+      cell.appendChild(node);
+      cell.appendChild(el('div', { class: 'lbl', text: name }));
+      cell.appendChild(el('div', { class: 'note', style: { fontSize: '.78rem' }, text: hands }));
+      row.appendChild(cell);
+    });
+    grid.appendChild(row);
+    grid.appendChild(el('figcaption', { text: 'Each atom holding as many hydrogens as it has hands. Count the lines: one, one, two, three, four.' }));
+    return grid;
+  }
+
+  /* Where the numbers come from, rather than a list to memorise. */
+  function handsTable() {
+    const rows = [
+      ['Carbon', 'C', 4, 4],
+      ['Nitrogen', 'N', 5, 3],
+      ['Oxygen', 'O', 6, 2],
+      ['Fluorine', 'F', 7, 1],
+    ];
+    const t = el('table', { class: 'lesson-table' });
+    const head = el('tr');
+    ['Atom', 'Electrons it brings', 'Still needs', 'Hands'].forEach((h) => head.appendChild(el('th', { text: h })));
+    t.appendChild(head);
+    rows.forEach(([name, sym, has, hands]) => {
+      const tr = el('tr');
+      tr.appendChild(el('td', {}, [el('b', { text: sym }), ' ' + name]));
+      tr.appendChild(el('td', { text: String(has) }));
+      tr.appendChild(el('td', { text: '8 \u2212 ' + has + ' = ' + hands }));
+      tr.appendChild(el('td', {}, [el('b', { text: String(hands) })]));
+      t.appendChild(tr);
+    });
+    const fg = el('figure', { class: 'figure' }, [t]);
+    fg.appendChild(el('figcaption', { text: 'Eight minus what the atom already has. That is the whole derivation.' }));
+    return fg;
+  }
+
+  /* A deliberately impossible molecule for the lesson 2 check: a carbon drawn
+   * with five bonds. It has to be built by hand, because no SMILES string can
+   * describe a structure that cannot exist. */
+  function impossibleCarbon() {
+    const M = ME.drawModel;
+    const g = M.emptyGraph();
+    const centre = M.addAtom(g, 0, 0, 'C');
+    /* Five arms, spread out so the crowding is obvious at a glance. */
+    const angles = [150, 210, 30, 330, 90];
+    const arms = angles.map((deg) => {
+      const a = (deg * Math.PI) / 180;
+      const i = M.addAtom(g, Math.cos(a), Math.sin(a), 'C');
+      M.addBond(g, centre, i, 1);
+      return { i, a };
+    });
+    /* Extend two of them, so it reads as a molecule and not as a star. */
+    [0, 1].forEach((k) => {
+      const arm = arms[k];
+      const a = arm.a + (k === 0 ? -0.9 : 0.9);
+      const j = M.addAtom(g, g.atoms[arm.i].x + Math.cos(a), g.atoms[arm.i].y + Math.sin(a), 'C');
+      M.addBond(g, arm.i, j, 1);
+    });
+    return M.toMolecule(g);
+  }
+
   function groupGallery() {
     const items = [
       ['CCO', 'Alcohol', 'O–H on a carbon. Dissolves in water.'],
@@ -430,12 +553,14 @@
       row.appendChild(input); row.appendChild(go);
       box.appendChild(row);
     } else if (q.kind === 'clickatom') {
-      const mol = molOf(q.smiles);
+      /* `mol` lets a lesson supply a structure no SMILES could describe, such
+       * as the deliberately over-bonded carbon in lesson 2. */
+      const mol = q.mol ? q.mol() : molOf(q.smiles);
       const holder = el('div', { class: 'clickmol' });
       let answered = false;
       const info = ME.render2d.describe(mol, {});
       holder.appendChild(ME.render2d.render(mol, {
-        xray: q.xray || 0, width: 420, height: 260,
+        xray: q.xray || 0, width: q.width || 440, height: q.height || 290,
         onAtomClick(i, atom) {
           if (answered) return;
           const enriched = Object.assign({}, atom, { bondCount: info.atoms[i].bonds.length });
