@@ -5,9 +5,10 @@
   "scripts": {
     "build-db": "node scripts/build-db.js",
     "build": "node scripts/build.js",
-    "test": "node --test test/unit.mjs && node test/smoke.mjs",
-    "test:unit": "node --test test/unit.mjs",
-    "test:browser": "node test/smoke.mjs"
+    "test": "node --test test/unit.mjs test/engine.mjs && node test/smoke.mjs",
+    "test:unit": "node --test test/unit.mjs test/engine.mjs",
+    "test:browser": "node test/smoke.mjs",
+    "test:engine": "node --test test/engine.mjs"
   },
   "keywords": [],
   "author": "",
