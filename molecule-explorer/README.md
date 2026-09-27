@@ -70,7 +70,7 @@ PubChem module fails the build.
   values; drawing → recognition; label spacing in the drawings; crowding in the
   editor; plus a sweep confirming every database entry's stored formula and mass
   agree with its structure).
-- `test/smoke.mjs` — 64 checks in a real browser, loaded from `file://` with
+- `test/smoke.mjs` — 81 checks in a real browser, loaded from `file://` with
   the network switched off, covering all eleven lessons, the X-ray slider, the
   molecule page, the gallery, the drawing editor, the periodic table and dark
   mode. It asserts the page makes **zero** network requests. A final phase
@@ -144,6 +144,13 @@ A wrong answer never just says no:
 - **Click-an-atom** describes the atom you actually clicked in the lesson's own
   terms — "that carbon has one line meeting it, so it is carrying three hidden
   hydrogens" — and then points you at what to look for.
+
+Progress is yours to throw away. Above the lessons there is a **Reset answers**
+button, which asks once and then puts all 33 questions back on the board, and a
+**Remember my progress** switch. Turn the switch off and nothing is written to
+the browser at all: answers still count while the tab is open, but reloading
+starts you fresh. Switching it off also deletes whatever was already saved. The
+theme preference is separate and neither control touches it.
 
 Tests enforce that every question is answerable: each click-an-atom question
 must have at least one correct atom and must not accept every atom, each

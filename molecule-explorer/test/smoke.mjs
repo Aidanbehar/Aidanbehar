@@ -354,6 +354,85 @@ await page.locator('.tab[data-view=gallery]').click();
 await page.waitForTimeout(700);
 await page.screenshot({ path: path.join(SHOTS, '12-dark-gallery.png') });
 
+/* ------------------------------------------------- resetting and forgetting */
+/* These reload the page, so they come last in the offline run. */
+{
+  const progressText = () => page.locator('.progress-wrap .note').innerText();
+  const storedKeys = () => page.evaluate(() => {
+    try {
+      return {
+        lessons: localStorage.getItem('molx.lessons'),
+        theme: localStorage.getItem('molx.theme'),
+      };
+    } catch (e) { return { lessons: null, theme: null }; }
+  });
+  const answerTwo = async () => {
+    await page.locator('.tab[data-view=learn]').click();
+    await page.waitForTimeout(250);
+    await page.locator('.lesson-link').nth(0).click();
+    await page.waitForTimeout(300);
+    await page.locator('.quiz-item').nth(0).locator('.quiz-opt').nth(1).click();
+    await page.waitForTimeout(150);
+    await page.locator('.quiz-item').nth(1).locator('.quiz-opt').nth(0).click();
+    await page.waitForTimeout(250);
+  };
+
+  await page.evaluate(() => { try { localStorage.removeItem('molx.remember'); } catch (e) { /* fine */ } });
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(800);
+
+  await answerTwo();
+  check('answers are counted', /^2 of 33/.test(await progressText()), await progressText());
+  check('answers are written to storage', !!(await storedKeys()).lessons);
+
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(800);
+  check('answers survive a reload by default', /^2 of 33/.test(await progressText()), await progressText());
+
+  /* the reset button asks before it does anything */
+  const resetBtn = page.locator('.progress-controls .btn');
+  await resetBtn.click();
+  await page.waitForTimeout(150);
+  check('reset asks first', /sure/i.test(await resetBtn.innerText()), await resetBtn.innerText());
+  await resetBtn.click();
+  await page.waitForTimeout(400);
+  check('reset clears the count', /^0 of 33/.test(await progressText()), await progressText());
+  check('reset clears storage', !(await storedKeys()).lessons);
+  check('reset reopens the questions', await page.locator('.quiz-item.solved').count() === 0);
+  check('reset leaves the options clickable',
+    await page.locator('.quiz-item').nth(0).locator('.quiz-opt:not([disabled])').count() === 3);
+  check('reset does not touch the theme', !!(await storedKeys()).theme);
+
+  /* the first tap disarms itself if nothing follows */
+  await resetBtn.click();
+  await page.waitForTimeout(4400);
+  check('an unconfirmed reset disarms itself', !/sure/i.test(await resetBtn.innerText()), await resetBtn.innerText());
+
+  /* switching remembering off */
+  await answerTwo();
+  await page.locator('.switch input').uncheck();
+  await page.waitForTimeout(300);
+  check('switching off wipes what was stored', !(await storedKeys()).lessons);
+  check('switching off keeps this session\u2019s answers', /^2 of 33/.test(await progressText()), await progressText());
+
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(800);
+  check('nothing is remembered after a reload', /^0 of 33/.test(await progressText()), await progressText());
+  check('the switch itself is remembered', !(await page.locator('.switch input').isChecked()));
+
+  await answerTwo();
+  check('answering still works while not saving', /^2 of 33/.test(await progressText()), await progressText());
+  check('and still writes nothing', !(await storedKeys()).lessons);
+
+  /* and back on again */
+  await page.locator('.switch input').check();
+  await page.waitForTimeout(200);
+  await answerTwo();
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(800);
+  check('switching it back on resumes saving', /^2 of 33/.test(await progressText()), await progressText());
+}
+
 /* -------------------------------------------------------------- summary */
 check('still no script errors at the end', errors.length === 0, errors.slice(0, 4).join(' | '));
 check('never touched the network in the whole offline run', attempted.length === 0, attempted.slice(0, 5).join(', '));

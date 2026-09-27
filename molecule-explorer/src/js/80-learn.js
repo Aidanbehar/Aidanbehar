@@ -866,7 +866,7 @@
 
     if (q.kind === 'choice') buildChoice(q, body, say);
     else if (q.kind === 'count') buildCount(q, body, say);
-    else if (q.kind === 'clickatom') buildClickAtom(q, body, say, () => solved);
+    else if (q.kind === 'clickatom') buildClickAtom(q, body, say);
 
     if (q.note) body.appendChild(el('p', { class: 'note quiz-hint', text: q.note }));
     body.appendChild(feedback);
@@ -929,14 +929,15 @@
   }
 
   /* ---- click the right atom in a drawing ---- */
-  function buildClickAtom(q, body, say, isSolved) {
+  function buildClickAtom(q, body, say) {
     const mol = q.mol ? q.mol() : molOf(q.smiles);
     const info = ME.render2d.describe(mol, {});
     const holder = el('div', { class: 'clickmol' });
     holder.appendChild(ME.render2d.render(mol, {
       xray: q.xray || 0, width: q.width || 440, height: q.height || 290,
       onAtomClick(i, atom) {
-        if (isSolved()) return;
+        /* Still answers after it has been got right, so the drawing stays
+         * something you can poke at; it just will not be counted twice. */
         const enriched = Object.assign({}, atom, { bondCount: info.atoms[i].bonds.length });
         if (q.test(enriched)) say(true, q.right);
         else say(false, describeClick(enriched) + q.wrong);
@@ -949,8 +950,36 @@
   /* -------------------------------------------------------------- view */
   const St = { built: false, index: 0, done: {}, navNode: null, bodyNode: null, barNode: null };
 
-  function loadProgress() { St.done = ME.store.get('lessons', {}) || {}; }
-  function saveProgress() { ME.store.set('lessons', St.done); }
+  /* Progress is kept between visits by default, but that is the reader's call.
+   * With remembering switched off nothing is written at all and the answers
+   * live only in this tab, so reloading starts the questions over. */
+  function remembering() { return ME.store.get('remember', true) !== false; }
+
+  function loadProgress() {
+    St.done = remembering() ? (ME.store.get('lessons', {}) || {}) : {};
+  }
+  function saveProgress() {
+    if (remembering()) ME.store.set('lessons', St.done);
+  }
+  function forgetStored() {
+    ME.store.remove('lessons');
+    ME.store.remove('lessonIndex');
+  }
+
+  /* Wipe the answers and put every question back on the board. */
+  function resetProgress() {
+    St.done = {};
+    forgetStored();
+    showLesson(St.index);
+    syncNav();
+  }
+
+  function setRemember(on) {
+    ME.store.set('remember', !!on);
+    /* Switching it off should not leave yesterday's answers sitting on disk. */
+    if (!on) forgetStored();
+    else saveProgress();
+  }
 
   /* Which questions of a lesson have been answered. Progress used to be a
    * single true/false per lesson, so an old saved value is read as "all of
@@ -983,8 +1012,12 @@
     const prog = el('div', { class: 'progress-wrap' });
     St.barNode = el('i');
     prog.appendChild(el('div', { class: 'progress-bar' }, [St.barNode]));
-    St.progText = el('div', { class: 'note', style: { fontSize: '.8rem', marginTop: '5px' } });
-    prog.appendChild(St.progText);
+
+    const row = el('div', { class: 'progress-row' });
+    St.progText = el('div', { class: 'note', style: { fontSize: '.8rem' } });
+    row.appendChild(St.progText);
+    row.appendChild(buildProgressControls());
+    prog.appendChild(row);
     wrap.appendChild(prog);
 
     const layout = el('div', { class: 'learn-layout' });
@@ -1004,8 +1037,47 @@
     });
 
     St.built = true;
-    const saved = ME.store.get('lessonIndex', 0);
+    const saved = remembering() ? ME.store.get('lessonIndex', 0) : 0;
     showLesson(Math.min(LESSONS.length - 1, Math.max(0, saved)));
+  }
+
+  function buildProgressControls() {
+    const box = el('div', { class: 'progress-controls' });
+
+    const remember = el('label', { class: 'switch', title: 'Turn this off and your answers are forgotten as soon as you reload' });
+    const cb = el('input', { type: 'checkbox' });
+    cb.checked = remembering();
+    cb.addEventListener('change', () => {
+      setRemember(cb.checked);
+      ME.toast(cb.checked
+        ? 'Your progress will be remembered on this device'
+        : 'Progress will not be saved \u2014 reloading starts you fresh');
+    });
+    remember.appendChild(cb);
+    remember.appendChild(el('span', { text: 'Remember my progress' }));
+    box.appendChild(remember);
+
+    /* Two taps rather than a dialog: the first asks, the second does it. */
+    let armed = null;
+    const reset = el('button', { class: 'btn btn-sm', text: 'Reset answers' });
+    const disarm = () => {
+      clearTimeout(armed); armed = null;
+      reset.textContent = 'Reset answers';
+      reset.classList.remove('btn-primary');
+    };
+    reset.addEventListener('click', () => {
+      if (!armed) {
+        reset.textContent = 'Reset \u2014 sure?';
+        reset.classList.add('btn-primary');
+        armed = setTimeout(disarm, 4000);
+        return;
+      }
+      disarm();
+      resetProgress();
+      ME.toast('All 33 questions are open again');
+    });
+    box.appendChild(reset);
+    return box;
   }
 
   function syncNav() {
@@ -1021,7 +1093,7 @@
 
   function showLesson(i) {
     St.index = i;
-    ME.store.set('lessonIndex', i);
+    if (remembering()) ME.store.set('lessonIndex', i);
     const lesson = LESSONS[i];
     ME.clear(St.bodyNode);
 
@@ -1060,5 +1132,5 @@
   function scrollUp() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
   function ensureBuilt(host) { if (!St.built) build(host); }
 
-  ME.learn = { ensureBuilt, LESSONS };
+  ME.learn = { ensureBuilt, LESSONS, resetProgress, setRemember, remembering };
 })();

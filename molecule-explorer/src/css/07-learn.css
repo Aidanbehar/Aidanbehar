@@ -26,6 +26,23 @@
 .lesson-link.on .lesson-num { border-color: var(--accent); color: var(--accent-text); }
 
 .progress-wrap { margin-bottom: 14px; }
+.progress-row {
+  display: flex; align-items: center; gap: 12px 16px;
+  flex-wrap: wrap; margin-top: 7px;
+}
+.progress-controls { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+
+/* a plain checkbox, sized and aligned to sit next to a small button */
+.switch {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  font-size: .82rem; color: var(--text-soft); user-select: none;
+}
+.switch input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; margin: 0; }
+.switch:hover { color: var(--text); }
+
+@media (max-width: 560px) {
+  .progress-controls { margin-left: 0; width: 100%; justify-content: space-between; }
+}
 .progress-bar { height: 5px; background: var(--border); border-radius: 99px; overflow: hidden; }
 .progress-bar i { display: block; height: 100%; background: var(--ok); border-radius: 99px; transition: width .3s; }
 
