@@ -1126,3 +1126,203 @@ describe('the element data', () => {
     assert.deepEqual(missing, [], 'formulas referencing unknown elements');
   });
 });
+
+/* ------------------------------------------------ configuration diagrams */
+describe('electron configuration', () => {
+  test('the noble-gas core expands to the right number of electrons', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.chem.elements.forEach((e) => {
+        const a = window.ME.orbitals.analyse(e);
+        /* Ten of the heaviest have only a predicted configuration; the rest
+         * must account for exactly as many electrons as the element has
+         * protons, which is what proves the core expansion is right. */
+        if (!a.predicted && a.total !== e.z) out.push([e.sym, e.z, a.total]);
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], 'electrons not adding up to the atomic number');
+  });
+
+  test('shells match the textbook counts', async () => {
+    const out = await run(() => {
+      const g = (sym) => window.ME.orbitals.analyse(window.ME.chem.element(sym)).rings.map((r) => r.count);
+      return { H: g('H'), C: g('C'), Ne: g('Ne'), Na: g('Na'), Ar: g('Ar'), Fe: g('Fe'), Au: g('Au') };
+    });
+    assert.deepEqual(out.H, [1]);
+    assert.deepEqual(out.C, [2, 4]);
+    assert.deepEqual(out.Ne, [2, 8]);
+    assert.deepEqual(out.Na, [2, 8, 1]);
+    assert.deepEqual(out.Ar, [2, 8, 8]);
+    /* Iron is the interesting one: 4s fills before 3d finishes, so the third
+     * shell ends up holding fourteen. */
+    assert.deepEqual(out.Fe, [2, 8, 14, 2]);
+    assert.deepEqual(out.Au, [2, 8, 18, 32, 18, 1]);
+  });
+
+  test('outer-shell counts are what the octet story needs', async () => {
+    const out = await run(() => {
+      const g = (sym) => window.ME.orbitals.analyse(window.ME.chem.element(sym)).outer;
+      return { H: g('H'), C: g('C'), N: g('N'), O: g('O'), F: g('F'), Ne: g('Ne'), Na: g('Na'), Cl: g('Cl') };
+    });
+    assert.equal(out.H, 1);
+    assert.equal(out.C, 4);
+    assert.equal(out.N, 5);
+    assert.equal(out.O, 6);
+    assert.equal(out.F, 7);
+    assert.equal(out.Ne, 8);
+    assert.equal(out.Na, 1);
+    assert.equal(out.Cl, 7);
+  });
+
+  test('the orbital boxes fill singly before pairing', async () => {
+    const out = await run(() => {
+      /* Count the arrows the diagram actually draws. */
+      const read = (sym) => {
+        const a = window.ME.orbitals.analyse(window.ME.chem.element(sym));
+        const node = window.ME.orbitals.orbitalBoxes(a);
+        return Array.from(node.querySelectorAll('.orb-row')).map((row) => ({
+          label: row.querySelector('.orb-label').textContent,
+          up: row.querySelectorAll('.orb-up').length,
+          down: row.querySelectorAll('.orb-down').length,
+          cells: row.querySelectorAll('.orb-cell').length,
+        }));
+      };
+      return { C: read('C'), N: read('N'), O: read('O'), Fe: read('Fe') };
+    });
+    /* carbon 2p2: two orbitals singly occupied, none paired */
+    const c2p = out.C.find((r) => r.label === '2p');
+    assert.deepEqual([c2p.up, c2p.down, c2p.cells], [2, 0, 3]);
+    /* nitrogen 2p3: all three singly occupied */
+    const n2p = out.N.find((r) => r.label === '2p');
+    assert.deepEqual([n2p.up, n2p.down, n2p.cells], [3, 0, 3]);
+    /* oxygen 2p4: three singles, then one of them pairs up */
+    const o2p = out.O.find((r) => r.label === '2p');
+    assert.deepEqual([o2p.up, o2p.down, o2p.cells], [3, 1, 3]);
+    /* iron 3d6: five singles and one pair, across five orbitals */
+    const fe3d = out.Fe.find((r) => r.label === '3d');
+    assert.deepEqual([fe3d.up, fe3d.down, fe3d.cells], [5, 1, 5]);
+  });
+
+  test('the arrows account for every electron', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.chem.elements.forEach((e) => {
+        const a = window.ME.orbitals.analyse(e);
+        if (a.predicted) return;
+        const node = window.ME.orbitals.orbitalBoxes(a);
+        const drawn = node.querySelectorAll('.orb-up').length + node.querySelectorAll('.orb-down').length;
+        if (drawn !== e.z) out.push([e.sym, e.z, drawn]);
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], 'arrows drawn not matching the atomic number');
+  });
+
+  test('a predicted configuration is flagged as predicted', async () => {
+    const out = await run(() => {
+      const predicted = window.ME.chem.elements
+        .filter((e) => window.ME.orbitals.analyse(e).predicted).map((e) => e.sym);
+      return { predicted, carbon: window.ME.orbitals.analyse(window.ME.chem.element('C')).predicted };
+    });
+    assert.ok(out.predicted.length > 0, 'some of the heaviest elements are predictions');
+    assert.ok(out.predicted.length < 20, 'but only a handful');
+    assert.equal(out.carbon, false, 'carbon is not a prediction');
+  });
+});
+
+describe('bonds an element wants', () => {
+  test('it agrees with the table the drawing editor validates against', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.chem.elements.forEach((e) => {
+        const rule = window.ME.chem.VALENCE[e.sym];
+        if (!rule) return;
+        const b = window.ME.orbitals.bonding(e);
+        const want = rule.hands === 0 ? 'No bonds'
+          : rule.hands === 1 ? '1 bond' : rule.hands + ' bonds';
+        if (b.headline !== want) out.push([e.sym, want, b.headline]);
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], 'the element page and the validator disagree');
+  });
+
+  test('the everyday elements come out right', async () => {
+    const out = await run(() => {
+      const g = (sym) => window.ME.orbitals.bonding(window.ME.chem.element(sym));
+      const r = {};
+      ['H', 'C', 'N', 'O', 'F', 'Cl', 'S', 'P', 'Ne', 'He', 'Na', 'Mg', 'Fe', 'Au', 'U'].forEach((sym) => {
+        const b = g(sym);
+        r[sym] = { headline: b.headline, kind: b.kind };
+      });
+      return r;
+    });
+    assert.equal(out.H.headline, '1 bond');
+    assert.equal(out.C.headline, '4 bonds');
+    assert.equal(out.N.headline, '3 bonds');
+    assert.equal(out.O.headline, '2 bonds');
+    assert.equal(out.F.headline, '1 bond');
+    assert.equal(out.Cl.headline, '1 bond');
+    assert.equal(out.S.headline, '2 bonds');
+    assert.equal(out.P.headline, '3 bonds');
+    /* Noble gases share nothing. */
+    assert.equal(out.Ne.kind, 'none');
+    assert.equal(out.He.kind, 'none');
+    /* Metals on the left give electrons away rather than sharing bonds, and
+     * the page should say so rather than claiming "1 bond". */
+    assert.equal(out.Na.kind, 'gives');
+    assert.equal(out.Mg.kind, 'gives');
+    assert.match(out.Na.headline, /^Gives away 1$/);
+    assert.match(out.Mg.headline, /^Gives away 2$/);
+    /* The d-block does not follow the simple rule, and says so. */
+    assert.equal(out.Fe.kind, 'varies');
+    assert.equal(out.Au.kind, 'varies');
+    assert.equal(out.U.kind, 'varies');
+  });
+
+  test('every element gets an answer of some kind', async () => {
+    const bad = await run(() => window.ME.chem.elements
+      .filter((e) => {
+        const b = window.ME.orbitals.bonding(e);
+        return !b || !b.headline || !b.text;
+      }).map((e) => e.sym));
+    assert.deepEqual(bad, []);
+  });
+});
+
+describe('the orbital shapes', () => {
+  test('only the orbital types an element actually uses are shown', async () => {
+    const out = await run(() => {
+      const g = (sym) => window.ME.orbitals.analyse(window.ME.chem.element(sym)).types;
+      return { H: g('H'), C: g('C'), Na: g('Na'), Fe: g('Fe'), U: g('U') };
+    });
+    assert.deepEqual(out.H, ['s']);
+    assert.deepEqual(out.C, ['s', 'p']);
+    assert.deepEqual(out.Na, ['s', 'p']);
+    assert.deepEqual(out.Fe, ['s', 'p', 'd']);
+    assert.ok(out.U.indexOf('f') >= 0, 'uranium fills f orbitals');
+  });
+
+  test('the 3D view really is three-dimensional', async () => {
+    const out = await run(() => {
+      const a = window.ME.orbitals.analyse(window.ME.chem.element('C'));
+      const node = window.ME.orbitals.orbitalShapes(a);
+      document.body.appendChild(node);
+      const host = node.querySelectorAll('.orb-3d')[1];   /* the p panel */
+      const svg = host.querySelector('svg');
+      const sig = () => Array.from(svg.querySelectorAll('ellipse'))
+        .map((e) => e.getAttribute('cx') + ',' + e.getAttribute('cy')).join(' ');
+      const before = sig();
+      const opts = { bubbles: true, cancelable: true, pointerId: 1, clientX: 100, clientY: 100 };
+      host.dispatchEvent(new PointerEvent('pointerdown', opts));
+      host.dispatchEvent(new PointerEvent('pointermove', Object.assign({}, opts, { clientX: 170, clientY: 140 })));
+      host.dispatchEvent(new PointerEvent('pointerup', opts));
+      const after = sig();
+      node.remove();
+      return { lobes: before.split(' ').length, rotated: before !== after };
+    });
+    assert.equal(out.lobes, 6, 'three p orbitals means six lobes');
+    assert.ok(out.rotated, 'dragging should turn it round');
+  });
+});

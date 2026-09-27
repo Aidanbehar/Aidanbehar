@@ -64,13 +64,13 @@ PubChem module fails the build.
 
 **`npm test`** runs both suites:
 
-- `test/unit.mjs` — 56 logic tests (search by case, typo, synonym, formula and
+- `test/unit.mjs` — 67 logic tests (search by case, typo, synonym, formula and
   SMILES; the five-bond-carbon message; twenty-odd valid ions and hypervalent
   species that must *not* be flagged; formula and molar mass against known
   values; drawing → recognition; label spacing in the drawings; crowding in the
   editor; plus a sweep confirming every database entry's stored formula and mass
   agree with its structure).
-- `test/smoke.mjs` — 102 checks in a real browser, loaded from `file://` with
+- `test/smoke.mjs` — 119 checks in a real browser, loaded from `file://` with
   the network switched off, covering all eleven lessons, the X-ray slider, the
   molecule page, the gallery, the drawing editor, the periodic table and dark
   mode. It asserts the page makes **zero** network requests. A final phase
@@ -108,6 +108,7 @@ src/
   js/45-pubchem.js      the only module that touches the network
   js/50-molpage.js      the molecule page
   js/60/61/62-draw-*.js the editor's model, its canvas painter, and its UI
+  js/66-orbitals.js     configuration parsing, shell and orbital diagrams
   js/68-elements.js     the periodic table and the element pages
   js/70-gallery.js      the gallery
   js/72-searchview.js   search results and the suggestion dropdown
@@ -147,6 +148,29 @@ than 118 rows. Only the prose is the app's own: a "where you have met this"
 line for the ~45 elements a beginner is likely to run into, and a sentence on
 what each category means. Elements without a note simply show their data rather
 than being given invented colour.
+
+Each element page also carries three things worked out from its configuration
+rather than looked up:
+
+- **How many bonds it wants**, with the reasoning. Where the drawing editor's
+  valence table has an entry that is the source of truth, so the two can never
+  disagree; beyond it the answer comes from the outer-shell count. Crucially it
+  does not pretend the rule is universal: sodium is described as *giving away*
+  an electron rather than wanting one bond, and iron says plainly that the
+  four-hands picture does not carry over to the d-block, then gives its actual
+  charges.
+- **An electron configuration diagram** — concentric shells with the electrons
+  on them and the outer shell picked out, beside an orbital box diagram filling
+  one electron per box before any pairing. The noble-gas core in a string like
+  `[Ar]4s2 3d6` is expanded by looking up argon's own configuration in the same
+  data and recursing, so there is no hand-typed table of cores. A test confirms
+  the expansion by checking that every element's electrons add up to its atomic
+  number.
+- **The orbital shapes in 3D.** Lobe directions are real 3D vectors, rotated
+  and projected every frame and sorted back to front, so you can drag to turn
+  them round. Only the types the element actually fills are shown, with a short
+  note on what an orbital is. The ten heaviest elements have only a *predicted*
+  configuration, and their pages say so rather than presenting it as measured.
 
 Deep links work: `#/elements/Fe` and `#/elements/26` both open iron. The Draw
 tool's element picker shares the same layout, categories and data, so the two

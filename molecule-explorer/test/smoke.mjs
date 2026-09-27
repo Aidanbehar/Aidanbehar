@@ -211,9 +211,34 @@ check('the open element lists its numbers', await page.locator('.pt-fact').count
 {
   const txt = await page.locator('.pt-detail').innerText();
   check('carbon shows its electron configuration', /\[He\]2s2 2p2/.test(txt));
-  check('carbon shows how many bonds it wants', /4 hands/.test(txt));
+  check('carbon shows how many bonds it wants', /4 bonds/.test(txt));
+  check('the bond count is explained, not just stated', /room for eight/i.test(txt), txt.slice(0, 200));
   check('carbon shows a plain-language note', /backbone of every molecule/i.test(txt));
   check('temperatures are given in celsius too', /\u00b0C\)/.test(txt), txt.slice(0, 120));
+  check('there is a shell diagram', await page.locator('.orb-shells').count() === 1);
+  check('the shells are labelled', /2 \u00b7 4 by shell/.test(txt), txt);
+  check('the outer shell is called out', /4 in the outer shell/.test(txt));
+  check('there are orbital boxes', await page.locator('.orb-row').count() === 3,
+    (await page.locator('.orb-row').count()) + ' rows');
+  check('the boxes hold six electrons for carbon',
+    (await page.locator('.orb-up').count()) + (await page.locator('.orb-down').count()) === 6);
+  check('orbital shapes are shown', await page.locator('.orb-panel').count() === 2);
+  check('the orbital note explains what an orbital is', /cloud of probability/i.test(txt));
+}
+
+/* drag the p-orbital picture and confirm it turns */
+{
+  await page.locator('.orb-panel').nth(1).scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
+  const svg = page.locator('.orb-panel').nth(1).locator('svg');
+  const before = await svg.innerHTML();
+  const bb = await page.locator('.orb-panel').nth(1).locator('.orb-3d').boundingBox();
+  await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bb.x + bb.width / 2 + 45, bb.y + bb.height / 2 + 25, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  check('the orbital picture turns when dragged', (await svg.innerHTML()) !== before);
 }
 check('molecules containing the element are linked', await page.locator('.pt-mol').count() > 0);
 
@@ -226,6 +251,10 @@ check('clicking an element opens it', (await page.locator('.pt-detail h2').inner
   const txt = await page.locator('.pt-detail').innerText();
   check('iron is labelled a transition metal', /Transition metal/.test(txt));
   check('iron lists the molecules it appears in', /Heme B/.test(txt), txt.slice(-160));
+  check('iron says the simple bond rule does not apply', /It varies/.test(txt));
+  check('and explains why', /d-block metal/i.test(txt), txt.slice(0, 300));
+  check('iron shows its fourteen-electron third shell', /2 \u00b7 8 \u00b7 14 \u00b7 2/.test(txt), txt);
+  check('iron shows d orbitals too', await page.locator('.orb-panel').count() === 3);
 }
 await page.screenshot({ path: path.join(SHOTS, '14-elements.png'), fullPage: true });
 
@@ -236,6 +265,8 @@ check('a barely-studied element still renders',
   (await page.locator('.pt-detail h2').innerText()) === 'Oganesson' && await page.locator('.pt-fact').count() > 0);
 check('and says plainly that nothing in the set contains it',
   /No built-in molecule contains oganesson/i.test(await page.locator('.pt-detail').innerText()));
+check('a predicted configuration is marked as a prediction',
+  /never been measured/i.test(await page.locator('.pt-detail').innerText()));
 
 /* a molecule chip opens the molecule page */
 await page.locator('.pt-el:has(.pt-sym:text-is("O"))').first().click();
@@ -243,6 +274,16 @@ await page.waitForTimeout(300);
 await page.locator('.pt-mol').first().click();
 await page.waitForTimeout(700);
 check('a linked molecule opens its page', await page.locator('#view-molecule.active h1').count() === 1);
+
+/* an alkali metal must not be described as wanting one covalent bond */
+await page.evaluate(() => { location.hash = '#/elements/Na'; });
+await page.waitForTimeout(400);
+{
+  const txt = await page.locator('.pt-detail').innerText();
+  check('sodium is described as giving an electron away', /Gives away 1/.test(txt), txt.slice(0, 200));
+  check('and not as making a bond', !/^1 bond/m.test(txt));
+  check('sodium shows three shells', /2 \u00b7 8 \u00b7 1 by shell/.test(txt), txt);
+}
 
 /* deep links, by symbol and by atomic number */
 for (const [frag, want] of [['Fe', 'Iron'], ['26', 'Iron'], ['Na', 'Sodium']]) {

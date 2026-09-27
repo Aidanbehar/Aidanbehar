@@ -183,14 +183,6 @@
     const chips = el('div', { class: 'mol-badges' });
     chips.appendChild(el('span', { class: 'chip', text: e.block || 'Element' }));
     if (e.state) chips.appendChild(el('span', { class: 'chip', text: e.state }));
-    const hands = handsOf(e.sym);
-    if (hands !== null) {
-      chips.appendChild(el('span', {
-        class: 'chip',
-        'data-tip': 'How many bonds this atom normally makes — the "hands" idea from lesson 2.',
-        text: hands === 1 ? '1 hand' : hands + ' hands',
-      }));
-    }
     heading.appendChild(chips);
     if (BLOCK_NOTES[key]) heading.appendChild(el('p', { class: 'note', text: BLOCK_NOTES[key] }));
     head.appendChild(heading);
@@ -200,18 +192,93 @@
       detailNode.appendChild(el('p', { class: 'pt-note', text: NOTES[e.sym] }));
     }
 
+    detailNode.appendChild(buildBonding(e));
     detailNode.appendChild(buildFacts(e));
+    detailNode.appendChild(buildConfiguration(e));
+    detailNode.appendChild(buildOrbitals(e));
 
     const inMol = moleculesWith(e.sym);
     detailNode.appendChild(buildMolecules(e, inMol));
     ME.bindTips(detailNode);
   }
 
-  /* How many bonds the element normally makes, from the same table the
-   * drawing validator uses, so the two can never disagree. */
-  function handsOf(sym) {
-    const rule = ME.chem.VALENCE[sym];
-    return rule ? rule.hands : null;
+  /* ----------------------------------------- how many bonds it wants ---- */
+  function buildBonding(e) {
+    const b = ME.orbitals.bonding(e);
+    const box = el('div', { class: 'pt-bond pt-bond-' + (b ? b.kind : 'varies') });
+    box.appendChild(el('div', { class: 'pt-bond-head' }, [
+      el('span', { class: 'pt-bond-n', text: b ? b.headline : 'unknown' }),
+      el('span', {
+        class: 'pt-bond-cap term',
+        'data-tip': 'The "hands" idea from lesson 2: how many things this atom holds on to at once.',
+        text: 'bonds it wants',
+      }),
+    ]));
+    if (b) {
+      box.appendChild(b.html
+        ? el('p', { class: 'pt-bond-why', html: b.text })
+        : el('p', { class: 'pt-bond-why', text: b.text }));
+    }
+    return box;
+  }
+
+  /* --------------------------------------- electron configuration ------- */
+  function buildConfiguration(e) {
+    const a = ME.orbitals.analyse(e);
+    const box = el('div', { class: 'pt-section' });
+    box.appendChild(el('div', { class: 'section-head' }, 'Electron configuration'));
+    box.appendChild(el('p', { class: 'note', style: { maxWidth: '68ch' } },
+      'Electrons stack up from the inside out, and only the ones in the outermost shell do any bonding. ' +
+      'The rings show how many sit in each shell; the boxes show which orbital each one is in, one per box ' +
+      'before any of them pair up.'));
+
+    const grid = el('div', { class: 'pt-config' });
+
+    const left = el('div', { class: 'pt-config-shells' });
+    left.appendChild(ME.orbitals.shellDiagram(e, a));
+    left.appendChild(el('div', { class: 'pt-config-caption' },
+      a.rings.length ? a.rings.map((r) => r.count).join(' · ') + ' by shell' : 'no electrons'));
+    if (a.outer) {
+      left.appendChild(el('div', { class: 'pt-config-outer' },
+        a.outer + ' in the outer shell (shell ' + a.valenceN + ')'));
+    }
+    grid.appendChild(left);
+
+    const right = el('div', { class: 'pt-config-boxes' });
+    right.appendChild(el('code', { class: 'pt-config-str', text: e.cfg || '' }));
+    right.appendChild(ME.orbitals.orbitalBoxes(a));
+    grid.appendChild(right);
+
+    box.appendChild(grid);
+
+    if (a.predicted) {
+      box.appendChild(el('p', { class: 'callout warn', style: { marginTop: '12px', fontSize: '.86rem' },
+        text: 'This configuration has never been measured — it is what theory predicts, which is the best anybody has for an element this short-lived.' }));
+    } else if (!a.matchesZ) {
+      box.appendChild(el('p', { class: 'callout warn', style: { marginTop: '12px', fontSize: '.86rem' },
+        text: 'The electrons shown add up to ' + a.total + ', not ' + e.z + '. That is a gap in the source data rather than in the chemistry.' }));
+    }
+    return box;
+  }
+
+  /* ------------------------------------------------ orbital shapes ------ */
+  function buildOrbitals(e) {
+    const a = ME.orbitals.analyse(e);
+    const box = el('div', { class: 'pt-section' });
+    box.appendChild(el('div', { class: 'section-head' }, 'What the orbitals look like'));
+    box.appendChild(el('p', { class: 'note', style: { maxWidth: '68ch' } },
+      'An orbital is not a track an electron runs along. It is a region where the electron is likely to be ' +
+      'found — a cloud of probability with a definite shape. Each orbital holds at most two electrons, and ' +
+      'the two have to spin opposite ways to share it. These shapes are why molecules have shapes at all: a ' +
+      'bond forms along the direction an orbital points.'));
+    if (a.types.length) {
+      box.appendChild(ME.orbitals.orbitalShapes(a));
+      box.appendChild(el('p', { class: 'note', style: { marginTop: '10px', fontSize: '.8rem' },
+        text: 'Drag any of the p or d pictures to turn it round. The two lobes of one orbital share a colour.' }));
+    } else {
+      box.appendChild(el('p', { class: 'note', text: 'No configuration on record for this element.' }));
+    }
+    return box;
   }
 
   function buildFacts(e) {

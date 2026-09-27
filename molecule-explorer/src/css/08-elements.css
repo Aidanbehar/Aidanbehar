@@ -134,3 +134,81 @@
 .pt-mol:hover { border-color: var(--accent); background: var(--accent-soft); }
 .pt-mol .nm { font-size: .86rem; font-weight: 550; }
 .pt-mol .fm { font-size: .74rem; color: var(--text-faint); font-family: var(--font-mono); }
+
+/* ------------------------------------------------- bonds the element wants */
+.pt-bond {
+  margin-top: 18px; padding: 14px 16px; border-radius: var(--r);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-left: 3px solid var(--text-faint);
+}
+.pt-bond-covalent { border-left-color: var(--ok); background: var(--ok-soft); }
+.pt-bond-gives    { border-left-color: var(--warn); background: var(--warn-soft); }
+.pt-bond-none     { border-left-color: var(--accent); background: var(--accent-soft); }
+.pt-bond-varies   { border-left-color: var(--text-faint); }
+.pt-bond-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.pt-bond-n { font-size: 1.5rem; font-weight: 680; letter-spacing: -.015em; }
+.pt-bond-cap {
+  font-size: .74rem; text-transform: uppercase; letter-spacing: .07em;
+  font-weight: 700; color: var(--text-soft);
+}
+.pt-bond-why { margin: 7px 0 0; font-size: .92rem; line-height: 1.55; max-width: 70ch; }
+.pt-bond-why sup { font-size: .72em; }
+
+/* --------------------------------------------------- configuration block */
+.pt-section { margin-top: 24px; }
+.pt-config {
+  display: grid; gap: 20px; align-items: start; margin-top: 14px;
+  grid-template-columns: 210px minmax(0, 1fr);
+}
+@media (max-width: 680px) { .pt-config { grid-template-columns: minmax(0, 1fr); } }
+
+.pt-config-shells { text-align: center; }
+.orb-shells { width: 100%; max-width: 200px; height: auto; display: block; margin: 0 auto; }
+.pt-config-caption { font-size: .82rem; font-weight: 650; margin-top: 6px; }
+.pt-config-outer { font-size: .78rem; color: var(--accent-text); margin-top: 2px; }
+
+.pt-config-str {
+  display: block; font-family: var(--font-mono); font-size: .86rem;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 7px 10px; margin-bottom: 12px;
+  overflow-x: auto; white-space: nowrap;
+}
+
+.orb-boxes { display: flex; flex-direction: column; gap: 5px; }
+.orb-row { display: flex; align-items: center; gap: 9px; }
+.orb-label {
+  font-size: .8rem; font-weight: 700; width: 24px; flex: none;
+  font-family: var(--font-mono); color: var(--text-soft);
+}
+.orb-label i { font-style: normal; color: var(--text); }
+.orb-cells { display: flex; gap: 2px; }
+.orb-cell {
+  width: 24px; height: 20px; flex: none; border: 1px solid var(--border-strong);
+  border-radius: 2px; background: var(--surface);
+  display: flex; align-items: center; justify-content: center; gap: 0;
+  font-size: .78rem; line-height: 1;
+}
+.orb-up { color: var(--accent); font-weight: 700; }
+.orb-down { color: #e0523f; font-weight: 700; }
+.orb-count { font-size: .76rem; color: var(--text-faint); white-space: nowrap; }
+@media (max-width: 520px) {
+  .orb-cell { width: 18px; height: 17px; font-size: .68rem; }
+  .orb-count { display: none; }
+}
+
+/* ------------------------------------------------------- orbital shapes */
+.orb-shapes {
+  display: grid; gap: 14px; margin-top: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.orb-panel {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 12px; text-align: center;
+}
+.orb-3d { display: block; margin: 0 auto 6px; width: 100%; max-width: 150px; touch-action: none; }
+.orb-3d.draggable { cursor: grab; }
+.orb-3d.draggable:active { cursor: grabbing; }
+.orb-3d-svg { width: 100%; height: auto; display: block; }
+.orb-panel-name { font-weight: 650; font-size: .92rem; }
+.orb-panel-count { font-size: .76rem; color: var(--text-faint); }
+.orb-panel-note { font-size: .8rem; color: var(--text-soft); line-height: 1.5; margin-top: 7px; text-align: left; }
