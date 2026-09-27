@@ -163,7 +163,7 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
   border-bottom: 1px solid var(--border);
 }
 .nav-inner {
-  max-width: 1240px; margin: 0 auto; padding: 0 16px;
+  max-width: 1400px; margin: 0 auto; padding: 0 16px;
   min-height: var(--nav-h);
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
 }
@@ -175,18 +175,25 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
 .brand svg { width: 24px; height: 24px; flex: none; }
 .brand span { white-space: nowrap; }
 
-.tabs { display: flex; gap: 2px; flex: none; }
+.tabs {
+  display: flex; gap: 1px; flex: 0 1 auto; min-width: 0;
+  /* Nine sections do not fit a narrow laptop, and dropping the search box
+   * onto a second row looks broken. Let the row scroll instead. */
+  overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
 .tab {
   appearance: none; border: 0; background: none; cursor: pointer;
-  padding: 7px 13px; border-radius: 99px; font-size: .93rem; font-weight: 520;
+  padding: 7px 10px; border-radius: 99px; font-size: .89rem; font-weight: 520;
   color: var(--text-soft); transition: background .14s, color .14s;
+  white-space: nowrap; flex: none;
 }
 .tab:hover { background: var(--surface-2); color: var(--text); }
 .tab[aria-current="page"] { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
 
 .nav-spacer { flex: 1 1 auto; }
 
-.searchbox { position: relative; flex: 1 1 260px; min-width: 190px; max-width: 420px; }
+.searchbox { position: relative; flex: 1 1 200px; min-width: 150px; max-width: 360px; }
 .searchbox svg.mag {
   position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
   width: 16px; height: 16px; color: var(--text-faint); pointer-events: none;
@@ -949,6 +956,486 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
 .orb-panel-name { font-weight: 650; font-size: .92rem; }
 .orb-panel-count { font-size: .76rem; color: var(--text-faint); }
 .orb-panel-note { font-size: .8rem; color: var(--text-soft); line-height: 1.5; margin-top: 7px; text-align: left; }
+
+
+/* ---- 09-balancer.css ---- */
+/* ---------------------------------------------------------------- balancer */
+.bal-intro { max-width: 66ch; margin-bottom: 18px; }
+
+.bal-box { position: relative; margin-bottom: 12px; }
+.bal-input {
+  width: 100%; font-family: var(--font-mono); font-size: 1.22rem;
+  padding: 16px 18px; border-radius: var(--r-lg); resize: vertical;
+  border: 1.5px solid var(--border-strong); background: var(--surface);
+  color: var(--text); line-height: 1.5; box-shadow: var(--shadow-sm);
+}
+.bal-input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.bal-preview {
+  display: none; margin-top: 10px; padding: 12px 16px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r); min-height: 46px;
+}
+.bal-preview.show { display: block; }
+.bal-problem { display: flex; gap: 9px; align-items: flex-start; font-size: .9rem; color: var(--text); }
+.bal-x { color: var(--warn); font-size: 1.05rem; line-height: 1.2; }
+.bal-fixes { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; margin-top: 9px; }
+.bal-fixes code { font-family: var(--font-mono); }
+
+.bal-actions { display: flex; gap: 9px; align-items: center; margin-bottom: 8px; }
+.bal-spacer { flex: 1; }
+
+.bal-examples { display: none; margin: 8px 0 18px; }
+.bal-examples.open { display: block; }
+.bal-ex-group {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .07em;
+  font-weight: 700; color: var(--text-faint); margin: 14px 0 7px;
+}
+.bal-ex-list { display: grid; gap: 7px; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+.bal-ex {
+  text-align: left; cursor: pointer; font: inherit; color: inherit;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 4px;
+  transition: border-color .12s, background .12s;
+}
+.bal-ex:hover { border-color: var(--accent); background: var(--accent-soft); }
+.bal-ex code { font-family: var(--font-mono); font-size: .95rem; }
+
+/* the equation itself */
+.bal-eq {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px;
+  font-family: var(--font-mono); font-size: 1.05rem; line-height: 1.7;
+}
+.bal-eq.big { font-size: 1.6rem; margin: 6px 0 16px; }
+.bal-sp { display: inline-flex; align-items: baseline; }
+.bal-coef { color: var(--accent); font-weight: 800; margin-right: 1px; }
+.bal-eq.big .bal-coef { font-size: 1.12em; }
+.bal-state { color: var(--text-faint); font-size: .74em; margin-left: 2px; }
+.bal-plus { color: var(--text-faint); padding: 0 2px; }
+.bal-arrow { color: var(--text-soft); padding: 0 6px; font-weight: 700; }
+
+.bal-answer { margin-bottom: 14px; }
+.bal-label {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+  font-weight: 700; color: var(--ok);
+}
+.bal-label.warn { color: var(--warn); }
+.bal-type { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 14px; }
+.chip-type { background: var(--accent-soft); color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.bal-type .note { flex: 1; min-width: 240px; }
+.bal-answer-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.bal-fail .bal-fail-why { font-size: .98rem; line-height: 1.6; margin: 6px 0 14px; max-width: 70ch; }
+
+.bal-panels { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; margin-bottom: 14px; }
+@media (max-width: 780px) { .bal-panels { grid-template-columns: 1fr; } }
+
+.bal-table { width: 100%; border-collapse: collapse; font-size: .9rem; margin-top: 4px; }
+.bal-table th {
+  text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-faint); font-weight: 700; padding: 0 8px 6px; border-bottom: 1px solid var(--border);
+}
+.bal-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.bal-table tr:last-child td { border-bottom: 0; }
+.bal-table td.num { font-family: var(--font-mono); text-align: center; width: 58px; font-weight: 600; }
+.bal-table td.mark { width: 30px; text-align: right; font-weight: 700; }
+.bal-table tr.ok td.mark { color: var(--ok); }
+.bal-table tr.bad td.mark { color: var(--danger); }
+.bal-table tr.bad td.num { color: var(--danger); }
+.bal-table tr.ok td.num { color: var(--ok); }
+
+.bal-mass-grid {
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+  margin: 14px 0 10px; flex-wrap: wrap;
+}
+.bal-mass-grid .lbl {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-faint); font-weight: 700; text-align: center;
+}
+.bal-mass-grid .val {
+  font-family: var(--font-mono); font-size: 1.15rem; font-weight: 700; text-align: center;
+}
+.bal-mass-grid .eqsign { font-size: 1.5rem; color: var(--text-faint); font-weight: 700; }
+.bal-mass.ok .bal-mass-grid .val { color: var(--ok); }
+.bal-mass.ok .bal-mass-grid .eqsign { color: var(--ok); }
+
+.bal-ratios { margin-bottom: 14px; }
+.bal-ratio-line {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 12px 0; font-family: var(--font-mono);
+}
+.bal-ratio { display: inline-flex; align-items: baseline; gap: 3px; }
+.bal-ratio .n { color: var(--accent); font-weight: 800; font-size: 1.15rem; }
+.bal-ratio-line .sep { color: var(--text-faint); font-weight: 700; }
+.bal-ratio-read { max-width: 70ch; }
+.bal-ratio-read code { font-family: var(--font-mono); }
+
+.bal-swaps { margin-bottom: 14px; }
+.bal-swaps code { font-family: var(--font-mono); font-weight: 600; }
+
+/* the walkthrough */
+.bal-how { margin-top: 4px; }
+.bal-steps { margin: 14px 0 0; padding-left: 22px; display: grid; gap: 16px; }
+.bal-steps li::marker { color: var(--accent); font-weight: 700; }
+.bal-step-head { font-weight: 650; margin-bottom: 4px; }
+.bal-step-body { font-size: .93rem; line-height: 1.62; color: var(--text); max-width: 72ch; }
+.bal-step-detail { margin-top: 5px; }
+.bal-step-detail code { font-family: var(--font-mono); }
+.bal-step-result {
+  margin-top: 8px; padding: 9px 12px; background: var(--surface-2);
+  border-radius: var(--r-sm); font-family: var(--font-mono); font-size: 1.02rem;
+  display: inline-block;
+}
+
+/* try-it mode */
+.bal-steppers {
+  display: flex; align-items: flex-end; gap: 6px 10px; flex-wrap: wrap;
+  margin: 16px 0; font-family: var(--font-mono);
+}
+.bal-stepwrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bal-stepper {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 99px; padding: 2px;
+}
+.bal-stepper .btn { border: 0; background: transparent; padding: 2px 8px; font-size: 1rem; font-weight: 700; }
+.bal-stepper .btn:hover { background: var(--surface); }
+.bal-stepval {
+  min-width: 26px; text-align: center; font-weight: 800;
+  color: var(--accent); font-size: 1.05rem;
+}
+.bal-stepf { font-size: .95rem; }
+.bal-try-feedback { margin: 12px 0; }
+.bal-try-table .bal-atoms { box-shadow: none; }
+.bal-try-acts { display: flex; gap: 8px; margin-top: 12px; }
+.bal-try.solved { border-color: var(--ok); }
+
+.bal-history { margin-top: 30px; }
+.bal-hist-list { display: grid; gap: 6px; margin-top: 8px; }
+.bal-hist {
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  font: inherit; color: inherit; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 8px 11px;
+}
+.bal-hist:hover { border-color: var(--accent); }
+.bal-hist code { font-family: var(--font-mono); font-size: .93rem; flex: 1; }
+
+
+/* ---- 10-gassim.css ---- */
+/* ------------------------------------------------------------ gas simulator */
+.gs-intro { max-width: 68ch; margin-bottom: 18px; }
+
+.gs-layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); }
+@media (max-width: 960px) { .gs-layout { grid-template-columns: 1fr; } }
+
+.gs-canvas-wrap {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-sm);
+}
+.gs-canvas { display: block; width: 100%; height: auto; }
+
+.gs-readout { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.gs-ro {
+  flex: 1; min-width: 130px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 9px 12px;
+}
+.gs-ro .k {
+  display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-faint); font-weight: 700;
+}
+.gs-ro .v { display: block; font-family: var(--font-mono); font-size: .98rem; font-weight: 600; margin-top: 2px; }
+
+.gs-right { display: grid; gap: 12px; align-content: start; }
+
+/* one variable */
+.gs-ctrl { padding: 13px 15px; }
+.gs-ctrl.held { border-color: var(--accent); background: var(--accent-soft); }
+.gs-ctrl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.gs-sym {
+  font-family: var(--font-mono); font-size: 1.15rem; font-weight: 800;
+  color: var(--accent); width: 18px;
+}
+.gs-name { flex: 1; font-weight: 600; font-size: .92rem; }
+.gs-lock {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  font: inherit; font-size: .74rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text-faint);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 99px; padding: 3px 9px;
+}
+.gs-lock-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border-strong); transition: background .12s;
+}
+.gs-lock.on { color: var(--accent-text); border-color: var(--accent); background: var(--surface); }
+.gs-lock.on .gs-lock-dot { background: var(--accent); }
+
+.gs-ctrl-row { display: flex; gap: 7px; margin-bottom: 9px; }
+.gs-num {
+  flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 1rem; font-weight: 600;
+  padding: 6px 10px; border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+}
+.gs-num:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.gs-unit {
+  font: inherit; font-size: .85rem; padding: 6px 6px; border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+  max-width: 96px;
+}
+.gs-slider { width: 100%; accent-color: var(--accent); }
+
+.gs-gas-grid { display: grid; gap: 4px; grid-template-columns: 1fr 1fr; margin-top: 6px; }
+.gs-gas-btn {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; text-align: left;
+  font: inherit; font-size: .81rem; color: inherit;
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-sm);
+  padding: 4px 6px;
+}
+.gs-gas-btn:hover { background: var(--surface-2); }
+.gs-gas-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); font-weight: 650; }
+.gs-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.gs-gas-btn span:nth-child(2) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-mm { font-family: var(--font-mono); font-size: .72rem; color: var(--text-faint); }
+.gs-gas-note { margin-top: 9px; }
+
+.gs-law-list { display: grid; gap: 5px; margin: 8px 0; }
+.gs-law {
+  display: flex; align-items: baseline; gap: 8px; cursor: pointer; text-align: left;
+  font: inherit; color: inherit; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 10px;
+}
+.gs-law:hover { border-color: var(--accent); }
+.gs-law.on { background: var(--accent-soft); border-color: var(--accent); }
+.gs-law-name { flex: 1; font-weight: 600; font-size: .86rem; }
+.gs-law-rel { font-family: var(--font-mono); font-size: .78rem; color: var(--text-soft); }
+.gs-law-note { margin-top: 8px; }
+.gs-law-why { margin-top: 6px; font-size: .9rem; line-height: 1.58; }
+
+.gs-extras .switch { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: .9rem; }
+
+/* the equation panel */
+.gs-eq { margin-top: 18px; }
+.gs-eq-line {
+  display: flex; gap: 3px; align-items: baseline; justify-content: center;
+  font-family: var(--font-mono); font-size: 1.9rem; font-weight: 700; margin: 10px 0 4px;
+}
+.gs-eq-line .sym { color: var(--accent); }
+.gs-eq-line .op { color: var(--text-faint); padding: 0 8px; }
+.gs-eq-nums {
+  display: flex; gap: 8px; align-items: flex-end; justify-content: center;
+  flex-wrap: wrap; margin-bottom: 12px;
+}
+.gs-eq-cell { text-align: center; min-width: 74px; }
+.gs-eq-cell .k {
+  font-family: var(--font-mono); font-size: .76rem; font-weight: 700; color: var(--accent);
+}
+.gs-eq-cell .v { font-family: var(--font-mono); font-size: 1.02rem; font-weight: 700; }
+.gs-eq-cell .u { font-size: .72rem; color: var(--text-faint); }
+.gs-eq-op { font-size: 1.3rem; color: var(--text-faint); padding: 0 6px 12px; font-weight: 700; }
+.gs-eq-check {
+  display: flex; gap: 10px; justify-content: center; align-items: baseline;
+  font-family: var(--font-mono); font-size: .96rem; margin-bottom: 12px;
+  color: var(--ok); font-weight: 600;
+}
+.gs-eq-check .op { color: var(--text-faint); }
+.gs-runit { font-family: var(--font-mono); }
+.gs-eq .note { max-width: 74ch; }
+
+.gs-conv { display: grid; gap: 10px; margin-top: 6px; }
+.gs-conv-row {
+  background: var(--surface-2); border-radius: var(--r-sm); padding: 10px 13px;
+  display: grid; gap: 5px;
+}
+.gs-conv-row code { font-family: var(--font-mono); font-size: .95rem; font-weight: 600; }
+
+.gs-real { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.gs-real-grid { display: flex; gap: 20px; flex-wrap: wrap; margin: 10px 0; }
+.gs-real-grid .k {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-faint); font-weight: 700;
+}
+.gs-real-grid .v { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700; }
+.gs-real-grid .v.warn { color: var(--warn); }
+.gs-src { font-size: .78rem; color: var(--text-faint); margin-top: 8px; }
+
+/* graphs */
+.gs-graphs { margin-top: 16px; }
+.gs-graph-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-top: 12px; }
+.gs-graph { background: var(--surface-2); border-radius: var(--r); padding: 10px; }
+.gs-graph canvas { display: block; width: 100%; height: auto; }
+.gs-graph-title { font-size: .82rem; font-weight: 650; margin-bottom: 4px; }
+.gs-graph-axes { font-size: .7rem; color: var(--text-faint); font-family: var(--font-mono); margin-top: 2px; }
+
+.gs-presets { margin-top: 16px; }
+.gs-preset-list { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); margin-top: 10px; }
+.gs-preset {
+  text-align: left; cursor: pointer; font: inherit; color: inherit;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 11px 13px; display: grid; gap: 4px;
+}
+.gs-preset:hover { border-color: var(--accent); background: var(--accent-soft); }
+.gs-preset-name { font-weight: 650; font-size: .93rem; }
+
+
+/* ---- 11-tools.css ---- */
+/* --------------------------------------------------------- tools & reference */
+.tl-intro, .rf-intro { max-width: 70ch; margin-bottom: 18px; }
+
+.tl-layout, .rf-layout { display: grid; gap: 18px; grid-template-columns: minmax(200px, 250px) minmax(0, 1fr); }
+@media (max-width: 860px) { .tl-layout, .rf-layout { grid-template-columns: 1fr; } }
+
+.tl-nav { display: grid; gap: 3px; align-content: start; }
+.tl-navbtn {
+  text-align: left; cursor: pointer; font: inherit; color: inherit;
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-sm);
+  padding: 8px 11px; display: grid; gap: 2px;
+}
+.tl-navbtn:hover { background: var(--surface-2); }
+.tl-navbtn.on { background: var(--accent-soft); border-color: var(--accent); }
+.tl-navname { font-weight: 600; font-size: .9rem; }
+.tl-navbtn .note { font-size: .78rem; line-height: 1.4; }
+.tl-navbtn.on .note { color: var(--accent-text); opacity: .85; }
+
+.tl-form {
+  display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin: 16px 0;
+}
+.tl-field { display: grid; gap: 4px; }
+.tl-field.wide { grid-column: 1 / -1; }
+.tl-field label {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-faint); font-weight: 700;
+}
+.tl-inline { display: flex; gap: 5px; }
+.tl-input, .tl-select, .tl-area {
+  font: inherit; font-size: .95rem; padding: 7px 10px; border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+  width: 100%; min-width: 0;
+}
+.tl-input { font-family: var(--font-mono); }
+.tl-area { font-family: var(--font-mono); resize: vertical; }
+.tl-input:focus, .tl-select:focus, .tl-area:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.tl-unit { max-width: 92px; flex: none; }
+
+.tl-out { margin-top: 18px; }
+.tl-headline {
+  font-size: 1.7rem; font-weight: 700; font-family: var(--font-mono);
+  color: var(--accent-text); line-height: 1.25; margin-bottom: 4px;
+}
+.tl-sub { font-size: .92rem; color: var(--text-soft); font-family: var(--font-mono); margin-bottom: 14px; }
+.tl-fixes { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+
+.tl-table { width: 100%; border-collapse: collapse; font-size: .89rem; margin: 14px 0; }
+.tl-table th {
+  text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-faint); font-weight: 700; padding: 0 9px 6px; border-bottom: 1px solid var(--border);
+}
+.tl-table td { padding: 7px 9px; border-bottom: 1px solid var(--border); }
+.tl-table tr:last-child td { border-bottom: 0; }
+.tl-table td:not(:first-child) { font-family: var(--font-mono); }
+
+.tl-steps { margin-top: 18px; }
+.tl-steps ol { margin: 8px 0 0; padding-left: 22px; display: grid; gap: 11px; }
+.tl-steps li { font-size: .93rem; line-height: 1.62; max-width: 74ch; }
+.tl-steps li::marker { color: var(--accent); font-weight: 700; }
+.tl-maths {
+  margin-top: 5px; font-family: var(--font-mono); font-size: .88rem;
+  background: var(--surface-2); padding: 7px 10px; border-radius: var(--r-sm);
+  display: inline-block;
+}
+.tl-src { margin-top: 12px; font-size: .78rem; color: var(--text-faint); }
+
+/* the grams -> moles -> moles -> grams picture */
+.tl-roadmap {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  margin: 16px 0; padding: 14px; background: var(--surface-2); border-radius: var(--r);
+}
+.tl-rm-step { text-align: center; padding: 6px 12px; background: var(--surface); border-radius: var(--r-sm); border: 1px solid var(--border); }
+.tl-rm-step .v { font-family: var(--font-mono); font-weight: 700; font-size: 1rem; }
+.tl-rm-step .k { font-size: .74rem; color: var(--text-faint); font-family: var(--font-mono); }
+.tl-rm-arrow { color: var(--accent); font-weight: 700; font-size: 1.1rem; }
+
+/* ---------------------------------------------------------------- reference */
+.rf-nav { display: grid; gap: 3px; align-content: start; }
+.rf-navbtn {
+  text-align: left; cursor: pointer; font: inherit; font-size: .9rem; font-weight: 550;
+  color: inherit; background: transparent; border: 1px solid transparent;
+  border-radius: var(--r-sm); padding: 8px 11px;
+}
+.rf-navbtn:hover { background: var(--surface-2); }
+.rf-navbtn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); font-weight: 650; }
+
+.rf-prov {
+  font-size: .8rem; color: var(--text-faint); border-left: 2px solid var(--border);
+  padding-left: 10px; margin: 4px 0 16px; line-height: 1.5; max-width: 76ch;
+}
+.rf-table { width: 100%; border-collapse: collapse; font-size: .88rem; margin: 10px 0 20px; }
+.rf-table th {
+  text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-faint); font-weight: 700; padding: 0 9px 6px; border-bottom: 1px solid var(--border);
+}
+.rf-table td { padding: 7px 9px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.rf-table td.mono { font-family: var(--font-mono); white-space: nowrap; }
+.rf-table .note { font-size: .85rem; }
+
+.rf-charge-grid { display: grid; gap: 3px; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); margin-top: 10px; }
+.rf-charge {
+  cursor: pointer; font: inherit; color: inherit; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 2px;
+  display: grid; gap: 1px; text-align: center;
+}
+.rf-charge:hover { border-color: var(--accent); }
+.rf-charge .sym { font-weight: 700; font-size: .88rem; }
+.rf-charge .q { font-family: var(--font-mono); font-size: .74rem; font-weight: 700; }
+.rf-charge.pos .q { color: var(--danger); }
+.rf-charge.neg .q { color: var(--accent-text); }
+.rf-charge.varies .q, .rf-charge.none .q { color: var(--text-faint); font-size: .66rem; }
+
+.rf-rule { border-left: 3px solid var(--ok); background: var(--ok-soft); padding: 11px 14px; border-radius: 0 var(--r-sm) var(--r-sm) 0; margin-bottom: 10px; }
+.rf-rule.no { border-left-color: var(--warn); background: var(--warn-soft); }
+.rf-rule-head { font-weight: 600; margin-bottom: 4px; font-size: .95rem; }
+.rf-exc { margin-top: 6px; font-size: .85rem; }
+.rf-exc .mono { font-family: var(--font-mono); }
+
+.rf-activity { display: grid; gap: 2px; margin-top: 10px; }
+.rf-act {
+  display: flex; align-items: center; gap: 10px; text-align: left; cursor: pointer;
+  font: inherit; color: inherit; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 10px;
+}
+.rf-act:hover { border-color: var(--accent); }
+.rf-act .rank { font-family: var(--font-mono); font-size: .72rem; color: var(--text-faint); width: 20px; }
+.rf-act .sym { font-weight: 700; width: 28px; }
+.rf-act .nm { font-size: .88rem; color: var(--text-soft); }
+.rf-act.hydrogen { background: var(--accent-soft); border-color: var(--accent); cursor: default; }
+.rf-act-divider {
+  font-size: .78rem; color: var(--text-faint); font-style: italic;
+  padding: 5px 10px; border-top: 1px dashed var(--border-strong);
+  border-bottom: 1px dashed var(--border-strong); margin: 3px 0;
+}
+
+.rf-two { display: grid; gap: 20px; grid-template-columns: 1fr 1fr; margin-top: 14px; }
+@media (max-width: 700px) { .rf-two { grid-template-columns: 1fr; } }
+.rf-acidlist { display: grid; gap: 5px; margin: 8px 0 10px; }
+.rf-acid { display: flex; gap: 9px; align-items: baseline; flex-wrap: wrap; font-size: .9rem; }
+.rf-acid .mono { font-family: var(--font-mono); font-weight: 700; min-width: 62px; }
+.rf-acid .note { flex: 1 1 100%; font-size: .8rem; }
+
+.rf-search {
+  width: 100%; max-width: 340px; font: inherit; padding: 8px 12px;
+  border-radius: var(--r-sm); border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text); margin-bottom: 16px;
+}
+.rf-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.rf-gloss { display: grid; gap: 12px; }
+.rf-gloss-item dt { font-weight: 650; font-size: .95rem; margin-bottom: 2px; }
+.rf-gloss-item dd { margin: 0; font-size: .9rem; color: var(--text-soft); line-height: 1.6; max-width: 76ch; }
 
 </style>
 </head>
@@ -3368,6 +3855,652 @@ window.ME = window.ME || {};
   function gcd(a, b) { while (b) { const t = a % b; a = b; b = t; } return a || 1; }
 
   ME.naming = { nameOf, formulaOf, splitIonic, isMetalSym, isVariableMetal, ROMAN, PREFIX };
+})();
+
+
+/* ================= 17-calc-stoich.js ================= */
+/* The mole, and stoichiometry.
+ *
+ * The whole subject rests on one idea: you cannot count atoms, but you can
+ * weigh them, and a mole is the bridge. Everything here is that bridge in one
+ * direction or another, and every calculation records its steps, because in
+ * stoichiometry the steps *are* the lesson - the answer on its own teaches
+ * nothing.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+  const NA = () => ME.fmt.CONST.NA;
+
+  /* ------------------------------------------------- grams, moles, particles */
+  function gramsToMoles(grams, formula) {
+    const m = ME.formula.parse(formula);
+    if (!m.ok) return m;
+    const moles = grams / m.mass;
+    return {
+      ok: true, moles: moles, molarMass: m.mass, formula: m,
+      steps: [
+        { text: 'First, how much does one mole of ' + m.display + ' weigh? Add up its atoms: ' +
+            ME.fmt.fmt(m.mass, 6) + ' g/mol.' },
+        { text: 'A mole of it weighs ' + ME.fmt.fmt(m.mass, 5) + ' g, and you have ' + ME.fmt.fmt(grams, 4) +
+            ' g. Divide: ' + ME.fmt.fmt(grams, 4) + ' g ÷ ' + ME.fmt.fmt(m.mass, 5) + ' g/mol = ' +
+            ME.fmt.fmt(moles, 4) + ' mol.',
+          maths: ME.fmt.fmt(grams, 4) + ' g × (1 mol / ' + ME.fmt.fmt(m.mass, 5) + ' g) = ' + ME.fmt.fmt(moles, 4) + ' mol' },
+        { text: 'Notice how the grams cancel and moles are left. That is dimensional analysis doing the thinking for you — if you set the fraction up the other way, you would get g²/mol, which is not a thing, and that is how you know you had it upside down.' },
+      ],
+    };
+  }
+
+  function molesToGrams(moles, formula) {
+    const m = ME.formula.parse(formula);
+    if (!m.ok) return m;
+    const grams = moles * m.mass;
+    return {
+      ok: true, grams: grams, molarMass: m.mass, formula: m,
+      steps: [
+        { text: 'One mole of ' + m.display + ' weighs ' + ME.fmt.fmt(m.mass, 6) + ' g.' },
+        { text: 'So ' + ME.fmt.fmt(moles, 4) + ' mol weighs ' + ME.fmt.fmt(moles, 4) + ' × ' +
+            ME.fmt.fmt(m.mass, 5) + ' = ' + ME.fmt.fmt(grams, 4) + ' g.',
+          maths: ME.fmt.fmt(moles, 4) + ' mol × (' + ME.fmt.fmt(m.mass, 5) + ' g / 1 mol) = ' + ME.fmt.fmt(grams, 4) + ' g' },
+      ],
+    };
+  }
+
+  function molesToParticles(moles) {
+    return {
+      ok: true, particles: moles * NA(),
+      steps: [
+        { text: 'A mole is a count, like a dozen — just a much bigger one. One mole is ' +
+            ME.fmt.sciText(NA(), 6) + ' of whatever you are counting.' },
+        { text: ME.fmt.fmt(moles, 4) + ' mol × ' + ME.fmt.sciText(NA(), 4) + ' /mol = ' +
+            ME.fmt.sciText(moles * NA(), 4) + ' particles.' },
+      ],
+    };
+  }
+
+  /* --------------------------------------------------- empirical formulas */
+  /* From percent composition or masses, to the simplest whole-number ratio.
+   * The trick everybody is taught - divide by the smallest - is really just
+   * finding the ratio, so the steps say that. */
+  function empiricalFormula(entries) {
+    /* entries: [{ sym, value }] where value is a mass or a percentage */
+    const steps = [];
+    const rows = entries.map((e) => {
+      const el = ME.chem.element(e.sym);
+      if (!el || !el.mass) return null;
+      return { sym: e.sym, value: e.value, mass: el.mass, moles: e.value / el.mass };
+    });
+    if (rows.some((r) => !r)) return { ok: false, error: 'One of those is not an element.' };
+    if (rows.some((r) => !(r.moles > 0))) return { ok: false, error: 'Every amount has to be greater than zero.' };
+
+    steps.push({ text: 'Percentages and grams are both masses, and masses cannot be compared directly — a gram of hydrogen is far more atoms than a gram of carbon. So turn each one into moles first, by dividing by its molar mass.' });
+    rows.forEach((r) => {
+      steps.push({ text: r.sym + ': ' + ME.fmt.fmt(r.value, 4) + ' ÷ ' + ME.fmt.fmt(r.mass, 5) +
+        ' = ' + ME.fmt.fmt(r.moles, 4) + ' mol' });
+    });
+
+    const smallest = Math.min.apply(null, rows.map((r) => r.moles));
+    rows.forEach((r) => { r.ratio = r.moles / smallest; });
+    steps.push({ text: 'Now divide every one by the smallest. That does not change the ratio, it just makes the smallest number 1, which makes the rest easy to read.' });
+    rows.forEach((r) => {
+      steps.push({ text: r.sym + ': ' + ME.fmt.fmt(r.moles, 4) + ' ÷ ' + ME.fmt.fmt(smallest, 4) +
+        ' = ' + ME.fmt.fmt(r.ratio, 4) });
+    });
+
+    /* Find the multiplier that makes all the ratios whole. */
+    let best = 1, bestErr = Infinity;
+    for (let k = 1; k <= 8; k++) {
+      const err = rows.reduce((m, r) => Math.max(m, Math.abs(r.ratio * k - Math.round(r.ratio * k))), 0);
+      if (err < bestErr - 1e-9) { bestErr = err; best = k; }
+      if (err < 0.06) break;
+    }
+    if (best > 1) {
+      steps.push({ text: 'Those are not whole numbers yet. Multiply them all by ' + best +
+        ' and they become whole — a ratio of 1 to 1.5 is the same as 2 to 3, and formulas are written in whole atoms.' });
+    }
+    const counts = {};
+    rows.forEach((r) => { counts[r.sym] = Math.round(r.ratio * best); });
+    const text = ME.formula.formulaText(counts);
+    if (bestErr > 0.12) {
+      return { ok: false, error: 'Those numbers do not settle on a whole-number ratio. Check the values — percentages should add to about 100.', steps: steps };
+    }
+    steps.push({ text: 'So the empirical formula is ' + text + '.' });
+    return { ok: true, formula: text, counts: counts, rows: rows, multiplier: best, steps: steps };
+  }
+
+  function molecularFormula(empirical, molarMass) {
+    const e = ME.formula.parse(empirical);
+    if (!e.ok) return e;
+    const n = molarMass / e.mass;
+    const rounded = Math.round(n);
+    const counts = {};
+    Object.keys(e.counts).forEach((k) => { counts[k] = e.counts[k] * rounded; });
+    return {
+      ok: true, n: rounded, formula: ME.formula.formulaText(counts), counts: counts,
+      steps: [
+        { text: 'The empirical formula gives the ratio, not the size. ' + e.display + ' weighs ' +
+            ME.fmt.fmt(e.mass, 5) + ' g/mol.' },
+        { text: 'The real molecule weighs ' + ME.fmt.fmt(molarMass, 5) + ' g/mol, which is ' +
+            ME.fmt.fmt(molarMass, 5) + ' ÷ ' + ME.fmt.fmt(e.mass, 5) + ' = ' + ME.fmt.fmt(n, 4) +
+            ' times as heavy — so about ' + rounded + '.' },
+        { text: 'Multiply every subscript by ' + rounded + ': the molecular formula is ' +
+            ME.formula.formulaText(counts) + '.' },
+      ],
+    };
+  }
+
+  /* -------------------------------------------------------- stoichiometry */
+  /* Mass of one substance to mass of another, through the balanced equation.
+   * Four steps, always the same four, which is why the road map picture is
+   * worth drawing: grams -> moles -> moles -> grams. */
+  function massToMass(equationText, fromName, fromGrams, toName) {
+    const bal = ME.balance.balance(equationText);
+    if (!bal.ok) return { ok: false, error: bal.error };
+    const all = bal.left.concat(bal.right);
+    const find = (name) => {
+      const want = ME.formula.parse(name);
+      if (!want.ok) return null;
+      return all.filter((x) => x.species.formula.text === want.text)[0] || null;
+    };
+    const from = find(fromName), to = find(toName);
+    if (!from) return { ok: false, error: 'I cannot find ' + fromName + ' in that equation.' };
+    if (!to) return { ok: false, error: 'I cannot find ' + toName + ' in that equation.' };
+
+    const Mfrom = from.species.formula.mass, Mto = to.species.formula.mass;
+    const molesFrom = fromGrams / Mfrom;
+    const molesTo = molesFrom * (to.coefficient / from.coefficient);
+    const gramsTo = molesTo * Mto;
+
+    return {
+      ok: true, equation: bal, from: from, to: to,
+      molesFrom: molesFrom, molesTo: molesTo, grams: gramsTo,
+      roadmap: [
+        { label: ME.fmt.fmt(fromGrams, 4) + ' g', sub: from.species.formula.display },
+        { label: ME.fmt.fmt(molesFrom, 4) + ' mol', sub: from.species.formula.display },
+        { label: ME.fmt.fmt(molesTo, 4) + ' mol', sub: to.species.formula.display },
+        { label: ME.fmt.fmt(gramsTo, 4) + ' g', sub: to.species.formula.display },
+      ],
+      steps: [
+        { text: 'Balance it first, always. ' + bal.text + ' — without this the ratio in step three is a guess.' },
+        { text: 'Grams cannot talk to grams. The equation counts molecules, not mass, so the first job is to turn the mass you have into a number of moles: ' +
+            ME.fmt.fmt(fromGrams, 4) + ' g ÷ ' + ME.fmt.fmt(Mfrom, 5) + ' g/mol = ' + ME.fmt.fmt(molesFrom, 4) + ' mol.' },
+        { text: 'Now use the equation. It says ' + from.coefficient + ' ' + from.species.formula.display +
+            ' gives ' + to.coefficient + ' ' + to.species.formula.display + ', so multiply by ' +
+            to.coefficient + '/' + from.coefficient + ': ' + ME.fmt.fmt(molesFrom, 4) + ' × ' +
+            to.coefficient + '/' + from.coefficient + ' = ' + ME.fmt.fmt(molesTo, 4) + ' mol.',
+          maths: ME.fmt.fmt(molesFrom, 4) + ' mol ' + from.species.formula.display + ' × (' +
+            to.coefficient + ' mol ' + to.species.formula.display + ' / ' + from.coefficient + ' mol ' +
+            from.species.formula.display + ') = ' + ME.fmt.fmt(molesTo, 4) + ' mol' },
+        { text: 'And back to something you can weigh: ' + ME.fmt.fmt(molesTo, 4) + ' mol × ' +
+            ME.fmt.fmt(Mto, 5) + ' g/mol = ' + ME.fmt.fmt(gramsTo, 4) + ' g of ' + to.species.formula.display + '.' },
+        { text: 'It is the same four steps every single time — grams, moles, moles, grams — and only the middle step needs the equation. Learn the shape and you have learned all of stoichiometry.' },
+      ],
+    };
+  }
+
+  /* Which reactant runs out first, and what that means for the yield. */
+  function limiting(equationText, given) {
+    /* given: [{ name, grams }] */
+    const bal = ME.balance.balance(equationText);
+    if (!bal.ok) return { ok: false, error: bal.error };
+    const rows = [];
+    for (const g of given) {
+      const want = ME.formula.parse(g.name);
+      if (!want.ok) return { ok: false, error: 'Cannot read ' + g.name };
+      const sp = bal.left.filter((x) => x.species.formula.text === want.text)[0];
+      if (!sp) return { ok: false, error: g.name + ' is not one of the reactants.' };
+      const moles = g.grams / sp.species.formula.mass;
+      rows.push({ name: sp.species.formula.display, grams: g.grams, moles: moles,
+        coefficient: sp.coefficient, batches: moles / sp.coefficient, sp: sp });
+    }
+    rows.sort((a, b) => a.batches - b.batches);
+    const lim = rows[0];
+
+    const steps = [
+      { text: 'A balanced equation is a recipe, and a recipe has a limit. Two eggs and a whole bag of flour still only makes one batch of pancakes — the eggs decide. The reactant that runs out first is called the limiting reactant, and it sets everything that follows.' },
+      { text: 'Comparing masses directly will mislead you, because the substances have different molar masses and the equation wants different numbers of each. Turn each into moles, then divide by its coefficient — that gives how many "batches" of the reaction each one could support.' },
+    ];
+    rows.forEach((r) => {
+      steps.push({ text: r.name + ': ' + ME.fmt.fmt(r.grams, 4) + ' g ÷ ' +
+        ME.fmt.fmt(r.sp.species.formula.mass, 5) + ' = ' + ME.fmt.fmt(r.moles, 4) + ' mol, and ÷ ' +
+        r.coefficient + ' = ' + ME.fmt.fmt(r.batches, 4) + ' batches.' });
+    });
+    steps.push({ text: lim.name + ' gives the smallest number, ' + ME.fmt.fmt(lim.batches, 4) +
+      ', so it runs out first. It is the limiting reactant, and every product amount is worked out from it. Everything else is in excess — there will be some left over when the reaction stops.' });
+
+    const products = bal.right.map((p) => {
+      const moles = lim.batches * p.coefficient;
+      return { name: p.species.formula.display, moles: moles, grams: moles * p.species.formula.mass };
+    });
+    const leftovers = rows.slice(1).map((r) => {
+      const used = lim.batches * r.coefficient;
+      return { name: r.name, moles: r.moles - used, grams: (r.moles - used) * r.sp.species.formula.mass };
+    });
+    return { ok: true, equation: bal, rows: rows, limiting: lim, products: products, leftovers: leftovers, steps: steps };
+  }
+
+  function percentYield(actual, theoretical) {
+    const pct = (actual / theoretical) * 100;
+    return {
+      ok: true, percent: pct,
+      steps: [
+        { text: 'The theoretical yield is what the equation promises if nothing goes wrong: ' +
+            ME.fmt.fmt(theoretical, 4) + ' g.' },
+        { text: 'You actually got ' + ME.fmt.fmt(actual, 4) + ' g. As a percentage: ' +
+            ME.fmt.fmt(actual, 4) + ' ÷ ' + ME.fmt.fmt(theoretical, 4) + ' × 100 = ' +
+            ME.fmt.fmt(pct, 3) + '%.' },
+        { text: pct > 100
+            ? 'Over 100%, which cannot really happen — the product is almost certainly still wet, or has something else mixed in with it.'
+            : 'Real reactions lose some. Product sticks to the glass, some of it goes off down a side reaction, some never reacts at all. A yield of 70–90% is a good day.' },
+      ],
+    };
+  }
+
+  ME.stoich = {
+    gramsToMoles, molesToGrams, molesToParticles,
+    empiricalFormula, molecularFormula, massToMass, limiting, percentYield,
+  };
+})();
+
+
+/* ================= 18-calc-gas.js ================= */
+/* The gas laws.
+ *
+ * All of them are one equation, PV = nRT, looked at with different things held
+ * still. That is worth saying out loud, because a first course usually
+ * presents Boyle, Charles, Gay-Lussac and Avogadro as four separate laws to
+ * memorise, and they are not four laws. They are one law, four times.
+ *
+ * Everything here works in SI internally (pascals, cubic metres, moles,
+ * kelvin) and converts at the edges, so no formula in this file has to know
+ * which units the reader picked.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+  const F = () => ME.fmt;
+
+  /* ------------------------------------------------------------- the gases */
+  /* Molar masses come from the verified element table via the formula parser,
+   * so none of them is typed here. Air is the exception and is marked as
+   * what it is: an average over a mixture, not a molecule. */
+  const GASES = [
+    { key: 'He', name: 'Helium', formula: 'He', atoms: 1, colour: '#d8b34a' },
+    { key: 'Ne', name: 'Neon', formula: 'Ne', atoms: 1, colour: '#b46ad0' },
+    { key: 'Ar', name: 'Argon', formula: 'Ar', atoms: 1, colour: '#4fb3a8' },
+    { key: 'Kr', name: 'Krypton', formula: 'Kr', atoms: 1, colour: '#6f7ad6' },
+    { key: 'Xe', name: 'Xenon', formula: 'Xe', atoms: 1, colour: '#9a5fb8' },
+    { key: 'H2', name: 'Hydrogen', formula: 'H2', atoms: 2, colour: '#8d949f' },
+    { key: 'N2', name: 'Nitrogen', formula: 'N2', atoms: 2, colour: '#3b62d4' },
+    { key: 'O2', name: 'Oxygen', formula: 'O2', atoms: 2, colour: '#d6453c' },
+    { key: 'CO2', name: 'Carbon dioxide', formula: 'CO2', atoms: 3, colour: '#5a6470' },
+    { key: 'CH4', name: 'Methane', formula: 'CH4', atoms: 5, colour: '#43884f' },
+    { key: 'NH3', name: 'Ammonia', formula: 'NH3', atoms: 4, colour: '#4a8fd0' },
+    { key: 'SF6', name: 'Sulfur hexafluoride', formula: 'SF6', atoms: 7, colour: '#c8a02e' },
+    { key: 'air', name: 'Air', formula: null, mass: 28.96, atoms: 2, colour: '#7d8894',
+      note: 'Air is a mixture, not a molecule, so 28.96 g/mol is an average over roughly four fifths nitrogen and one fifth oxygen. The gas laws do not care — they never asked what the particles were.' },
+  ];
+
+  const BY_KEY = {};
+  GASES.forEach((g) => { BY_KEY[g.key] = g; });
+
+  function gas(key) { return BY_KEY[key] || BY_KEY.N2; }
+
+  /* Molar mass in g/mol, derived from the element table wherever possible. */
+  function molarMass(key) {
+    const g = gas(key);
+    if (g.mass) return g.mass;
+    const p = ME.formula.parse(g.formula);
+    return p.ok ? p.mass : null;
+  }
+
+  /* -------------------------- LITERATURE: van der Waals constants ---------
+   * These are measured, tabulated quantities with no free machine-readable
+   * source, so they sit here in one place, in the units they are published in
+   * (a in L² bar mol⁻², b in L mol⁻¹) and the app says they are
+   * tabulated values rather than implying they were checked against anything.
+   *
+   * `a` is how much the particles pull on each other, which lowers the
+   * pressure below ideal. `b` is how much room the particles themselves take
+   * up, which leaves less space than the container suggests. */
+  const VDW = {
+    source: 'Tabulated van der Waals constants, a in L² bar mol⁻² and b in L mol⁻¹.',
+    He: { a: 0.0346, b: 0.0238 }, Ne: { a: 0.208, b: 0.0167 },
+    Ar: { a: 1.355, b: 0.0320 }, Kr: { a: 2.325, b: 0.0396 },
+    Xe: { a: 4.192, b: 0.0516 }, H2: { a: 0.2453, b: 0.0265 },
+    N2: { a: 1.370, b: 0.0387 }, O2: { a: 1.382, b: 0.0319 },
+    CO2: { a: 3.658, b: 0.0429 }, CH4: { a: 2.303, b: 0.0431 },
+    NH3: { a: 4.225, b: 0.0371 }, SF6: { a: 7.857, b: 0.0879 },
+    air: { a: 1.368, b: 0.0367 },
+  };
+
+  /* ------------------------------------------------------- the ideal gas law */
+  /* Solve for whichever of the four is missing. Everything in SI. */
+  function solveSI(state, solveFor) {
+    const R = F().CONST.R;
+    const { P, V, n, T } = state;
+    switch (solveFor) {
+      case 'P': return (n * R * T) / V;
+      case 'V': return (n * R * T) / P;
+      case 'n': return (P * V) / (R * T);
+      case 'T': return (P * V) / (n * R);
+      default: return null;
+    }
+  }
+
+  /* The same thing in whatever units the reader is using, with the conversion
+   * steps recorded so the app can show its working. */
+  function solve(input, solveFor) {
+    const u = input.units;
+    const steps = [];
+    const si = {};
+
+    const put = (key, dim, unit) => {
+      if (input[key] === null || input[key] === undefined) return;
+      const v = F().convert(input[key], unit, dim === 'temperature' ? 'K' : baseOf(dim));
+      si[key] = v;
+      if (unit !== (dim === 'temperature' ? 'K' : baseOf(dim))) {
+        steps.push({
+          key: key, from: input[key], fromUnit: unit, to: v,
+          toUnit: dim === 'temperature' ? 'K' : baseOf(dim),
+          why: dim === 'temperature'
+            ? 'Temperature has to go in as kelvin. The gas laws are proportional to temperature, and a proportion only means anything if zero really is zero — at 0 °C the particles have plenty of energy left, so calling it zero would make the arithmetic nonsense. At 0 K they have none.'
+            : null,
+        });
+      }
+    };
+    put('P', 'pressure', u.P);
+    put('V', 'volume', u.V);
+    put('n', 'amount', u.n);
+    put('T', 'temperature', u.T);
+
+    const answerSI = solveSI(si, solveFor);
+    if (answerSI === null || !isFinite(answerSI)) return { ok: false, error: 'Those numbers do not give an answer.' };
+
+    const dim = { P: 'pressure', V: 'volume', n: 'amount', T: 'temperature' }[solveFor];
+    const outUnit = u[solveFor];
+    const answer = F().convert(answerSI, dim === 'temperature' ? 'K' : baseOf(dim), outUnit);
+    return {
+      ok: true, value: answer, unit: outUnit, si: answerSI, steps: steps,
+      R: F().gasConstant(u.P, u.V, u.n),
+      RUnit: F().unitLabel(u.P) + '·' + F().unitLabel(u.V) + ' / (' + F().unitLabel(u.n) + '·K)',
+    };
+  }
+
+  function baseOf(dim) {
+    return { pressure: 'Pa', volume: 'm3', amount: 'mol', temperature: 'K', mass: 'g' }[dim];
+  }
+
+  /* Grams to moles and back, which is a unit conversion that needs to know
+   * what the gas is. This is why "grams" cannot live in the plain unit table. */
+  function gramsToMoles(grams, gasKey) {
+    const M = molarMass(gasKey);
+    return M ? grams / M : null;
+  }
+  function molesToGrams(moles, gasKey) {
+    const M = molarMass(gasKey);
+    return M ? moles * M : null;
+  }
+
+  /* ----------------------------------------------------- the four "laws" */
+  /* Each one is PV = nRT with two things pinned. The point of listing them is
+   * to show that they are the same statement, not four things to learn. */
+  const LAWS = [
+    {
+      key: 'boyle', name: "Boyle's law", hold: ['T', 'n'], vary: ['P', 'V'],
+      relation: 'P₁V₁ = P₂V₂',
+      plain: 'Squeeze a fixed amount of gas at a fixed temperature and the pressure goes up in exact proportion as the volume goes down.',
+      why: 'The particles are unchanged and moving just as fast, but the box is smaller, so each one hits the wall more often. Halve the volume and every particle has half as far to travel between hits, so the hits come twice as often, so the pressure doubles.',
+    },
+    {
+      key: 'charles', name: "Charles's law", hold: ['P', 'n'], vary: ['V', 'T'],
+      relation: 'V₁ / T₁ = V₂ / T₂',
+      plain: 'Heat a gas at a fixed pressure and it expands in proportion to its temperature in kelvin.',
+      why: 'Hotter means faster, and faster particles hit harder and more often. If the pressure has to stay the same, the only way out is for the box to get bigger, so the hits spread over more wall. This is why a balloon shrinks in a freezer.',
+    },
+    {
+      key: 'gaylussac', name: "Gay-Lussac's law", hold: ['V', 'n'], vary: ['P', 'T'],
+      relation: 'P₁ / T₁ = P₂ / T₂',
+      plain: 'Heat a gas in a container that cannot change size and the pressure climbs in proportion to the temperature.',
+      why: 'Same reasoning as Charles, with the escape route blocked. The particles speed up and hit harder, and since the walls cannot move, all of that turns into pressure. It is why an aerosol can says do not incinerate.',
+    },
+    {
+      key: 'avogadro', name: "Avogadro's law", hold: ['P', 'T'], vary: ['V', 'n'],
+      relation: 'V₁ / n₁ = V₂ / n₂',
+      plain: 'At the same pressure and temperature, twice as much gas takes up twice the volume — whatever the gas is.',
+      why: 'The startling part is "whatever the gas is". A mole of hydrogen and a mole of sulfur hexafluoride, which is 70 times heavier, fill the same space. The heavy one moves slower, and that exactly cancels out its extra mass, so it lands on the wall with the same push.',
+    },
+  ];
+
+  /* Combined gas law: the same ratio before and after. */
+  function combined(before, after, solveFor) {
+    /* P1V1/(n1T1) = P2V2/(n2T2) = R, so anything missing follows. */
+    const R = (s) => (s.P * s.V) / (s.n * s.T);
+    const k = R(before);
+    const a = Object.assign({}, after);
+    switch (solveFor) {
+      case 'P': return (k * a.n * a.T) / a.V;
+      case 'V': return (k * a.n * a.T) / a.P;
+      case 'n': return (a.P * a.V) / (k * a.T);
+      case 'T': return (a.P * a.V) / (k * a.n);
+      default: return null;
+    }
+  }
+
+  /* ----------------------------------------------------- non-ideal behaviour */
+  /* The van der Waals equation, in SI, for the "real gas" comparison.
+   *   (P + a n²/V²)(V − nb) = nRT
+   */
+  function vanDerWaalsP(state, gasKey) {
+    const c = VDW[gasKey];
+    if (!c) return null;
+    /* a: L² bar mol⁻² -> Pa m⁶ mol⁻² ; b: L mol⁻¹ -> m³ mol⁻¹ */
+    const a = c.a * 1e5 * 1e-6;
+    const b = c.b * 1e-3;
+    const R = F().CONST.R;
+    const { V, n, T } = state;
+    const free = V - n * b;
+    if (free <= 0) return null;
+    return (n * R * T) / free - (a * n * n) / (V * V);
+  }
+
+  /* How far from ideal, as a percentage, and whether it is worth mentioning. */
+  function nonIdeal(state, gasKey) {
+    const ideal = solveSI(state, 'P');
+    const real = vanDerWaalsP(state, gasKey);
+    if (real === null || !ideal) return null;
+    const off = (real - ideal) / ideal * 100;
+    return { ideal: ideal, real: real, percent: off, matters: Math.abs(off) > 2 };
+  }
+
+  /* -------------------------------------------------- particle speeds */
+  /* Root-mean-square speed, from (3/2)kT = (1/2)mv² per particle. */
+  function rmsSpeed(T, gasKey) {
+    const M = molarMass(gasKey);
+    if (!M || !T) return null;
+    return Math.sqrt((3 * F().CONST.R * T) / (M / 1000));   /* m/s */
+  }
+
+  /* The Maxwell-Boltzmann distribution, for the speed histogram. Returns the
+   * fraction of particles per unit speed at each speed given. */
+  function speedDistribution(T, gasKey, speeds) {
+    const M = molarMass(gasKey);
+    if (!M || !T) return null;
+    const m = (M / 1000) / F().CONST.NA;
+    const k = F().CONST.kB;
+    const pre = 4 * Math.PI * Math.pow(m / (2 * Math.PI * k * T), 1.5);
+    return speeds.map((v) => pre * v * v * Math.exp(-(m * v * v) / (2 * k * T)));
+  }
+
+  /* Dalton: the total is just the sum, because each gas fills the whole
+   * container as if the others were not there. */
+  function partialPressures(moles, totalPressure) {
+    const total = moles.reduce((a, b) => a + b, 0);
+    if (!total) return null;
+    return moles.map((n) => ({ moles: n, fraction: n / total, pressure: (n / total) * totalPressure }));
+  }
+
+  ME.gas = {
+    GASES, gas, molarMass, solve, solveSI, combined, LAWS, VDW,
+    vanDerWaalsP, nonIdeal, rmsSpeed, speedDistribution, partialPressures,
+    gramsToMoles, molesToGrams, baseOf,
+  };
+})();
+
+
+/* ================= 19-calc-solution.js ================= */
+/* Solutions, acids and bases, and heat.
+ *
+ * Three topics in one file because they share the same shape: a small handful
+ * of relationships, each of which has to be explained rather than stated.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+  const fmt = (x, s) => ME.fmt.fmt(x, s || 4);
+
+  /* ------------------------------------------------------------ solutions */
+  function molarity(moles, litres) {
+    const M = moles / litres;
+    return { ok: true, value: M, steps: [
+      { text: 'Molarity is just "how crowded" — moles of the dissolved stuff per litre of solution. Nothing more.' },
+      { text: fmt(moles) + ' mol ÷ ' + fmt(litres) + ' L = ' + fmt(M) + ' mol/L, written ' + fmt(M) + ' M.' },
+      { text: 'Note it is per litre of *solution*, not per litre of water. You dissolve the solid first and then top up to the mark, because the solid takes up room too.' },
+    ] };
+  }
+
+  function molarityFromGrams(grams, formula, litres) {
+    const p = ME.formula.parse(formula);
+    if (!p.ok) return p;
+    const moles = grams / p.mass;
+    const M = moles / litres;
+    return { ok: true, value: M, moles: moles, molarMass: p.mass, steps: [
+      { text: 'Molarity counts moles, so the grams have to become moles first. One mole of ' + p.display +
+          ' is ' + fmt(p.mass, 6) + ' g.' },
+      { text: fmt(grams) + ' g ÷ ' + fmt(p.mass, 5) + ' g/mol = ' + fmt(moles) + ' mol.' },
+      { text: fmt(moles) + ' mol ÷ ' + fmt(litres) + ' L = ' + fmt(M) + ' M.' },
+    ] };
+  }
+
+  /* Dilution. The reason M1V1 = M2V2 works is worth saying, because otherwise
+   * it is a fourth formula to memorise rather than an obvious consequence. */
+  function dilute(M1, V1, M2, V2) {
+    const known = [M1, V1, M2, V2].filter((x) => x !== null && x !== undefined).length;
+    if (known !== 3) return { ok: false, error: 'Give me three of the four and I will find the fourth.' };
+    let out = {}, solved;
+    if (M2 === null || M2 === undefined) { solved = 'M2'; out.M2 = (M1 * V1) / V2; }
+    else if (V2 === null || V2 === undefined) { solved = 'V2'; out.V2 = (M1 * V1) / M2; }
+    else if (M1 === null || M1 === undefined) { solved = 'M1'; out.M1 = (M2 * V2) / V1; }
+    else { solved = 'V1'; out.V1 = (M2 * V2) / M1; }
+    const value = out[solved];
+    return { ok: true, solvedFor: solved, value: value, steps: [
+      { text: 'Diluting adds water. It does not add or remove any of the dissolved substance — so the number of moles before and after is exactly the same.' },
+      { text: 'Moles is molarity times volume, so that sentence is M₁V₁ = M₂V₂. It is not a new law, it is "the amount did not change" written down.' },
+      { text: 'Rearranged for ' + solved + ': ' + fmt(value) + '.' },
+      { text: 'The one trap: this works for any pair of units as long as you use the same ones on both sides. Millilitres on the left and litres on the right is out by a thousand.' },
+    ] };
+  }
+
+  function massPercent(soluteGrams, solutionGrams) {
+    const p = (soluteGrams / solutionGrams) * 100;
+    return { ok: true, value: p, steps: [
+      { text: 'Mass percent is the everyday way of saying concentration — it is what is on a bottle of vinegar or hydrogen peroxide.' },
+      { text: fmt(soluteGrams) + ' g ÷ ' + fmt(solutionGrams) + ' g × 100 = ' + fmt(p, 4) + '%.' },
+      { text: 'The bottom number is the whole solution, solute included. Dividing by the mass of the solvent alone is the usual slip.' },
+    ] };
+  }
+
+  function ppm(soluteGrams, solutionGrams) {
+    const v = (soluteGrams / solutionGrams) * 1e6;
+    return { ok: true, value: v, steps: [
+      { text: 'Parts per million is mass percent with a bigger multiplier, for things too dilute for percentages to be readable.' },
+      { text: fmt(soluteGrams) + ' g ÷ ' + fmt(solutionGrams) + ' g × 10⁶ = ' + fmt(v, 4) + ' ppm.' },
+      { text: 'For water, 1 ppm is almost exactly 1 mg per litre, because a litre of water weighs about a kilogram. That is why water quality is quoted in mg/L and ppm interchangeably.' },
+    ] };
+  }
+
+  function molality(moles, kgSolvent) {
+    const m = moles / kgSolvent;
+    return { ok: true, value: m, steps: [
+      { text: 'Molality is per kilogram of *solvent*, not per litre of solution. The difference matters because volume changes with temperature and mass does not — so molality is what you use when the temperature is going to move, which is exactly the case for freezing and boiling points.' },
+      { text: fmt(moles) + ' mol ÷ ' + fmt(kgSolvent) + ' kg = ' + fmt(m) + ' mol/kg.' },
+    ] };
+  }
+
+  /* ------------------------------------------------------- acids and bases */
+  function pHfromH(H) {
+    if (!(H > 0)) return { ok: false, error: 'A concentration has to be greater than zero.' };
+    const pH = -Math.log10(H);
+    return { ok: true, pH: pH, pOH: 14 - pH, OH: ME.fmt.CONST.Kw / H, steps: [
+      { text: 'pH is a way of writing a very small number without drowning in zeros. Hydrogen ion concentrations run from about 1 down to 0.00000000000001, which is fourteen decimal places of nothing.' },
+      { text: 'So take the power of ten and flip the sign: pH = −log[H⁺] = −log(' + ME.fmt.sciText(H, 3) + ') = ' + fmt(pH, 3) + '.' },
+      { text: 'This is why a change of one pH unit is a factor of ten in acidity, not a small nudge. pH 3 is ten times as acidic as pH 4 and a hundred times pH 5.' },
+      { text: 'And because water itself always satisfies [H⁺][OH⁻] = 10⁻¹⁴, the pOH follows for free: 14 − ' + fmt(pH, 3) + ' = ' + fmt(14 - pH, 3) + '.' },
+    ] };
+  }
+
+  function HfrompH(pH) {
+    const H = Math.pow(10, -pH);
+    return { ok: true, H: H, OH: ME.fmt.CONST.Kw / H, pOH: 14 - pH, steps: [
+      { text: 'Going back the other way just undoes the logarithm: [H⁺] = 10^(−pH).' },
+      { text: '10^(−' + fmt(pH, 3) + ') = ' + ME.fmt.sciText(H, 4) + ' mol/L.' },
+      { text: 'And [OH⁻] = 10⁻¹⁴ ÷ ' + ME.fmt.sciText(H, 3) + ' = ' + ME.fmt.sciText(ME.fmt.CONST.Kw / H, 4) + ' mol/L.' },
+    ] };
+  }
+
+  function neutralise(Ma, Va, Mb, Vb, solveFor) {
+    /* Assumes one-to-one, and says so. */
+    const steps = [
+      { text: 'At the endpoint the acid and the base have cancelled exactly — every H⁺ has met an OH⁻ and become water.' },
+      { text: 'So moles of acid = moles of base, which is MₐVₐ = MᵦVᵦ for a one-to-one pair.' },
+      { text: 'If the acid gives two hydrogens, like H₂SO₄, you need twice as much base, and the equation gains a 2. Always balance the neutralisation first to see which it is.' },
+    ];
+    let value;
+    if (solveFor === 'Mb') value = (Ma * Va) / Vb;
+    else if (solveFor === 'Vb') value = (Ma * Va) / Mb;
+    else if (solveFor === 'Ma') value = (Mb * Vb) / Va;
+    else value = (Mb * Vb) / Ma;
+    steps.push({ text: 'Rearranged: ' + solveFor + ' = ' + fmt(value) + '.' });
+    return { ok: true, value: value, steps: steps };
+  }
+
+  /* --------------------------------------------------------------- heat */
+  function heat(mass, specificHeat, deltaT) {
+    const q = mass * specificHeat * deltaT;
+    return { ok: true, q: q, steps: [
+      { text: 'Three things decide how much energy a temperature change took: how much stuff there is, what the stuff is, and how far the temperature moved. q = mcΔT is those three multiplied together, in that order.' },
+      { text: 'c is the specific heat — the energy it takes to warm one gram by one degree. Water’s is 4.184 J/(g·K), which is enormous; a metal’s is around a tenth of that. It is why the sea takes all summer to warm up and a saucepan handle burns you in seconds.' },
+      { text: fmt(mass) + ' g × ' + fmt(specificHeat, 4) + ' J/(g·K) × ' + fmt(deltaT, 4) + ' K = ' + fmt(q, 4) + ' J.' },
+      { text: q > 0 ? 'A positive answer means the substance gained that much energy.'
+                    : 'A negative answer means the substance lost that much energy.' },
+      { text: 'Note ΔT is the same number in kelvin and in celsius. A gap of ten degrees is a gap of ten kelvin — only the starting point differs between the two scales, and a difference does not care where you started.' },
+    ] };
+  }
+
+  function gibbs(deltaH, deltaS, T) {
+    /* deltaH in kJ/mol, deltaS in J/(mol K), T in K */
+    const g = deltaH - (T * deltaS) / 1000;
+    const spontaneous = g < 0;
+    return { ok: true, deltaG: g, spontaneous: spontaneous, steps: [
+      { text: 'Two things decide whether a reaction goes by itself. Does it release energy (ΔH negative)? And does it leave things more spread out and disordered (ΔS positive)? Either one helps; both together is unstoppable.' },
+      { text: 'ΔG = ΔH − TΔS weighs them against each other, and the T is why temperature can change the answer. At low temperature the energy term wins; at high temperature the disorder term does, because it is multiplied by T.' },
+      { text: 'ΔG = ' + fmt(deltaH, 4) + ' kJ/mol − (' + fmt(T, 4) + ' K × ' + fmt(deltaS, 4) +
+          ' J/(mol·K) ÷ 1000) = ' + fmt(g, 4) + ' kJ/mol.' },
+      { text: spontaneous
+          ? 'Negative, so it happens on its own. That does not mean quickly — diamond turning into graphite has a negative ΔG and takes longer than the age of the universe. Spontaneous is about direction, not speed.'
+          : 'Positive, so it will not go on its own at this temperature. Something has to push it.' },
+      { text: 'The crossover is at T = ΔH/ΔS, which for these numbers is ' +
+          (deltaS !== 0 ? fmt((deltaH * 1000) / deltaS, 4) + ' K.' : 'nowhere — ΔS is zero, so temperature makes no difference.') },
+    ] };
+  }
+
+  ME.solution = {
+    molarity, molarityFromGrams, dilute, massPercent, ppm, molality,
+    pHfromH, HfrompH, neutralise, heat, gibbs,
+  };
 })();
 
 
@@ -8166,6 +9299,2396 @@ window.ME = window.ME || {};
 })();
 
 
+/* ================= 73-balancer.js ================= */
+/* The Balancer tab.
+ *
+ * One box, type an equation loosely, get it balanced. Everything on this page
+ * is meant to teach rather than just answer: the atom table you watch go
+ * green, the mass check that makes conservation of mass a number you can see,
+ * a walkthrough of how to do it by hand, and a mode where you set the
+ * coefficients yourself and get nudged.
+ *
+ * All the actual chemistry is in ME.balance and ME.formula. This file is the
+ * face of it.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+  const el = ME.el;
+
+  const EXAMPLES = [
+    { group: 'Start here', items: [
+      { eq: 'H2 + O2 -> H2O', why: 'Hydrogen burning. The simplest one worth doing.' },
+      { eq: 'Na + Cl2 -> NaCl', why: 'Sodium and chlorine making table salt.' },
+      { eq: 'CH4 + O2 -> CO2 + H2O', why: 'Natural gas burning — the equation you will meet most often.' },
+      { eq: 'Fe + O2 -> Fe2O3', why: 'Iron rusting. Needs bigger numbers than it looks like it should.' },
+    ] },
+    { group: 'Getting harder', items: [
+      { eq: 'C3H8 + O2 -> CO2 + H2O', why: 'Propane. Save the oxygen until last and it falls out.' },
+      { eq: 'C8H18 + O2 -> CO2 + H2O', why: 'Petrol. This is the one where you have to double everything.' },
+      { eq: 'Al + CuSO4 -> Al2(SO4)3 + Cu', why: 'Brackets, and a whole sulfate group that moves as one lump.' },
+      { eq: 'Ca(OH)2 + H3PO4 -> Ca3(PO4)2 + H2O', why: 'Two bracketed groups at once.' },
+      { eq: 'NH3 + O2 -> NO + H2O', why: 'No carbon anywhere, so the usual order of attack changes.' },
+    ] },
+    { group: 'Tricky', items: [
+      { eq: 'KMnO4 + HCl -> KCl + MnCl2 + H2O + Cl2', why: 'Six substances and chlorine in three of them.' },
+      { eq: 'CuSO4·5H2O -> CuSO4 + H2O', why: 'A hydrate. The dot means water inside the crystal.' },
+      { eq: 'MnO4- + Fe2+ + H+ -> Mn2+ + Fe3+ + H2O', why: 'Ions, so the charge has to balance as well as the atoms.' },
+      { eq: 'Cr2O72- + H+ + e- -> Cr3+ + H2O', why: 'A half-equation with electrons written in.' },
+    ] },
+    { group: 'These ones cannot be balanced', items: [
+      { eq: 'CH4 + O2 -> CO2', why: 'The hydrogen has nowhere to go.' },
+      { eq: 'C + O2 -> CO + CO2', why: 'Two reactions written as one, so there is no single answer.' },
+    ] },
+  ];
+
+  const St = { built: false, host: null, input: null, history: [], mode: 'auto', guesses: null, last: null };
+
+  /* --------------------------------------------------------------- build */
+  function build(host) {
+    St.host = host;
+    const wrap = el('div', { class: 'wrap' });
+    wrap.appendChild(el('h1', { text: 'Balancer' }));
+    wrap.appendChild(el('p', { class: 'note bal-intro' },
+      'Type an equation however you like — arrows as -> or = or →, spaces or no spaces, state symbols if you want them. You can use names instead of formulas too: try "methane + oxygen -> carbon dioxide + water".'));
+
+    /* the input */
+    const box = el('div', { class: 'bal-box' });
+    St.input = el('textarea', {
+      class: 'bal-input', rows: '2', spellcheck: 'false',
+      autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off',
+      placeholder: 'CH4 + O2 -> CO2 + H2O',
+      'aria-label': 'Chemical equation to balance',
+    });
+    box.appendChild(St.input);
+    St.preview = el('div', { class: 'bal-preview', 'aria-live': 'polite' });
+    box.appendChild(St.preview);
+    wrap.appendChild(box);
+
+    const row = el('div', { class: 'bal-actions' });
+    const goBtn = el('button', { class: 'btn btn-primary' }, [ME.icon('check'), 'Balance it']);
+    goBtn.addEventListener('click', () => submit());
+    row.appendChild(goBtn);
+    const clearBtn = el('button', { class: 'btn' }, [ME.icon('x'), 'Clear']);
+    clearBtn.addEventListener('click', () => { St.input.value = ''; onInput(); St.input.focus(); });
+    row.appendChild(clearBtn);
+    row.appendChild(el('span', { class: 'bal-spacer' }));
+    St.exampleBtn = el('button', { class: 'btn' }, [ME.icon('book'), 'Examples']);
+    St.exampleBtn.addEventListener('click', () => toggleExamples());
+    row.appendChild(St.exampleBtn);
+    wrap.appendChild(row);
+
+    St.examples = el('div', { class: 'bal-examples' });
+    buildExamples(St.examples);
+    wrap.appendChild(St.examples);
+
+    St.result = el('div', { class: 'bal-result', 'aria-live': 'polite' });
+    wrap.appendChild(St.result);
+
+    St.historyNode = el('div', { class: 'bal-history' });
+    wrap.appendChild(St.historyNode);
+
+    host.appendChild(wrap);
+    St.built = true;
+
+    St.input.addEventListener('input', ME.debounce(onInput, 90));
+    St.input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+    });
+    onInput();
+  }
+
+  function buildExamples(node) {
+    EXAMPLES.forEach((g) => {
+      node.appendChild(el('div', { class: 'bal-ex-group', text: g.group }));
+      const list = el('div', { class: 'bal-ex-list' });
+      g.items.forEach((x) => {
+        const b = el('button', { class: 'bal-ex' });
+        b.appendChild(el('code', { html: prettyEquation(x.eq) }));
+        b.appendChild(el('span', { class: 'note', text: x.why }));
+        b.addEventListener('click', () => {
+          St.input.value = x.eq;
+          onInput();
+          submit();
+          toggleExamples(false);
+        });
+        list.appendChild(b);
+      });
+      node.appendChild(list);
+    });
+  }
+
+  function toggleExamples(force) {
+    const on = force === undefined ? !St.examples.classList.contains('open') : force;
+    St.examples.classList.toggle('open', on);
+    St.exampleBtn.classList.toggle('on', on);
+  }
+
+  /* --------------------------------------------------- live preview */
+  /* Show what the app has understood, as they type. A formula that does not
+   * parse is marked, with the fix offered as a button rather than a telling-off. */
+  function onInput() {
+    const raw = St.input.value;
+    ME.clear(St.preview);
+    if (!raw.trim()) { St.preview.classList.remove('show'); return; }
+    St.preview.classList.add('show');
+
+    const arrow = ME.balance.findArrow(raw);
+    if (!arrow) {
+      St.preview.appendChild(el('span', { class: 'note',
+        text: 'Add an arrow between the starting materials and the products — -> or = will do.' }));
+      return;
+    }
+
+    const eq = ME.balance.parseEquation(resolveNames(raw).text);
+    if (eq.ok) {
+      St.preview.appendChild(renderEquation(eq.left, eq.right, null));
+      return;
+    }
+
+    /* Something did not parse. Name the piece and offer the fixes. */
+    const line = el('div', { class: 'bal-problem' });
+    line.appendChild(el('span', { class: 'bal-x', html: '&#9888;' }));
+    line.appendChild(el('span', { text: eq.error }));
+    St.preview.appendChild(line);
+
+    (eq.problems || []).forEach((p) => {
+      if (!p.fixes || !p.fixes.length) return;
+      const fixRow = el('div', { class: 'bal-fixes' });
+      fixRow.appendChild(el('span', { class: 'note', text: 'Did you mean' }));
+      p.fixes.forEach((f) => {
+        const b = el('button', { class: 'btn btn-sm' });
+        b.appendChild(el('code', { html: ME.formulaHTML(f) }));
+        b.addEventListener('click', () => {
+          /* Replace just the offending piece, leaving the rest alone. */
+          St.input.value = St.input.value.replace(p.input, f);
+          onInput();
+          St.input.focus();
+        });
+        fixRow.appendChild(b);
+      });
+      St.preview.appendChild(fixRow);
+    });
+  }
+
+  /* Swap any recognised compound names for their formulas, showing the reader
+   * what the formula is so the name teaches them something. */
+  function resolveNames(raw) {
+    const arrow = ME.balance.findArrow(raw);
+    if (!arrow) return { text: raw, swaps: [] };
+    const left = raw.slice(0, arrow.at);
+    const right = raw.slice(arrow.at + arrow.len);
+    const swaps = [];
+
+    const doSide = (side) => ME.balance.splitSide(side).map((piece) => {
+      const trimmed = piece.trim();
+      if (!trimmed) return piece;
+      /* Already a formula? Leave it completely alone. */
+      if (ME.formula.parse(trimmed).ok) return trimmed;
+      const found = lookupName(trimmed);
+      if (found) { swaps.push({ from: trimmed, to: found.formula, source: found.source }); return found.formula; }
+      return trimmed;
+    }).join(' + ');
+
+    return { text: doSide(left) + ' -> ' + doSide(right), swaps: swaps };
+  }
+
+  /* Seven elements do not go around as lone atoms. Typing "oxygen" into an
+   * equation means O2, and reading it as a single O atom silently balances a
+   * reaction that does not happen — methane + oxygen came out as
+   * "CH4 + 4O → CO2 + 2H2O", which is neatly balanced and complete
+   * nonsense. Phosphorus and sulfur are here for the same reason. */
+  const ELEMENTAL_FORM = {
+    H: 'H2', N: 'N2', O: 'O2', F: 'F2', Cl: 'Cl2', Br: 'Br2', I: 'I2',
+    P: 'P4', S: 'S8',
+  };
+  const ELEMENTAL_WHY = {
+    H2: 'hydrogen goes around as H\u2082, two atoms sharing a pair \u2014 a lone H atom is far too reactive to exist on its own',
+    N2: 'nitrogen goes around as N\u2082, held by a triple bond, which is why the air is four-fifths nitrogen and nothing much happens',
+    O2: 'oxygen goes around as O\u2082, not as lone atoms',
+    F2: 'fluorine goes around as F\u2082',
+    Cl2: 'chlorine goes around as Cl\u2082',
+    Br2: 'bromine goes around as Br\u2082',
+    I2: 'iodine goes around as I\u2082',
+    P4: 'white phosphorus is a P\u2084 tetrahedron',
+    S8: 'sulfur is an S\u2088 ring, which is why it is yellow and crumbly rather than a gas',
+  };
+
+  /* A name, from the naming rules first and then the offline molecule
+   * database. Both are already verified, so either is trustworthy. */
+  function lookupName(text) {
+    const byRule = ME.naming.formulaOf(text);
+    if (byRule.ok) {
+      const better = ELEMENTAL_FORM[byRule.formula];
+      if (better) return { formula: better, source: 'naming rules', why: ELEMENTAL_WHY[better] };
+      return { formula: byRule.formula, source: 'naming rules' };
+    }
+    const hits = ME.search.search(text);
+    if (hits.results && hits.results.length) {
+      const m = hits.results[0].m;
+      if (m.f && ME.formula.parse(m.f).ok) return { formula: m.f, source: m.n };
+    }
+    return null;
+  }
+
+  /* ------------------------------------------------------------- submit */
+  function submit() {
+    const raw = St.input.value.trim();
+    if (!raw) return;
+    const resolved = resolveNames(raw);
+    const result = ME.balance.balance(resolved.text);
+    St.last = result;
+    St.mode = 'auto';
+    St.guesses = null;
+    render(result, resolved);
+    if (result.ok) remember(raw, result);
+  }
+
+  function remember(raw, result) {
+    St.history = St.history.filter((h) => h.text !== result.text);
+    St.history.unshift({ raw: raw, text: result.text, type: result.type.label });
+    St.history = St.history.slice(0, 12);
+    renderHistory();
+  }
+
+  function renderHistory() {
+    ME.clear(St.historyNode);
+    if (!St.history.length) return;
+    St.historyNode.appendChild(el('h3', { class: 'section-head', text: 'Balanced this session' }));
+    const list = el('div', { class: 'bal-hist-list' });
+    St.history.forEach((h) => {
+      const b = el('button', { class: 'bal-hist' });
+      b.appendChild(el('code', { html: prettyEquation(h.text) }));
+      b.appendChild(el('span', { class: 'chip', text: h.type }));
+      b.addEventListener('click', () => { St.input.value = h.raw; onInput(); submit(); });
+      list.appendChild(b);
+    });
+    St.historyNode.appendChild(list);
+  }
+
+  /* ------------------------------------------------------------- render */
+  function render(result, resolved) {
+    ME.clear(St.result);
+
+    if (resolved && resolved.swaps.length) {
+      const note = el('div', { class: 'callout bal-swaps' });
+      note.appendChild(el('strong', { text: 'Names turned into formulas: ' }));
+      resolved.swaps.forEach((s, i) => {
+        if (i) note.appendChild(document.createTextNode(', '));
+        note.appendChild(document.createTextNode(s.from + ' = '));
+        note.appendChild(el('code', { html: ME.formulaHTML(s.to) }));
+      });
+      note.appendChild(document.createTextNode('. Worth learning these \u2014 formulas are how the rest of chemistry talks.'));
+      const whys = resolved.swaps.filter((s) => s.why);
+      if (whys.length) {
+        note.appendChild(el('div', { class: 'note', style: { marginTop: '6px' },
+          text: 'Note ' + whys.map((s) => s.why).join('; and ') + '.' }));
+      }
+      St.result.appendChild(note);
+    }
+
+    if (!result.ok) { renderFailure(result); return; }
+
+    /* the answer, big */
+    const card = el('div', { class: 'card card-pad bal-answer' });
+    if (result.alreadyBalanced) {
+      card.appendChild(el('div', { class: 'bal-label', text: 'Already balanced' }));
+    } else {
+      card.appendChild(el('div', { class: 'bal-label', text: 'Balanced' }));
+    }
+    card.appendChild(renderEquation(result.left, result.right, 'big'));
+
+    const typeRow = el('div', { class: 'bal-type' });
+    typeRow.appendChild(el('span', { class: 'chip chip-type', text: result.type.label }));
+    typeRow.appendChild(el('span', { class: 'note', text: result.type.why }));
+    card.appendChild(typeRow);
+
+    const acts = el('div', { class: 'bal-answer-acts' });
+    const copy = el('button', { class: 'btn btn-sm' }, [ME.icon('copy'), 'Copy']);
+    copy.addEventListener('click', () => ME.copy(result.text, 'equation'));
+    acts.appendChild(copy);
+    const how = el('button', { class: 'btn btn-sm' }, [ME.icon('book'), 'Show me how']);
+    const tryIt = el('button', { class: 'btn btn-sm' }, [ME.icon('pencil'), 'Let me try']);
+    acts.appendChild(how);
+    acts.appendChild(tryIt);
+    card.appendChild(acts);
+    St.result.appendChild(card);
+
+    /* atom table + mass */
+    const panels = el('div', { class: 'bal-panels' });
+    panels.appendChild(atomTable(result.tally, result.left, result.right));
+    panels.appendChild(massPanel(result.mass));
+    St.result.appendChild(panels);
+
+    /* mole ratios */
+    St.result.appendChild(ratioPanel(result));
+
+    const extra = el('div', { class: 'bal-extra' });
+    St.result.appendChild(extra);
+    how.addEventListener('click', () => {
+      const open = extra.dataset.mode === 'how';
+      ME.clear(extra);
+      extra.dataset.mode = open ? '' : 'how';
+      how.classList.toggle('on', !open);
+      tryIt.classList.remove('on');
+      if (!open) extra.appendChild(walkthrough(result));
+    });
+    tryIt.addEventListener('click', () => {
+      const open = extra.dataset.mode === 'try';
+      ME.clear(extra);
+      extra.dataset.mode = open ? '' : 'try';
+      tryIt.classList.toggle('on', !open);
+      how.classList.remove('on');
+      if (!open) extra.appendChild(tryPanel(result));
+    });
+  }
+
+  function renderFailure(result) {
+    const card = el('div', { class: 'card card-pad bal-fail' });
+    const heads = {
+      impossible: 'This one cannot be balanced',
+      ambiguous: 'This one has more than one answer',
+      sides: 'Something is on the wrong side',
+    };
+    card.appendChild(el('div', { class: 'bal-label warn', text: heads[result.kind] || 'I could not read that' }));
+    card.appendChild(el('p', { class: 'bal-fail-why', text: result.error }));
+
+    /* Even a failure shows the atom counts, because seeing which element does
+     * not appear on both sides is the whole lesson. */
+    if (result.equation && result.equation.ok) {
+      const fake = {
+        left: result.equation.left.map((s) => ({ species: s, coefficient: s.coefficient || 1 })),
+        right: result.equation.right.map((s) => ({ species: s, coefficient: s.coefficient || 1 })),
+      };
+      const rows = [];
+      const elements = [];
+      fake.left.concat(fake.right).forEach((x) =>
+        Object.keys(x.species.formula.counts).forEach((s) => { if (elements.indexOf(s) < 0) elements.push(s); }));
+      elements.forEach((e) => {
+        const side = (list) => list.reduce((n, x) => n + (x.species.formula.counts[e] || 0) * x.coefficient, 0);
+        const l = side(fake.left), r = side(fake.right);
+        rows.push({ element: e, left: l, right: r, ok: l === r, orphan: (l === 0) !== (r === 0) });
+      });
+      card.appendChild(el('p', { class: 'note', text: 'With one of each, the counts stand like this — an element with a zero on one side is the giveaway:' }));
+      card.appendChild(atomTable(rows, fake.left, fake.right, true));
+    }
+    St.result.appendChild(card);
+  }
+
+  /* An equation as DOM, with the coefficients picked out in colour. */
+  function renderEquation(left, right, size) {
+    const node = el('div', { class: 'bal-eq' + (size === 'big' ? ' big' : '') });
+    const part = (x) => {
+      const sp = x.species || x;
+      const coefficient = x.coefficient;
+      const piece = el('span', { class: 'bal-sp' });
+      if (coefficient !== undefined && coefficient !== 1) {
+        piece.appendChild(el('span', { class: 'bal-coef', text: String(coefficient) }));
+      }
+      piece.appendChild(el('span', { class: 'bal-f', html: sp.formula.html }));
+      if (sp.state) piece.appendChild(el('span', { class: 'bal-state', text: '(' + sp.state + ')' }));
+      return piece;
+    };
+    left.forEach((x, i) => {
+      if (i) node.appendChild(el('span', { class: 'bal-plus', text: '+' }));
+      node.appendChild(part(x));
+    });
+    node.appendChild(el('span', { class: 'bal-arrow', html: '&#8594;' }));
+    right.forEach((x, i) => {
+      if (i) node.appendChild(el('span', { class: 'bal-plus', text: '+' }));
+      node.appendChild(part(x));
+    });
+    return node;
+  }
+
+  function atomTable(rows, left, right, plain) {
+    const card = el('div', { class: 'card card-pad bal-atoms' });
+    card.appendChild(el('h3', { class: 'section-head', text: 'Atoms on each side' }));
+    card.appendChild(el('p', { class: 'note', text: plain
+      ? 'Every row has to match for the equation to be balanced.'
+      : 'Every row matches, which is what balanced means. Nothing was created and nothing was destroyed.' }));
+    const t = el('table', { class: 'bal-table' });
+    const head = el('tr');
+    ['', 'Left', 'Right', ''].forEach((h) => head.appendChild(el('th', { text: h })));
+    t.appendChild(head);
+    rows.forEach((r) => {
+      const tr = el('tr', { class: r.ok ? 'ok' : 'bad' });
+      const e = ME.chem.element(r.element);
+      const label = r.isCharge || r.element === 'charge'
+        ? el('td', {}, [el('strong', { text: 'charge' })])
+        : el('td', {}, [el('strong', { text: r.element }), ' ' + (e ? e.name.toLowerCase() : '')]);
+      tr.appendChild(label);
+      tr.appendChild(el('td', { class: 'num', text: fmtSigned(r.left, r.isCharge || r.element === 'charge') }));
+      tr.appendChild(el('td', { class: 'num', text: fmtSigned(r.right, r.isCharge || r.element === 'charge') }));
+      tr.appendChild(el('td', { class: 'mark', html: r.ok ? '&#10003;' : '&#10007;' }));
+      t.appendChild(tr);
+    });
+    card.appendChild(t);
+    return card;
+  }
+
+  const fmtSigned = (n, signed) => (signed && n > 0 ? '+' + n : String(n));
+
+  function massPanel(mass) {
+    const card = el('div', { class: 'card card-pad bal-mass' });
+    card.appendChild(el('h3', { class: 'section-head', text: 'Conservation of mass' }));
+    card.appendChild(el('p', { class: 'note',
+      text: 'Atoms are not created or destroyed, so the total mass cannot change either. Here it is, weighed on both sides:' }));
+    const grid = el('div', { class: 'bal-mass-grid' });
+    grid.appendChild(el('div', {}, [
+      el('div', { class: 'lbl', text: 'Reactants' }),
+      el('div', { class: 'val', text: ME.fmt.fmt(mass.left, 6) + ' g/mol' }),
+    ]));
+    grid.appendChild(el('div', { class: 'eqsign', text: mass.ok ? '=' : '≠' }));
+    grid.appendChild(el('div', {}, [
+      el('div', { class: 'lbl', text: 'Products' }),
+      el('div', { class: 'val', text: ME.fmt.fmt(mass.right, 6) + ' g/mol' }),
+    ]));
+    card.appendChild(grid);
+    card.classList.toggle('ok', mass.ok);
+    if (mass.ok) {
+      card.appendChild(el('p', { class: 'note',
+        text: 'The same to six figures, and it has to be — the products are the same atoms, rearranged.' }));
+    }
+    return card;
+  }
+
+  function ratioPanel(result) {
+    const card = el('div', { class: 'card card-pad bal-ratios' });
+    card.appendChild(el('h3', { class: 'section-head', text: 'What the numbers mean' }));
+    card.appendChild(el('p', { class: 'note',
+      text: 'Read the coefficients as a recipe. They are not masses — they count molecules, or just as well, moles.' }));
+    const line = el('div', { class: 'bal-ratio-line' });
+    result.ratios.forEach((r, i) => {
+      if (i) line.appendChild(el('span', { class: 'sep', text: ':' }));
+      const b = el('span', { class: 'bal-ratio' });
+      b.appendChild(el('span', { class: 'n', text: String(r.coefficient) }));
+      b.appendChild(el('span', { class: 'f', html: ME.formulaHTML(r.name) }));
+      line.appendChild(b);
+    });
+    card.appendChild(line);
+
+    const first = result.left[0], firstProduct = result.right[0];
+    card.appendChild(el('p', { class: 'note bal-ratio-read' }, [
+      'So for every ',
+      el('strong', { text: String(first.coefficient) }),
+      ' ' + spell(first.coefficient, 'molecule') + ' of ',
+      el('code', { html: first.species.formula.html }),
+      ' you get ',
+      el('strong', { text: String(firstProduct.coefficient) }),
+      ' of ',
+      el('code', { html: firstProduct.species.formula.html }),
+      '. Double one and you double the other, which is the whole of stoichiometry in one sentence.',
+    ]));
+    return card;
+  }
+
+  const spell = (n, w) => w + (n === 1 ? '' : 's');
+
+  /* ------------------------------------------------------- walkthrough */
+  function walkthrough(result) {
+    const steps = ME.balance.explain(result);
+    const card = el('div', { class: 'card card-pad bal-how' });
+    card.appendChild(el('h3', { text: 'How to do this one by hand' }));
+    card.appendChild(el('p', { class: 'note',
+      text: 'The order matters more than the arithmetic. Here is the order, and why it is that order.' }));
+    const list = el('ol', { class: 'bal-steps' });
+    steps.forEach((s) => {
+      const li = el('li');
+      li.appendChild(el('div', { class: 'bal-step-head', text: s.heading }));
+      li.appendChild(el('div', { class: 'bal-step-body', text: s.body }));
+      if (s.detail) li.appendChild(el('div', { class: 'note bal-step-detail' }, [
+        'It appears in ', el('code', { html: ME.formulaHTML(s.detail) }),
+        s.final !== null && s.final !== undefined ? ', and ends up at ' + s.final + ' on each side.' : '.',
+      ]));
+      if (s.result) {
+        li.appendChild(el('div', { class: 'bal-step-result' }, [el('code', { html: prettyEquation(s.result) })]));
+      }
+      list.appendChild(li);
+    });
+    card.appendChild(list);
+    return card;
+  }
+
+  /* --------------------------------------------------------- try it mode */
+  function tryPanel(result) {
+    const all = result.left.concat(result.right);
+    const guesses = all.map(() => 1);
+    const card = el('div', { class: 'card card-pad bal-try' });
+    card.appendChild(el('h3', { text: 'Your turn' }));
+    card.appendChild(el('p', { class: 'note',
+      text: 'Set the coefficients yourself. The counts update as you go, and every row has to match. There is no penalty for poking at it — that is how everybody learns this.' }));
+
+    const steppers = el('div', { class: 'bal-steppers' });
+    const nodes = [];
+    all.forEach((x, i) => {
+      if (i === result.left.length) steppers.appendChild(el('span', { class: 'bal-arrow', html: '&#8594;' }));
+      else if (i) steppers.appendChild(el('span', { class: 'bal-plus', text: '+' }));
+      const cell = el('div', { class: 'bal-stepper' });
+      const minus = el('button', { class: 'btn btn-sm', text: '−', 'aria-label': 'fewer' });
+      const val = el('span', { class: 'bal-stepval', text: '1' });
+      const plus = el('button', { class: 'btn btn-sm', text: '+', 'aria-label': 'more' });
+      cell.appendChild(minus);
+      cell.appendChild(val);
+      cell.appendChild(plus);
+      const f = el('div', { class: 'bal-stepf', html: x.species.formula.html });
+      const holder = el('div', { class: 'bal-stepwrap' }, [cell, f]);
+      minus.addEventListener('click', () => { if (guesses[i] > 1) { guesses[i]--; val.textContent = guesses[i]; sync(); } });
+      plus.addEventListener('click', () => { if (guesses[i] < 40) { guesses[i]++; val.textContent = guesses[i]; sync(); } });
+      nodes.push({ val: val });
+      steppers.appendChild(holder);
+    });
+    card.appendChild(steppers);
+
+    const feedback = el('div', { class: 'bal-try-feedback' });
+    const table = el('div', { class: 'bal-try-table' });
+    card.appendChild(feedback);
+    card.appendChild(table);
+
+    const acts = el('div', { class: 'bal-try-acts' });
+    const reset = el('button', { class: 'btn btn-sm', text: 'Start over' });
+    reset.addEventListener('click', () => {
+      all.forEach((x, i) => { guesses[i] = 1; nodes[i].val.textContent = '1'; });
+      sync();
+    });
+    const reveal = el('button', { class: 'btn btn-sm', text: 'Show me the answer' });
+    reveal.addEventListener('click', () => {
+      result.coefficients.forEach((c, i) => { guesses[i] = c; nodes[i].val.textContent = String(c); });
+      sync();
+    });
+    acts.appendChild(reset);
+    acts.appendChild(reveal);
+    card.appendChild(acts);
+
+    function sync() {
+      const h = ME.balance.hint(result, guesses);
+      ME.clear(feedback);
+      feedback.appendChild(el('div', { class: 'callout ' + (h.done ? 'ok' : 'warn'), text: h.message }));
+      ME.clear(table);
+      table.appendChild(atomTable(h.rows, result.left, result.right, !h.done));
+      card.classList.toggle('solved', h.done);
+    }
+    sync();
+    return card;
+  }
+
+  /* A plain-text equation with subscripts, for buttons and history. */
+  function prettyEquation(text) {
+    return ME.esc(text)
+      .replace(/([A-Za-z\)\]])(\d+)/g, '$1<sub>$2</sub>')
+      .replace(/-&gt;|=&gt;|--&gt;/g, '→')
+      .replace(/\^(\d*)([+-])/g, '<sup>$1$2</sup>');
+  }
+
+  function ensureBuilt(host) { if (!St.built) build(host); }
+
+  /* So a lesson can drop the whole balancer into itself. */
+  function load(equation, andBalance) {
+    if (!St.built) return;
+    St.input.value = equation;
+    onInput();
+    if (andBalance !== false) submit();
+  }
+
+  ME.balancer = { ensureBuilt, load, EXAMPLES };
+})();
+
+
+/* ================= 74-gassim.js ================= */
+/* The Gas Simulator tab.
+ *
+ * A box of particles you can squeeze, heat and fill, with all four gas
+ * variables live. The point is that PV = nRT stops being an equation to
+ * memorise once you have watched the particles do it: pull the piston out and
+ * you can see the hits on the wall get rarer.
+ *
+ * Every number shown goes through ME.gas and ME.fmt, so the simulation, the
+ * equation panel and the graphs cannot disagree with each other.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+  const el = ME.el;
+  const G = () => ME.gas;
+  const F = () => ME.fmt;
+
+  /* Which units each variable offers, in the order a reader expects. */
+  const UNIT_CHOICES = {
+    P: ['atm', 'kPa', 'Pa', 'bar', 'mmHg', 'torr', 'psi'],
+    V: ['L', 'mL', 'm3', 'cm3', 'dm3', 'gal', 'ft3'],
+    T: ['K', 'C', 'F'],
+    n: ['mol', 'mmol', 'particles', 'g'],
+  };
+
+  const VAR = {
+    P: { label: 'Pressure', dim: 'pressure', symbol: 'P' },
+    V: { label: 'Volume', dim: 'volume', symbol: 'V' },
+    T: { label: 'Temperature', dim: 'temperature', symbol: 'T' },
+    n: { label: 'Amount', dim: 'amount', symbol: 'n' },
+  };
+
+  const PRESETS = [
+    { name: 'Room temperature, one mole', si: { P: 101325, V: 0.0244, n: 1, T: 293.15 }, gas: 'air',
+      derive: 'V',
+      why: 'A mole of air at room temperature and normal pressure. About 24 litres — a bit more than a bucket.' },
+    { name: 'Car tyre on a cold morning', si: { P: 240000, V: 0.015, n: 1.48, T: 273.15 }, gas: 'air', hold: ['V', 'n'],
+      derive: 'n',
+      why: 'A tyre is a fixed volume, so when the night cools the air inside, the pressure drops and the tyre reads low. Nothing leaked. Warm it back up on the motorway and the pressure comes back.' },
+    { name: 'Balloon in the freezer', si: { P: 101325, V: 0.002, n: 0.083, T: 293.15 }, gas: 'He', hold: ['P', 'n'],
+      derive: 'n',
+      why: 'A balloon holds its pressure and changes size instead. Drag the temperature down to 255 K and watch it shrink — that is Charles’s law in a freezer.' },
+    { name: 'Scuba tank', si: { P: 20000000, V: 0.012, n: 98, T: 293.15 }, gas: 'air', hold: ['V', 'T'],
+      derive: 'n',
+      why: 'Twelve litres at 200 atmospheres. This is also where the ideal gas law starts to creak — switch on the real-gas comparison and see how far off it is.' },
+    { name: 'Hot air balloon', si: { P: 101325, V: 2800, n: 88000, T: 373.15 }, gas: 'air', hold: ['P', 'V'],
+      derive: 'n',
+      why: 'Heating the air pushes some of it out of the open bottom, so what is left is less dense than the air outside. That density difference is the whole lift.' },
+    { name: 'Fizzy drink can', si: { P: 250000, V: 0.00002, n: 0.0021, T: 277.15 }, gas: 'CO2', hold: ['V', 'T'],
+      derive: 'n',
+      why: 'The gap above the drink holds carbon dioxide at about 2.5 atmospheres. Open it and the pressure drops to one, so the gas that was dissolved has nowhere to stay.' },
+  ];
+
+  const St = {
+    built: false, host: null, running: false, raf: null,
+    /* the physical state, always in SI */
+    si: { P: 101325, V: 0.0244, n: 1, T: 293.15 },
+    gasKey: 'air',
+    hold: { P: false, V: false, n: true, T: true },
+    units: { P: 'atm', V: 'L', T: 'C', n: 'mol' },
+    realGas: false,
+    particles: [], flashes: [], pistonX: 0.78,
+    history: { PV: [], VT: [], PT: [] },
+    fields: {}, lastChanged: 'V',
+  };
+
+  /* ----------------------------------------------------------- persistence */
+  function loadPrefs() {
+    const u = ME.store.get('gasUnits', null);
+    if (u && typeof u === 'object') {
+      Object.keys(St.units).forEach((k) => { if (UNIT_CHOICES[k].indexOf(u[k]) >= 0) St.units[k] = u[k]; });
+    }
+    const g = ME.store.get('gasKey', null);
+    if (g && G().gas(g).key === g) St.gasKey = g;
+  }
+  function savePrefs() {
+    ME.store.set('gasUnits', St.units);
+    ME.store.set('gasKey', St.gasKey);
+  }
+
+  /* -------------------------------------------------------------- display */
+  /* A variable's value in the unit the reader picked. Amount in grams needs
+   * the gas's molar mass, which is why it cannot be a plain conversion. */
+  function shown(key) {
+    const unit = St.units[key];
+    if (key === 'n' && unit === 'g') return G().molesToGrams(St.si.n, St.gasKey);
+    if (key === 'n') return F().convert(St.si.n, 'mol', unit);
+    const dim = VAR[key].dim;
+    return F().convert(St.si[key], G().baseOf(dim), unit);
+  }
+
+  /* And the other way, when they type into a box. */
+  function toSI(key, value) {
+    const unit = St.units[key];
+    if (key === 'n' && unit === 'g') return G().gramsToMoles(value, St.gasKey);
+    if (key === 'n') return F().convert(value, unit, 'mol');
+    return F().convert(value, unit, G().baseOf(VAR[key].dim));
+  }
+
+  /* ------------------------------------------------------------ the physics */
+  /* One variable has been changed. Something has to give, and which one is
+   * decided by what the reader has chosen to hold still. */
+  function apply(changed, newSI) {
+    const free = ['P', 'V', 'n', 'T'].filter((k) => k !== changed && !St.hold[k]);
+    if (!free.length) {
+      ME.toast('Everything else is held, so nothing can respond. Unlock one of them.');
+      return false;
+    }
+    /* Prefer to move the one the reader did not touch last, so repeated drags
+     * keep pushing the same variable around rather than ping-ponging. */
+    const respond = free.indexOf(St.lastChanged) >= 0 && free.length > 1
+      ? free.filter((k) => k !== St.lastChanged)[0]
+      : free[0];
+
+    const trial = Object.assign({}, St.si);
+    trial[changed] = newSI;
+    trial[respond] = G().solveSI(trial, respond);
+
+    if (!isFinite(trial[respond]) || trial[respond] <= 0) {
+      ME.toast('That would need ' + VAR[respond].label.toLowerCase() + ' to be zero or negative, which cannot happen.');
+      return false;
+    }
+    St.si = trial;
+    St.lastChanged = changed;
+    return true;
+  }
+
+  /* PV = nRT means a gas has three degrees of freedom, not four. Any state
+   * written out with all four numbers by hand will be slightly wrong, and the
+   * equation panel will show PV and nRT disagreeing - which it did, by 1.4%,
+   * from the very first frame. So every state gets one variable recomputed
+   * from the other three before it is shown. */
+  function enforce(preferred) {
+    const order = (preferred ? [preferred] : []).concat(['V', 'P', 'T', 'n']);
+    const solveFor = order.filter((k) => !St.hold[k])[0] || 'V';
+    const v = G().solveSI(St.si, solveFor);
+    if (isFinite(v) && v > 0) St.si[solveFor] = v;
+    return solveFor;
+  }
+
+  function setVar(key, displayValue) {
+    const si = toSI(key, displayValue);
+    if (si === null || !isFinite(si)) return;
+
+    /* Guardrails that teach rather than just refuse. */
+    if (key === 'T' && si <= 0) {
+      ME.toast('Nothing can be colder than 0 K. That is not a limit of the equipment — temperature measures how much the particles are moving, and at 0 K they have stopped. There is no less than stopped.');
+      syncFields();
+      return;
+    }
+    if (si <= 0) { syncFields(); return; }
+
+    if (St.hold[key]) St.hold[key] = false;
+    if (!apply(key, si)) { syncFields(); return; }
+    reseedParticles();
+    syncAll();
+  }
+
+  /* --------------------------------------------------------------- build */
+  function build(host) {
+    St.host = host;
+    loadPrefs();
+    const wrap = el('div', { class: 'wrap' });
+    wrap.appendChild(el('h1', { text: 'Gas Simulator' }));
+    wrap.appendChild(el('p', { class: 'note gs-intro' },
+      'Four numbers describe a gas completely: how hard it pushes, how much room it has, how hot it is, and how much of it there is. Change one and something else has to move. Pick what to hold still, then drag.'));
+
+    const layout = el('div', { class: 'gs-layout' });
+
+    /* left: the box */
+    const left = el('div', { class: 'gs-left' });
+    St.canvas = el('canvas', { class: 'gs-canvas', width: '760', height: '470' });
+    left.appendChild(el('div', { class: 'gs-canvas-wrap' }, [St.canvas]));
+    St.readout = el('div', { class: 'gs-readout' });
+    left.appendChild(St.readout);
+    layout.appendChild(left);
+
+    /* right: the controls */
+    const right = el('div', { class: 'gs-right' });
+    right.appendChild(gasPicker());
+    right.appendChild(lawPresets());
+    ['P', 'V', 'T', 'n'].forEach((k) => right.appendChild(control(k)));
+    right.appendChild(extras());
+    layout.appendChild(right);
+
+    /* The equation and the graphs go in the left column under the box, because
+     * the four controls make the right column much the taller of the two and
+     * the space would otherwise just sit there empty. */
+    left.appendChild(equationPanel());
+    left.appendChild(graphPanel());
+
+    wrap.appendChild(layout);
+    wrap.appendChild(scenarioPanel());
+    host.appendChild(wrap);
+    St.built = true;
+
+    St.ctx = St.canvas.getContext('2d');
+    enforce('V');
+    reseedParticles();
+    syncAll();
+    bindPiston();
+  }
+
+  /* -------------------------------------------------------------- controls */
+  function control(key) {
+    const v = VAR[key];
+    const card = el('div', { class: 'card card-pad gs-ctrl', 'data-var': key });
+
+    const head = el('div', { class: 'gs-ctrl-head' });
+    head.appendChild(el('span', { class: 'gs-sym', text: v.symbol }));
+    head.appendChild(el('span', { class: 'gs-name', text: v.label }));
+
+    const lock = el('button', { class: 'gs-lock', title: 'Hold this one still' });
+    lock.appendChild(el('span', { class: 'gs-lock-dot' }));
+    lock.appendChild(el('span', { class: 'gs-lock-text', text: 'hold' }));
+    lock.addEventListener('click', () => {
+      const wouldHold = ['P', 'V', 'n', 'T'].filter((k) => St.hold[k] || k === key).length;
+      if (!St.hold[key] && wouldHold > 3) {
+        ME.toast('Three held at once already fixes the fourth. Release one first.');
+        return;
+      }
+      St.hold[key] = !St.hold[key];
+      syncAll();
+    });
+    head.appendChild(lock);
+    card.appendChild(head);
+
+    const row = el('div', { class: 'gs-ctrl-row' });
+    const input = el('input', { class: 'gs-num', type: 'text', inputmode: 'decimal',
+      'aria-label': v.label + ' value' });
+    input.addEventListener('change', () => {
+      const q = F().parseQuantity(input.value);
+      if (q) setVar(key, q.value); else syncFields();
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+    row.appendChild(input);
+
+    const select = el('select', { class: 'gs-unit', 'aria-label': v.label + ' unit' });
+    UNIT_CHOICES[key].forEach((u) => {
+      const label = u === 'g' ? 'g' : F().unitLabel(u);
+      select.appendChild(el('option', { value: u, text: label, selected: u === St.units[key] || null }));
+    });
+    select.addEventListener('change', () => {
+      /* Changing a unit only changes how the number is written. The gas in the
+       * box is untouched, which is worth being strict about. */
+      St.units[key] = select.value;
+      savePrefs();
+      syncAll();
+      ME.toast('Showing ' + v.label.toLowerCase() + ' in ' + (select.value === 'g' ? 'grams' : F().unitLabel(select.value)) + '. The gas itself has not changed.');
+    });
+    row.appendChild(select);
+    card.appendChild(row);
+
+    const slider = el('input', { type: 'range', class: 'gs-slider', min: '0', max: '1000', value: '500',
+      'aria-label': v.label + ' slider' });
+    slider.addEventListener('input', () => {
+      const r = sliderRange(key);
+      const frac = slider.value / 1000;
+      /* Logarithmic, because pressure and volume span orders of magnitude and
+       * a linear slider would spend its whole travel in the top decade. */
+      const si = r.log
+        ? r.min * Math.pow(r.max / r.min, frac)
+        : r.min + frac * (r.max - r.min);
+      if (St.hold[key]) St.hold[key] = false;
+      if (apply(key, si)) { reseedParticles(); syncAll(); } else syncFields();
+    });
+    card.appendChild(slider);
+
+    St.fields[key] = { input: input, slider: slider, select: select, lock: lock, card: card };
+    return card;
+  }
+
+  /* Sensible ranges, in SI, for each slider. */
+  function sliderRange(key) {
+    switch (key) {
+      case 'P': return { min: 1000, max: 5e7, log: true };
+      case 'V': return { min: 1e-5, max: 5, log: true };
+      case 'T': return { min: 20, max: 1200, log: false };
+      case 'n': return { min: 0.005, max: 200, log: true };
+      default: return { min: 0, max: 1 };
+    }
+  }
+
+  function gasPicker() {
+    const card = el('div', { class: 'card card-pad gs-gas' });
+    card.appendChild(el('h3', { class: 'section-head', text: 'Which gas' }));
+    const grid = el('div', { class: 'gs-gas-grid' });
+    G().GASES.forEach((g) => {
+      const b = el('button', { class: 'gs-gas-btn' + (g.key === St.gasKey ? ' on' : ''), 'data-gas': g.key });
+      b.appendChild(el('span', { class: 'gs-dot', style: { background: g.colour } }));
+      b.appendChild(el('span', { text: g.name }));
+      b.appendChild(el('span', { class: 'gs-mm', text: ME.fmt.fmt(G().molarMass(g.key), 4) }));
+      b.addEventListener('click', () => {
+        const wasGrams = St.units.n === 'g';
+        St.gasKey = g.key;
+        savePrefs();
+        reseedParticles();
+        syncAll();
+        ME.toast(g.name + ' at ' + ME.fmt.fmt(G().molarMass(g.key), 4) + ' g/mol. ' +
+          (wasGrams ? 'The amount is shown in grams, so the number changed — same number of particles, different mass.' :
+            'Same number of particles, so P, V, n and T are all unchanged. Only the speed on screen is different.'));
+      });
+      grid.appendChild(b);
+    });
+    card.appendChild(grid);
+    St.gasNote = el('p', { class: 'note gs-gas-note' });
+    card.appendChild(St.gasNote);
+    return card;
+  }
+
+  function lawPresets() {
+    const card = el('div', { class: 'card card-pad gs-laws' });
+    card.appendChild(el('h3', { class: 'section-head', text: 'Hold two, and you have a law' }));
+    card.appendChild(el('p', { class: 'note',
+      text: 'Each of the named gas laws is just PV = nRT with two things pinned. Pick one and the locks are set for you.' }));
+    const list = el('div', { class: 'gs-law-list' });
+    G().LAWS.forEach((law) => {
+      const b = el('button', { class: 'gs-law', 'data-law': law.key });
+      b.appendChild(el('span', { class: 'gs-law-name', text: law.name }));
+      b.appendChild(el('span', { class: 'gs-law-rel', text: law.relation }));
+      b.addEventListener('click', () => {
+        ['P', 'V', 'n', 'T'].forEach((k) => { St.hold[k] = law.hold.indexOf(k) >= 0; });
+        St.lastChanged = law.vary[0];
+        St.activeLaw = law;
+        syncAll();
+      });
+      list.appendChild(b);
+    });
+    card.appendChild(list);
+    St.lawNote = el('div', { class: 'gs-law-note' });
+    card.appendChild(St.lawNote);
+    return card;
+  }
+
+  function extras() {
+    const card = el('div', { class: 'card card-pad gs-extras' });
+    const real = el('label', { class: 'switch' });
+    const cb = el('input', { type: 'checkbox' });
+    cb.addEventListener('change', () => { St.realGas = cb.checked; syncAll(); });
+    real.appendChild(cb);
+    real.appendChild(el('span', { text: 'Compare with a real gas' }));
+    card.appendChild(real);
+    card.appendChild(el('p', { class: 'note', style: { marginTop: '6px' },
+      text: 'The ideal gas law pretends particles have no size and ignore each other. Switch this on to see how far that is from the truth for the gas and conditions you have set.' }));
+    const reset = el('button', { class: 'btn btn-sm', style: { marginTop: '10px' }, text: 'Reset' });
+    reset.addEventListener('click', () => {
+      St.si = { P: 101325, V: 0.0244, n: 1, T: 293.15 };
+      St.hold = { P: false, V: false, n: true, T: true };
+      St.realGas = false; cb.checked = false;
+      St.activeLaw = null;
+      enforce('V');
+      reseedParticles(); syncAll();
+    });
+    card.appendChild(reset);
+    return card;
+  }
+
+  /* --------------------------------------------------------- equation panel */
+  function equationPanel() {
+    const card = el('div', { class: 'card card-pad gs-eq' });
+    card.appendChild(el('h3', { text: 'PV = nRT, with your numbers in it' }));
+    St.eqBody = el('div', { class: 'gs-eq-body' });
+    card.appendChild(St.eqBody);
+    return card;
+  }
+
+  function renderEquation() {
+    ME.clear(St.eqBody);
+    const u = St.units;
+    const R = F().gasConstant(u.P, u.V, u.n === 'g' ? 'mol' : u.n);
+
+    /* the symbolic form */
+    const line = el('div', { class: 'gs-eq-line' });
+    ['P', 'V', '=', 'n', 'R', 'T'].forEach((t) => {
+      line.appendChild(el('span', { class: t === '=' ? 'op' : 'sym', text: t }));
+    });
+    St.eqBody.appendChild(line);
+
+    /* the numbers, in the reader's units */
+    const nums = el('div', { class: 'gs-eq-nums' });
+    const cell = (label, value, unit) => el('div', { class: 'gs-eq-cell' }, [
+      el('div', { class: 'k', text: label }),
+      el('div', { class: 'v', text: ME.fmt.fmt(value, 4) }),
+      el('div', { class: 'u', text: unit }),
+    ]);
+    nums.appendChild(cell('P', shown('P'), F().unitLabel(u.P)));
+    nums.appendChild(cell('V', shown('V'), F().unitLabel(u.V)));
+    nums.appendChild(el('div', { class: 'gs-eq-op', text: '=' }));
+    nums.appendChild(cell('n', u.n === 'g' ? St.si.n : shown('n'), 'mol'));
+    nums.appendChild(cell('R', R, ''));
+    nums.appendChild(cell('T', St.si.T, 'K'));
+    St.eqBody.appendChild(nums);
+
+    const lhs = shown('P') * shown('V');
+    const rhs = (u.n === 'g' ? St.si.n : shown('n')) * R * St.si.T;
+    const check = el('div', { class: 'gs-eq-check' });
+    check.appendChild(el('span', { text: 'PV = ' + ME.fmt.fmt(lhs, 5) }));
+    check.appendChild(el('span', { class: 'op', text: Math.abs(lhs - rhs) < Math.abs(lhs) * 1e-6 ? '=' : '≈' }));
+    check.appendChild(el('span', { text: 'nRT = ' + ME.fmt.fmt(rhs, 5) }));
+    St.eqBody.appendChild(check);
+
+    /* R depends on the units, which is the thing nobody tells you */
+    St.eqBody.appendChild(el('p', { class: 'note' }, [
+      'R is ', el('strong', { text: ME.fmt.fmt(R, 6) }), ' ',
+      el('span', { class: 'gs-runit', text: F().unitLabel(u.P) + '·' + F().unitLabel(u.V) + ' / (mol·K)' }),
+      '. There is nothing to memorise here: R is one number, ', el('strong', { text: '8.314462 J/(mol·K)' }),
+      ', and every other version of it is that number wearing different units. Change a unit above and watch it follow.',
+    ]));
+
+    /* the conversions actually being done, including the kelvin one */
+    const conv = el('div', { class: 'gs-conv' });
+    let any = false;
+    if (St.units.T !== 'K') {
+      any = true;
+      conv.appendChild(el('div', { class: 'gs-conv-row' }, [
+        el('code', { text: ME.fmt.fmt(shown('T'), 4) + ' ' + F().unitLabel(St.units.T) + ' → ' + ME.fmt.fmt(St.si.T, 5) + ' K' }),
+        el('span', { class: 'note', text: 'Temperature must go in as kelvin. The law says volume is proportional to temperature, and a proportion only works if zero means zero — at 0 °C the particles still have plenty of motion left, so doubling from 10 °C to 20 °C does not double anything. From 283 K to 293 K it is a 3.5% change, which is what actually happens.' }),
+      ]));
+    }
+    if (St.units.n === 'g') {
+      any = true;
+      conv.appendChild(el('div', { class: 'gs-conv-row' }, [
+        el('code', { text: ME.fmt.fmt(shown('n'), 4) + ' g ÷ ' + ME.fmt.fmt(G().molarMass(St.gasKey), 4) + ' g/mol = ' + ME.fmt.fmt(St.si.n, 4) + ' mol' }),
+        el('span', { class: 'note', text: 'Grams are not an amount the gas laws understand — they count particles, not mass. Dividing by the molar mass turns one into the other, and it is the only place in this panel where which gas you picked makes any difference.' }),
+      ]));
+    }
+    if (any) {
+      St.eqBody.appendChild(el('h4', { class: 'section-head', text: 'Conversions being done for you' }));
+      St.eqBody.appendChild(conv);
+    }
+
+    if (St.realGas) St.eqBody.appendChild(realGasPanel());
+  }
+
+  function realGasPanel() {
+    const box = el('div', { class: 'gs-real' });
+    const r = G().nonIdeal(St.si, St.gasKey);
+    if (!r) {
+      box.appendChild(el('p', { class: 'note', text: 'At this volume the particles would be overlapping, which the van der Waals equation cannot describe either. It is a liquid by now.' }));
+      return box;
+    }
+    const u = St.units.P;
+    const ideal = F().convert(r.ideal, 'Pa', u), real = F().convert(r.real, 'Pa', u);
+    box.appendChild(el('h4', { class: 'section-head', text: 'Ideal against real' }));
+    const grid = el('div', { class: 'gs-real-grid' });
+    grid.appendChild(el('div', {}, [el('div', { class: 'k', text: 'Ideal gas law says' }),
+      el('div', { class: 'v', text: ME.fmt.fmt(ideal, 5) + ' ' + F().unitLabel(u) })]));
+    grid.appendChild(el('div', {}, [el('div', { class: 'k', text: 'van der Waals says' }),
+      el('div', { class: 'v', text: ME.fmt.fmt(real, 5) + ' ' + F().unitLabel(u) })]));
+    grid.appendChild(el('div', {}, [el('div', { class: 'k', text: 'Difference' }),
+      el('div', { class: 'v' + (r.matters ? ' warn' : ''), text: (r.percent > 0 ? '+' : '') + ME.fmt.fmt(r.percent, 3) + '%' })]));
+    box.appendChild(grid);
+    box.appendChild(el('p', { class: 'note', text: r.matters
+      ? 'More than a couple of percent out, so the ideal gas law is starting to lie here. Two things it ignores are catching up: the particles do take up room, which leaves less space than the container suggests, and they do pull on each other, which softens their landing on the wall. Squeeze harder or cool further and it gets worse.'
+      : 'Under a couple of percent apart, so the ideal gas law is doing fine. It works because at everyday pressures the particles are so far apart that their own size and their attraction to each other genuinely do not matter much.' }));
+    box.appendChild(el('p', { class: 'note gs-src', text: G().VDW.source + ' These are tabulated measurements, not something this app can derive.' }));
+    return box;
+  }
+
+  /* -------------------------------------------------------------- graphs */
+  function graphPanel() {
+    const card = el('div', { class: 'card card-pad gs-graphs' });
+    card.appendChild(el('h3', { text: 'What the numbers look like' }));
+    card.appendChild(el('p', { class: 'note',
+      text: 'The first three plot themselves as you drag. A straight line through the origin means directly proportional; a curve that never touches the axes means inversely proportional.' }));
+    const grid = el('div', { class: 'gs-graph-grid' });
+    St.graphs = {};
+    [['PV', 'P against V', 'V', 'P'], ['VT', 'V against T', 'T (K)', 'V'],
+     ['PT', 'P against T', 'T (K)', 'P'], ['speed', 'How fast the particles are going', 'speed (m/s)', 'share']]
+      .forEach(([key, title, xl, yl]) => {
+        const holder = el('div', { class: 'gs-graph' });
+        holder.appendChild(el('div', { class: 'gs-graph-title', text: title }));
+        const c = el('canvas', { width: '340', height: '210' });
+        holder.appendChild(c);
+        holder.appendChild(el('div', { class: 'gs-graph-axes', text: xl + '  →   ↑ ' + yl }));
+        grid.appendChild(holder);
+        St.graphs[key] = c;
+      });
+    card.appendChild(grid);
+    return card;
+  }
+
+  function scenarioPanel() {
+    const card = el('div', { class: 'card card-pad gs-presets' });
+    card.appendChild(el('h3', { text: 'Try a real situation' }));
+    const list = el('div', { class: 'gs-preset-list' });
+    PRESETS.forEach((p) => {
+      const b = el('button', { class: 'gs-preset' });
+      b.appendChild(el('span', { class: 'gs-preset-name', text: p.name }));
+      b.appendChild(el('span', { class: 'note', text: p.why }));
+      b.addEventListener('click', () => {
+        St.si = Object.assign({}, p.si);
+        St.gasKey = p.gas;
+        if (p.hold) ['P', 'V', 'n', 'T'].forEach((k) => { St.hold[k] = p.hold.indexOf(k) >= 0; });
+        St.activeLaw = null;
+        /* The scenario numbers are written from life, so one of them gets
+         * recomputed to make the state obey the law exactly. */
+        enforce(p.derive || 'n');
+        clearHistory();
+        reseedParticles();
+        syncAll();
+        St.canvas.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      list.appendChild(b);
+    });
+    card.appendChild(list);
+    return card;
+  }
+
+  /* ------------------------------------------------------------ particles */
+  /* Particle count is proportional to moles, capped so the animation stays
+   * smooth. Speed is scaled from the real rms speed, so a heavy gas visibly
+   * moves slower at the same temperature. */
+  function particleCount() {
+    return Math.max(6, Math.min(260, Math.round(18 * Math.pow(St.si.n, 0.55) * 6)));
+  }
+
+  function reseedParticles() {
+    const want = particleCount();
+    const g = G().gas(St.gasKey);
+    const speed = visualSpeed();
+    while (St.particles.length > want) St.particles.pop();
+    while (St.particles.length < want) {
+      St.particles.push({
+        x: Math.random() * 0.94 + 0.02, y: Math.random() * 0.94 + 0.03,
+        a: Math.random() * Math.PI * 2, r: 3 + Math.min(4, g.atoms * 0.6),
+      });
+    }
+    St.particles.forEach((p) => {
+      p.vx = Math.cos(p.a) * speed * (0.75 + Math.random() * 0.5);
+      p.vy = Math.sin(p.a) * speed * (0.75 + Math.random() * 0.5);
+    });
+    /* The piston sits where the volume says it does, on a log scale so the
+     * whole useful range fits in the box. */
+    const r = sliderRange('V');
+    const frac = Math.log(St.si.V / r.min) / Math.log(r.max / r.min);
+    St.pistonX = Math.max(0.12, Math.min(0.97, 0.12 + frac * 0.85));
+  }
+
+  function visualSpeed() {
+    const rms = G().rmsSpeed(St.si.T, St.gasKey) || 400;
+    return Math.max(0.0006, Math.min(0.02, rms / 90000));
+  }
+
+  function bindPiston() {
+    let dragging = false;
+    const xy = (e) => {
+      const b = St.canvas.getBoundingClientRect();
+      const t = e.touches ? e.touches[0] : e;
+      return (t.clientX - b.left) / b.width;
+    };
+    const near = (fx) => Math.abs(fx - St.pistonX) < 0.05;
+    const move = (e) => {
+      if (!dragging) return;
+      e.preventDefault();
+      const fx = Math.max(0.12, Math.min(0.97, xy(e)));
+      const r = sliderRange('V');
+      const frac = (fx - 0.12) / 0.85;
+      const si = r.min * Math.pow(r.max / r.min, frac);
+      if (St.hold.V) St.hold.V = false;
+      if (apply('V', si)) { reseedParticles(); syncAll(); }
+    };
+    const down = (e) => { if (near(xy(e))) { dragging = true; move(e); } };
+    const up = () => { dragging = false; };
+    St.canvas.addEventListener('mousedown', down);
+    St.canvas.addEventListener('touchstart', down, { passive: false });
+    window.addEventListener('mousemove', move);
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('mouseup', up);
+    window.addEventListener('touchend', up);
+    St.canvas.addEventListener('mousemove', (e) => {
+      St.canvas.style.cursor = near(xy(e)) ? 'ew-resize' : 'default';
+    });
+  }
+
+  function step() {
+    const c = St.ctx, W = St.canvas.width, H = St.canvas.height;
+    const g = G().gas(St.gasKey);
+    const style = getComputedStyle(document.body);
+    const bg = style.getPropertyValue('--surface-2').trim() || '#f6f7fa';
+    const wall = style.getPropertyValue('--border-strong').trim() || '#cbd1dc';
+    const textFaint = style.getPropertyValue('--text-faint').trim() || '#878d9b';
+
+    c.clearRect(0, 0, W, H);
+    const px = St.pistonX * W;
+
+    /* the container */
+    c.fillStyle = bg;
+    c.fillRect(0, 0, px, H);
+    c.strokeStyle = wall;
+    c.lineWidth = 2;
+    c.strokeRect(1, 1, px - 2, H - 2);
+
+    /* wall-hit flashes: pressure you can see */
+    St.flashes = St.flashes.filter((f) => f.life > 0);
+    St.flashes.forEach((f) => {
+      c.globalAlpha = Math.min(1, f.life / 12) * 0.55;
+      c.fillStyle = g.colour;
+      c.beginPath();
+      c.arc(f.x * px, f.y * H, 9 * (1 - f.life / 14) + 3, 0, Math.PI * 2);
+      c.fill();
+      f.life--;
+    });
+    c.globalAlpha = 1;
+
+    /* the particles */
+    const speed = visualSpeed();
+    St.particles.forEach((p) => {
+      const sp = Math.hypot(p.vx, p.vy) || 1;
+      p.vx = (p.vx / sp) * speed; p.vy = (p.vy / sp) * speed;
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0.012) { p.x = 0.012; p.vx = Math.abs(p.vx); hit(p); }
+      if (p.x > 0.988) { p.x = 0.988; p.vx = -Math.abs(p.vx); hit(p); }
+      if (p.y < 0.016) { p.y = 0.016; p.vy = Math.abs(p.vy); hit(p); }
+      if (p.y > 0.984) { p.y = 0.984; p.vy = -Math.abs(p.vy); hit(p); }
+      c.fillStyle = g.colour;
+      c.beginPath();
+      c.arc(p.x * px, p.y * H, p.r, 0, Math.PI * 2);
+      c.fill();
+    });
+
+    /* the piston */
+    c.fillStyle = wall;
+    c.fillRect(px - 5, 0, 10, H);
+    c.fillRect(px, H / 2 - 22, Math.min(46, W - px - 4), 44);
+    c.fillStyle = textFaint;
+    c.font = '600 12px system-ui, sans-serif';
+    c.textAlign = 'center';
+    for (let i = -1; i <= 1; i++) c.fillRect(px - 2, H / 2 + i * 8 - 1, 4, 2);
+    if (px < W - 70) c.fillText('drag', px + 24, H / 2 + 34);
+
+    if (St.running) St.raf = requestAnimationFrame(step);
+  }
+
+  function hit(p) { if (St.flashes.length < 40) St.flashes.push({ x: p.x, y: p.y, life: 14 }); }
+
+  /* --------------------------------------------------------------- sync */
+  function syncFields() {
+    Object.keys(St.fields).forEach((k) => {
+      const f = St.fields[k];
+      const val = shown(k);
+      f.input.value = ME.fmt.fmt(val, k === 'n' && St.units.n === 'particles' ? 3 : 4);
+      const r = sliderRange(k);
+      const frac = r.log
+        ? Math.log(St.si[k] / r.min) / Math.log(r.max / r.min)
+        : (St.si[k] - r.min) / (r.max - r.min);
+      f.slider.value = String(Math.max(0, Math.min(1000, Math.round(frac * 1000))));
+      f.card.classList.toggle('held', !!St.hold[k]);
+      f.lock.classList.toggle('on', !!St.hold[k]);
+      if (f.select.value !== St.units[k]) f.select.value = St.units[k];
+    });
+  }
+
+  function syncAll() {
+    syncFields();
+    renderEquation();
+    renderReadout();
+    renderGasNote();
+    renderLawNote();
+    ME.$$('.gs-gas-btn', St.host).forEach((b) => b.classList.toggle('on', b.dataset.gas === St.gasKey));
+    ME.$$('.gs-law', St.host).forEach((b) =>
+      b.classList.toggle('on', !!St.activeLaw && b.dataset.law === St.activeLaw.key));
+    recordHistory();
+    drawGraphs();
+  }
+
+  function renderReadout() {
+    ME.clear(St.readout);
+    const rms = G().rmsSpeed(St.si.T, St.gasKey);
+    const items = [
+      ['Particles on screen', String(St.particles.length) + ' of ' + ME.fmt.sciText(St.si.n * F().CONST.NA, 3)],
+      ['Typical speed', ME.fmt.fmt(rms, 3) + ' m/s'],
+      ['Density', ME.fmt.fmt((St.si.n * G().molarMass(St.gasKey)) / (St.si.V * 1000), 3) + ' g/L'],
+    ];
+    items.forEach(([k, v]) => {
+      St.readout.appendChild(el('div', { class: 'gs-ro' }, [
+        el('span', { class: 'k', text: k }), el('span', { class: 'v', text: v }),
+      ]));
+    });
+  }
+
+  function renderGasNote() {
+    const g = G().gas(St.gasKey);
+    const rms = G().rmsSpeed(St.si.T, St.gasKey);
+    const ref = G().rmsSpeed(St.si.T, 'H2');
+    ME.clear(St.gasNote);
+    St.gasNote.appendChild(document.createTextNode(
+      g.name + ' is ' + ME.fmt.fmt(G().molarMass(g.key), 4) + ' g/mol, so at this temperature its particles average ' +
+      ME.fmt.fmt(rms, 3) + ' m/s — ' +
+      (St.gasKey === 'H2' ? 'the fastest of any gas, because it is the lightest.'
+        : ME.fmt.fmt(ref / rms, 2) + ' times slower than hydrogen. Heavier particles move slower at the same temperature, because temperature sets their energy and energy is mass times speed squared. ') +
+      (g.note ? '' : 'Swapping the gas changes nothing in PV = nRT: the law never asks what the particles are.')));
+    if (g.note) St.gasNote.appendChild(el('span', { text: ' ' + g.note }));
+  }
+
+  function renderLawNote() {
+    ME.clear(St.lawNote);
+    const held = ['P', 'V', 'n', 'T'].filter((k) => St.hold[k]);
+    if (!St.activeLaw) {
+      St.lawNote.appendChild(el('p', { class: 'note', text: held.length
+        ? 'Holding ' + held.map((k) => VAR[k].symbol).join(' and ') + '. Change anything else and whichever variable is still free will move to keep PV = nRT true.'
+        : 'Nothing held. Change one variable and another will move to compensate — lock a couple to control which.' }));
+      return;
+    }
+    const law = St.activeLaw;
+    const box = el('div', { class: 'callout' });
+    box.appendChild(el('strong', { text: law.name + ': ' + law.relation }));
+    box.appendChild(el('p', { text: law.plain }));
+    box.appendChild(el('p', { class: 'gs-law-why', text: law.why }));
+    box.appendChild(el('p', { class: 'note', text: 'Holding ' + law.hold.map((k) => VAR[k].label.toLowerCase()).join(' and ') +
+      ' still. Now drag ' + law.vary.map((k) => VAR[k].label.toLowerCase()).join(' or ') + ' and watch the other one answer.' }));
+    St.lawNote.appendChild(box);
+  }
+
+  /* ------------------------------------------------------------- history */
+  function clearHistory() { St.history = { PV: [], VT: [], PT: [] }; }
+  function recordHistory() {
+    const push = (key, x, y) => {
+      const list = St.history[key];
+      const last = list[list.length - 1];
+      if (last && Math.abs(last[0] - x) < 1e-12 && Math.abs(last[1] - y) < 1e-12) return;
+      list.push([x, y]);
+      if (list.length > 400) list.shift();
+    };
+    push('PV', St.si.V, St.si.P);
+    push('VT', St.si.T, St.si.V);
+    push('PT', St.si.T, St.si.P);
+  }
+
+  function drawGraphs() {
+    drawScatter('PV', St.history.PV, 'V', 'P');
+    drawScatter('VT', St.history.VT, 'T', 'V');
+    drawScatter('PT', St.history.PT, 'T', 'P');
+    drawSpeeds();
+  }
+
+  function drawScatter(key, pts, xKey, yKey) {
+    const c = St.graphs[key];
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    const W = c.width, H = c.height, pad = 26;
+    const style = getComputedStyle(document.body);
+    const line = style.getPropertyValue('--border').trim() || '#e2e5ec';
+    const accent = style.getPropertyValue('--accent').trim() || '#2f6df6';
+    const faint = style.getPropertyValue('--text-faint').trim() || '#888';
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = line; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad, 6); ctx.lineTo(pad, H - pad); ctx.lineTo(W - 6, H - pad); ctx.stroke();
+
+    if (pts.length < 2) {
+      ctx.fillStyle = faint;
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('drag something to plot', W / 2, H / 2);
+      return;
+    }
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const x0 = 0, x1 = Math.max.apply(null, xs) * 1.08;
+    const y0 = 0, y1 = Math.max.apply(null, ys) * 1.08;
+    const X = (v) => pad + ((v - x0) / (x1 - x0 || 1)) * (W - pad - 8);
+    const Y = (v) => H - pad - ((v - y0) / (y1 - y0 || 1)) * (H - pad - 10);
+
+    /* the path, in order of when it was visited */
+    ctx.strokeStyle = accent; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    pts.forEach((p, i) => { if (i) ctx.lineTo(X(p[0]), Y(p[1])); else ctx.moveTo(X(p[0]), Y(p[1])); });
+    ctx.stroke();
+    /* where it is now */
+    const last = pts[pts.length - 1];
+    ctx.fillStyle = accent;
+    ctx.beginPath(); ctx.arc(X(last[0]), Y(last[1]), 4, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function drawSpeeds() {
+    const c = St.graphs.speed;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    const W = c.width, H = c.height, pad = 26;
+    const style = getComputedStyle(document.body);
+    const line = style.getPropertyValue('--border').trim() || '#e2e5ec';
+    const faint = style.getPropertyValue('--text-faint').trim() || '#888';
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = line; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad, 6); ctx.lineTo(pad, H - pad); ctx.lineTo(W - 6, H - pad); ctx.stroke();
+
+    const vmax = Math.max(400, (G().rmsSpeed(St.si.T, St.gasKey) || 400) * 2.6);
+    const speeds = [];
+    for (let i = 0; i <= 90; i++) speeds.push((i / 90) * vmax);
+    const dist = G().speedDistribution(St.si.T, St.gasKey, speeds);
+    if (!dist) return;
+    const peak = Math.max.apply(null, dist) || 1;
+    const X = (v) => pad + (v / vmax) * (W - pad - 8);
+    const Y = (d) => H - pad - (d / peak) * (H - pad - 14);
+
+    const g = G().gas(St.gasKey);
+    ctx.fillStyle = g.colour + '44';
+    ctx.strokeStyle = g.colour;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(0));
+    speeds.forEach((v, i) => ctx.lineTo(X(v), Y(dist[i])));
+    ctx.lineTo(X(vmax), Y(0));
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    /* mark the rms speed */
+    const rms = G().rmsSpeed(St.si.T, St.gasKey);
+    ctx.strokeStyle = faint;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(X(rms), 8); ctx.lineTo(X(rms), H - pad); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = faint;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(Math.round(rms) + ' m/s', Math.min(X(rms) + 4, W - 62), 18);
+  }
+
+  /* ------------------------------------------------------------ lifecycle */
+  function ensureBuilt(host) { if (!St.built) build(host); }
+  function resume() {
+    if (!St.built || St.running) return;
+    St.running = true;
+    St.raf = requestAnimationFrame(step);
+  }
+  function pause() {
+    St.running = false;
+    if (St.raf) cancelAnimationFrame(St.raf);
+    St.raf = null;
+  }
+
+  ME.gassim = { ensureBuilt, resume, pause, get state() { return St; } };
+})();
+
+
+/* ================= 75-tools.js ================= */
+/* The Tools tab: calculators that show their working.
+ *
+ * Every one of these is a thin face over the engine. None of them does any
+ * chemistry of its own, which is the point — the number a tool shows is the
+ * same number a lesson would show and the same number a question would be
+ * graded against.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+  const el = ME.el;
+
+  /* A field spec: key, label, placeholder, and what kind of thing it takes. */
+  const TOOLS = [
+    {
+      key: 'molar-mass', name: 'Molar mass', blurb: 'Type any formula and see what a mole of it weighs, atom by atom.',
+      fields: [{ k: 'f', label: 'Formula', placeholder: 'CuSO4·5H2O', wide: true }],
+      run(v) {
+        const r = ME.formula.molarMass(v.f);
+        if (!r.ok) return { error: r.error, fixes: r.fixes };
+        const rows = r.rows.map((x) => [
+          x.sym + ' ' + x.name.toLowerCase(),
+          String(x.count) + ' × ' + ME.fmt.fmt(x.mass, 6),
+          ME.fmt.fmt(x.total, 6) + ' g/mol',
+        ]);
+        return {
+          headline: ME.fmt.fmt(r.mass, 6) + ' g/mol',
+          sub: r.formula.display + ', ' + r.formula.atoms + ' atoms',
+          table: { head: ['Element', 'Count × mass', 'Contribution'], rows: rows },
+          steps: [
+            { text: 'A molar mass is nothing more than the atoms added up. Every atomic mass here comes from the periodic table in this app, which is checked against PubChem when the app is built.' },
+            { text: 'Add the contributions: ' + r.rows.map((x) => ME.fmt.fmt(x.total, 5)).join(' + ') + ' = ' + ME.fmt.fmt(r.mass, 6) + ' g/mol.' },
+            { text: 'The unit is grams per mole, and that per-mole is doing real work: it means this number is simultaneously "what one molecule weighs in atomic mass units" and "what 6.022 × 10²³ of them weigh in grams". That coincidence is exactly why the mole was defined the way it was.' },
+          ],
+        };
+      },
+    },
+    {
+      key: 'percent-composition', name: 'Percent composition', blurb: 'What fraction of a compound’s mass is each element.',
+      fields: [{ k: 'f', label: 'Formula', placeholder: 'C6H12O6', wide: true }],
+      run(v) {
+        const r = ME.formula.percentComposition(v.f);
+        if (!r.ok) return { error: r.error, fixes: r.fixes };
+        return {
+          headline: r.rows.map((x) => x.sym + ' ' + ME.fmt.fmt(x.percent, 4) + '%').join('  ·  '),
+          sub: 'total molar mass ' + ME.fmt.fmt(r.mass, 6) + ' g/mol',
+          table: {
+            head: ['Element', 'Mass in one mole', 'Percent'],
+            rows: r.rows.map((x) => [x.sym + ' ' + x.name.toLowerCase(),
+              ME.fmt.fmt(x.total, 5) + ' g', ME.fmt.fmt(x.percent, 4) + '%']),
+          },
+          steps: [
+            { text: 'Work out what one mole of the whole compound weighs, then ask what share of that each element is responsible for.' },
+            { text: 'Each row is that element’s contribution divided by the total, times 100. They have to add to 100% — if yours do not, something is missing.' },
+          ],
+        };
+      },
+    },
+    {
+      key: 'grams-moles', name: 'Grams ⇄ moles ⇄ particles', blurb: 'The bridge between what you can weigh and what you can count.',
+      fields: [
+        { k: 'f', label: 'Formula', placeholder: 'NaCl' },
+        { k: 'amount', label: 'Amount', placeholder: '25' },
+        { k: 'kind', label: 'which is', type: 'select', options: [['g', 'grams'], ['mol', 'moles']] },
+      ],
+      run(v) {
+        const amount = num(v.amount);
+        if (amount === null) return { error: 'Type an amount.' };
+        const r = v.kind === 'mol' ? ME.stoich.molesToGrams(amount, v.f) : ME.stoich.gramsToMoles(amount, v.f);
+        if (!r.ok) return { error: r.error, fixes: r.fixes };
+        const moles = v.kind === 'mol' ? amount : r.moles;
+        const particles = ME.stoich.molesToParticles(moles);
+        return {
+          headline: v.kind === 'mol' ? ME.fmt.fmt(r.grams, 5) + ' g' : ME.fmt.fmt(r.moles, 5) + ' mol',
+          sub: ME.fmt.sciText(particles.particles, 4) + ' particles · molar mass ' + ME.fmt.fmt(r.molarMass, 6) + ' g/mol',
+          steps: r.steps.concat(particles.steps),
+        };
+      },
+    },
+    {
+      key: 'stoichiometry', name: 'Stoichiometry', blurb: 'From a mass of one substance to a mass of another, through a balanced equation.',
+      fields: [
+        { k: 'eq', label: 'Equation', placeholder: 'CH4 + O2 -> CO2 + H2O', wide: true },
+        { k: 'from', label: 'I have', placeholder: 'CH4' },
+        { k: 'grams', label: 'grams of it', placeholder: '16' },
+        { k: 'to', label: 'How much', placeholder: 'CO2' },
+      ],
+      run(v) {
+        const g = num(v.grams);
+        if (g === null) return { error: 'Type a mass in grams.' };
+        const r = ME.stoich.massToMass(v.eq, v.from, g, v.to);
+        if (!r.ok) return { error: r.error };
+        return {
+          headline: ME.fmt.fmt(r.grams, 5) + ' g of ' + r.to.species.formula.display,
+          sub: r.equation.text,
+          roadmap: r.roadmap,
+          steps: r.steps,
+        };
+      },
+    },
+    {
+      key: 'limiting', name: 'Limiting reactant', blurb: 'Which one runs out first, what you get, and what is left over.',
+      fields: [
+        { k: 'eq', label: 'Equation', placeholder: 'N2 + H2 -> NH3', wide: true },
+        { k: 'a', label: 'Reactant', placeholder: 'N2' },
+        { k: 'ag', label: 'grams', placeholder: '28' },
+        { k: 'b', label: 'Reactant', placeholder: 'H2' },
+        { k: 'bg', label: 'grams', placeholder: '10' },
+      ],
+      run(v) {
+        const ag = num(v.ag), bg = num(v.bg);
+        if (ag === null || bg === null) return { error: 'Both masses, please.' };
+        const r = ME.stoich.limiting(v.eq, [{ name: v.a, grams: ag }, { name: v.b, grams: bg }]);
+        if (!r.ok) return { error: r.error };
+        return {
+          headline: r.limiting.name + ' runs out first',
+          sub: r.equation.text,
+          table: {
+            head: ['Product', 'Moles', 'Mass'],
+            rows: r.products.map((p) => [p.name, ME.fmt.fmt(p.moles, 4), ME.fmt.fmt(p.grams, 5) + ' g']).concat(
+              r.leftovers.map((l) => [l.name + ' left over', ME.fmt.fmt(l.moles, 4), ME.fmt.fmt(l.grams, 5) + ' g'])),
+          },
+          steps: r.steps,
+        };
+      },
+    },
+    {
+      key: 'percent-yield', name: 'Percent yield', blurb: 'What you got against what the equation promised.',
+      fields: [
+        { k: 'actual', label: 'Actually got (g)', placeholder: '12.4' },
+        { k: 'theoretical', label: 'Theoretical (g)', placeholder: '15.0' },
+      ],
+      run(v) {
+        const a = num(v.actual), t = num(v.theoretical);
+        if (a === null || t === null || !t) return { error: 'Two masses, and the theoretical one cannot be zero.' };
+        const r = ME.stoich.percentYield(a, t);
+        return { headline: ME.fmt.fmt(r.percent, 4) + '%', steps: r.steps };
+      },
+    },
+    {
+      key: 'empirical', name: 'Empirical formula', blurb: 'From percentages or masses to the simplest whole-number ratio.',
+      fields: [{ k: 'data', label: 'Element and amount, one per line', type: 'area', wide: true,
+        placeholder: 'C 40.0\nH 6.7\nO 53.3' }],
+      run(v) {
+        const entries = String(v.data || '').split(/\n+/).map((line) => {
+          const m = line.trim().match(/^([A-Za-z]{1,2})\s*[:\s,]\s*([\d.]+)/);
+          return m ? { sym: m[1][0].toUpperCase() + (m[1][1] || '').toLowerCase(), value: parseFloat(m[2]) } : null;
+        }).filter(Boolean);
+        if (entries.length < 2) return { error: 'Give me at least two lines, like "C 40.0".' };
+        const r = ME.stoich.empiricalFormula(entries);
+        if (!r.ok) return { error: r.error, steps: r.steps };
+        return { headline: r.formula, sub: 'simplest whole-number ratio', steps: r.steps };
+      },
+    },
+    {
+      key: 'gas-laws', name: 'Gas laws', blurb: 'PV = nRT in any units, with every conversion shown.',
+      fields: [
+        { k: 'P', label: 'Pressure', placeholder: '1', unit: 'pressure', unitDefault: 'atm' },
+        { k: 'V', label: 'Volume', placeholder: '22.4', unit: 'volume', unitDefault: 'L' },
+        { k: 'n', label: 'Moles', placeholder: '1', unit: 'amount', unitDefault: 'mol' },
+        { k: 'T', label: 'Temperature', placeholder: '273.15', unit: 'temperature', unitDefault: 'K' },
+        { k: 'solve', label: 'Leave one blank, or solve for', type: 'select',
+          options: [['auto', 'the blank one'], ['P', 'P'], ['V', 'V'], ['n', 'n'], ['T', 'T']] },
+      ],
+      run(v) {
+        const units = { P: v.P_unit || 'atm', V: v.V_unit || 'L', n: v.n_unit || 'mol', T: v.T_unit || 'K' };
+        const vals = {};
+        ['P', 'V', 'n', 'T'].forEach((k) => { vals[k] = num(v[k]); });
+        let solveFor = v.solve && v.solve !== 'auto' ? v.solve : null;
+        if (!solveFor) {
+          const blanks = ['P', 'V', 'n', 'T'].filter((k) => vals[k] === null);
+          if (blanks.length !== 1) return { error: 'Leave exactly one of the four blank, or pick which to solve for.' };
+          solveFor = blanks[0];
+        }
+        const missing = ['P', 'V', 'n', 'T'].filter((k) => k !== solveFor && vals[k] === null);
+        if (missing.length) return { error: 'I still need ' + missing.join(', ') + '.' };
+        if (vals.T !== null && solveFor !== 'T') {
+          const K = ME.fmt.convert(vals.T, units.T, 'K');
+          if (K <= 0) return { error: 'Nothing can be at or below 0 K. Temperature measures how much the particles move, and at 0 K they have stopped — there is no less than stopped.' };
+        }
+        const r = ME.gas.solve(Object.assign({}, vals, { units: units }), solveFor);
+        if (!r.ok) return { error: r.error };
+        return {
+          headline: solveFor + ' = ' + ME.fmt.fmt(r.value, 5) + ' ' + ME.fmt.unitLabel(r.unit),
+          sub: 'using R = ' + ME.fmt.fmt(r.R, 6) + ' ' + r.RUnit,
+          steps: [
+            { text: 'PV = nRT. Rearranged for ' + solveFor + ', that is ' + rearranged(solveFor) + '.' },
+          ].concat(r.steps.map((s) => ({
+            text: ME.fmt.fmt(s.from, 5) + ' ' + ME.fmt.unitLabel(s.fromUnit) + ' becomes ' +
+              ME.fmt.fmt(s.to, 5) + ' ' + ME.fmt.unitLabel(s.toUnit) + '.' + (s.why ? ' ' + s.why : ''),
+          }))).concat([
+            { text: 'R is not a number to look up — it is 8.314462 J/(mol·K) expressed in whatever units you are working in. Here it comes out as ' + ME.fmt.fmt(r.R, 6) + ' ' + r.RUnit + '.' },
+            { text: 'Answer: ' + solveFor + ' = ' + ME.fmt.fmt(r.value, 5) + ' ' + ME.fmt.unitLabel(r.unit) + '.' },
+          ]),
+          link: { view: '#/gas', label: 'See it in the Gas Simulator' },
+        };
+      },
+    },
+    {
+      key: 'concentration', name: 'Concentration', blurb: 'Molarity from moles or grams, mass percent, ppm and molality.',
+      fields: [
+        { k: 'mode', label: 'Work out', type: 'select', options: [
+          ['M-mol', 'molarity from moles'], ['M-g', 'molarity from grams'],
+          ['pct', 'mass percent'], ['ppm', 'parts per million'], ['molal', 'molality'],
+        ] },
+        { k: 'a', label: 'Amount', placeholder: '0.5' },
+        { k: 'f', label: 'Formula (for grams)', placeholder: 'NaCl' },
+        { k: 'b', label: 'Volume (L) or mass (g/kg)', placeholder: '2' },
+      ],
+      run(v) {
+        const a = num(v.a), b = num(v.b);
+        if (a === null || b === null || !b) return { error: 'Two numbers, and the second cannot be zero.' };
+        let r;
+        if (v.mode === 'M-mol') r = ME.solution.molarity(a, b);
+        else if (v.mode === 'M-g') r = ME.solution.molarityFromGrams(a, v.f, b);
+        else if (v.mode === 'pct') r = ME.solution.massPercent(a, b);
+        else if (v.mode === 'ppm') r = ME.solution.ppm(a, b);
+        else r = ME.solution.molality(a, b);
+        if (!r.ok) return { error: r.error };
+        const unit = v.mode === 'pct' ? '%' : v.mode === 'ppm' ? ' ppm' : v.mode === 'molal' ? ' mol/kg' : ' M';
+        return { headline: ME.fmt.fmt(r.value, 5) + unit, steps: r.steps };
+      },
+    },
+    {
+      key: 'dilution', name: 'Dilution', blurb: 'M₁V₁ = M₂V₂. Leave one box empty.',
+      fields: [
+        { k: 'M1', label: 'M₁', placeholder: '6' }, { k: 'V1', label: 'V₁', placeholder: '' },
+        { k: 'M2', label: 'M₂', placeholder: '1.5' }, { k: 'V2', label: 'V₂', placeholder: '250' },
+      ],
+      run(v) {
+        const g = (k) => (String(v[k] || '').trim() === '' ? null : num(v[k]));
+        const r = ME.solution.dilute(g('M1'), g('V1'), g('M2'), g('V2'));
+        if (!r.ok) return { error: r.error };
+        return { headline: r.solvedFor + ' = ' + ME.fmt.fmt(r.value, 5), steps: r.steps };
+      },
+    },
+    {
+      key: 'ph', name: 'pH and pOH', blurb: 'Between pH, pOH, [H⁺] and [OH⁻].',
+      fields: [
+        { k: 'mode', label: 'I know', type: 'select', options: [['pH', 'the pH'], ['H', '[H⁺] in mol/L']] },
+        { k: 'value', label: 'Value', placeholder: '3.5' },
+      ],
+      run(v) {
+        const x = num(v.value);
+        if (x === null) return { error: 'Type a value.' };
+        const r = v.mode === 'pH' ? ME.solution.HfrompH(x) : ME.solution.pHfromH(x);
+        if (!r.ok) return { error: r.error };
+        const pH = v.mode === 'pH' ? x : r.pH;
+        return {
+          headline: 'pH ' + ME.fmt.fmt(pH, 3) + (pH < 7 ? '  ·  acidic' : pH > 7 ? '  ·  basic' : '  ·  neutral'),
+          sub: '[H⁺] = ' + ME.fmt.sciText(v.mode === 'pH' ? r.H : x, 4) + ' mol/L, [OH⁻] = ' +
+            ME.fmt.sciText(r.OH, 4) + ' mol/L, pOH = ' + ME.fmt.fmt(r.pOH, 3),
+          steps: r.steps,
+        };
+      },
+    },
+    {
+      key: 'heat', name: 'Heat: q = mcΔT', blurb: 'Energy in or out of something whose temperature changed.',
+      fields: [
+        { k: 'm', label: 'Mass (g)', placeholder: '250' },
+        { k: 'sub', label: 'Substance', type: 'select', options: [] },
+        { k: 'c', label: 'or specific heat J/(g·K)', placeholder: '4.184' },
+        { k: 'dT', label: 'ΔT (K or °C)', placeholder: '30' },
+      ],
+      run(v) {
+        const m = num(v.m), dT = num(v.dT);
+        let c = num(v.c);
+        if (v.sub && v.sub !== 'custom') c = ME.ref.SPECIFIC_HEAT.values[v.sub];
+        if (m === null || dT === null || c === null) return { error: 'Mass, specific heat and temperature change, please.' };
+        const r = ME.solution.heat(m, c, dT);
+        return {
+          headline: ME.fmt.fmt(r.q, 5) + ' J  (' + ME.fmt.fmt(r.q / 1000, 4) + ' kJ)',
+          sub: (v.sub && v.sub !== 'custom' ? v.sub + ', ' : '') + 'c = ' + ME.fmt.fmt(c, 4) + ' J/(g·K)',
+          steps: r.steps,
+          source: ME.ref.SPECIFIC_HEAT.source,
+        };
+      },
+    },
+    {
+      key: 'gibbs', name: 'Gibbs free energy', blurb: 'ΔG = ΔH − TΔS, and whether a reaction goes by itself.',
+      fields: [
+        { k: 'H', label: 'ΔH (kJ/mol)', placeholder: '-92' },
+        { k: 'S', label: 'ΔS (J/mol·K)', placeholder: '-198' },
+        { k: 'T', label: 'T (K)', placeholder: '298' },
+      ],
+      run(v) {
+        const H = num(v.H), S = num(v.S), T = num(v.T);
+        if (H === null || S === null || T === null) return { error: 'All three, please.' };
+        if (T <= 0) return { error: 'Temperature in kelvin, and it cannot be zero or less.' };
+        const r = ME.solution.gibbs(H, S, T);
+        return {
+          headline: 'ΔG = ' + ME.fmt.fmt(r.deltaG, 4) + ' kJ/mol',
+          sub: r.spontaneous ? 'negative, so it goes on its own' : 'positive, so it needs pushing',
+          steps: r.steps,
+        };
+      },
+    },
+    {
+      key: 'name-formula', name: 'Name ⇄ formula', blurb: 'Inorganic compounds, both directions, with the rules spelled out.',
+      fields: [{ k: 'q', label: 'A formula or a name', placeholder: 'iron(III) sulfate', wide: true }],
+      run(v) {
+        const text = String(v.q || '').trim();
+        if (!text) return { error: 'Type a formula or a name.' };
+        const asFormula = ME.formula.parse(text);
+        if (asFormula.ok) {
+          const r = ME.naming.nameOf(text);
+          if (!r.ok) return { error: r.error };
+          return { headline: r.name, sub: asFormula.display + ', ' + ME.fmt.fmt(asFormula.mass, 5) + ' g/mol',
+            steps: r.steps };
+        }
+        const r = ME.naming.formulaOf(text);
+        if (!r.ok) return { error: r.error, fixes: asFormula.fixes };
+        const p = ME.formula.parse(r.formula);
+        return { headline: r.formula, sub: p.ok ? ME.fmt.fmt(p.mass, 5) + ' g/mol' : '',
+          steps: r.steps.map((s) => ({ text: s })) };
+      },
+    },
+    {
+      key: 'reaction-type', name: 'Reaction type', blurb: 'What kind of reaction an equation is, and why.',
+      fields: [{ k: 'eq', label: 'Equation', placeholder: 'AgNO3 + NaCl -> AgCl + NaNO3', wide: true }],
+      run(v) {
+        const r = ME.balance.balance(v.eq);
+        if (!r.ok) return { error: r.error };
+        return {
+          headline: r.type.label, sub: r.text,
+          steps: [{ text: r.type.why }, { text: 'Balanced, it is ' + r.text + '.' }],
+          link: { view: '#/balancer/' + encodeURIComponent(v.eq), label: 'Open in the Balancer' },
+        };
+      },
+    },
+    {
+      key: 'units', name: 'Unit converter', blurb: 'Every unit the app knows, in both directions.',
+      fields: [
+        { k: 'dim', label: 'Quantity', type: 'select', options: [] },
+        { k: 'value', label: 'Value', placeholder: '1' },
+        { k: 'from', label: 'From', type: 'select', options: [] },
+        { k: 'to', label: 'To', type: 'select', options: [] },
+      ],
+      run(v) {
+        const x = num(v.value);
+        if (x === null) return { error: 'Type a value.' };
+        try {
+          const out = ME.fmt.convert(x, v.from, v.to);
+          return {
+            headline: ME.fmt.fmt(x, 6) + ' ' + ME.fmt.unitLabel(v.from) + ' = ' + ME.fmt.fmt(out, 6) + ' ' + ME.fmt.unitLabel(v.to),
+            steps: [
+              { text: 'Conversion is multiplying by a fraction that equals one. ' +
+                  '1 ' + ME.fmt.unitLabel(v.from) + ' is ' + ME.fmt.fmt(ME.fmt.convert(1, v.from, v.to), 6) + ' ' + ME.fmt.unitLabel(v.to) +
+                  ', so that fraction is the conversion factor.' },
+              { text: 'Set it up so the unit you are getting rid of appears on the bottom and cancels. If the units do not cancel, the fraction is upside down — that is the whole of dimensional analysis, and it will catch almost every arithmetic slip you make.' },
+            ],
+          };
+        } catch (e) { return { error: e.message }; }
+      },
+    },
+    {
+      key: 'sigfigs', name: 'Significant figures', blurb: 'How many a number claims, and how to round to a given number.',
+      fields: [
+        { k: 'value', label: 'Number as written', placeholder: '0.004070' },
+        { k: 'to', label: 'Round to (optional)', placeholder: '3' },
+      ],
+      run(v) {
+        const text = String(v.value || '').trim();
+        if (!text) return { error: 'Type a number.' };
+        const n = ME.fmt.sigFigs(text);
+        if (n === null) return { error: 'That does not read as a number.' };
+        const q = ME.fmt.parseQuantity(text);
+        const to = num(v.to);
+        const steps = [
+          { text: 'Significant figures are a claim about how carefully something was measured. Every digit counts except zeros that are only holding a place.' },
+          { text: 'Leading zeros never count — 0.00407 and 4.07 are measured to the same care, and the zeros only say where the decimal point is.' },
+          { text: text.indexOf('.') >= 0
+              ? 'There is a decimal point here, so trailing zeros do count: they would not have been written unless they were measured.'
+              : 'There is no decimal point, so trailing zeros are ambiguous and by convention do not count. This is exactly why scientific notation exists: 1200 could be two, three or four figures, but 1.20 × 10³ is unmistakably three.' },
+        ];
+        let headline = n + ' significant figure' + (n === 1 ? '' : 's');
+        if (to && q) {
+          const rounded = ME.fmt.roundSig(q.value, to);
+          headline += '  →  ' + ME.fmt.fmt(rounded, to) + ' to ' + to;
+          steps.push({ text: 'Rounded to ' + to + ': ' + ME.fmt.fmt(rounded, to) + ', or in scientific notation ' + ME.fmt.sciText(rounded, to) + '.' });
+        }
+        if (ME.fmt.sigFigsAmbiguous(text)) {
+          steps.push({ text: 'Written like this the precision is genuinely unclear. If you mean all of those digits, write it as ' + ME.fmt.sciText(q.value, String(text).replace(/[^\d]/g, '').replace(/0+$/, '').length || 1) + ' or put a decimal point on the end.' });
+        }
+        return { headline: headline, sub: 'value ' + (q ? ME.fmt.sciText(q.value, 6) : ''), steps: steps };
+      },
+    },
+  ];
+
+  const num = (x) => {
+    const q = ME.fmt.parseQuantity(x);
+    return q ? q.value : null;
+  };
+
+  const rearranged = (k) => ({ P: 'P = nRT / V', V: 'V = nRT / P', n: 'n = PV / RT', T: 'T = PV / nR' }[k]);
+
+  const St = { built: false, host: null, current: null, nodes: {} };
+
+  function build(host) {
+    St.host = host;
+    const wrap = el('div', { class: 'wrap' });
+    wrap.appendChild(el('h1', { text: 'Tools' }));
+    wrap.appendChild(el('p', { class: 'note tl-intro' },
+      'Calculators that show their working. Every one uses the same code as the lessons and the practice questions, so an answer here and an answer there can never disagree.'));
+
+    const layout = el('div', { class: 'tl-layout' });
+    const nav = el('nav', { class: 'tl-nav', 'aria-label': 'Tools' });
+    TOOLS.forEach((t) => {
+      const b = el('button', { class: 'tl-navbtn', 'data-tool': t.key });
+      b.appendChild(el('span', { class: 'tl-navname', text: t.name }));
+      b.appendChild(el('span', { class: 'note', text: t.blurb }));
+      b.addEventListener('click', () => show(t.key));
+      nav.appendChild(b);
+    });
+    layout.appendChild(nav);
+    St.panel = el('div', { class: 'tl-panel' });
+    layout.appendChild(St.panel);
+    wrap.appendChild(layout);
+    host.appendChild(wrap);
+    St.built = true;
+    show('molar-mass');
+  }
+
+  function show(key) {
+    const tool = TOOLS.filter((t) => t.key === key)[0] || TOOLS[0];
+    St.current = tool;
+    ME.$$('.tl-navbtn', St.host).forEach((b) => b.classList.toggle('on', b.dataset.tool === tool.key));
+    ME.clear(St.panel);
+
+    const card = el('div', { class: 'card card-pad tl-tool' });
+    card.appendChild(el('h2', { text: tool.name }));
+    card.appendChild(el('p', { class: 'note', text: tool.blurb }));
+
+    const form = el('div', { class: 'tl-form' });
+    const values = {};
+    const inputs = {};
+
+    tool.fields.forEach((f) => {
+      const holder = el('div', { class: 'tl-field' + (f.wide ? ' wide' : '') });
+      holder.appendChild(el('label', { text: f.label }));
+      let node;
+      if (f.type === 'select') {
+        node = el('select', { class: 'tl-select' });
+        optionsFor(tool, f).forEach(([v, label]) => node.appendChild(el('option', { value: v, text: label })));
+        values[f.k] = node.value;
+        node.addEventListener('change', () => { values[f.k] = node.value; go(); });
+      } else if (f.type === 'area') {
+        node = el('textarea', { class: 'tl-area', rows: '4', placeholder: f.placeholder || '', spellcheck: 'false' });
+        node.addEventListener('input', ME.debounce(() => { values[f.k] = node.value; go(); }, 200));
+      } else {
+        const row = el('div', { class: 'tl-inline' });
+        node = el('input', { class: 'tl-input', type: 'text', placeholder: f.placeholder || '', spellcheck: 'false',
+          autocomplete: 'off', autocapitalize: 'off' });
+        node.addEventListener('input', ME.debounce(() => { values[f.k] = node.value; go(); }, 200));
+        node.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+        row.appendChild(node);
+        if (f.unit) {
+          const u = el('select', { class: 'tl-select tl-unit' });
+          ME.fmt.unitsFor(f.unit).forEach((x) =>
+            u.appendChild(el('option', { value: x, text: ME.fmt.unitLabel(x), selected: x === f.unitDefault || null })));
+          values[f.k + '_unit'] = f.unitDefault;
+          u.addEventListener('change', () => { values[f.k + '_unit'] = u.value; go(); });
+          row.appendChild(u);
+        }
+        holder.appendChild(row);
+        form.appendChild(holder);
+        inputs[f.k] = node;
+        if (f.placeholder && !f.unit) { /* prefill nothing; placeholders show the shape */ }
+        return;
+      }
+      holder.appendChild(node);
+      form.appendChild(holder);
+      inputs[f.k] = node;
+    });
+    card.appendChild(form);
+
+    const goBtn = el('button', { class: 'btn btn-primary', text: 'Work it out' });
+    goBtn.addEventListener('click', () => go());
+    card.appendChild(goBtn);
+
+    const out = el('div', { class: 'tl-out', 'aria-live': 'polite' });
+    card.appendChild(out);
+    St.panel.appendChild(card);
+
+    /* Pre-fill from the placeholders so the tool shows something working the
+     * moment it opens, rather than an empty box and a question mark. */
+    tool.fields.forEach((f) => {
+      if (f.type === 'select' || !f.placeholder) return;
+      inputs[f.k].value = f.placeholder;
+      values[f.k] = f.placeholder;
+    });
+    go();
+
+    function go() {
+      let result;
+      try { result = tool.run(values); }
+      catch (e) { result = { error: 'Something in there does not make sense: ' + e.message }; }
+      renderResult(out, result, tool, inputs, values, go);
+    }
+  }
+
+  function optionsFor(tool, f) {
+    if (f.options && f.options.length) return f.options;
+    if (tool.key === 'heat' && f.k === 'sub') {
+      return Object.keys(ME.ref.SPECIFIC_HEAT.values).map((k) => [k, k]).concat([['custom', 'something else — type c']]);
+    }
+    if (tool.key === 'units') {
+      if (f.k === 'dim') return Object.keys(ME.fmt.UNITS).map((d) => [d, d]);
+      return ME.fmt.unitsFor('pressure').map((u) => [u, ME.fmt.unitLabel(u)]);
+    }
+    return [];
+  }
+
+  function renderResult(out, r, tool, inputs, values, go) {
+    ME.clear(out);
+    if (!r) return;
+    if (r.error) {
+      const box = el('div', { class: 'callout warn' });
+      box.appendChild(el('div', { text: r.error }));
+      if (r.fixes && r.fixes.length) {
+        const row = el('div', { class: 'tl-fixes' });
+        row.appendChild(el('span', { class: 'note', text: 'Did you mean' }));
+        r.fixes.forEach((fx) => {
+          const b = el('button', { class: 'btn btn-sm' });
+          b.appendChild(el('code', { html: ME.formulaHTML(fx) }));
+          b.addEventListener('click', () => {
+            const key = tool.fields.filter((f) => f.k === 'f' || f.k === 'q')[0];
+            if (key && inputs[key.k]) { inputs[key.k].value = fx; values[key.k] = fx; go(); }
+          });
+          row.appendChild(b);
+        });
+        box.appendChild(row);
+      }
+      out.appendChild(box);
+      if (r.steps) out.appendChild(stepList(r.steps));
+      return;
+    }
+
+    out.appendChild(el('div', { class: 'tl-headline', text: r.headline }));
+    if (r.sub) out.appendChild(el('div', { class: 'tl-sub', html: ME.formulaHTML(r.sub) }));
+    if (r.roadmap) out.appendChild(roadmap(r.roadmap));
+    if (r.table) out.appendChild(table(r.table));
+    if (r.steps) out.appendChild(stepList(r.steps));
+    if (r.source) out.appendChild(el('p', { class: 'note tl-src', text: r.source }));
+    if (r.link) {
+      const b = el('button', { class: 'btn btn-sm', style: { marginTop: '12px' }, text: r.link.label });
+      b.addEventListener('click', () => ME.router.go(r.link.view));
+      out.appendChild(b);
+    }
+  }
+
+  function stepList(steps) {
+    const box = el('div', { class: 'tl-steps' });
+    box.appendChild(el('h3', { class: 'section-head', text: 'How that works' }));
+    const list = el('ol');
+    steps.forEach((s) => {
+      const li = el('li');
+      li.appendChild(el('div', { text: typeof s === 'string' ? s : s.text }));
+      if (s && s.maths) li.appendChild(el('div', { class: 'tl-maths', text: s.maths }));
+      list.appendChild(li);
+    });
+    box.appendChild(list);
+    return box;
+  }
+
+  function table(t) {
+    const node = el('table', { class: 'tl-table' });
+    const head = el('tr');
+    t.head.forEach((h) => head.appendChild(el('th', { text: h })));
+    node.appendChild(head);
+    t.rows.forEach((r) => {
+      const tr = el('tr');
+      r.forEach((c) => tr.appendChild(el('td', { html: ME.formulaHTML(String(c)) })));
+      node.appendChild(tr);
+    });
+    return node;
+  }
+
+  /* The four-step picture that makes stoichiometry click. */
+  function roadmap(steps) {
+    const box = el('div', { class: 'tl-roadmap' });
+    steps.forEach((s, i) => {
+      if (i) box.appendChild(el('span', { class: 'tl-rm-arrow', html: '&#8594;' }));
+      box.appendChild(el('div', { class: 'tl-rm-step' }, [
+        el('div', { class: 'v', text: s.label }),
+        el('div', { class: 'k', html: ME.formulaHTML(s.sub) }),
+      ]));
+    });
+    return box;
+  }
+
+  function ensureBuilt(host) { if (!St.built) build(host); }
+  ME.tools = { ensureBuilt, show, TOOLS };
+})();
+
+
+/* ================= 76-reference.js ================= */
+/* The Reference tab: the tables you keep needing, plus a glossary.
+ *
+ * Everything here is the same data the rest of the app uses, so the tables
+ * cannot drift from the calculations. Each one says where it came from,
+ * because the provenance genuinely differs — the ion table is checked
+ * against PubChem at build time, the solubility rules are from a textbook.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+  const el = ME.el;
+
+  /* The glossary. Definitions in the same voice as the lessons: what it is and
+   * why it matters, not a dictionary entry. */
+  const GLOSSARY = [
+    ['atom', 'The smallest piece of an element that is still that element. Split it and you have changed which element it is.'],
+    ['element', 'A substance made of only one kind of atom. There are 118, and everything else is built from them.'],
+    ['compound', 'Two or more different elements chemically joined, in a fixed ratio. Water is always two hydrogens to one oxygen — never 2.1.'],
+    ['mixture', 'Several substances in the same place but not joined. You can separate a mixture without any chemistry, which is the test.'],
+    ['molecule', 'A group of atoms held together by covalent bonds, behaving as one unit.'],
+    ['ion', 'An atom or group that has lost or gained electrons, so it carries a charge.'],
+    ['cation', 'A positive ion. It has lost electrons. Remember it as the "paw-sitive" cat.'],
+    ['anion', 'A negative ion. It has gained electrons.'],
+    ['isotope', 'Atoms of the same element with different numbers of neutrons. Same chemistry, different mass.'],
+    ['mole', 'A count: 6.022 × 10²³ of something. It exists so you can weigh out a known number of atoms, since counting them is impossible.'],
+    ['molar mass', 'What one mole of a substance weighs, in grams. Numerically the same as its formula mass, which is the whole convenience of the mole.'],
+    ['valence electrons', 'The electrons in the outermost shell. Almost everything an atom does chemically is decided by these and nothing else.'],
+    ['covalent bond', 'Two atoms sharing a pair of electrons. Neither one wins, so they stay stuck together.'],
+    ['ionic bond', 'One atom hands electrons to another, and the resulting opposite charges hold on to each other.'],
+    ['metallic bond', 'Metal atoms pooling their outer electrons into a shared sea, which is why metals conduct and bend instead of shattering.'],
+    ['electronegativity', 'How hard an atom pulls on shared electrons. The difference between two atoms’ values decides whether their bond is covalent, polar or ionic.'],
+    ['polar', 'A molecule with a positive end and a negative end, because the electrons are not shared evenly. Water is the famous case.'],
+    ['hydrogen bond', 'The extra-strong attraction between a hydrogen already bonded to N, O or F and a lone pair on another such atom. Weaker than a real bond, strong enough to explain most of water’s oddities.'],
+    ['intermolecular force', 'Attraction between whole molecules rather than within them. It sets melting and boiling points, not what the substance is.'],
+    ['polyatomic ion', 'A group of atoms that carries a charge and travels as one unit, like sulfate. It stays together through most reactions.'],
+    ['oxidation', 'Losing electrons. The old meaning was "reacting with oxygen", which turned out to be a special case.'],
+    ['reduction', 'Gaining electrons. It is called reduction because the charge is reduced.'],
+    ['redox', 'A reaction where electrons move from one substance to another. One thing is always oxidised and another always reduced — they cannot happen alone.'],
+    ['acid', 'Something with a hydrogen it will give away. That is what "acid" means at bottom — everything else follows from it.'],
+    ['base', 'Something that will take a hydrogen ion, usually because it has a lone pair waiting or an OH⁻ to offer.'],
+    ['pH', 'A short way of writing the hydrogen ion concentration: −log[H⁺]. One unit means a factor of ten.'],
+    ['buffer', 'A mixture of a weak acid and its conjugate base, which soaks up added acid or base and holds the pH nearly still. Your blood is one.'],
+    ['catalyst', 'Something that speeds a reaction up without being used up. It gives the reaction an easier route, lowering the activation energy.'],
+    ['activation energy', 'The hill a reaction has to get over before it can run downhill. It is why a mixture can be perfectly capable of reacting and still just sit there.'],
+    ['enthalpy', 'The heat content of a substance. ΔH is how much heat a reaction gives out or takes in, at constant pressure.'],
+    ['entropy', 'How many ways the energy and particles of a system can be arranged. More ways means higher entropy, and the universe drifts towards more ways.'],
+    ['exothermic', 'Gives out heat. The products hold less energy than the reactants, and the difference leaves as warmth.'],
+    ['endothermic', 'Takes in heat. It feels cold because it is stealing energy from its surroundings.'],
+    ['equilibrium', 'Forward and reverse reactions running at the same rate, so nothing appears to change. Both are still happening — that is why it is called dynamic.'],
+    ['stoichiometry', 'Using a balanced equation to work out how much of one substance reacts with or produces how much of another.'],
+    ['limiting reactant', 'The one that runs out first, and therefore decides how much product you can possibly get.'],
+    ['molarity', 'Moles of dissolved substance per litre of solution. Written M.'],
+    ['solute', 'The thing being dissolved.'],
+    ['solvent', 'The thing doing the dissolving. Usually there is more of it.'],
+    ['saturated', 'Holding as much dissolved solute as it can at that temperature. Add more and it just sits on the bottom.'],
+    ['precipitate', 'A solid that appears out of a solution when two dissolved things meet and form something insoluble.'],
+    ['empirical formula', 'The simplest whole-number ratio of atoms. Glucose is C₆H₁₂O₆ but its empirical formula is CH₂O.'],
+    ['isomer', 'Molecules with the same formula but different structures, and so different properties. It is why a formula alone tells you so little.'],
+    ['functional group', 'A small cluster of atoms that gives a molecule its behaviour. Recognise the group and you can predict a lot.'],
+    ['saturated (organic)', 'Holding as many hydrogens as possible — no double bonds, no rings. The other meaning of the same word, unfortunately.'],
+    ['aromatic', 'A flat ring whose electrons are spread evenly around it rather than fixed in place. Unusually stable.'],
+    ['catalyst poison', 'Something that sticks to a catalyst and stops it working. Leaded petrol wrecked catalytic converters this way.'],
+    ['significant figures', 'The digits in a measurement that were actually measured. Writing more implies precision you do not have.'],
+    ['dimensional analysis', 'Multiplying by fractions that equal one, arranged so the unwanted units cancel. It catches almost every arithmetic slip.'],
+  ];
+
+  const SECTIONS = [
+    { key: 'ions', name: 'Polyatomic ions', render: ionTable },
+    { key: 'charges', name: 'Ion charges from the table', render: chargeTable },
+    { key: 'solubility', name: 'Solubility rules', render: solubility },
+    { key: 'activity', name: 'Activity series', render: activity },
+    { key: 'acids', name: 'Strong acids and bases', render: acidsBases },
+    { key: 'constants', name: 'Constants', render: constants },
+    { key: 'prefixes', name: 'SI prefixes', render: prefixes },
+    { key: 'heats', name: 'Specific heats', render: heats },
+    { key: 'glossary', name: 'Glossary', render: glossary },
+  ];
+
+  const St = { built: false, host: null, panel: null };
+
+  function build(host) {
+    St.host = host;
+    const wrap = el('div', { class: 'wrap' });
+    wrap.appendChild(el('h1', { text: 'Reference' }));
+    wrap.appendChild(el('p', { class: 'note rf-intro' },
+      'The tables you end up needing over and over. Each one says where it came from, because that differs: the ion table is checked against PubChem every time the app is built, while the solubility rules and the activity series are textbook data with no machine-readable source.'));
+
+    const layout = el('div', { class: 'rf-layout' });
+    const nav = el('nav', { class: 'rf-nav' });
+    SECTIONS.forEach((s) => {
+      const b = el('button', { class: 'rf-navbtn', 'data-sec': s.key, text: s.name });
+      b.addEventListener('click', () => show(s.key));
+      nav.appendChild(b);
+    });
+    layout.appendChild(nav);
+    St.panel = el('div', { class: 'rf-panel' });
+    layout.appendChild(St.panel);
+    wrap.appendChild(layout);
+    host.appendChild(wrap);
+    St.built = true;
+    show('ions');
+  }
+
+  function show(key) {
+    const sec = SECTIONS.filter((s) => s.key === key)[0] || SECTIONS[0];
+    ME.$$('.rf-navbtn', St.host).forEach((b) => b.classList.toggle('on', b.dataset.sec === sec.key));
+    ME.clear(St.panel);
+    St.panel.appendChild(sec.render());
+    ME.bindTips(St.panel);
+  }
+
+  function card(title, provenance, body) {
+    const c = el('div', { class: 'card card-pad rf-card' });
+    c.appendChild(el('h2', { text: title }));
+    if (provenance) c.appendChild(el('p', { class: 'rf-prov', text: provenance }));
+    if (body) c.appendChild(body);
+    return c;
+  }
+
+  function ionTable() {
+    const byCharge = {};
+    ME.ref.ions.forEach((i) => { (byCharge[i.c] = byCharge[i.c] || []).push(i); });
+    const body = el('div');
+    body.appendChild(el('p', { class: 'note',
+      text: 'Grouped by charge, because that is what you need when you are balancing a formula. The pattern in the endings is worth more than memorising the list: -ate is the common one, -ite has one oxygen fewer, hypo- one fewer again, and per- one more.' }));
+    Object.keys(byCharge).sort((a, b) => Number(b) - Number(a)).forEach((c) => {
+      const n = Number(c);
+      body.appendChild(el('h3', { class: 'section-head',
+        text: n > 0 ? 'Charge ' + n + '+' : 'Charge ' + Math.abs(n) + '−' }));
+      const t = el('table', { class: 'rf-table' });
+      const head = el('tr');
+      ['Name', 'Formula', 'Where you meet it'].forEach((h) => head.appendChild(el('th', { text: h })));
+      t.appendChild(head);
+      byCharge[c].forEach((i) => {
+        const tr = el('tr');
+        tr.appendChild(el('td', {}, [el('strong', { text: i.n })]));
+        const f = el('td', { class: 'mono' });
+        f.appendChild(el('span', { html: ME.formulaHTML(i.f) }));
+        f.appendChild(el('sup', { text: (Math.abs(n) === 1 ? '' : Math.abs(n)) + (n < 0 ? '−' : '+') }));
+        tr.appendChild(f);
+        tr.appendChild(el('td', { class: 'note', text: i.note || '' }));
+        t.appendChild(tr);
+      });
+      body.appendChild(t);
+    });
+    return card('Polyatomic ions',
+      'All ' + ME.ref.ions.length + ' of these are resolved against PubChem when the app is built, with both the formula and the charge cross-checked. If PubChem disagrees, the build fails rather than shipping a wrong ion.',
+      body);
+  }
+
+  function chargeTable() {
+    const body = el('div');
+    body.appendChild(el('p', { class: 'note',
+      text: 'These are not memorised, they are read off the periodic table. An element in group 1 has one electron in its outer shell and loses it; an element in group 17 is one short and takes one. Click any element to see the reasoning.' }));
+    const grid = el('div', { class: 'rf-charge-grid' });
+    ME.chem.elements.forEach((e) => {
+      const t = ME.ref.typicalCharge(e.sym);
+      if (!t) return;
+      const b = el('button', { class: 'rf-charge' + (t.variable ? ' varies' : t.charge === 0 ? ' none' : t.charge > 0 ? ' pos' : ' neg') });
+      b.appendChild(el('span', { class: 'sym', text: e.sym }));
+      b.appendChild(el('span', { class: 'q', text: t.variable ? 'varies' : t.charge === 0 ? '—' :
+        (Math.abs(t.charge) === 1 ? '' : Math.abs(t.charge)) + (t.charge > 0 ? '+' : '−') }));
+      b.dataset.tip = e.name + ': ' + t.why;
+      b.addEventListener('click', () => ME.router.go('#/elements/' + e.sym));
+      grid.appendChild(b);
+    });
+    body.appendChild(grid);
+    body.appendChild(el('p', { class: 'note', style: { marginTop: '12px' },
+      text: 'The ones marked "varies" are mostly transition metals, and that is exactly why their names carry Roman numerals — the numeral is there to say which charge this time. Carbon and silicon vary for a different reason: gaining four electrons or losing four are both too hard, so they share instead.' }));
+    return card('What charge an element takes', 'Derived from each element’s group in the PubChem periodic table, not stored as a separate list, so it cannot disagree with the table.', body);
+  }
+
+  function solubility() {
+    const body = el('div');
+    body.appendChild(el('p', { class: 'note',
+      text: 'What dissolves in water and what does not. This is what lets you predict whether mixing two solutions produces a solid — which is the whole of double replacement.' }));
+    ME.ref.SOLUBILITY.rules.forEach((r) => {
+      const box = el('div', { class: 'rf-rule ' + (r.soluble ? 'yes' : 'no') });
+      box.appendChild(el('div', { class: 'rf-rule-head', text: r.text }));
+      box.appendChild(el('div', { class: 'note', text: r.why }));
+      if (r.exceptions.length) {
+        box.appendChild(el('div', { class: 'rf-exc' }, [
+          el('span', { class: 'note', text: 'Exceptions: ' }),
+          el('span', { class: 'mono', html: r.exceptions.map((x) => ME.formulaHTML(x)).join(', ') }),
+        ]));
+      }
+      body.appendChild(box);
+    });
+    return card('Solubility rules', ME.ref.SOLUBILITY.source, body);
+  }
+
+  function activity() {
+    const body = el('div');
+    body.appendChild(el('p', { class: 'note', text: ME.ref.ACTIVITY.note }));
+    const strip = el('div', { class: 'rf-activity' });
+    ME.ref.ACTIVITY.metals.forEach((sym, i) => {
+      const e = ME.chem.element(sym);
+      const b = el('button', { class: 'rf-act' + (sym === 'H' ? ' hydrogen' : '') });
+      b.appendChild(el('span', { class: 'rank', text: String(i + 1) }));
+      b.appendChild(el('span', { class: 'sym', text: sym }));
+      b.appendChild(el('span', { class: 'nm', text: e ? e.name : sym }));
+      if (sym !== 'H') b.addEventListener('click', () => ME.router.go('#/elements/' + sym));
+      strip.appendChild(b);
+      if (sym === 'H') {
+        strip.appendChild(el('div', { class: 'rf-act-divider',
+          text: 'Everything above here fizzes in acid. Nothing below it does.' }));
+      }
+    });
+    body.appendChild(strip);
+    body.appendChild(el('p', { class: 'note', style: { marginTop: '12px' },
+      text: 'Reading it: drop a metal into a solution of a metal below it and the one you dropped in will push the other one out. Copper in silver nitrate grows silver crystals; silver in copper sulfate does nothing at all.' }));
+    return card('Activity series', ME.ref.ACTIVITY.source, body);
+  }
+
+  function acidsBases() {
+    const body = el('div');
+    body.appendChild(el('div', { class: 'callout' }, ME.ref.STRONG_ACIDS.why));
+    const two = el('div', { class: 'rf-two' });
+    [['Strong acids', ME.ref.STRONG_ACIDS], ['Strong bases', ME.ref.STRONG_BASES]].forEach(([title, data]) => {
+      const col = el('div');
+      col.appendChild(el('h3', { class: 'section-head', text: title }));
+      const list = el('div', { class: 'rf-acidlist' });
+      data.list.forEach((a) => {
+        const item = el('div', { class: 'rf-acid' });
+        item.appendChild(el('span', { class: 'mono', html: ME.formulaHTML(a.f) }));
+        item.appendChild(el('span', { text: a.n }));
+        if (a.note) item.appendChild(el('span', { class: 'note', text: a.note }));
+        list.appendChild(item);
+      });
+      col.appendChild(list);
+      col.appendChild(el('p', { class: 'note', text: data.why }));
+      two.appendChild(col);
+    });
+    body.appendChild(two);
+    body.appendChild(el('p', { class: 'note', style: { marginTop: '12px' },
+      text: 'Anything not on these lists is weak, which does not mean harmless — hydrofluoric acid is weak and will dissolve glass and bone. Weak means it holds on to most of its hydrogens most of the time.' }));
+    return card('Strong acids and bases', ME.ref.STRONG_ACIDS.source, body);
+  }
+
+  function constants() {
+    const C = ME.fmt.CONST;
+    const rows = [
+      ["Avogadro's number", 'Nᴀ', ME.fmt.sciText(C.NA, 9) + ' mol⁻¹', 'Exact by definition since 2019. It is not measured any more — the mole is defined as this many things.'],
+      ['Boltzmann constant', 'kᴮ', C.kB + ' J/K', 'Also exact by definition. Energy per particle per kelvin.'],
+      ['Gas constant', 'R', ME.fmt.fmt(C.R, 9) + ' J/(mol·K)', 'Not an independent measurement: R = Nᴀ × kᴮ. Energy per mole per kelvin instead of per particle.'],
+      ['Gas constant', 'R', ME.fmt.fmt(ME.fmt.gasConstant('atm', 'L', 'mol'), 7) + ' L·atm/(mol·K)', 'The same number in the units a school lab uses.'],
+      ['Gas constant', 'R', ME.fmt.fmt(ME.fmt.gasConstant('kPa', 'L', 'mol'), 7) + ' L·kPa/(mol·K)', 'And again. There is one R; these are all it wearing different clothes.'],
+      ['Molar volume at STP', 'Vₘ', ME.fmt.fmt(C.molarVolumeSTP, 6) + ' L/mol', 'One mole of any ideal gas at 0 °C and 1 atm. Calculated from R, not looked up.'],
+      ['Standard atmosphere', 'atm', C.atmInPa + ' Pa', 'Exact by definition.'],
+      ['Ice point', '0 °C', C.zeroC + ' K', 'Exact by definition — the celsius scale is defined from kelvin.'],
+      ['Ion product of water', 'Kᴡ', ME.fmt.sciText(C.Kw, 3), 'At 25 °C. This one really is measured, and it changes with temperature.'],
+    ];
+    const t = el('table', { class: 'rf-table' });
+    const head = el('tr');
+    ['Constant', 'Symbol', 'Value', 'Note'].forEach((h) => head.appendChild(el('th', { text: h })));
+    t.appendChild(head);
+    rows.forEach((r) => {
+      const tr = el('tr');
+      tr.appendChild(el('td', {}, [el('strong', { text: r[0] })]));
+      tr.appendChild(el('td', { class: 'mono', text: r[1] }));
+      tr.appendChild(el('td', { class: 'mono', text: r[2] }));
+      tr.appendChild(el('td', { class: 'note', text: r[3] }));
+      t.appendChild(tr);
+    });
+    return card('Constants',
+      'The SI definitions fix Avogadro’s number, the Boltzmann constant, the atmosphere and the ice point exactly, so R and the molar volume are computed from them here rather than copied from a book.',
+      t);
+  }
+
+  function prefixes() {
+    const t = el('table', { class: 'rf-table' });
+    const head = el('tr');
+    ['Prefix', 'Symbol', 'Multiplier', 'Example'].forEach((h) => head.appendChild(el('th', { text: h })));
+    t.appendChild(head);
+    /* Negative keys need quoting in an object literal. */
+    const EG = { '3': '1 kg = 1000 g', '-2': '1 cm = 0.01 m', '-3': '1 mL = 0.001 L',
+      '-9': 'a chemical bond is about 0.15 nm long', '6': '1 MJ = 10⁶ J',
+      '-6': '1 µmol = 10⁻⁶ mol', '-12': 'a picosecond is how long a bond takes to vibrate once' };
+    ME.ref.PREFIXES.forEach(([name, sym, exp]) => {
+      const tr = el('tr');
+      tr.appendChild(el('td', {}, [el('strong', { text: name })]));
+      tr.appendChild(el('td', { class: 'mono', text: sym || '—' }));
+      tr.appendChild(el('td', { class: 'mono', html: exp === 0 ? '1' : '10<sup>' + exp + '</sup>' }));
+      tr.appendChild(el('td', { class: 'note', text: EG[exp] || '' }));
+      t.appendChild(tr);
+    });
+    const body = el('div');
+    body.appendChild(el('p', { class: 'note',
+      text: 'These are definitions, not measurements, and they are the same in every unit: a kilogram, a kilojoule and a kilometre all mean a thousand of the thing.' }));
+    body.appendChild(t);
+    return card('SI prefixes', 'Definitions.', body);
+  }
+
+  function heats() {
+    const t = el('table', { class: 'rf-table' });
+    const head = el('tr');
+    ['Substance', 'Specific heat J/(g·K)'].forEach((h) => head.appendChild(el('th', { text: h })));
+    t.appendChild(head);
+    const vals = ME.ref.SPECIFIC_HEAT.values;
+    Object.keys(vals).sort((a, b) => vals[b] - vals[a]).forEach((k) => {
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: k }));
+      tr.appendChild(el('td', { class: 'mono', text: String(vals[k]) }));
+      t.appendChild(tr);
+    });
+    const body = el('div');
+    body.appendChild(el('div', { class: 'callout' }, ME.ref.SPECIFIC_HEAT.why));
+    body.appendChild(t);
+    body.appendChild(el('h3', { class: 'section-head', text: 'And for water changing state' }));
+    body.appendChild(el('p', { class: 'note' }, [
+      'Melting takes ', el('strong', { text: ME.ref.LATENT.fusion + ' J/g' }),
+      ' and boiling takes ', el('strong', { text: ME.ref.LATENT.vaporisation + ' J/g' }),
+      '. ' + ME.ref.LATENT.why,
+    ]));
+    return card('Specific heats', ME.ref.SPECIFIC_HEAT.source, body);
+  }
+
+  function glossary() {
+    const body = el('div');
+    const search = el('input', { class: 'rf-search', type: 'search', placeholder: 'Find a word…',
+      'aria-label': 'Search the glossary', autocomplete: 'off' });
+    body.appendChild(search);
+    const list = el('div', { class: 'rf-gloss' });
+    body.appendChild(list);
+
+    function draw(q) {
+      ME.clear(list);
+      const n = String(q || '').toLowerCase().trim();
+      const hits = GLOSSARY.filter(([w, d]) => !n || w.toLowerCase().indexOf(n) >= 0 || d.toLowerCase().indexOf(n) >= 0);
+      if (!hits.length) {
+        list.appendChild(el('p', { class: 'note', text: 'Nothing matches that. The search looks at the definitions too, so try a plainer word.' }));
+        return;
+      }
+      hits.forEach(([word, def]) => {
+        list.appendChild(el('div', { class: 'rf-gloss-item' }, [
+          el('dt', { text: word }), el('dd', { text: def }),
+        ]));
+      });
+    }
+    search.addEventListener('input', ME.debounce(() => draw(search.value), 120));
+    draw('');
+    return card('Glossary', 'Definitions written the way the lessons write them: what it is, and why it matters.', body);
+  }
+
+  function ensureBuilt(host) { if (!St.built) build(host); }
+
+  /* So the search bar and the lessons can look a word up. */
+  function define(word) {
+    const n = String(word || '').toLowerCase().trim();
+    const hit = GLOSSARY.filter(([w]) => w.toLowerCase() === n)[0];
+    return hit ? hit[1] : null;
+  }
+
+  ME.reference = { ensureBuilt, show, define, GLOSSARY, SECTIONS };
+})();
+
+
 /* ================= 80-learn.js ================= */
 /* The guided lessons.
  *
@@ -9533,11 +13056,15 @@ window.ME = window.ME || {};
   const ME = window.ME;
   const el = ME.el;
 
-  const VIEWS = ['learn', 'draw', 'elements', 'gallery', 'search', 'molecule'];
+  const VIEWS = ['learn', 'draw', 'elements', 'balancer', 'gas', 'tools', 'reference', 'gallery', 'search', 'molecule'];
   const TABS = [
     { k: 'learn', label: 'Learn', icon: 'book' },
     { k: 'draw', label: 'Draw', icon: 'pencil' },
     { k: 'elements', label: 'Elements', icon: 'grid' },
+    { k: 'balancer', label: 'Balancer', icon: 'check' },
+    { k: 'gas', label: 'Gas Simulator', icon: 'grid' },
+    { k: 'tools', label: 'Tools', icon: 'pencil' },
+    { k: 'reference', label: 'Reference', icon: 'book' },
     { k: 'gallery', label: 'Gallery', icon: 'grid' },
     { k: 'search', label: 'Search', icon: 'search' },
   ];
@@ -9684,6 +13211,7 @@ window.ME = window.ME || {};
   }
 
   function setView(name) {
+    if (currentView === 'gas' && name !== 'gas' && ME.gassim) ME.gassim.pause();
     currentView = name;
     VIEWS.forEach((v) => {
       const node = ME.$('#view-' + v);
@@ -9728,6 +13256,32 @@ window.ME = window.ME || {};
         const key = decodeURIComponent(parts[1]);
         ME.elements.show(/^\d+$/.test(key) ? parseInt(key, 10) : key);
       }
+      return;
+    }
+    if (parts[0] === 'balancer') {
+      setView('balancer');
+      ME.balancer.ensureBuilt(ME.$('#view-balancer'));
+      /* #/balancer/CH4+O2->CO2+H2O opens straight onto that equation, which is
+       * how a lesson links to it. */
+      if (parts[1]) ME.balancer.load(decodeURIComponent(parts.slice(1).join('/')));
+      return;
+    }
+    if (parts[0] === 'gas') {
+      setView('gas');
+      ME.gassim.ensureBuilt(ME.$('#view-gas'));
+      ME.gassim.resume();
+      return;
+    }
+    if (parts[0] === 'tools') {
+      setView('tools');
+      ME.tools.ensureBuilt(ME.$('#view-tools'));
+      if (parts[1]) ME.tools.show(decodeURIComponent(parts[1]));
+      return;
+    }
+    if (parts[0] === 'reference') {
+      setView('reference');
+      ME.reference.ensureBuilt(ME.$('#view-reference'));
+      if (parts[1]) ME.reference.show(decodeURIComponent(parts[1]));
       return;
     }
     if (parts[0] === 'gallery') {

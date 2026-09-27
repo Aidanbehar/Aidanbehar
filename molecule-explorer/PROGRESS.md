@@ -108,6 +108,49 @@ network switched off.
 - `hydrosulfuric acid` would not read back to H₂S — its acid stem is longer than
   its −ide stem.
 
+## Stage 2 — the four new tabs
+
+### Done
+- **Balancer tab** (`73-balancer.js`). One box, loose input, live formatted
+  preview. Accepts names as well as formulas. Atom table that goes green, mass
+  check, reaction type with a reason, mole ratios, a by-hand walkthrough, and a
+  try-it-yourself mode with +/− steppers and live hints. Examples menu from easy
+  to unbalanceable, session history, copy button. Unbalanceable and
+  multiple-answer equations are explained, not errored.
+- **Gas Simulator tab** (`74-gassim.js` + `18-calc-gas.js`). Canvas of particles
+  with a draggable piston and visible wall-hit flashes. Slider *and* number box
+  for P, V, T, n, each with its **own** unit dropdown (7 pressure, 7 volume, 3
+  temperature, 4 amount including grams), remembered between visits. Hold-still
+  locks with one-click Boyle / Charles / Gay-Lussac / Avogadro presets, each
+  explained. 13 gases with real molar masses; heavier ones visibly move slower.
+  Live PV=nRT panel with the right R for the chosen units and every conversion
+  shown, including why temperature must be kelvin. Four live graphs. Absolute
+  zero blocked with the reason. Optional van der Waals comparison. Six real
+  scenarios.
+- **Tools tab** (`75-tools.js` + `17-calc-stoich.js`, `19-calc-solution.js`).
+  17 calculators, every one showing its working in the teacher voice: molar
+  mass, percent composition, g⇄mol⇄particles, stoichiometry with the
+  grams→moles→moles→grams road map, limiting reactant, percent yield, empirical
+  formula, gas laws, concentration, dilution, pH/pOH, q=mcΔT, ΔG, name⇄formula,
+  reaction type, unit converter, significant figures.
+- **Reference tab** (`76-reference.js`). Nine sections: polyatomic ions grouped
+  by charge, ion charges read off the periodic table, solubility rules, activity
+  series, strong acids and bases, constants, SI prefixes, specific heats, and a
+  49-entry searchable glossary. Every table states its provenance.
+- Nav now carries nine tabs on one row, with Balancer and Gas Simulator
+  immediately after Elements as specified.
+
+### Bugs found and fixed
+- `oxygen` typed into the balancer resolved to a lone **O** atom, so
+  "methane + oxygen" balanced as `CH4 + 4O → CO2 + 2H2O` — arithmetically
+  perfect and chemically nonsense. The seven diatomic elements plus P₄ and S₈
+  now resolve to their real molecular forms, and the app says why.
+- The simulator's starting state was written with all four numbers by hand, so
+  it violated PV=nRT by 1.4% from the first frame. A gas has three degrees of
+  freedom, so one variable is now always recomputed from the other three. Same
+  for every scenario preset.
+- Nine tabs pushed the search box onto a second row.
+
 ### Next, in order
 1. Course map + long-form lesson format (multi-page, checkpoints between pages)
 2. New question types: numeric, balance, name/formula, order, match, sort,

@@ -62,10 +62,20 @@ await page.waitForTimeout(1200);
 
 check('page loads with no script errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 check('no network requests attempted on load', attempted.length === 0, attempted.slice(0, 3).join(', '));
-check('navigation rendered', await page.locator('.nav .tab').count() === 5);
-check('Elements sits between Draw and Gallery',
-  (await page.locator('.nav .tab').allInnerTexts()).join('|') === 'Learn|Draw|Elements|Gallery|Search',
-  (await page.locator('.nav .tab').allInnerTexts()).join('|'));
+const tabNames = (await page.locator('.nav .tab').allInnerTexts()).join('|');
+check('navigation rendered', await page.locator('.nav .tab').count() >= 9, tabNames);
+/* The order is part of the spec: Balancer and Gas Simulator go immediately
+   after Elements, and Gallery and Search stay at the end. */
+check('the tabs are in the order the app promises',
+  tabNames === 'Learn|Draw|Elements|Balancer|Gas Simulator|Tools|Reference|Gallery|Search', tabNames);
+/* Nine tabs plus the search box must not push the nav onto a second row on a
+   laptop, which is what dropped the search box below the tabs once. */
+const navFits = await page.evaluate(() => {
+  const tabs = document.querySelector('.tabs').getBoundingClientRect();
+  const box = document.querySelector('.searchbox').getBoundingClientRect();
+  return { oneRow: Math.abs(tabs.top - box.top) < 8, height: Math.round(document.querySelector('.nav-inner').getBoundingClientRect().height) };
+});
+check('the nav stays on one row', navFits.oneRow, JSON.stringify(navFits));
 check('Learn is the default view', await page.locator('#view-learn.active').count() === 1);
 check('lesson 1 rendered', (await page.locator('.lesson h2').innerText()).includes('Why draw'));
 check('lesson figures drew molecules', await page.locator('#view-learn svg.molcanvas').count() >= 2);
@@ -193,6 +203,137 @@ const saltText = await page.locator('#view-molecule').innerText();
 check('inorganic badge shown', saltText.includes('Inorganic'));
 check('skeletal view explained away for a salt', /no carbon-carbon backbone|shortcut for carbon chains/i.test(saltText));
 await page.screenshot({ path: path.join(SHOTS, '07-salt.png'), fullPage: true });
+
+/* ------------------------------------------------------- the new tabs */
+/* Balancer: a name typed instead of a formula, which is the case that broke
+   once - "oxygen" resolved to a lone O atom and balanced CH4 + 4O -> CO2 +
+   2H2O, which is arithmetically perfect and chemically nonsense. */
+await page.locator('.tab[data-view=balancer]').click();
+await page.waitForTimeout(350);
+await page.locator('.bal-input').fill('methane + oxygen -> carbon dioxide + water');
+await page.waitForTimeout(300);
+await page.locator('.bal-actions .btn-primary').click();
+await page.waitForTimeout(350);
+const balAnswer = (await page.locator('.bal-answer .bal-eq.big').innerText()).replace(/\s+/g, '');
+check('balancer accepts names and uses the molecular form of an element',
+  balAnswer === 'CH4+2O2\u2192CO2+2H2O', balAnswer);
+check('balancer names the reaction type',
+  (await page.locator('.chip-type').innerText()) === 'Combustion',
+  await page.locator('.chip-type').innerText());
+check('balancer atom table is all green',
+  await page.locator('.bal-table tr.bad').count() === 0);
+check('balancer shows the mass check', await page.locator('.bal-mass.ok').count() === 1);
+check('balancer shows the mole ratios', await page.locator('.bal-ratio').count() >= 4);
+await page.locator('.bal-answer-acts .btn', { hasText: 'Show me how' }).click();
+await page.waitForTimeout(250);
+check('balancer walkthrough has real steps', await page.locator('.bal-steps li').count() >= 5);
+await page.locator('.bal-answer-acts .btn', { hasText: 'Let me try' }).click();
+await page.waitForTimeout(250);
+check('try-it mode gives a stepper per substance', await page.locator('.bal-stepper').count() === 4);
+check('try-it mode says what is wrong',
+  /hydrogen|oxygen|carbon/.test(await page.locator('.bal-try-feedback').innerText()),
+  await page.locator('.bal-try-feedback').innerText());
+await page.locator('.bal-try-acts .btn', { hasText: 'Show me the answer' }).click();
+await page.waitForTimeout(250);
+check('try-it mode recognises the finished answer', await page.locator('.bal-try.solved').count() === 1);
+await page.screenshot({ path: path.join(SHOTS, '09-balancer.png') });
+
+/* an equation that cannot be balanced must explain itself, not error */
+await page.locator('.bal-input').fill('CH4 + O2 -> CO2');
+await page.locator('.bal-actions .btn-primary').click();
+await page.waitForTimeout(300);
+check('an unbalanceable equation is explained',
+  /appears only on the left/.test(await page.locator('.bal-fail-why').innerText()),
+  await page.locator('.bal-fail-why').innerText());
+
+/* Gas Simulator */
+await page.locator('.tab[data-view=gas]').click();
+await page.waitForTimeout(900);
+check('gas simulator drew its box', await page.evaluate(() => {
+  const c = document.querySelector('.gs-canvas');
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  let painted = 0;
+  for (let i = 3; i < d.length; i += 4 * 97) if (d[i] > 0) painted++;
+  return painted > 200;
+}));
+check('gas simulator has all four variables', await page.locator('.gs-ctrl').count() === 4);
+/* The state has three degrees of freedom, so a hand-written set of four
+   numbers will not satisfy the law. It did not, by 1.4%, on the first frame. */
+check('the gas obeys its own law exactly', await page.evaluate(() => {
+  const s = window.ME.gassim.state.si, R = window.ME.fmt.CONST.R;
+  return Math.abs(s.P * s.V - s.n * R * s.T) / (s.P * s.V) < 1e-12;
+}));
+await page.locator('.gs-law', { hasText: "Boyle's law" }).click();
+await page.waitForTimeout(250);
+check("Boyle's law holds temperature and amount", await page.evaluate(() =>
+  window.ME.gassim.state.hold.T && window.ME.gassim.state.hold.n &&
+  !window.ME.gassim.state.hold.P && !window.ME.gassim.state.hold.V));
+/* changing a display unit must not change the gas */
+const gasBefore = await page.evaluate(() => JSON.stringify(window.ME.gassim.state.si));
+await page.locator('.gs-ctrl[data-var=T] .gs-unit').selectOption('F');
+await page.waitForTimeout(300);
+check('changing a unit only changes the display, never the gas',
+  (await page.evaluate(() => JSON.stringify(window.ME.gassim.state.si))) === gasBefore);
+check('and the number shown converts',
+  (await page.locator('.gs-ctrl[data-var=T] .gs-num').inputValue()) === '68',
+  await page.locator('.gs-ctrl[data-var=T] .gs-num').inputValue());
+await page.locator('.gs-ctrl[data-var=T] .gs-unit').selectOption('C');
+await page.waitForTimeout(200);
+/* every scenario must also be self-consistent */
+const presetCount = await page.locator('.gs-preset').count();
+let presetsOk = true;
+for (let i = 0; i < presetCount; i++) {
+  await page.locator('.gs-preset').nth(i).click();
+  await page.waitForTimeout(160);
+  const off = await page.evaluate(() => {
+    const s = window.ME.gassim.state.si, R = window.ME.fmt.CONST.R;
+    return Math.abs(s.P * s.V - s.n * R * s.T) / (s.P * s.V);
+  });
+  if (off > 1e-9) presetsOk = false;
+}
+check('every scenario preset obeys the gas law too', presetsOk && presetCount >= 5, 'presets: ' + presetCount);
+await page.evaluate(() => window.scrollTo(0, 0));
+await page.waitForTimeout(400);
+await page.screenshot({ path: path.join(SHOTS, '10-gas.png') });
+
+/* Tools */
+await page.locator('.tab[data-view=tools]').click();
+await page.waitForTimeout(450);
+check('tools are listed', await page.locator('.tl-navbtn').count() >= 15);
+check('the first tool shows an answer straight away',
+  (await page.locator('.tl-headline').innerText()).indexOf('g/mol') > 0,
+  await page.locator('.tl-headline').innerText());
+check('and shows its working', await page.locator('.tl-steps li').count() >= 2);
+await page.locator('.tl-navbtn', { hasText: 'Stoichiometry' }).click();
+await page.waitForTimeout(350);
+check('stoichiometry draws the grams-moles-moles-grams road map',
+  await page.locator('.tl-rm-step').count() === 4);
+await page.locator('.tl-navbtn', { hasText: 'Limiting reactant' }).click();
+await page.waitForTimeout(350);
+check('limiting reactant names the one that runs out',
+  /runs out first/.test(await page.locator('.tl-headline').innerText()),
+  await page.locator('.tl-headline').innerText());
+await page.screenshot({ path: path.join(SHOTS, '11-tools.png') });
+
+/* Reference */
+await page.locator('.tab[data-view=reference]').click();
+await page.waitForTimeout(400);
+check('reference sections are listed', await page.locator('.rf-navbtn').count() >= 8);
+check('the ion table says where it came from',
+  /PubChem/.test(await page.locator('.rf-prov').innerText()),
+  await page.locator('.rf-prov').innerText());
+await page.locator('.rf-navbtn', { hasText: 'Glossary' }).click();
+await page.waitForTimeout(250);
+check('the glossary has entries', await page.locator('.rf-gloss-item').count() >= 40);
+await page.locator('.rf-search').fill('mole');
+await page.waitForTimeout(250);
+const glossHits = await page.locator('.rf-gloss-item').count();
+check('the glossary search narrows', glossHits > 0 && glossHits < 40, 'hits: ' + glossHits);
+await page.locator('.rf-navbtn', { hasText: 'Activity series' }).click();
+await page.waitForTimeout(250);
+check('the activity series is in order and marks hydrogen',
+  await page.locator('.rf-act.hydrogen').count() === 1);
+await page.screenshot({ path: path.join(SHOTS, '12-reference.png') });
 
 /* --------------------------------------------------------------- gallery */
 await page.locator('.tab[data-view=gallery]').click();

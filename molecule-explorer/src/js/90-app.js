@@ -6,11 +6,15 @@
   const ME = window.ME;
   const el = ME.el;
 
-  const VIEWS = ['learn', 'draw', 'elements', 'gallery', 'search', 'molecule'];
+  const VIEWS = ['learn', 'draw', 'elements', 'balancer', 'gas', 'tools', 'reference', 'gallery', 'search', 'molecule'];
   const TABS = [
     { k: 'learn', label: 'Learn', icon: 'book' },
     { k: 'draw', label: 'Draw', icon: 'pencil' },
     { k: 'elements', label: 'Elements', icon: 'grid' },
+    { k: 'balancer', label: 'Balancer', icon: 'check' },
+    { k: 'gas', label: 'Gas Simulator', icon: 'grid' },
+    { k: 'tools', label: 'Tools', icon: 'pencil' },
+    { k: 'reference', label: 'Reference', icon: 'book' },
     { k: 'gallery', label: 'Gallery', icon: 'grid' },
     { k: 'search', label: 'Search', icon: 'search' },
   ];
@@ -157,6 +161,7 @@
   }
 
   function setView(name) {
+    if (currentView === 'gas' && name !== 'gas' && ME.gassim) ME.gassim.pause();
     currentView = name;
     VIEWS.forEach((v) => {
       const node = ME.$('#view-' + v);
@@ -201,6 +206,32 @@
         const key = decodeURIComponent(parts[1]);
         ME.elements.show(/^\d+$/.test(key) ? parseInt(key, 10) : key);
       }
+      return;
+    }
+    if (parts[0] === 'balancer') {
+      setView('balancer');
+      ME.balancer.ensureBuilt(ME.$('#view-balancer'));
+      /* #/balancer/CH4+O2->CO2+H2O opens straight onto that equation, which is
+       * how a lesson links to it. */
+      if (parts[1]) ME.balancer.load(decodeURIComponent(parts.slice(1).join('/')));
+      return;
+    }
+    if (parts[0] === 'gas') {
+      setView('gas');
+      ME.gassim.ensureBuilt(ME.$('#view-gas'));
+      ME.gassim.resume();
+      return;
+    }
+    if (parts[0] === 'tools') {
+      setView('tools');
+      ME.tools.ensureBuilt(ME.$('#view-tools'));
+      if (parts[1]) ME.tools.show(decodeURIComponent(parts[1]));
+      return;
+    }
+    if (parts[0] === 'reference') {
+      setView('reference');
+      ME.reference.ensureBuilt(ME.$('#view-reference'));
+      if (parts[1]) ME.reference.show(decodeURIComponent(parts[1]));
       return;
     }
     if (parts[0] === 'gallery') {
