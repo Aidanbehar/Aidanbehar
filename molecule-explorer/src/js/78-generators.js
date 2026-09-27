@@ -410,7 +410,11 @@
     name: 'Unit conversion',
     make(r) {
       const dim = r.pick(['pressure', 'volume', 'temperature', 'mass', 'energy', 'length']);
-      const units = ME.fmt.unitsFor(dim);
+      /* Not every unit the app knows belongs in a chemistry drill. An
+       * electronvolt is a real unit and asking a beginner to convert into one
+       * is just noise. */
+      const SKIP = { eV: 1, A: 1, ug: 1, umol: 1, particles: 1, oz: 1 };
+      const units = ME.fmt.unitsFor(dim).filter((u) => !SKIP[u]);
       const from = r.pick(units);
       let to = r.pick(units);
       let guard = 0;
