@@ -694,6 +694,38 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
   .lesson-table th, .lesson-table td { padding-left: 5px; padding-right: 5px; }
 }
 
+/* A reference table whose last column carries a sentence rather than a word.
+ * The nowrap headings of the plain .lesson-table force it wider than a phone,
+ * so this variant wraps them, and below 560px the reason moves onto its own
+ * line underneath its row instead of being squeezed or dropped. */
+.lesson-table.reasons th { white-space: normal; }
+.lesson-table.reasons td:last-child, .lesson-table.reasons th:last-child { text-align: left; }
+@media (max-width: 560px) {
+  .lesson-table.reasons, .lesson-table.reasons tbody,
+  .lesson-table.reasons tr, .lesson-table.reasons td { display: block; width: 100%; }
+  .lesson-table.reasons thead, .lesson-table.reasons tr:first-child { display: none; }
+  .lesson-table.reasons tr { padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .lesson-table.reasons tr:last-child { border-bottom: 0; }
+  .lesson-table.reasons td { padding: 1px 0; border: 0; }
+  .lesson-table.reasons td[data-label]::before {
+    content: attr(data-label) ": "; color: var(--text-faint);
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700;
+  }
+}
+
+/* A displayed equation, set as a real fraction rather than a slash, because
+ * the whole point of the unsaturation lesson is that you halve something. */
+.equation {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 4px 12px; padding: 14px 10px;
+  font-size: 1.1rem; line-height: 1.25;
+}
+.equation .frac { display: inline-flex; flex-direction: column; align-items: center; }
+.equation .frac .num { padding: 0 10px 4px; border-bottom: 2px solid currentColor; }
+.equation .frac .den { padding: 4px 10px 0; }
+.equation .eq-tail { font-weight: 700; color: var(--accent); }
+@media (max-width: 520px) { .equation { font-size: .95rem; } }
+
 
 /* ---- 08-elements.css ---- */
 /* --------------------------------------------------------- periodic table */
@@ -6544,6 +6576,134 @@ window.ME = window.ME || {};
     },
 
     {
+      id: 'unsaturation',
+      title: 'Degrees of unsaturation',
+      body() {
+        const f = document.createDocumentFragment();
+
+        f.appendChild(p('The first lesson said a formula tells you almost nothing. That was nearly true — but there is exactly one useful thing you can squeeze out of a bare formula, and it is the first thing a chemist does when an unknown substance comes back from the machine with nothing but a headcount attached.'));
+        f.appendChild(p('You can work out ', b('how many rings and double bonds it must contain'), ', without seeing the structure at all. Here is why that is possible.'));
+
+        f.appendChild(h3('How many hydrogens should a molecule have?'));
+        f.appendChild(p('Lay some carbons out in a plain row and fill every spare hand with a hydrogen. The two carbons on the ends spend one hand each holding their single neighbour, so they take three hydrogens. Every carbon in the middle spends two hands on its two neighbours, so it takes two.'));
+        f.appendChild(alkaneSeries());
+        f.appendChild(p('Three and eight. Four and ten. Five and twelve. The pattern is ', b('2 × carbons + 2'), ', and the two extra are the pair of end carbons each getting a third hydrogen instead of a neighbour.'));
+        f.appendChild(p('Branching does not change it. Bend the chain, hang a carbon off the side, rearrange it however you like — as long as every carbon still has four single bonds, the hydrogen count comes out the same. A molecule carrying this maximum is ', term('saturated', 'Saturated means the molecule is holding as many hydrogens as it possibly can. There is no room for more, so there is nothing for it to add on to.'), ': full up, with no room for more.'));
+
+        f.appendChild(h3('What a ring or a double bond costs'));
+        f.appendChild(p('Now take butane, C₄H₁₀, and do something to it.'));
+        f.appendChild(p('Bend it round and join the two ends together. Each end carbon has to free up a hand to hold the other, and a hand that was holding a hydrogen is now holding a carbon. ', b('Two hydrogens gone.')));
+        f.appendChild(p('Or leave it straight and make one of the joins a double bond instead. Both carbons at that join give up a hand to the extra shared pair. ', b('Two hydrogens gone.')));
+        f.appendChild(unsaturationCost());
+        f.appendChild(p('That is the key: a ring and a double bond cost exactly the same thing. From the formula alone they are indistinguishable, which is why the count you are about to meet is sometimes called ', b('double bond equivalents'), ' — it lumps them together on purpose, because a formula genuinely cannot tell them apart.'));
+
+        f.appendChild(h3('The count itself'));
+        f.appendChild(p('So: work out how many hydrogens the molecule ', el('em', { text: 'should' }), ' have if it were saturated, subtract how many it ', el('em', { text: 'actually' }), ' has, and halve the difference. Each missing pair is one ring or one double bond.'));
+        f.appendChild(p('That number is the ', b('degree of unsaturation'), '. For a molecule of nothing but carbon and hydrogen:'));
+        f.appendChild(equation('Degrees of unsaturation', '2C + 2 − H', '2'));
+        f.appendChild(p('Try it on benzene, C₆H₆. Six saturated carbons would carry 14 hydrogens; benzene has 6, so it is 8 short, and 8 ÷ 2 = ', b('4'), '. Look at the drawing and there they are: one ring plus three double bonds. A benzene ring is worth four degrees all by itself, which is why an unknown that comes out at four or more is the classic hint that there is a benzene ring hiding in it.'));
+        f.appendChild(el('div', { class: 'callout' }, [
+          b('A triple bond counts as two. '),
+          'It is two shared pairs beyond a single bond, so it costs four hydrogens rather than two. And a ', b('C=O'), ' counts just like any other double bond — people forget that one constantly.',
+        ]));
+
+        f.appendChild(h3('What about the other atoms?'));
+        f.appendChild(p('Real molecules have oxygens and nitrogens and the odd chlorine in them. Each one either changes the expected hydrogen count or it does not, and which it does follows straight from how many hands it has.'));
+        f.appendChild(p(b('Oxygen: ignore it. '), 'Oxygen has two hands, and a spot in the middle of a chain needs exactly two. Drop an oxygen into ethane and you get ethanol: one bond broken, two made, and not a single hydrogen gained or lost. C₂H₆ becomes C₂H₆O — look at the hydrogens, they did not move.'));
+        f.appendChild(oxygenFigure());
+        f.appendChild(p(b('Halogens: subtract them, like hydrogens. '), 'Fluorine, chlorine, bromine and iodine have one hand each, exactly like a hydrogen, and they sit in exactly the places a hydrogen would. A chlorine is a hydrogen in a heavy coat, so count it as one.'));
+        f.appendChild(p(b('Nitrogen: add it. '), 'Nitrogen has three hands. Passing a chain through it only uses two, so the spare hand takes a hydrogen the chain would not otherwise have had. Every nitrogen raises the expected count by one.'));
+        f.appendChild(p(b('Phosphorus: add it too, like a nitrogen. '), 'Phosphorus sits directly under nitrogen in the periodic table, and it inherits the same three hands. So it behaves the same way in the count: two hands to pass the chain through, one spare to hold an extra hydrogen, and therefore ', b('+1'), ' apiece — exactly the nitrogen rule, applied to a bigger atom.'));
+        f.appendChild(strip('Triphenylphosphine, a phosphorus holding three benzene rings. (2×18 + 2 + 1 − 15) ÷ 2 = 12 — and three benzene rings at four degrees each is twelve.', [
+          ['P(c1ccccc1)(c1ccccc1)c1ccccc1', 'Triphenylphosphine', 'C₁₈H₁₅P · 12 degrees'],
+        ], { width: 320, height: 230 }));
+        f.appendChild(unsatTable());
+        f.appendChild(p('Put all of that together and you have the full formula, which is the only thing in this lesson worth committing to memory:'));
+        f.appendChild(equation('Degrees of unsaturation', '2C + 2 + N + P − H − X', '2'));
+        f.appendChild(p('C is carbons, H is hydrogens, N is nitrogens, P is phosphorus, X is halogens, and oxygen — along with sulfur, which also has two hands — simply does not appear. Nitrogen and phosphorus share a column of the periodic table, so it is no coincidence that they share a term; you are really only learning one rule there, not two.'));
+        f.appendChild(h3('The one place phosphorus misbehaves'));
+        f.appendChild(p('Phosphorus has a second setting. Unlike nitrogen it can open up and hold ', b('five'), ' things at once, which is exactly what it does in a phosphate — the group that holds DNA together and carries energy around your cells as ATP.'));
+        f.appendChild(strip('Phosphoric acid. The three-hand rule predicts 0 degrees; the drawing plainly has one, the P=O.', [
+          ['OP(=O)(O)O', 'Phosphoric acid', 'H₃PO₄ · predicted 0, actually 1'],
+        ], { xray: 1, width: 300, height: 220 }));
+        f.appendChild(p('Run the numbers on H₃PO₄: no carbons, three hydrogens, one phosphorus, and the oxygens are ignored. (0 + 2 + 1 − 3) ÷ 2 = ', b('0'), '. But look at the drawing — there is a P=O sitting right there, which is a double bond, which ought to be one degree. The rule has come up short.'));
+        f.appendChild(el('div', { class: 'callout warn' }, [
+          b('So: expect a phosphate to read one degree low for each P=O. '),
+          'The three-hand rule assumes phosphorus behaves like nitrogen, and a five-bonded phosphorus does not. Some chemists dodge this by drawing the group as P⁺–O⁻ instead of P=O, which has no double bond and puts the count back in agreement — the same molecule, two honest drawings, and the arithmetic follows whichever one you picked. This is a real rough edge, not something this app is glossing over: when a phosphorus turns up, look at the drawing before you trust the number.',
+        ]));
+
+        f.appendChild(h3('Worked through: caffeine'));
+        f.appendChild(p('Caffeine is C₈H₁₀N₄O₂. Eight carbons, ten hydrogens, four nitrogens, two oxygens we throw away, no halogens.'));
+        f.appendChild(equation('Caffeine', '2×8 + 2 + 4 − 10', '2', '= 6'));
+        f.appendChild(p('Six. Now check it against the real thing, because a rule you cannot check is a rule you cannot trust:'));
+        f.appendChild(xrayFigure('CN1C=NC2=C1C(=O)N(C(=O)N2C)C', 'Caffeine: two rings, two C=O double bonds and two more double bonds inside the rings. Two plus four is six — exactly what the formula predicted.'));
+        f.appendChild(p('The arithmetic knew there were six rings-and-double-bonds in there before anyone drew anything.'));
+
+        f.appendChild(h3('What it is good for, and what it is not'));
+        f.appendChild(p('A degree count of ', b('0'), ' is the strongest result you can get: no rings, no double bonds, no triple bonds, nothing. The molecule is a plain saturated skeleton, and there is very little it can be.'));
+        f.appendChild(p('Anything above zero narrows things down rather than settling them. The count tells you ', b('how many'), '. It never tells you ', b('which'), ', and it never tells you ', b('where'), '. Four degrees might be a benzene ring, or two rings and two double bonds, or four separate C=O groups scattered about.'));
+        f.appendChild(el('div', { class: 'callout warn' }, [
+          b('Two conditions. '),
+          'The molecule has to be neutral — charges and lone ions break the hand-counting the whole derivation rests on — and the formula has to be right. A half-integer answer, like 3.5, is not a strange molecule. It is a wrong formula, and that is genuinely useful: the count catches typos.',
+        ]));
+        f.appendChild(p('You will meet this under other names, all of them the same arithmetic: ', el('em', { text: 'index of hydrogen deficiency' }), ', ', el('em', { text: 'double bond equivalents' }), ', ', el('em', { text: 'rings plus π bonds' }), '.'));
+        return f;
+      },
+      quizzes: [
+        {
+          kind: 'count',
+          q: 'A compound has the formula C₆H₁₀. How many degrees of unsaturation does it have?',
+          answer: 2,
+          right: 'Two. Six saturated carbons would carry 2×6 + 2 = 14 hydrogens, this one has 10, so it is four short — and four missing hydrogens is two degrees. Two rings, two double bonds, one of each, or a single triple bond: the formula cannot tell you which, only that there are two.',
+          wrong: 'Work out how many hydrogens six saturated carbons would carry, subtract the 10 this molecule actually has, and halve what is left.',
+          hints: {
+            4: 'That is the number of missing hydrogens, not the number of degrees. Each ring or double bond costs two of them, so halve it.',
+            1: 'One degree would mean 12 hydrogens. This one has 10, so there is something else to account for as well.',
+            0: 'Zero would mean it is saturated, and six saturated carbons carry 14 hydrogens. This molecule has only 10.',
+            14: 'That is how many hydrogens a saturated six-carbon molecule would have. The degrees come from the shortfall, not from the baseline itself.',
+            12: 'That is the hydrogen count you would expect for one degree, rather than a count of degrees.',
+          },
+        },
+        {
+          kind: 'choice',
+          q: 'Chloroethane is C₂H₅Cl. A chlorine has one hand, exactly like a hydrogen. So what do you do with it?',
+          options: [
+            { t: 'Subtract it, exactly as you would a hydrogen.', ok: true, why: 'Right — a one-handed atom fills a slot a hydrogen would have filled, so it counts as one. That gives (2×2 + 2 − 5 − 1) ÷ 2 = 0, and chloroethane is indeed a plain saturated molecule with no rings and no double bonds.' },
+            { t: 'Add it, as you would a nitrogen.', ok: false, why: 'Nitrogen is added because it has three hands — one more than a chain needs to pass through it — so it makes room for an extra hydrogen. A halogen does the opposite: it takes a slot rather than creating one.' },
+            { t: 'Ignore it, as you would an oxygen.', ok: false, why: 'Oxygen is ignored because its two hands are exactly what a place in a chain needs, so it changes nothing. A chlorine has one hand, not two, so it cannot sit in a chain at all — it hangs off the end like a hydrogen.' },
+            { t: 'Count it as a carbon, since it is a heavy atom.', ok: false, why: 'Weight has nothing to do with it. All that matters is how many hands the atom has, and chlorine has one.' },
+          ],
+        },
+        {
+          kind: 'count',
+          smiles: 'CN1CCCC1c1cccnc1',
+          render: { width: 400, height: 250 },
+          q: 'Nicotine is C₁₀H₁₄N₂. How many degrees of unsaturation does it have?',
+          answer: 5,
+          right: 'Five. (2×10 + 2 + 2 − 14) ÷ 2 = 10 ÷ 2 = 5 — and the drawing agrees. The six-membered ring is aromatic, which is one ring plus three double bonds, so four; the five-membered ring adds the fifth.',
+          wrong: 'Ten carbons, fourteen hydrogens, two nitrogens, no halogens and no oxygens to worry about. Remember that each nitrogen is added, not subtracted.',
+          hints: {
+            4: 'You have left the nitrogens out. Each one has three hands, so it makes room for one extra hydrogen and adds 1 to the top of the fraction.',
+            3: 'You have subtracted the nitrogens instead of adding them. Nitrogen makes room for a hydrogen, so it goes on the same side as the carbons; halogens are the ones you subtract.',
+            10: 'That is the top of the fraction, before halving. Each ring or double bond costs two hydrogens.',
+            6: 'Check the arithmetic: 2×10 + 2 + 2 − 14 comes to 10, and half of 10 is 5.',
+            9: 'That is roughly the count of every ring and double bond counted twice somewhere. Work the formula instead: 2C + 2 + N + P − H − X, all over 2.',
+          },
+        },
+        {
+          kind: 'choice',
+          q: 'Phosphoric acid is H₃PO₄. The formula gives (0 + 2 + 1 − 3) ÷ 2 = 0 degrees, but the usual drawing of it clearly contains a P=O double bond. What has gone wrong?',
+          options: [
+            { t: 'Nothing is wrong with the arithmetic — the rule assumes phosphorus has three hands, and this one is using five.', ok: true, why: 'Exactly right, and worth remembering. The +1 for phosphorus comes from it sitting under nitrogen with three hands. A phosphate opens up to five bonds, which the rule was never built for, so the count reads one low for every P=O. Draw the same group as P⁺–O⁻ instead and the count agrees again.' },
+            { t: 'The formula H₃PO₄ must be wrong.', ok: false, why: 'It is right — phosphoric acid really is H₃PO₄. A wrong formula usually announces itself with a half-integer answer like 3.5, and this one came out as a clean whole number.' },
+            { t: 'Oxygen should have been counted after all.', ok: false, why: 'No — oxygen genuinely has two hands and genuinely changes nothing, in a phosphate as anywhere else. The odd one out here is the phosphorus.' },
+            { t: 'A P=O does not count as a degree of unsaturation.', ok: false, why: 'It is a double bond like any other, and it counts. The problem is on the prediction side, not the counting side.' },
+          ],
+        },
+      ],
+    },
+
+    {
       id: 'groups',
       title: 'Functional groups: the interesting parts',
       body() {
@@ -6696,6 +6856,97 @@ window.ME = window.ME || {};
     });
     const fg = el('figure', { class: 'figure' }, [t]);
     fg.appendChild(el('figcaption', { text: 'Eight minus what the atom already has. That is the whole derivation.' }));
+    return fg;
+  }
+
+  /* A row of small drawings with a caption under each, which the unsaturation
+   * lesson leans on repeatedly to show a formula changing. */
+  function strip(caption, items, opts) {
+    const row = el('div', { class: 'figure-2up', style: { gridTemplateColumns: 'repeat(' + items.length + ', 1fr)' } });
+    items.forEach(([smi, name, sub]) => {
+      const cell = el('div', {});
+      cell.appendChild(drawing(smi, Object.assign({ xray: 0, width: 200, height: 150, interactive: false }, opts || {})));
+      cell.appendChild(el('div', { class: 'lbl', text: name }));
+      if (sub) cell.appendChild(el('div', { class: 'note', style: { fontSize: '.78rem' }, text: sub }));
+      row.appendChild(cell);
+    });
+    return fig(caption, row);
+  }
+
+  /* Saturated chains, so the 2n + 2 pattern can be read off rather than
+   * asserted. Drawn skeletally on purpose: the hydrogens are hidden, and
+   * working them out is the skill the previous lessons just taught. */
+  function alkaneSeries() {
+    return strip('Every hydrogen here is hidden. Count the hands at each corner and they come to eight, ten and twelve.', [
+      ['CCC', 'Propane', 'C₃H₈'],
+      ['CCCC', 'Butane', 'C₄H₁₀'],
+      ['CCCCC', 'Pentane', 'C₅H₁₂'],
+    ]);
+  }
+
+  /* One ring and one double bond, side by side with the chain they came from,
+   * both landing on the same formula. */
+  function unsaturationCost() {
+    return strip('Two different things done to butane, and the same two hydrogens lost either way. The last two share a formula and share a degree count — one each.', [
+      ['CCCC', 'Butane', 'C₄H₁₀ · 0 degrees'],
+      ['C=CCC', 'But-1-ene', 'C₄H₈ · 1 degree'],
+      ['C1CCC1', 'Cyclobutane', 'C₄H₈ · 1 degree'],
+    ]);
+  }
+
+  /* Why oxygen drops out of the formula: it slots in without disturbing the
+   * hydrogens, so the two structures below have the same H count. */
+  function oxygenFigure() {
+    return strip('An oxygen dropped into the middle of ethane. Six hydrogens before, six after — so oxygen never appears in the count at all.', [
+      ['CC', 'Ethane', 'C₂H₆ · 0 degrees'],
+      ['CCO', 'Ethanol', 'C₂H₆O · 0 degrees'],
+      ['COC', 'Dimethyl ether', 'C₂H₆O · 0 degrees'],
+    ], { xray: 1 });
+  }
+
+  /* A displayed equation, set as a real fraction, because the halving is the
+   * step people drop. `tail` carries the worked-out answer when there is one. */
+  function equation(lhs, num, den, tail) {
+    const kids = [
+      el('span', { text: lhs }),
+      el('span', { text: '=' }),
+      el('span', { class: 'frac' }, [
+        el('span', { class: 'num', text: num }),
+        el('span', { class: 'den', text: den }),
+      ]),
+    ];
+    if (tail) kids.push(el('span', { class: 'eq-tail', text: tail }));
+    return el('figure', { class: 'figure' }, [el('div', { class: 'equation' }, kids)]);
+  }
+
+  /* Each atom's effect on the count, derived from its hands rather than listed
+   * as four things to memorise. */
+  function unsatTable() {
+    const rows = [
+      ['C', 'Carbon', '4', 'Adds 2', 'Two more hands than a place in a chain needs'],
+      ['N', 'Nitrogen', '3', 'Adds 1', 'One spare hand, so room for one extra hydrogen'],
+      ['P', 'Phosphorus', '3', 'Adds 1', 'Sits under nitrogen, so it inherits the same three hands'],
+      ['O', 'Oxygen', '2', 'Nothing', 'Exactly the two hands a place in a chain needs'],
+      ['X', 'F, Cl, Br, I', '1', 'Takes 1', 'One hand, so it fills a hydrogen’s slot'],
+      ['H', 'Hydrogen', '1', 'Takes 1', 'The thing being counted'],
+    ];
+    const cols = ['Atom', 'Hands', 'Effect on the count', 'Why'];
+    const t = el('table', { class: 'lesson-table reasons' });
+    const head = el('tr');
+    cols.forEach((h) => head.appendChild(el('th', { text: h })));
+    t.appendChild(head);
+    rows.forEach(([sym, name, hands, effect, why]) => {
+      const tr = el('tr');
+      /* The label rides along on each cell so the phone layout, which stacks
+       * the row and drops the header, can still say what each line is. */
+      tr.appendChild(el('td', { 'data-label': cols[0] }, [el('b', { text: sym }), ' ' + name]));
+      tr.appendChild(el('td', { 'data-label': cols[1], text: hands }));
+      tr.appendChild(el('td', { 'data-label': cols[2] }, [el('b', { text: effect })]));
+      tr.appendChild(el('td', { 'data-label': cols[3], text: why }));
+      t.appendChild(tr);
+    });
+    const fg = el('figure', { class: 'figure' }, [t]);
+    fg.appendChild(el('figcaption', { text: 'Every line of this follows from the hands rule in lesson 2. Nothing here is a separate fact.' }));
     return fg;
   }
 
@@ -6986,7 +7237,7 @@ window.ME = window.ME || {};
     const wrap = el('div', { class: 'wrap' });
     wrap.appendChild(el('h1', { text: 'Learn' }));
     wrap.appendChild(el('p', { class: 'note', style: { maxWidth: '64ch', marginBottom: '18px' } },
-      'Eleven short lessons. Start at the top; each one assumes the one before it. Each ends with a few questions, and a wrong answer explains itself rather than just marking you down.'));
+      LESSONS.length + ' short lessons. Start at the top; each one assumes the one before it. Each ends with a few questions, and a wrong answer explains itself rather than just marking you down.'));
 
     const prog = el('div', { class: 'progress-wrap' });
     St.barNode = el('i');
@@ -7053,7 +7304,7 @@ window.ME = window.ME || {};
       }
       disarm();
       resetProgress();
-      ME.toast('All 33 questions are open again');
+      ME.toast('All ' + totalQuestions() + ' questions are open again');
     });
     box.appendChild(reset);
     return box;

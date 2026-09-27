@@ -74,13 +74,20 @@ await page.screenshot({ path: path.join(SHOTS, '01-learn.png'), fullPage: false 
 
 /* ------------------------------------------------------------- lessons */
 const lessonCount = await page.locator('.lesson-link').count();
-check('eleven lessons listed', lessonCount === 11, 'got ' + lessonCount);
+/* Counted from the app rather than pinned, so adding a lesson does not mean
+   editing a pile of literals in here. */
+const QTOTAL = await page.evaluate(() =>
+  window.ME.learn.LESSONS.reduce((n, l) => n + (l.quizzes || [l.quiz]).filter(Boolean).length, 0));
+check('every lesson is listed in the sidebar', lessonCount === (await page.evaluate(() => window.ME.learn.LESSONS.length)),
+  'got ' + lessonCount);
+check('there is a lesson on degrees of unsaturation',
+  await page.evaluate(() => window.ME.learn.LESSONS.some((l) => l.id === 'unsaturation')));
 
 /* answer lesson 1's quiz correctly */
 await page.locator('.quiz-opt').nth(1).click();
 await page.waitForTimeout(250);
 check('quiz accepts the right answer', await page.locator('.quiz-feedback.show .callout.ok').count() === 1);
-check('progress recorded', (await page.locator('.progress-wrap .note').innerText()).startsWith('1 of 33'),
+check('progress recorded', (await page.locator('.progress-wrap .note').innerText()).startsWith('1 of ' + QTOTAL),
   await page.locator('.progress-wrap .note').innerText());
 
 /* Each lesson carries a set of questions, and a wrong answer explains itself
@@ -129,7 +136,7 @@ for (let i = 0; i < lessonCount; i++) {
   await page.locator('.lesson-link').nth(i).click();
   await page.waitForTimeout(160);
 }
-check('all eleven lessons render without error', errors.length === 0, errors.slice(0, 2).join(' | '));
+check('every lesson renders without error', errors.length === 0, errors.slice(0, 2).join(' | '));
 await page.screenshot({ path: path.join(SHOTS, '02-lesson-caffeine.png') });
 
 /* --------------------------------------------------------------- search */
@@ -497,12 +504,12 @@ await page.screenshot({ path: path.join(SHOTS, '12-dark-gallery.png') });
   await page.waitForTimeout(800);
 
   await answerTwo();
-  check('answers are counted', /^2 of 33/.test(await progressText()), await progressText());
+  check('answers are counted', (await progressText()).startsWith('2 of ' + QTOTAL), await progressText());
   check('answers are written to storage', !!(await storedKeys()).lessons);
 
   await page.reload({ waitUntil: 'load' });
   await page.waitForTimeout(800);
-  check('answers survive a reload by default', /^2 of 33/.test(await progressText()), await progressText());
+  check('answers survive a reload by default', (await progressText()).startsWith('2 of ' + QTOTAL), await progressText());
 
   /* the reset button asks before it does anything */
   const resetBtn = page.locator('.progress-controls .btn');
@@ -511,7 +518,7 @@ await page.screenshot({ path: path.join(SHOTS, '12-dark-gallery.png') });
   check('reset asks first', /sure/i.test(await resetBtn.innerText()), await resetBtn.innerText());
   await resetBtn.click();
   await page.waitForTimeout(400);
-  check('reset clears the count', /^0 of 33/.test(await progressText()), await progressText());
+  check('reset clears the count', (await progressText()).startsWith('0 of ' + QTOTAL), await progressText());
   check('reset clears storage', !(await storedKeys()).lessons);
   check('reset reopens the questions', await page.locator('.quiz-item.solved').count() === 0);
   check('reset leaves the options clickable',
@@ -528,15 +535,15 @@ await page.screenshot({ path: path.join(SHOTS, '12-dark-gallery.png') });
   await page.locator('.switch input').uncheck();
   await page.waitForTimeout(300);
   check('switching off wipes what was stored', !(await storedKeys()).lessons);
-  check('switching off keeps this session\u2019s answers', /^2 of 33/.test(await progressText()), await progressText());
+  check('switching off keeps this session\u2019s answers', (await progressText()).startsWith('2 of ' + QTOTAL), await progressText());
 
   await page.reload({ waitUntil: 'load' });
   await page.waitForTimeout(800);
-  check('nothing is remembered after a reload', /^0 of 33/.test(await progressText()), await progressText());
+  check('nothing is remembered after a reload', (await progressText()).startsWith('0 of ' + QTOTAL), await progressText());
   check('the switch itself is remembered', !(await page.locator('.switch input').isChecked()));
 
   await answerTwo();
-  check('answering still works while not saving', /^2 of 33/.test(await progressText()), await progressText());
+  check('answering still works while not saving', (await progressText()).startsWith('2 of ' + QTOTAL), await progressText());
   check('and still writes nothing', !(await storedKeys()).lessons);
 
   /* and back on again */
@@ -545,7 +552,7 @@ await page.screenshot({ path: path.join(SHOTS, '12-dark-gallery.png') });
   await answerTwo();
   await page.reload({ waitUntil: 'load' });
   await page.waitForTimeout(800);
-  check('switching it back on resumes saving', /^2 of 33/.test(await progressText()), await progressText());
+  check('switching it back on resumes saving', (await progressText()).startsWith('2 of ' + QTOTAL), await progressText());
 }
 
 /* -------------------------------------------------------------- summary */

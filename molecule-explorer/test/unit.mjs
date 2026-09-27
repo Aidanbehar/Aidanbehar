@@ -924,6 +924,104 @@ describe('dots never pile up', () => {
 });
 
 /* ----------------------------------------------------- the lesson checks */
+/* ------------------------------------------------- degrees of unsaturation */
+/* Every number the unsaturation lesson quotes is checked here against the
+ * real structure, two independent ways: the arithmetic on the formula, and a
+ * direct count of rings and pi bonds in the molecule itself. If the lesson
+ * ever drifts from the chemistry, one of the two disagrees. */
+describe('the unsaturation lesson quotes real numbers', () => {
+  /* name -> [SMILES, formula the lesson prints, degrees the lesson claims] */
+  const CLAIMS = {
+    propane: ['CCC', 'C3H8', 0],
+    butane: ['CCCC', 'C4H10', 0],
+    pentane: ['CCCCC', 'C5H12', 0],
+    'but-1-ene': ['C=CCC', 'C4H8', 1],
+    cyclobutane: ['C1CCC1', 'C4H8', 1],
+    ethane: ['CC', 'C2H6', 0],
+    ethanol: ['CCO', 'C2H6O', 0],
+    'dimethyl ether': ['COC', 'C2H6O', 0],
+    benzene: ['c1ccccc1', 'C6H6', 4],
+    chloroethane: ['CCCl', 'C2H5Cl', 0],
+    caffeine: ['CN1C=NC2=C1C(=O)N(C(=O)N2C)C', 'C8H10N4O2', 6],
+    nicotine: ['CN1CCCC1c1cccnc1', 'C10H14N2', 5],
+    triphenylphosphine: ['P(c1ccccc1)(c1ccccc1)c1ccccc1', 'C18H15P', 12],
+  };
+
+  /* The lesson is explicit that a five-bonded phosphorus breaks the rule, and
+   * says by how much. That claim is checked too, rather than waved at. */
+  /* The formula string is the composition the shipped library reports, in its
+   * own element order; the lesson prints the same composition the way everyone
+   * writes it, H3PO4. */
+  const PHOSPHATE = ['OP(=O)(O)O', 'H3O4P', 0, 1];
+
+  test('each formula and degree count matches the structure', async () => {
+    const out = await run((claims) => {
+      const res = {};
+      Object.keys(claims).forEach((name) => {
+        const mol = window.ME.chem.fromSmiles(claims[name][0]);
+        const n = { C: 0, H: 0, N: 0, X: 0 };
+        let rings = 0, pi = 0;
+        const HAL = { 9: 1, 17: 1, 35: 1, 53: 1 };
+        for (let a = 0; a < mol.getAllAtoms(); a++) {
+          const z = mol.getAtomicNo(a);
+          if (z === 6) n.C++;
+          /* phosphorus sits under nitrogen and carries the same +1 term */
+          else if (z === 7 || z === 15) n.N++;
+          else if (z === 1) n.H++;
+          else if (HAL[z]) n.X++;
+          n.H += mol.getImplicitHydrogens(a);
+        }
+        for (let b = 0; b < mol.getAllBonds(); b++) pi += Math.max(0, mol.getBondOrder(b) - 1);
+        /* rings = bonds - atoms + fragments, for any graph */
+        rings = mol.getAllBonds() - mol.getAllAtoms() + window.ME.chem.fragmentCount(mol);
+        res[name] = {
+          formula: window.ME.chem.analyse(mol).formula,
+          byArithmetic: (2 * n.C + 2 + n.N - n.H - n.X) / 2,
+          byStructure: rings + pi,
+        };
+      });
+      return res;
+    }, Object.assign({ phosphate: PHOSPHATE }, CLAIMS));
+
+    /* The one the lesson says the rule gets wrong, and by exactly one. */
+    assert.equal(out.phosphate.formula.replace(/[^A-Za-z0-9]/g, ''), PHOSPHATE[1]);
+    assert.equal(out.phosphate.byArithmetic, PHOSPHATE[2],
+      'the lesson says the three-hand rule predicts 0 for phosphoric acid');
+    assert.equal(out.phosphate.byStructure, PHOSPHATE[3],
+      'the lesson says phosphoric acid really has one degree, the P=O');
+
+    Object.keys(CLAIMS).forEach((name) => {
+      const [, formula, degrees] = CLAIMS[name];
+      const got = out[name];
+      assert.equal(got.formula.replace(/[^A-Za-z0-9]/g, ''), formula,
+        `the lesson prints ${formula} for ${name} but the structure is ${got.formula}`);
+      assert.equal(got.byArithmetic, degrees,
+        `the lesson claims ${degrees} degrees for ${name}; the formula gives ${got.byArithmetic}`);
+      assert.equal(got.byStructure, degrees,
+        `the lesson claims ${degrees} degrees for ${name}; the structure has ${got.byStructure} rings and pi bonds`);
+    });
+  });
+
+  test('both unsaturation questions agree with the formula they quote', async () => {
+    /* The two counting questions give a formula in their text, so the stated
+     * answer can be checked straight off that text. */
+    const qs = await run(() => {
+      const L = window.ME.learn.LESSONS.find((x) => x.id === 'unsaturation');
+      return L.quizzes.filter((q) => q.kind === 'count').map((q) => ({ q: q.q, answer: q.answer }));
+    });
+    assert.equal(qs.length, 2);
+    const SUB = { '₀': 0, '₁': 1, '₂': 2, '₃': 3, '₄': 4, '₅': 5, '₆': 6, '₇': 7, '₈': 8, '₉': 9 };
+    qs.forEach(({ q, answer }) => {
+      const plain = q.replace(/[₀-₉]/g, (c) => String(SUB[c]));
+      const m = plain.match(/C(\d*)H(\d*)(?:N(\d*))?/);
+      assert.ok(m, `no formula found in "${q}"`);
+      const [C, H, N] = [1, 2, 3].map((i) => (m[i] === undefined ? 0 : m[i] === '' ? 1 : +m[i]));
+      assert.equal((2 * C + 2 + N - H) / 2, answer,
+        `"${q}" expects ${answer}, but its own formula gives ${(2 * C + 2 + N - H) / 2}`);
+    });
+  });
+});
+
 describe('every lesson check is answerable', () => {
   test('each click-an-atom question has at least one correct atom', async () => {
     const out = await run(() => {

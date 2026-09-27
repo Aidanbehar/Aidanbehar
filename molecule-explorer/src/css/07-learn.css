@@ -132,3 +132,35 @@
   .lesson-table { font-size: .82rem; }
   .lesson-table th, .lesson-table td { padding-left: 5px; padding-right: 5px; }
 }
+
+/* A reference table whose last column carries a sentence rather than a word.
+ * The nowrap headings of the plain .lesson-table force it wider than a phone,
+ * so this variant wraps them, and below 560px the reason moves onto its own
+ * line underneath its row instead of being squeezed or dropped. */
+.lesson-table.reasons th { white-space: normal; }
+.lesson-table.reasons td:last-child, .lesson-table.reasons th:last-child { text-align: left; }
+@media (max-width: 560px) {
+  .lesson-table.reasons, .lesson-table.reasons tbody,
+  .lesson-table.reasons tr, .lesson-table.reasons td { display: block; width: 100%; }
+  .lesson-table.reasons thead, .lesson-table.reasons tr:first-child { display: none; }
+  .lesson-table.reasons tr { padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .lesson-table.reasons tr:last-child { border-bottom: 0; }
+  .lesson-table.reasons td { padding: 1px 0; border: 0; }
+  .lesson-table.reasons td[data-label]::before {
+    content: attr(data-label) ": "; color: var(--text-faint);
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700;
+  }
+}
+
+/* A displayed equation, set as a real fraction rather than a slash, because
+ * the whole point of the unsaturation lesson is that you halve something. */
+.equation {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 4px 12px; padding: 14px 10px;
+  font-size: 1.1rem; line-height: 1.25;
+}
+.equation .frac { display: inline-flex; flex-direction: column; align-items: center; }
+.equation .frac .num { padding: 0 10px 4px; border-bottom: 2px solid currentColor; }
+.equation .frac .den { padding: 4px 10px 0; }
+.equation .eq-tail { font-weight: 700; color: var(--accent); }
+@media (max-width: 520px) { .equation { font-size: .95rem; } }
