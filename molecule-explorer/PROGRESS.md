@@ -177,10 +177,13 @@ network switched off.
 - **Unit 9 — The mole and stoichiometry** (3 lessons: the mole, molar mass and
   formulas from analysis, and stoichiometry with limiting reactant and percent
   yield; embeds the new road-map simulation)
+- **Unit 10 — Gases** (3 lessons: kinetic theory and what pressure is, the
+  four gas laws shown to be one law, and PV = nRT with gas stoichiometry and
+  partial pressures; embeds the new one-law-at-a-time simulation)
 - **Unit 15 — Organic chemistry: reading structures** (the original 12 lessons,
   kept working unchanged)
 
-49 lessons, 113 pages, 364 questions, about 10 hours of reading.
+52 lessons, 121 pages, 386 questions, about 11 hours of reading.
 
 **`src/js/20-calc-lewis.js` — Lewis structures and VSEPR**
 - Runs the counting method and returns electron totals, bond orders, lone
@@ -201,6 +204,10 @@ network switched off.
   the arrow that performs it, computed by `ME.stoich.massToMass` — the same
   code the Tools tab and the graders use. It runs across on a wide screen and
   turns the corner downwards on a narrow one.
+- One gas law at a time: two variables pinned, one dragged, the fourth forced,
+  with the relationship plotted so it is visible whether the line reaches the
+  origin — which is the whole difference between Boyle and Charles. Every
+  point comes from `ME.gas.combined`.
 
 ### Bugs found and fixed
 - The practice generators loaded *before* the course engine, because the
@@ -232,7 +239,16 @@ network switched off.
 - Two numbers in Unit 9's worked examples were wrong by hand: the leftover
   hydrogen in the limiting-reactant example (9.7 g, actually 8.74) and
   calcium nitrate's molar mass in the last decimal. Every number those
-  worked examples print is now checked against the engine in a test.
+  worked examples print is now checked against the engine in a test. The
+  same test now covers Unit 10's gas numbers.
+- The gas-law simulation's slider ran in SI, where the whole volume range is
+  0.005 to 0.09 m³, and a range input snapped the value to a step that no
+  longer matched the readout beside it. It now runs in the reader's own units
+  and reads back whatever the input actually landed on.
+- Its graph started at the low end of the slider, which cropped out the one
+  thing worth seeing: whether the line reaches the origin. A proportional law
+  is now plotted from zero and an inverse one from the slider's low end,
+  because an inverse law is not defined at zero.
 - A lesson linking to `#/m/sodium-chloride` reached nothing: molecule links
   need `cid:` or `n:` because the database is keyed by neither a slug nor a
   title. A test now renders every lesson and checks that every hand-written

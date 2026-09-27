@@ -1272,9 +1272,175 @@
       'Grams, moles, moles, grams. Only the middle arrow needs the balanced equation.', body);
   }
 
+  /* ================================================== one gas law at a time */
+  /* The full Gas Simulator tab lets you move everything at once, which is the
+   * right tool once the ideas are in place. This one deliberately pins two
+   * variables so a single relationship is visible on its own, and plots it so
+   * you can see whether it is a straight line through the origin or a curve.
+   * Every point on the graph comes from ME.gas.combined. */
+  function gasLaw(opts) {
+    opts = opts || {};
+    let law = ME.gas.LAWS.filter((l) => l.key === (opts.law || 'boyle'))[0] || ME.gas.LAWS[0];
+
+    /* The arithmetic runs in SI, and the slider runs in the units the reader
+     * reads, because a range input whose whole span is 0.005 to 0.09 snaps
+     * awkwardly. `si` converts one to the other; `fromZero` says whether the
+     * relationship is defined at zero, which decides where the graph starts.
+     * Whether the line reaches the origin is the difference between Boyle and
+     * Charles, so the graph must not quietly crop it out. */
+    const REF = { P: 101325, V: 0.0224, n: 1, T: 273.15 };
+    const RANGE = {
+      P: { lo: 25, hi: 500, unit: 'kPa', si: 1000, step: 1, label: 'Pressure', fromZero: true },
+      V: { lo: 2, hi: 90, unit: 'L', si: 0.001, step: 0.5, label: 'Volume', fromZero: false },
+      T: { lo: 50, hi: 700, unit: 'K', si: 1, step: 5, label: 'Temperature', fromZero: true },
+      n: { lo: 0.25, hi: 3, unit: 'mol', si: 1, step: 0.05, label: 'Amount', fromZero: true },
+    };
+
+    const body = el('div');
+    const chips = el('div', { class: 'sim-buttons' });
+    body.appendChild(chips);
+    const holdLine = el('div', { class: 'sim-note' });
+    body.appendChild(holdLine);
+    const controls = el('div');
+    body.appendChild(controls);
+    const readout = el('div', { class: 'sim-roadmap' });
+    body.appendChild(readout);
+    const plot = el('canvas', { width: '680', height: '280' });
+    body.appendChild(plot);
+    const why = el('div', { class: 'sim-note' });
+    body.appendChild(why);
+
+    ME.gas.LAWS.forEach((l) => {
+      const btn = el('button', { class: 'btn btn-sm' + (l === law ? ' on' : ''), text: l.name });
+      btn.addEventListener('click', () => {
+        law = l;
+        ME.$$('.btn', chips).forEach((x) => x.classList.toggle('on', x.textContent === l.name));
+        rebuild();
+      });
+      chips.appendChild(btn);
+    });
+
+    /* The variable the reader drags, and the one the gas law then forces. */
+    let driven, forced, shown;   /* `shown` is in the reader's units */
+
+    function rebuild() {
+      /* Each law lists its two free variables; the reader drags the second and
+       * the first is forced. Boyle: drag the volume, the pressure follows.
+       * Charles: drag the temperature, the volume follows. And so on. */
+      driven = law.vary[1];
+      forced = law.vary[0];
+      const r = RANGE[driven];
+      shown = REF[driven] / r.si;
+      ME.clear(controls);
+      const sl = slider('Drag the ' + r.label.toLowerCase(), r.lo, r.hi, shown, r.step,
+        (v) => { shown = v; draw(); },
+        (v) => ME.fmt.fmt(v, 4) + ' ' + r.unit);
+      controls.appendChild(sl.node);
+      /* A range input snaps its value to the nearest step, so read back what
+       * it actually landed on rather than trusting what we asked for —
+       * otherwise the slider and the readout disagree by half a step. */
+      shown = Number(sl.input.value);
+      sl.sync();
+      holdLine.textContent = 'Held still: ' + law.hold.map((k) => RANGE[k].label.toLowerCase()).join(' and ') +
+        '. ' + law.plain;
+      why.textContent = law.why;
+      draw();
+    }
+
+    /* v is in the reader's units; everything inside is SI. */
+    function stateFor(v) {
+      const after = Object.assign({}, REF);
+      after[driven] = v * RANGE[driven].si;
+      after[forced] = ME.gas.combined(REF, after, forced);
+      return after;
+    }
+
+    function station(label, siValue, key, strong) {
+      const r = RANGE[key];
+      return el('div', { class: 'sim-rm-station' + (strong ? ' on' : '') }, [
+        el('div', { class: 'v', text: ME.fmt.fmt(siValue / r.si, 4) + ' ' + r.unit }),
+        el('div', { class: 'k', text: label }),
+      ]);
+    }
+
+    function draw() {
+      const st = stateFor(shown);
+      ME.clear(readout);
+      readout.appendChild(station('you set', st[driven], driven, true));
+      readout.appendChild(el('div', { class: 'sim-rm-arrow' }, [
+        el('div', { class: 'sim-rm-op', text: law.relation }),
+        el('div', { class: 'sim-rm-glyph', 'aria-hidden': 'true' }),
+        el('div', { class: 'sim-rm-why', text: 'so this one has no choice' }),
+      ]));
+      readout.appendChild(station('follows', st[forced], forced, false));
+      law.hold.forEach((k) => readout.appendChild(station('held', st[k], k, false)));
+      plotIt();
+    }
+
+    function plotIt() {
+      const ctx = plot.getContext('2d');
+      const W = plot.width, H = plot.height, pad = 46;
+      ctx.clearRect(0, 0, W, H);
+      const dr = RANGE[driven], fr = RANGE[forced];
+
+      /* Sample the law across the axis. A proportional law is sampled from
+       * zero so the reader can see the line arrive at the origin; an inverse
+       * one cannot be, because it goes to infinity there. */
+      const from = dr.fromZero ? 0.0001 : dr.lo;
+      const pts = [];
+      for (let i = 0; i <= 160; i++) {
+        const v = from + (dr.hi - from) * (i / 160);
+        pts.push([v, stateFor(v)[forced] / fr.si]);
+      }
+      const yMax = Math.max.apply(null, pts.map((q) => q[1])) * 1.06;
+      const xMax = dr.hi;
+      const px = (x) => pad + (x / xMax) * (W - pad - 16);
+      const py = (y) => H - pad - (y / yMax) * (H - pad - 20);
+
+      ctx.strokeStyle = css('--border-strong', '#bbb');
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(pad, 12); ctx.lineTo(pad, H - pad); ctx.lineTo(W - 12, H - pad);
+      ctx.stroke();
+
+      ctx.fillStyle = css('--text-faint', '#888');
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.fillText(fr.label + ' (' + fr.unit + ')', 8, 16);
+      const xl = dr.label + ' (' + dr.unit + ')';
+      ctx.fillText(xl, W - 14 - ctx.measureText(xl).width, H - 14);
+      ctx.fillText('0', pad - 11, H - pad + 15);
+      ctx.fillText(ME.fmt.fmt(xMax, 3), px(xMax) - 12, H - pad + 15);
+      /* Just inside the axis rather than beside the axis title, which sits in
+       * the same corner. */
+      ctx.fillText(ME.fmt.fmt(yMax, 3), pad + 6, py(yMax) + 4);
+
+      ctx.strokeStyle = css('--accent', '#3b6ef0');
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      pts.forEach((q, i) => {
+        const y = py(q[1]);
+        /* An inverse law runs off the top of the frame near zero; clip rather
+         * than draw a spike that squashes everything else flat. */
+        if (y < 6) { ctx.moveTo(px(q[0]), 6); return; }
+        if (i === 0) ctx.moveTo(px(q[0]), y); else ctx.lineTo(px(q[0]), y);
+      });
+      ctx.stroke();
+
+      const here = stateFor(shown);
+      ctx.fillStyle = css('--accent', '#3b6ef0');
+      ctx.beginPath();
+      ctx.arc(px(shown), py(here[forced] / fr.si), 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    rebuild();
+    return shell(opts.title || 'One gas law at a time',
+      'Two variables pinned, one dragged, and the fourth has no choice. Watch whether the graph is a line through the origin or a curve.', body);
+  }
+
   ME.sims = {
     statesOfMatter, heatingCurve, buildAtom, trendMap, phScale, titration, lewis,
-    energyDiagram, equilibrium, solutionMixer, bondRotation, stoichMap,
+    energyDiagram, equilibrium, solutionMixer, bondRotation, stoichMap, gasLaw,
     shell, slider, whenVisible, css,
   };
 })();

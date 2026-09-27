@@ -489,3 +489,4 @@
   .sim-rm-arrow { width: auto; max-width: 300px; padding: 3px 0; }
   .sim-rm-glyph::before { content: '\2193'; }
 }
+.sim-rm-station.on { border-color: var(--accent); background: var(--accent-soft); }

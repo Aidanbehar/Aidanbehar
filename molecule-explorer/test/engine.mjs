@@ -925,6 +925,37 @@ describe('generated practice problems', () => {
     near(got.leftoverGrams, 8.74, 0.01, 'hydrogen left over');
     near(got.propeneMultiplier, 3, 0.01, 'the CH2 to C3H6 multiplier');
   });
+
+  test('the worked examples in the gas unit still match the engine', async () => {
+    const got = await run(() => {
+      const g = window.ME.gas, F = window.ME.fmt;
+      return {
+        rAtmL: F.gasConstant('atm', 'L', 'mol'),
+        rKPaL: F.gasConstant('kPa', 'L', 'mol'),
+        rMmHgL: F.gasConstant('mmHg', 'L', 'mol'),
+        molarVolume: F.CONST.molarVolumeSTP,
+        cubeSide: Math.cbrt(F.CONST.molarVolumeSTP / 1000) * 100,
+        charles: g.combined({ P: 1, V: 3, n: 1, T: 300.15 }, { P: 1, n: 1, T: 400.15 }, 'V'),
+        celsiusTrap: 3 * 127 / 27,
+        boyle: g.combined({ P: 1, V: 2, n: 1, T: 300 }, { V: 0.5, n: 1, T: 300 }, 'P'),
+        rmsH2: g.rmsSpeed(298, 'H2'),
+        rmsSF6: g.rmsSpeed(298, 'SF6'),
+        ch4Moles: 32 / window.ME.formula.parse('CH4').mass,
+      };
+    });
+    const near = (a, b, tol, what) => assert.ok(Math.abs(a - b) < tol, what + ': engine says ' + a + ', the lesson prints ' + b);
+    near(got.rAtmL, 0.08206, 0.00001, 'R in L atm');
+    near(got.rKPaL, 8.314, 0.001, 'R in L kPa');
+    near(got.rMmHgL, 62.36, 0.01, 'R in L mmHg');
+    near(got.molarVolume, 22.4, 0.02, 'molar volume at STP');
+    near(got.cubeSide, 28, 0.5, 'the side of a 22.4 L cube, in cm');
+    near(got.charles, 4.00, 0.01, 'Charles: 3.0 L from 27 to 127 C');
+    near(got.celsiusTrap, 14.1, 0.05, 'what using Celsius would have given');
+    near(got.boyle, 4.0, 0.01, 'Boyle: 2.0 L at 1 atm squeezed to 0.5 L');
+    near(got.rmsH2, 1900, 50, 'hydrogen rms speed at room temperature');
+    near(got.rmsSF6, 225, 5, 'SF6 rms speed at room temperature');
+    near(got.ch4Moles, 2.00, 0.01, 'moles in 32 g of methane');
+  });
 });
 
 /* ---------------------------------------------------- prose with formulas in */
