@@ -705,12 +705,13 @@ describe('lesson 2 teaches what its check asks about', () => {
   test('its check has exactly one right answer, and it is findable', async () => {
     const out = await run(() => {
       const L = window.ME.learn.LESSONS.find((l) => l.id === 'hands');
-      const mol = L.quiz.mol();
+      const q = (L.quizzes || [L.quiz])[0];
+      const mol = q.mol();
       const desc = window.ME.render2d.describe(mol, {});
       const atoms = desc.atoms.map((a, i) => ({ i, sym: a.sym, bondCount: a.bonds.length }));
       return {
         total: atoms.length,
-        accepted: atoms.filter((a) => L.quiz.test(a)).map((a) => a.i),
+        accepted: atoms.filter((a) => q.test(a)).map((a) => a.i),
         bondCounts: atoms.map((a) => a.bondCount),
         allCarbon: atoms.every((a) => a.sym === 'C'),
       };
@@ -928,18 +929,18 @@ describe('every lesson check is answerable', () => {
     const out = await run(() => {
       const res = [];
       window.ME.learn.LESSONS.forEach((L) => {
-        const q = L.quiz;
-        if (!q || q.kind !== 'clickatom') return;
+        (L.quizzes || [L.quiz]).filter((q) => q && q.kind === 'clickatom').forEach((q) => {
         const mol = q.mol ? q.mol() : window.ME.chem.fromSmiles(q.smiles);
         const desc = window.ME.render2d.describe(mol, {});
         const atoms = desc.atoms.map((a, i) => ({
           i, sym: a.sym, hydrogens: a.hydrogens, bondCount: a.bonds.length,
         }));
         res.push({ id: L.id, accepted: atoms.filter((a) => q.test(a)).length, total: atoms.length });
+        });
       });
       return res;
     });
-    assert.ok(out.length >= 4, 'expected several click-an-atom questions');
+    assert.ok(out.length >= 8, 'expected a click-an-atom question in most lessons');
     out.forEach((r) => {
       assert.ok(r.accepted >= 1, `lesson "${r.id}" asks for an atom that does not exist in its molecule`);
       assert.ok(r.accepted < r.total, `lesson "${r.id}" accepts every atom, so it is not a question`);
@@ -950,22 +951,28 @@ describe('every lesson check is answerable', () => {
     const out = await run(() => {
       const res = [];
       window.ME.learn.LESSONS.forEach((L) => {
-        const q = L.quiz;
-        if (!q || q.kind !== 'count' || !q.smiles) return;
+        (L.quizzes || [L.quiz]).filter((q) => q && q.kind === 'count' && q.smiles).forEach((q) => {
         const mol = window.ME.chem.fromSmiles(q.smiles);
         let carbons = 0, hydrogens = 0;
         for (let a = 0; a < mol.getAllAtoms(); a++) {
           if (mol.getAtomicNo(a) === 6) carbons++;
           hydrogens += mol.getImplicitHydrogens(a);
         }
-        res.push({ id: L.id, answer: q.answer, carbons, hydrogens });
+        res.push({ id: L.id, answer: q.answer, carbons, hydrogens, q: q.q });
+        });
       });
       return res;
     });
-    assert.ok(out.length >= 2);
+    assert.ok(out.length >= 6);
     out.forEach((r) => {
-      assert.ok(r.answer === r.carbons || r.answer === r.hydrogens,
-        `lesson "${r.id}" expects ${r.answer}, but its molecule has ${r.carbons} carbons and ${r.hydrogens} hydrogens`);
+      /* A question may legitimately count something else \u2014 heteroatoms, or
+       * every atom in the picture \u2014 so only questions that say "carbon" or
+       * "hydrogen" are pinned to those counts. */
+      if (/how many carbon/i.test(r.q)) {
+        assert.equal(r.answer, r.carbons, `"${r.q}" expects ${r.answer} but the molecule has ${r.carbons} carbons`);
+      } else if (/how many hydrogen/i.test(r.q)) {
+        assert.equal(r.answer, r.hydrogens, `"${r.q}" expects ${r.answer} but the molecule has ${r.hydrogens} hydrogens`);
+      }
     });
   });
 
@@ -974,8 +981,7 @@ describe('every lesson check is answerable', () => {
     const out = await run(() => {
       const res = [];
       window.ME.learn.LESSONS.forEach((L) => {
-        const q = L.quiz;
-        if (!q || q.kind !== 'clickatom') return;
+        (L.quizzes || [L.quiz]).filter((q) => q && q.kind === 'clickatom').forEach((q) => {
         const mol = q.mol ? q.mol() : window.ME.chem.fromSmiles(q.smiles);
         const desc = window.ME.render2d.describe(mol, {});
         const atoms = desc.atoms.map((a, i) => ({ i, sym: a.sym, hydrogens: a.hydrogens, bondCount: a.bonds.length }));
@@ -986,6 +992,7 @@ describe('every lesson check is answerable', () => {
           right: q.right,
           note: q.note || '',
           hydrogensOfAccepted: accepted.map((a) => a.hydrogens),
+        });
         });
       });
       return res;

@@ -70,7 +70,7 @@ PubChem module fails the build.
   values; drawing → recognition; label spacing in the drawings; crowding in the
   editor; plus a sweep confirming every database entry's stored formula and mass
   agree with its structure).
-- `test/smoke.mjs` — 57 checks in a real browser, loaded from `file://` with
+- `test/smoke.mjs` — 64 checks in a real browser, loaded from `file://` with
   the network switched off, covering all eleven lessons, the X-ray slider, the
   molecule page, the gallery, the drawing editor, the periodic table and dark
   mode. It asserts the page makes **zero** network requests. A final phase
@@ -127,6 +127,28 @@ Each JS file is its own IIFE hanging off a shared `ME` namespace, so
 concatenation order is the only coupling between them.
 
 ---
+
+## The lessons
+
+Eleven lessons, each ending with three questions — 33 in all. Progress is
+counted in questions rather than lessons, and kept in `localStorage`.
+
+A wrong answer never just says no:
+
+- **Multiple choice** rules out only the option you picked, explains what is
+  wrong with *that* option specifically, and leaves the question open.
+- **Counting** says whether you are too high or too low and, where the mistake
+  is a predictable one, names it — "that is the corners only; each end of the
+  zig-zag is a carbon too". Hints are keyed to the exact number entered. The
+  answer is never given away.
+- **Click-an-atom** describes the atom you actually clicked in the lesson's own
+  terms — "that carbon has one line meeting it, so it is carrying three hidden
+  hydrogens" — and then points you at what to look for.
+
+Tests enforce that every question is answerable: each click-an-atom question
+must have at least one correct atom and must not accept every atom, each
+counting question must match its own molecule, and no question may ask for
+something its accepted answer does not have.
 
 ## Notes on the chemistry
 

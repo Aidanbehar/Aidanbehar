@@ -77,7 +77,49 @@ check('eleven lessons listed', lessonCount === 11, 'got ' + lessonCount);
 await page.locator('.quiz-opt').nth(1).click();
 await page.waitForTimeout(250);
 check('quiz accepts the right answer', await page.locator('.quiz-feedback.show .callout.ok').count() === 1);
-check('progress recorded', (await page.locator('.progress-wrap .note').innerText()).startsWith('1 of 11'));
+check('progress recorded', (await page.locator('.progress-wrap .note').innerText()).startsWith('1 of 33'),
+  await page.locator('.progress-wrap .note').innerText());
+
+/* Each lesson carries a set of questions, and a wrong answer explains itself
+   rather than just locking the question. */
+check('lesson 1 shows a set of questions', await page.locator('.quiz-item').count() === 3,
+  'got ' + (await page.locator('.quiz-item').count()));
+check('the set keeps a running tally', /1 \/ 3/.test(await page.locator('.quiz-tally').innerText()),
+  await page.locator('.quiz-tally').innerText());
+{
+  /* a wrong option should say why that option is wrong, and leave the rest open */
+  const q2 = page.locator('.quiz-item').nth(1);
+  await q2.locator('.quiz-opt').nth(1).click();
+  await page.waitForTimeout(200);
+  const msg = await q2.locator('.quiz-feedback').innerText();
+  check('a wrong option explains that option', /Ethanol is a liquid and dimethyl ether is a gas/i.test(msg), msg.slice(0, 90));
+  const left = await q2.locator('.quiz-opt:not([disabled])').count();
+  check('the question stays open after a wrong answer', left === 3, left + ' options left');
+}
+{
+  /* a wrong count should say which way you are out, plus a hint for that number */
+  await page.locator('.lesson-link').nth(4).click();
+  await page.waitForTimeout(300);
+  const cq = page.locator('.quiz-item').nth(0);
+  await cq.locator('input[type=number]').fill('4');
+  await cq.locator('button', { hasText: 'Check' }).click();
+  await page.waitForTimeout(200);
+  const msg = await cq.locator('.quiz-feedback').innerText();
+  check('a wrong count says which way it is out', /^Too few/.test(msg), msg.slice(0, 60));
+  check('a wrong count names the actual mistake', /corners only/i.test(msg), msg.slice(0, 90));
+}
+{
+  /* a wrong click should describe the atom that was clicked */
+  await page.locator('.lesson-link').nth(5).click();
+  await page.waitForTimeout(400);
+  const aq = page.locator('.quiz-item').nth(0);
+  await aq.locator('.clickmol .hit').nth(0).click();
+  await page.waitForTimeout(200);
+  const msg = await aq.locator('.quiz-feedback').innerText();
+  check('a wrong click describes what was clicked', /That carbon has (one|two|three|four) line/i.test(msg), msg.slice(0, 90));
+}
+await page.locator('.lesson-link').nth(0).click();
+await page.waitForTimeout(200);
 
 /* walk every lesson to be sure none of them throws */
 for (let i = 0; i < lessonCount; i++) {
