@@ -797,3 +797,187 @@ describe('naming inorganic compounds', () => {
     });
   });
 });
+
+/* ------------------------------------------------------- practice problems */
+describe('generated practice problems', () => {
+  test('every generator makes a valid problem, every time', async () => {
+    /* 200 runs each, and the check is structural: a question with no text, an
+     * answer that is not a number, or a multiple choice without exactly one
+     * right option would all put a broken problem in front of a reader. */
+    const problems = await run(() => window.ME.practice.selfTest(200));
+    assert.deepEqual(problems, [], JSON.stringify(problems.slice(0, 8)));
+  });
+
+  test('there is a generator for everything the course needs to drill', async () => {
+    const keys = await run(() => window.ME.practice.keys);
+    ['molar-mass', 'grams-moles', 'balance', 'formula-to-name', 'name-to-formula',
+     'stoichiometry', 'limiting', 'gas-law', 'dilution', 'ph', 'heat',
+     'unit-conversion', 'sigfigs', 'percent-composition', 'empirical', 'molarity']
+      .forEach((k) => assert.ok(keys.indexOf(k) >= 0, 'missing generator: ' + k));
+  });
+
+  test('a generated answer can be recomputed independently and matches', async () => {
+    /* The engine produced the answer; here it is checked a second way, from
+     * the numbers printed in the question itself. If a generator ever wrote a
+     * question that does not match its own answer, this catches it. */
+    const bad = await run(() => {
+      const out = [];
+      const F = window.ME.fmt;
+      for (let i = 1; i <= 150; i++) {
+        const p = window.ME.practice.generate('gas-law', i * 104729);
+        if (!p) { out.push('gas-law returned nothing'); continue; }
+        const grab = (re) => { const m = p.q.match(re); return m ? parseFloat(m[1]) : null; };
+        const unit = (re) => { const m = p.q.match(re); return m ? m[1] : null; };
+        const si = {};
+        const P = grab(/P = ([\d.]+) (?:atm|kPa|mmHg)/);
+        if (P !== null) si.P = F.convert(P, unit(/P = [\d.]+ (atm|kPa|mmHg)/), 'Pa');
+        const V = grab(/V = ([\d.]+) L/);
+        if (V !== null) si.V = V / 1000;
+        const n = grab(/n = ([\d.]+) mol/);
+        if (n !== null) si.n = n;
+        const T = grab(/T = ([\d.-]+) (?:K|°C)/);
+        if (T !== null) si.T = unit(/T = [\d.-]+ (K|°C)/) === 'K' ? T : F.convert(T, 'C', 'K');
+        const missing = ['P', 'V', 'n', 'T'].filter((k) => si[k] === undefined);
+        if (missing.length !== 1) { out.push('question gave ' + (4 - missing.length) + ' of the four'); continue; }
+        const k = missing[0];
+        const mine = window.ME.gas.solveSI(si, k);
+        const base = k === 'T' ? 'K' : window.ME.gas.baseOf({ P: 'pressure', V: 'volume', n: 'amount' }[k]);
+        const inAsked = F.convert(mine, base, p.unit === 'mol' ? 'mol' : p.unit);
+        if (Math.abs(inAsked - p.answer) > Math.abs(p.answer) * 1e-6) {
+          out.push(k + ': question implies ' + inAsked + ', answer says ' + p.answer);
+        }
+        /* and the state has to be one a reader could actually meet */
+        if (si.T < 150 || si.T > 700) out.push('unphysical temperature ' + si.T);
+      }
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 5)));
+  });
+
+  test('a generated molar mass matches the engine to six figures', async () => {
+    const bad = await run(() => {
+      const out = [];
+      for (let i = 1; i <= 200; i++) {
+        const p = window.ME.practice.generate('molar-mass', i * 7919);
+        /* the formula may carry a charge, as an ion from the database does */
+        const m = p.q.match(/,\s*([A-Za-z0-9()·.^+-]+)\?$/);
+        if (!m) { out.push('no formula in: ' + p.q); continue; }
+        const mine = window.ME.formula.parse(m[1]);
+        if (!mine.ok) { out.push('unparseable formula in question: ' + m[1]); continue; }
+        if (Math.abs(mine.mass - p.answer) > 1e-6) out.push(m[1] + ': ' + mine.mass + ' vs ' + p.answer);
+      }
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 5)));
+  });
+
+  test('generated naming problems use compounds whose names round-trip', async () => {
+    const bad = await run(() => {
+      const out = [];
+      for (let i = 1; i <= 150; i++) {
+        const p = window.ME.practice.generate('name-to-formula', i * 31337);
+        if (!p) { out.push('nothing generated'); continue; }
+        const back = window.ME.naming.formulaOf(p.q.replace(/^Write the formula for /, '').replace(/\.$/, ''));
+        if (!back.ok) { out.push('name does not read back: ' + p.q); continue; }
+        const a = window.ME.formula.parse(back.formula);
+        const b = window.ME.formula.parse(p.answer);
+        if (!a.ok || !b.ok || a.text !== b.text) out.push(p.q + ' -> ' + back.formula + ' vs ' + p.answer);
+      }
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 5)));
+  });
+});
+
+/* ------------------------------------------------------------- the course */
+describe('the course structure', () => {
+  test('every lesson has a question, and every question a kind that exists', async () => {
+    const bad = await run(() => {
+      const out = [];
+      const kinds = Object.keys(window.ME.quiz.KINDS);
+      window.ME.course.allLessons().forEach((l) => {
+        const qs = window.ME.course.questionsOf(l);
+        if (!qs.length) out.push([l.id, 'no questions']);
+        qs.forEach((q, i) => {
+          if (kinds.indexOf(q.kind) < 0) out.push([l.id, i, 'unknown kind ' + q.kind]);
+          if (!q.q || q.q.length < 8) out.push([l.id, i, 'no question text']);
+        });
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 6)));
+  });
+
+  test('every multiple choice has exactly one right answer, and every option a reason', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.course.allLessons().forEach((l) => {
+        window.ME.course.questionsOf(l).forEach((q, i) => {
+          if (q.kind !== 'choice') return;
+          const opts = q.optionsBuilder ? q.optionsBuilder() : q.options;
+          const right = opts.filter((o) => o.ok).length;
+          if (right !== 1) out.push([l.id, i, right + ' right options']);
+          opts.forEach((o, j) => {
+            if (!o.why || o.why.length < 20) out.push([l.id, i, j, 'option with no real explanation']);
+          });
+        });
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 6)));
+  });
+
+  test('every named practice generator actually exists', async () => {
+    const bad = await run(() => {
+      const keys = window.ME.practice.keys, out = [];
+      window.ME.course.allLessons().forEach((l) => {
+        if (!l.practice) return;
+        (Array.isArray(l.practice) ? l.practice : [l.practice]).forEach((k) => {
+          if (keys.indexOf(k) < 0) out.push([l.id, k]);
+        });
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('every builds_on points at a lesson that exists', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.course.allLessons().forEach((l) => {
+        (l.builds_on || []).forEach((id) => {
+          if (!window.ME.course.lesson(id)) out.push([l.id, 'builds on missing lesson ' + id]);
+        });
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('units are numbered without gaps or repeats', async () => {
+    const ns = await run(() => window.ME.course.units.map((u) => u.n));
+    const sorted = ns.slice().sort((a, b) => a - b);
+    assert.deepEqual(ns, sorted, 'units are not in order: ' + ns);
+    assert.equal(new Set(ns).size, ns.length, 'two units share a number: ' + ns);
+  });
+
+  test('a long-form lesson has the parts the format promises', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.course.allLessons().forEach((l) => {
+        if (!l.pages) return;        /* the original twelve use the older format */
+        if (!l.hook) out.push([l.id, 'no hook']);
+        if (l.pages.length < 2) out.push([l.id, 'only one page']);
+        if (!l.mistakes || l.mistakes.length < 2) out.push([l.id, 'no common-mistakes section']);
+        if (!l.recap) out.push([l.id, 'no recap']);
+        l.pages.forEach((pg, i) => { if (!pg.body) out.push([l.id, i, 'page with no body']); });
+        (l.checkpoints || []).forEach((c, i) => {
+          if (c.after === undefined) out.push([l.id, i, 'checkpoint with no page to sit after']);
+          else if (c.after >= l.pages.length) out.push([l.id, i, 'checkpoint after a page that does not exist']);
+        });
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 6)));
+  });
+});

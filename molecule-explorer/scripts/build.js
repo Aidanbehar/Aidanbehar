@@ -90,7 +90,22 @@ function buildApp() {
   const dir = path.join(SRC, 'js');
   const files = listSorted(dir, '.js');
   console.log('  app modules: ' + files.join(', '));
-  return files.map((f) => `/* ================= ${f} ================= */\n` + read(path.join(dir, f))).join('\n\n');
+  let out = files.map((f) => `/* ================= ${f} ================= */\n` + read(path.join(dir, f))).join('\n\n');
+
+  /* Lesson content lives in src/lessons, one file per unit, and goes in after
+   * every module so it can register itself with the course engine. There is a
+   * lot of it, and keeping it out of src/js stops the app code being buried. */
+  const lessonDir = path.join(SRC, 'lessons');
+  if (fs.existsSync(lessonDir)) {
+    const lessons = listSorted(lessonDir, '.js');
+    if (lessons.length) {
+      console.log('  lesson units: ' + lessons.join(', '));
+      out += '\n\n' + lessons
+        .map((f) => `/* ================= lessons/${f} ================= */\n` + read(path.join(lessonDir, f)))
+        .join('\n\n');
+    }
+  }
+  return out;
 }
 
 /* --------------------------------------------------------------- checks */

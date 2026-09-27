@@ -182,6 +182,7 @@ window.ME = window.ME || {};
     cube: 'M12 2 3 7v10l9 5 9-5V7zm0 2.3 6.5 3.6L12 11.5 5.5 7.9zM5 9.7l6 3.3v6.4l-6-3.3zm14 0v6.4l-6 3.3V13z',
     rotate: 'M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z',
     chevron: 'M8.6 5.4 7.2 6.8 12.4 12l-5.2 5.2 1.4 1.4L15.2 12z',
+    warn: 'M12 2 1.5 21h21zm0 4.3 7 12.7H5zM11 10h2v5h-2zm0 6h2v2h-2z',
   };
 
   function icon(name, cls) {

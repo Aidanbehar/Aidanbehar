@@ -621,7 +621,10 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
 .progress-bar { height: 5px; background: var(--border); border-radius: 99px; overflow: hidden; }
 .progress-bar i { display: block; height: 100%; background: var(--ok); border-radius: 99px; transition: width .3s; }
 
-.lesson { max-width: 720px; }
+/* A reading measure. Prose set much wider than this gets hard to track
+ * back to the start of the next line. */
+.ls-reader { max-width: 780px; margin: 0 auto; }
+.lesson { max-width: 100%; }
 .lesson-body { font-size: 1.02rem; line-height: 1.68; }
 .lesson-body p { margin-bottom: 1.05em; }
 .lesson-body h2 { margin-top: 0; }
@@ -739,6 +742,216 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
 .equation .frac .den { padding: 4px 10px 0; }
 .equation .eq-tail { font-weight: 700; color: var(--accent); }
 @media (max-width: 520px) { .equation { font-size: .95rem; } }
+
+/* ------------------------------------------------------------- course map */
+.cm-intro { max-width: 70ch; margin-bottom: 20px; }
+.cm-top { display: grid; gap: 14px; margin-bottom: 26px; }
+.cm-resume {
+  justify-self: start; display: inline-flex; align-items: center; gap: 12px;
+  padding: 11px 16px; text-align: left;
+}
+.cm-resume-k {
+  display: block; font-size: .7rem; text-transform: uppercase;
+  letter-spacing: .07em; opacity: .8; font-weight: 700;
+}
+.cm-resume-v { display: block; font-size: 1rem; font-weight: 650; }
+
+.cm-unit {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 16px 18px; margin-bottom: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.cm-unit.done { border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.cm-unit-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.cm-unit-n {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .07em;
+  font-weight: 800; color: var(--accent); flex: none;
+}
+.cm-unit-title { font-size: 1.08rem; font-weight: 650; flex: 1; min-width: 180px; }
+.cm-unit-time { font-size: .76rem; color: var(--text-faint); font-family: var(--font-mono); }
+.cm-unit-blurb { margin: 6px 0 10px; max-width: 74ch; }
+.cm-unit-bar {
+  height: 5px; background: var(--surface-2); border-radius: 99px;
+  overflow: hidden; margin: 8px 0 5px;
+}
+.cm-unit-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s; }
+.cm-unit.done .cm-unit-bar i { background: var(--ok); }
+.cm-unit-meta { font-size: .78rem; margin-bottom: 10px; }
+
+.cm-lessons { display: grid; gap: 3px; }
+.cm-lesson {
+  display: flex; align-items: center; gap: 11px; text-align: left; cursor: pointer;
+  font: inherit; color: inherit; background: transparent;
+  border: 1px solid transparent; border-radius: var(--r-sm); padding: 7px 9px;
+}
+.cm-lesson:hover { background: var(--surface-2); border-color: var(--border); }
+.cm-lesson-n {
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--surface-2); color: var(--text-faint);
+  display: grid; place-items: center; font-size: .78rem; font-weight: 700;
+  border: 1px solid var(--border);
+}
+.cm-lesson.done .cm-lesson-n { background: var(--ok); color: #fff; border-color: var(--ok); }
+.cm-lesson-mid { display: grid; gap: 1px; }
+.cm-lesson-title { font-size: .93rem; font-weight: 550; }
+.cm-lesson-sub { font-size: .76rem; }
+
+/* ----------------------------------------------------------- lesson reader */
+.ls-crumb { margin-bottom: 10px; }
+.ls-kicker {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .07em;
+  font-weight: 700; color: var(--text-faint);
+}
+.ls-builds { margin: 8px 0 18px; max-width: 70ch; }
+.ls-prereq {
+  font: inherit; font-size: inherit; color: var(--accent-text); cursor: pointer;
+  background: none; border: 0; padding: 0; text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.ls-hook {
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  padding: 16px 20px; border-radius: 0 var(--r) var(--r) 0;
+  margin: 4px 0 24px; font-size: 1.02rem; line-height: 1.68;
+}
+.ls-hook p:first-child { margin-top: 0; }
+.ls-hook p:last-child { margin-bottom: 0; }
+
+.ls-page-n {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .07em;
+  font-weight: 700; color: var(--accent); margin-bottom: 4px;
+}
+.ls-dots { display: flex; gap: 5px; justify-content: center; margin: 22px 0 12px; }
+.ls-dot {
+  width: 9px; height: 9px; border-radius: 50%; cursor: pointer; padding: 0;
+  border: 1px solid var(--border-strong); background: var(--surface-2);
+}
+.ls-dot.seen { background: var(--border-strong); }
+.ls-dot.on { background: var(--accent); border-color: var(--accent); transform: scale(1.35); }
+.ls-pagenav { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 26px; }
+.ls-pagenav .note { text-align: right; }
+
+.quiz-checkpoint { margin: 24px 0 8px; }
+
+.ls-mistakes { margin: 30px 0; }
+.ls-mistakes h3 { display: flex; align-items: center; gap: 8px; }
+.ls-mistakes h3 svg { width: 1em; height: 1em; color: var(--warn); }
+.ls-mistake {
+  border-left: 3px solid var(--warn); background: var(--warn-soft);
+  padding: 11px 15px; border-radius: 0 var(--r-sm) var(--r-sm) 0; margin-bottom: 9px;
+}
+.ls-mistake-claim { font-weight: 600; margin-bottom: 4px; font-size: .95rem; }
+.ls-mistake-why { font-size: .92rem; line-height: 1.6; color: var(--text); }
+
+.ls-practice { margin: 30px 0; padding: 18px 20px; background: var(--surface-2); border-radius: var(--r-lg); }
+.ls-practice h3 { margin-top: 0; }
+.ls-practice-kinds { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+.ls-practice-slot { margin: 14px 0; }
+.ls-practice-slot .quiz-item { background: var(--surface); border-radius: var(--r); padding: 14px; }
+.ls-practice-acts { display: flex; gap: 8px; }
+.ls-solution {
+  margin-top: 14px; padding: 14px 16px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--r);
+}
+.ls-solution h4 { margin: 0 0 8px; font-size: .95rem; }
+.ls-solution ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.ls-solution li { font-size: .9rem; line-height: 1.6; }
+
+.ls-recap {
+  margin: 30px 0; padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--border));
+  background: var(--ok-soft); border-radius: var(--r-lg);
+}
+.ls-recap h3 { margin-top: 0; }
+.ls-recap p { font-size: .95rem; line-height: 1.65; max-width: 74ch; }
+
+/* ------------------------------------------------------ new question types */
+.quiz-numeric { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
+.quiz-numinput {
+  font-family: var(--font-mono); font-size: 1rem; padding: 7px 11px; width: 130px;
+  border-radius: var(--r-sm); border: 1px solid var(--border-strong);
+  background: var(--surface-2); color: var(--text);
+}
+.quiz-numinput.wide { width: 230px; }
+.quiz-numinput:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.quiz-unit { font-family: var(--font-mono); font-size: .92rem; color: var(--text-soft); }
+
+.quiz-balance { margin: 10px 0 14px; }
+.quiz-balance-tally { max-width: 360px; }
+
+.quiz-order { display: grid; gap: 4px; margin: 8px 0 12px; max-width: 460px; }
+.quiz-order-item {
+  display: flex; align-items: center; gap: 10px; cursor: grab;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 8px 11px; font-size: .93rem;
+}
+.quiz-order-item:hover { border-color: var(--accent); }
+.quiz-order-item.dragging { opacity: .4; }
+.quiz-order-item .grip { color: var(--text-faint); letter-spacing: -2px; font-size: .8rem; }
+
+.quiz-match { display: grid; gap: 6px; margin: 8px 0 12px; }
+.quiz-match-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.quiz-match-left { min-width: 150px; font-weight: 550; font-size: .93rem; }
+.quiz-match-row select { max-width: 280px; }
+
+.quiz-sort-pool {
+  display: flex; gap: 6px; flex-wrap: wrap; min-height: 46px; padding: 9px;
+  background: var(--surface-2); border: 1px dashed var(--border-strong);
+  border-radius: var(--r); margin: 8px 0;
+}
+.quiz-sort-pool.over, .quiz-sort-drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.quiz-sort { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 12px; }
+.quiz-sort-bin { border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.quiz-sort-head {
+  background: var(--surface-2); padding: 7px 11px; font-size: .82rem; font-weight: 650;
+  border-bottom: 1px solid var(--border);
+}
+.quiz-sort-drop {
+  min-height: 60px; padding: 9px; display: flex; gap: 6px; flex-wrap: wrap;
+  align-content: flex-start; border: 1px dashed transparent;
+}
+.quiz-sort-item {
+  cursor: grab; font: inherit; font-size: .85rem; color: inherit;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: 99px; padding: 4px 11px;
+}
+.quiz-sort-item:hover { border-color: var(--accent); }
+
+.quiz-steps { margin: 8px 0 12px; padding-left: 22px; display: grid; gap: 9px; }
+.quiz-steps li { font-size: .93rem; line-height: 1.6; }
+.quiz-blank {
+  font-family: var(--font-mono); font-size: .95rem; padding: 3px 8px; width: 120px;
+  border: 0; border-bottom: 2px solid var(--accent); background: var(--accent-soft);
+  color: var(--text); border-radius: var(--r-sm) var(--r-sm) 0 0;
+}
+.quiz-blank:focus { outline: none; background: var(--surface-2); }
+
+.quiz-build { margin: 6px 0 12px; }
+.quiz-build-acts { display: flex; gap: 8px; margin-top: 10px; }
+
+/* ------------------------------------------------ long-form lesson pieces */
+.lesson-eq {
+  font-family: var(--font-mono); font-size: 1.12rem; text-align: center;
+  padding: 14px 12px; margin: 16px 0; background: var(--surface-2);
+  border-radius: var(--r); font-weight: 600;
+}
+.lesson-worked {
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  padding: 16px 18px; margin: 20px 0; background: var(--surface);
+}
+.lw-title {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .07em;
+  font-weight: 800; color: var(--accent); margin-bottom: 12px;
+}
+.lw-step { margin-bottom: 14px; }
+.lw-step:last-child { margin-bottom: 0; }
+.lw-q { font-weight: 600; font-size: .96rem; margin-bottom: 4px; }
+.lw-why { font-size: .93rem; line-height: 1.62; color: var(--text); max-width: 74ch; }
+.lw-maths {
+  margin-top: 7px; font-family: var(--font-mono); font-size: .95rem;
+  background: var(--surface-2); padding: 8px 12px; border-radius: var(--r-sm);
+  display: inline-block; font-weight: 600;
+}
 
 
 /* ---- 08-elements.css ---- */
@@ -1668,6 +1881,7 @@ window.ME = window.ME || {};
     cube: 'M12 2 3 7v10l9 5 9-5V7zm0 2.3 6.5 3.6L12 11.5 5.5 7.9zM5 9.7l6 3.3v6.4l-6-3.3zm14 0v6.4l-6 3.3V13z',
     rotate: 'M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z',
     chevron: 'M8.6 5.4 7.2 6.8 12.4 12l-5.2 5.2 1.4 1.4L15.2 12z',
+    warn: 'M12 2 1.5 21h21zm0 4.3 7 12.7H5zM11 10h2v5h-2zm0 6h2v2h-2z',
   };
 
   function icon(name, cls) {
@@ -11689,6 +11903,1164 @@ window.ME = window.ME || {};
 })();
 
 
+/* ================= 77-course.js ================= */
+/* The course: units, long-form lessons, question types and practice.
+ *
+ * Three things live here.
+ *
+ * ME.course   a registry. Units and lessons register themselves from the
+ *             src/lessons files, so adding a unit means adding one file and
+ *             nothing else.
+ * ME.quiz     every kind of question the course can ask, in one place, so a
+ *             lesson author picks a `kind` and gets grading, explanation and
+ *             retry behaviour for free.
+ * ME.practice generators that make unlimited fresh problems. Each one asks the
+ *             calculation engine for the answer rather than carrying one, so a
+ *             generated question and its worked solution cannot disagree.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+  const el = ME.el;
+
+  /* ============================================================ registry */
+  const UNITS = [];
+  const BY_LESSON = new Map();
+
+  function unit(spec) {
+    const u = Object.assign({ lessons: [] }, spec);
+    u.lessons.forEach((l) => { l.unit = u; BY_LESSON.set(l.id, l); });
+    UNITS.push(u);
+    UNITS.sort((a, b) => a.n - b.n);
+    return u;
+  }
+
+  function allLessons() {
+    const out = [];
+    UNITS.forEach((u) => u.lessons.forEach((l) => out.push(l)));
+    return out;
+  }
+  const lesson = (id) => BY_LESSON.get(id) || null;
+
+  /* How many questions a lesson holds, whichever format it is written in. */
+  function questionsOf(l) {
+    if (!l) return [];
+    if (l.__questions) return l.__questions;
+    const out = [];
+    (l.checkpoints || []).forEach((q) => out.push(q));
+    (l.quizzes || (l.quiz ? [l.quiz] : [])).forEach((q) => out.push(q));
+    l.__questions = out;
+    return out;
+  }
+
+  /* Roughly how long a lesson takes, for the course map. */
+  function minutesOf(l) {
+    if (l.mins) return l.mins;
+    const pages = (l.pages || []).length || 1;
+    return Math.max(6, Math.round(pages * 4 + questionsOf(l).length * 1.2));
+  }
+
+  /* ========================================================== questions */
+  /* Every kind renders into a container and calls `say(ok, message)`.
+   * A wrong answer is never just "no": it says what was chosen, why that is
+   * not it, and leaves the question open. */
+
+  const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+  const spell = (n) => (n >= 0 && n < WORDS.length ? WORDS[n] : String(n));
+  const plural = (n, w) => spell(n) + ' ' + w + (n === 1 ? '' : 's');
+
+  const KINDS = {};
+
+  /* ---- pick one of several ---- */
+  KINDS.choice = function (q, body, say) {
+    const opts = q.optionsBuilder ? q.optionsBuilder() : q.options;
+    const list = el('div', { class: 'quiz-opts' });
+    const buttons = [];
+    opts.forEach((o, i) => {
+      const btn = el('button', { class: 'quiz-opt' });
+      if (o.node) btn.appendChild(o.node); else btn.innerHTML = ME.formulaHTML(o.t);
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        if (o.ok) {
+          buttons.forEach((x) => { x.disabled = true; });
+          btn.classList.add('right');
+          say(true, o.why);
+        } else {
+          btn.classList.add('wrong');
+          btn.disabled = true;
+          say(false, o.why);
+          const left = buttons.filter((x) => !x.disabled);
+          if (left.length === 1) {
+            const correct = opts.findIndex((x) => x.ok);
+            buttons[correct].classList.add('right');
+          }
+        }
+      });
+      buttons.push(btn);
+      list.appendChild(btn);
+    });
+    body.appendChild(list);
+  };
+
+  /* ---- type a whole number ---- */
+  KINDS.count = function (q, body, say) {
+    if (q.smiles) body.appendChild(drawing(q.smiles, Object.assign({ xray: 0, width: 360, height: 220 }, q.render || {})));
+    const row = el('div', { class: 'quiz-count' });
+    const input = el('input', { type: 'number', min: '0', 'aria-label': 'Your answer' });
+    const go = el('button', { class: 'btn btn-primary btn-sm', text: 'Check' });
+    const submit = () => {
+      const v = parseInt(input.value, 10);
+      if (isNaN(v)) return;
+      if (v === q.answer) { say(true, q.right); return; }
+      const named = q.hints && q.hints[v];
+      const direction = v < q.answer ? 'Too few. ' : 'Too many. ';
+      say(false, direction + (named || q.wrong));
+    };
+    go.addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    row.appendChild(input);
+    row.appendChild(go);
+    body.appendChild(row);
+  };
+
+  /* ---- a measured number, with units and a tolerance ---- */
+  KINDS.numeric = function (q, body, say) {
+    const row = el('div', { class: 'quiz-numeric' });
+    const input = el('input', { type: 'text', inputmode: 'decimal', class: 'quiz-numinput',
+      placeholder: q.placeholder || '', 'aria-label': 'Your answer', spellcheck: 'false' });
+    const go = el('button', { class: 'btn btn-primary btn-sm', text: 'Check' });
+    if (q.unit && !q.unitRequired) {
+      row.appendChild(input);
+      row.appendChild(el('span', { class: 'quiz-unit', text: ME.fmt.unitLabel(q.unit) }));
+    } else {
+      row.appendChild(input);
+    }
+    row.appendChild(go);
+    const submit = () => {
+      const r = ME.fmt.checkAnswer(input.value, {
+        value: q.answer, unit: q.unit, unitRequired: q.unitRequired,
+        tol: q.tol, sig: q.sig, abs: q.abs,
+      });
+      if (r.ok) { say(true, q.right || 'That is it.'); return; }
+      say(false, r.why + (q.wrong ? ' ' + q.wrong : ''));
+    };
+    go.addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    body.appendChild(row);
+    if (q.sig) {
+      body.appendChild(el('p', { class: 'note quiz-hint',
+        text: 'Give it to ' + q.sig + ' significant figures.' }));
+    }
+  };
+
+  /* ---- balance an equation with steppers ---- */
+  KINDS.balance = function (q, body, say) {
+    const result = ME.balance.balance(q.equation);
+    if (!result.ok) { body.appendChild(el('p', { class: 'note', text: 'This question is broken: ' + result.error })); return; }
+    const all = result.left.concat(result.right);
+    const guesses = all.map(() => 1);
+    const steppers = el('div', { class: 'bal-steppers quiz-balance' });
+    const vals = [];
+    all.forEach((x, i) => {
+      if (i === result.left.length) steppers.appendChild(el('span', { class: 'bal-arrow', html: '&#8594;' }));
+      else if (i) steppers.appendChild(el('span', { class: 'bal-plus', text: '+' }));
+      const cell = el('div', { class: 'bal-stepper' });
+      const minus = el('button', { class: 'btn btn-sm', text: '−', 'aria-label': 'fewer' });
+      const val = el('span', { class: 'bal-stepval', text: '1' });
+      const plus = el('button', { class: 'btn btn-sm', text: '+', 'aria-label': 'more' });
+      cell.appendChild(minus); cell.appendChild(val); cell.appendChild(plus);
+      minus.addEventListener('click', () => { if (guesses[i] > 1) { guesses[i]--; val.textContent = guesses[i]; check(); } });
+      plus.addEventListener('click', () => { if (guesses[i] < 30) { guesses[i]++; val.textContent = guesses[i]; check(); } });
+      vals.push(val);
+      steppers.appendChild(el('div', { class: 'bal-stepwrap' }, [cell,
+        el('div', { class: 'bal-stepf', html: x.species.formula.html })]));
+    });
+    body.appendChild(steppers);
+    const tally = el('div', { class: 'quiz-balance-tally' });
+    body.appendChild(tally);
+
+    let solved = false;
+    function check() {
+      const h = ME.balance.hint(result, guesses);
+      ME.clear(tally);
+      const t = el('table', { class: 'bal-table' });
+      const head = el('tr');
+      ['', 'Left', 'Right', ''].forEach((x) => head.appendChild(el('th', { text: x })));
+      t.appendChild(head);
+      h.rows.forEach((r) => {
+        const tr = el('tr', { class: r.ok ? 'ok' : 'bad' });
+        tr.appendChild(el('td', {}, [el('strong', { text: r.element })]));
+        tr.appendChild(el('td', { class: 'num', text: String(r.left) }));
+        tr.appendChild(el('td', { class: 'num', text: String(r.right) }));
+        tr.appendChild(el('td', { class: 'mark', html: r.ok ? '&#10003;' : '&#10007;' }));
+        t.appendChild(tr);
+      });
+      tally.appendChild(t);
+      if (h.done && !solved) { solved = true; say(true, q.right || h.message); }
+      else if (!h.done) say(false, h.message);
+    }
+    check();
+  };
+
+  /* ---- name this compound, or write the formula ---- */
+  KINDS.name = function (q, body, say) {
+    const row = el('div', { class: 'quiz-numeric' });
+    const input = el('input', { type: 'text', class: 'quiz-numinput wide', spellcheck: 'false',
+      autocomplete: 'off', autocapitalize: 'off',
+      placeholder: q.mode === 'formula' ? 'a formula' : 'a name', 'aria-label': 'Your answer' });
+    const go = el('button', { class: 'btn btn-primary btn-sm', text: 'Check' });
+    row.appendChild(input); row.appendChild(go);
+    body.appendChild(row);
+
+    const submit = () => {
+      const given = String(input.value || '').trim();
+      if (!given) return;
+      if (q.mode === 'formula') {
+        /* Compare the atoms, not the spelling, so CaCl2 and Cl2Ca both pass. */
+        const a = ME.formula.parse(given);
+        const b = ME.formula.parse(q.answer);
+        if (!a.ok) { say(false, a.error + (a.fixes && a.fixes.length ? ' Did you mean ' + a.fixes.join(' or ') + '?' : '')); return; }
+        if (a.text === b.text && a.charge === b.charge) { say(true, q.right || 'That is it: ' + b.display + '.'); return; }
+        say(false, diagnoseFormula(a, b) + (q.wrong ? ' ' + q.wrong : ''));
+      } else {
+        const norm = (x) => String(x).toLowerCase().replace(/[\s\-()]/g, '').replace(/aluminum/, 'aluminium').replace(/sulph/g, 'sulf');
+        const accepted = [q.answer].concat(q.also || []);
+        if (accepted.some((x) => norm(x) === norm(given))) { say(true, q.right || 'That is the name.'); return; }
+        /* Nearly right is worth saying so. */
+        if (accepted.some((x) => norm(x).replace(/[ivx]+/g, '') === norm(given).replace(/[ivx]+/g, ''))) {
+          say(false, 'The two halves of the name are right, but the Roman numeral is not. Work the metal’s charge out backwards from the fact that the whole compound is neutral.');
+          return;
+        }
+        say(false, (q.wrong || 'Not quite.') + ' The answer has the shape "' + shapeOf(q.answer) + '".');
+      }
+    };
+    go.addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  };
+
+  function diagnoseFormula(got, want) {
+    const keys = Array.from(new Set(Object.keys(got.counts).concat(Object.keys(want.counts))));
+    const missing = keys.filter((k) => !got.counts[k] && want.counts[k]);
+    const extra = keys.filter((k) => got.counts[k] && !want.counts[k]);
+    const wrong = keys.filter((k) => got.counts[k] && want.counts[k] && got.counts[k] !== want.counts[k]);
+    if (missing.length) return 'There is no ' + missing.map((k) => ME.chem.element(k).name.toLowerCase()).join(' or ') + ' in what you wrote, and there should be.';
+    if (extra.length) return 'You have ' + extra.map((k) => ME.chem.element(k).name.toLowerCase()).join(' and ') + ' in there, which does not belong.';
+    if (wrong.length) {
+      const k = wrong[0];
+      return 'The elements are right but the numbers are not — you have ' + got.counts[k] + ' ' +
+        ME.chem.element(k).name.toLowerCase() + ' and it needs ' + want.counts[k] +
+        '. Check the charges: they have to cancel exactly.';
+    }
+    if (got.charge !== want.charge) return 'The atoms are right but the charge is not.';
+    return 'Not quite.';
+  }
+
+  const shapeOf = (name) => String(name).replace(/[a-z]+/g, '…').replace(/…+/g, '…');
+
+  /* ---- drag into order ---- */
+  KINDS.order = function (q, body, say) {
+    const items = shuffle(q.items.map((t, i) => ({ t: t, i: i })));
+    const list = el('div', { class: 'quiz-order' });
+    items.forEach((it) => {
+      const row = el('div', { class: 'quiz-order-item', draggable: 'true' });
+      row.dataset.index = it.i;
+      row.appendChild(el('span', { class: 'grip', html: '&#8942;&#8942;' }));
+      row.appendChild(el('span', { html: ME.formulaHTML(it.t) }));
+      list.appendChild(row);
+    });
+    body.appendChild(list);
+    const go = el('button', { class: 'btn btn-primary btn-sm', text: 'Check the order' });
+    go.addEventListener('click', () => {
+      const got = ME.$$('.quiz-order-item', list).map((n) => Number(n.dataset.index));
+      const right = got.every((v, i) => v === i);
+      if (right) { say(true, q.right || 'That is the right order.'); return; }
+      const firstWrong = got.findIndex((v, i) => v !== i);
+      say(false, (q.wrong || 'Not in the right order yet.') + ' Look at position ' + (firstWrong + 1) + '.');
+    });
+    body.appendChild(go);
+    makeSortable(list);
+  };
+
+  /* ---- drag to match pairs ---- */
+  KINDS.match = function (q, body, say) {
+    const rights = shuffle(q.pairs.map((p, i) => ({ t: p[1], i: i })));
+    const grid = el('div', { class: 'quiz-match' });
+    const chosen = {};
+    q.pairs.forEach((p, i) => {
+      const row = el('div', { class: 'quiz-match-row' });
+      row.appendChild(el('div', { class: 'quiz-match-left', html: ME.formulaHTML(p[0]) }));
+      const sel = el('select', { class: 'tl-select', 'aria-label': 'match for ' + p[0] });
+      sel.appendChild(el('option', { value: '', text: 'choose…' }));
+      rights.forEach((r) => sel.appendChild(el('option', { value: String(r.i), text: r.t })));
+      sel.addEventListener('change', () => { chosen[i] = sel.value; });
+      row.appendChild(sel);
+      grid.appendChild(row);
+    });
+    body.appendChild(grid);
+    const go = el('button', { class: 'btn btn-primary btn-sm', text: 'Check' });
+    go.addEventListener('click', () => {
+      const answered = q.pairs.map((p, i) => chosen[i]);
+      if (answered.some((x) => x === undefined || x === '')) { say(false, 'Match all of them first.'); return; }
+      const wrong = answered.filter((v, i) => Number(v) !== i).length;
+      if (!wrong) { say(true, q.right || 'All matched.'); return; }
+      say(false, plural(wrong, 'pair') + ' still wrong. ' + (q.wrong || ''));
+    });
+    body.appendChild(go);
+  };
+
+  /* ---- sort into categories ---- */
+  KINDS.sort = function (q, body, say) {
+    const items = shuffle(q.items.slice());
+    const pool = el('div', { class: 'quiz-sort-pool' });
+    const bins = {};
+    const wrap = el('div', { class: 'quiz-sort' });
+    q.categories.forEach((c) => {
+      const bin = el('div', { class: 'quiz-sort-bin' });
+      bin.appendChild(el('div', { class: 'quiz-sort-head', text: c }));
+      const drop = el('div', { class: 'quiz-sort-drop' });
+      drop.dataset.cat = c;
+      bin.appendChild(drop);
+      bins[c] = drop;
+      wrap.appendChild(bin);
+      makeDropTarget(drop);
+    });
+    items.forEach((it) => {
+      const chip = el('button', { class: 'quiz-sort-item', draggable: 'true' });
+      chip.dataset.cat = it.cat;
+      chip.innerHTML = ME.formulaHTML(it.t);
+      /* Clicking cycles through the bins, so it works without dragging. */
+      chip.addEventListener('click', () => {
+        const here = chip.parentNode.dataset ? chip.parentNode.dataset.cat : null;
+        const idx = here ? q.categories.indexOf(here) : -1;
+        const next = q.categories[(idx + 1) % q.categories.length];
+        bins[next].appendChild(chip);
+      });
+      pool.appendChild(chip);
+    });
+    body.appendChild(pool);
+    makeDropTarget(pool);
+    body.appendChild(wrap);
+    const go = el('button', { class: 'btn btn-primary btn-sm', text: 'Check' });
+    go.addEventListener('click', () => {
+      const left = ME.$$('.quiz-sort-item', pool).length;
+      if (left) { say(false, plural(left, 'item') + ' still to sort. Drag them, or just click one to move it along.'); return; }
+      const wrong = [];
+      q.categories.forEach((c) => {
+        ME.$$('.quiz-sort-item', bins[c]).forEach((n) => { if (n.dataset.cat !== c) wrong.push(n.textContent); });
+      });
+      if (!wrong.length) { say(true, q.right || 'All sorted correctly.'); return; }
+      say(false, plural(wrong.length, 'item') + ' in the wrong place: ' + wrong.slice(0, 3).join(', ') +
+        '. ' + (q.wrong || ''));
+    });
+    body.appendChild(go);
+  };
+
+  /* ---- fill in one step of a worked solution ---- */
+  KINDS.fillstep = function (q, body, say) {
+    const list = el('ol', { class: 'quiz-steps' });
+    let input = null;
+    q.steps.forEach((s) => {
+      const li = el('li');
+      if (s.blank) {
+        li.appendChild(el('span', { text: s.before || '' }));
+        input = el('input', { type: 'text', class: 'quiz-blank', spellcheck: 'false',
+          'aria-label': 'the missing step' });
+        li.appendChild(input);
+        li.appendChild(el('span', { text: s.after || '' }));
+      } else {
+        li.innerHTML = ME.formulaHTML(s.text);
+      }
+      list.appendChild(li);
+    });
+    body.appendChild(list);
+    const go = el('button', { class: 'btn btn-primary btn-sm', text: 'Check' });
+    go.addEventListener('click', () => {
+      if (!input) return;
+      const r = q.numeric
+        ? ME.fmt.checkAnswer(input.value, { value: q.answer, tol: q.tol || 0.02 })
+        : { ok: String(input.value).trim().toLowerCase() === String(q.answer).toLowerCase(),
+            why: q.wrong || 'Not that.' };
+      if (r.ok) say(true, q.right || 'Yes — that is the step.');
+      else say(false, r.why);
+    });
+    body.appendChild(go);
+  };
+
+  /* ---- click an atom in a drawing ---- */
+  KINDS.clickatom = function (q, body, say) {
+    const mol = q.mol ? q.mol() : molOf(q.smiles);
+    const info = ME.render2d.describe(mol, {});
+    const holder = el('div', { class: 'clickmol' });
+    holder.appendChild(ME.render2d.render(mol, {
+      xray: q.xray || 0, width: q.width || 440, height: q.height || 290,
+      onAtomClick(i, atom) {
+        const enriched = Object.assign({}, atom, { bondCount: info.atoms[i].bonds.length });
+        if (q.test(enriched)) say(true, q.right);
+        else say(false, describeClick(enriched) + q.wrong);
+      },
+    }));
+    body.appendChild(holder);
+    body.appendChild(el('p', { class: 'note', text: 'Click an atom in the drawing above.' }));
+  };
+
+  /* ---- draw it in the editor, checked by structure ---- */
+  KINDS.build = function (q, body, say) {
+    const box = el('div', { class: 'quiz-build' });
+    box.appendChild(el('p', { class: 'note',
+      text: 'Draw it in the Draw section, then come back and press Check. The check ignores how it is laid out on the page — only the structure matters.' }));
+    const acts = el('div', { class: 'quiz-build-acts' });
+    const open = el('button', { class: 'btn btn-sm' }, [ME.icon('pencil'), 'Open Draw']);
+    open.addEventListener('click', () => ME.router.go('#/draw'));
+    const check = el('button', { class: 'btn btn-primary btn-sm', text: 'Check what I drew' });
+    check.addEventListener('click', () => {
+      let mol = null;
+      try { mol = ME.draw.currentMolecule ? ME.draw.currentMolecule() : null; } catch (e) { mol = null; }
+      if (!mol || !mol.getAllAtoms()) { say(false, 'There is nothing in the Draw canvas yet.'); return; }
+      const wantMol = molOf(q.smiles);
+      const gotID = ME.chem.canonicalID(mol);
+      const wantID = ME.chem.canonicalID(wantMol);
+      if (gotID && gotID === wantID) { say(true, q.right || 'That is it.'); return; }
+      /* Say how close it is, rather than just no. */
+      const a = mol.getMolecularFormula().formula, b = wantMol.getMolecularFormula().formula;
+      if (a === b) {
+        say(false, 'The formula is right — ' + a + ' — but the atoms are joined up differently. Same atoms, different structure, which makes it a different substance. Look again at what is bonded to what.');
+      } else {
+        say(false, 'You have drawn ' + a + ' and the target is ' + b + '. ' + (q.wrong || ''));
+      }
+    });
+    acts.appendChild(open); acts.appendChild(check);
+    box.appendChild(acts);
+    body.appendChild(box);
+  };
+
+  function describeClick(a) {
+    if (a.sym !== 'C') {
+      const h = a.hydrogens ? ', holding ' + plural(a.hydrogens, 'hydrogen') : '';
+      return 'That is the ' + ME.chem.elementName(a.sym).toLowerCase() + h + '. ';
+    }
+    const lines = plural(a.bondCount, 'line');
+    if (a.hydrogens === 0) return 'That carbon has ' + lines + ' meeting it, so all four of its hands are used and it has no hydrogens. ';
+    return 'That carbon has ' + lines + ' meeting it, so it is carrying ' + plural(a.hydrogens, 'hidden hydrogen') + '. ';
+  }
+
+  /* ---------------------------------------------------------- rendering */
+  function buildQuestion(q, index, total, alreadyPassed, onSolved) {
+    const item = el('div', { class: 'quiz-item' + (alreadyPassed ? ' solved' : '') });
+    const numBadge = total > 1
+      ? el('span', { class: 'quiz-num', text: alreadyPassed ? '✓' : String(index + 1) })
+      : null;
+    if (numBadge) item.appendChild(numBadge);
+
+    const body = el('div', { class: 'quiz-body' });
+    item.appendChild(body);
+    body.appendChild(el('div', { class: 'quiz-q', html: ME.formulaHTML(q.q) }));
+    if (q.figure) body.appendChild(q.figure());
+
+    const feedback = el('div', { class: 'quiz-feedback' });
+    let solved = alreadyPassed;
+    function say(ok, message) {
+      feedback.classList.add('show');
+      ME.clear(feedback);
+      feedback.appendChild(el('div', { class: 'callout ' + (ok ? 'ok' : 'warn'), html: ME.formulaHTML(message) }));
+      if (ok && !solved) {
+        solved = true;
+        item.classList.add('solved');
+        if (numBadge) numBadge.textContent = '✓';
+        if (onSolved) onSolved();
+      }
+    }
+
+    const fn = KINDS[q.kind];
+    if (fn) fn(q, body, say);
+    else body.appendChild(el('p', { class: 'note', text: 'Unknown question type: ' + q.kind }));
+
+    if (q.note) body.appendChild(el('p', { class: 'note quiz-hint', text: q.note }));
+    body.appendChild(feedback);
+    return item;
+  }
+
+  /* ------------------------------------------------------------ helpers */
+  function molOf(smiles) {
+    const m = ME.chem.fromSmiles(smiles);
+    ME.chem.ensureCoordinates(m);
+    return m;
+  }
+  function drawing(smiles, opts) {
+    return ME.render2d.render(molOf(smiles), Object.assign({ width: 400, height: 240, interactive: true }, opts || {}));
+  }
+
+  function shuffle(a) {
+    const out = a.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = out[i]; out[i] = out[j]; out[j] = t;
+    }
+    return out;
+  }
+
+  /* Drag and drop, kept deliberately simple, and always with a click
+   * alternative so nothing depends on being able to drag. */
+  let dragged = null;
+  function makeSortable(list) {
+    ME.$$('.quiz-order-item', list).forEach((row) => {
+      row.addEventListener('dragstart', () => { dragged = row; row.classList.add('dragging'); });
+      row.addEventListener('dragend', () => { row.classList.remove('dragging'); dragged = null; });
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (!dragged || dragged === row) return;
+        const rect = row.getBoundingClientRect();
+        const after = (e.clientY - rect.top) > rect.height / 2;
+        list.insertBefore(dragged, after ? row.nextSibling : row);
+      });
+      /* click to move up, so it works without a mouse drag */
+      row.addEventListener('click', () => {
+        if (row.previousSibling) list.insertBefore(row, row.previousSibling);
+        else list.appendChild(row);
+      });
+    });
+  }
+  function makeDropTarget(node) {
+    node.addEventListener('dragover', (e) => { e.preventDefault(); node.classList.add('over'); });
+    node.addEventListener('dragleave', () => node.classList.remove('over'));
+    node.addEventListener('drop', (e) => {
+      e.preventDefault();
+      node.classList.remove('over');
+      if (dragged) node.appendChild(dragged);
+    });
+  }
+  document.addEventListener('dragstart', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('quiz-sort-item')) dragged = e.target;
+  });
+
+  /* ========================================================== practice */
+  /* A seeded random number generator, so a generated problem can be
+   * reproduced exactly - which is what makes them testable. */
+  function rng(seed) {
+    let s = seed >>> 0 || 1;
+    const next = () => {
+      s ^= s << 13; s >>>= 0;
+      s ^= s >> 17;
+      s ^= s << 5; s >>>= 0;
+      return s / 4294967296;
+    };
+    return {
+      next: next,
+      int: (a, b) => a + Math.floor(next() * (b - a + 1)),
+      pick: (list) => list[Math.floor(next() * list.length)],
+      round: (x, dp) => Math.round(x * Math.pow(10, dp)) / Math.pow(10, dp),
+    };
+  }
+
+  const GENERATORS = {};
+  function generator(key, spec) { GENERATORS[key] = spec; }
+  function generate(key, seed) {
+    const g = GENERATORS[key];
+    if (!g) return null;
+    const r = rng(seed === undefined ? (Math.random() * 1e9) | 0 : seed);
+    const out = g.make(r);
+    if (out) { out.key = key; out.seed = seed; }
+    return out;
+  }
+
+  ME.course = {
+    unit, allLessons, lesson, questionsOf, minutesOf,
+    get units() { return UNITS; },
+  };
+  ME.quiz = { buildQuestion, KINDS, shuffle, plural, spell, describeClick, molOf, drawing };
+  ME.practice = { generator, generate, rng, get keys() { return Object.keys(GENERATORS); } };
+})();
+
+
+/* ================= 78-generators.js ================= */
+/* Unlimited practice problems.
+ *
+ * The rule every generator follows: pick the numbers, then ask the calculation
+ * engine for the answer. Never carry an answer. That way a generated question,
+ * its worked solution and the grader are all the same code, and the app cannot
+ * mark a correct answer wrong.
+ *
+ * The compounds are real, too - they come from the verified molecule database
+ * and the verified ion table, not from a list typed here.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+  const gen = (k, s) => ME.practice.generator(k, s);
+  const f = (x, s) => ME.fmt.fmt(x, s || 4);
+
+  /* ---------------------------------------------------------------- pools */
+  /* Simple ionic compounds, built from the verified tables rather than listed,
+   * so every one is a real compound with a real name. */
+  function ionicPool() {
+    if (ionicPool.cache) return ionicPool.cache;
+    const metals = ['Na', 'K', 'Li', 'Mg', 'Ca', 'Ba', 'Al', 'Zn', 'Ag', 'Fe', 'Cu', 'Pb', 'Sn'];
+    const out = [];
+    metals.forEach((m) => {
+      const t = ME.ref.typicalCharge(m);
+      const charges = t.variable ? (m === 'Fe' ? [2, 3] : m === 'Cu' ? [1, 2] : [2, 4]) : [t.charge];
+      charges.forEach((mc) => {
+        const anions = [{ f: 'Cl', c: -1 }, { f: 'O', c: -2 }, { f: 'S', c: -2 }, { f: 'Br', c: -1 }, { f: 'N', c: -3 }]
+          .concat(ME.ref.ions.filter((i) => i.c < 0 && i.f.length <= 4).map((i) => ({ f: i.f, c: i.c, ion: i })));
+        anions.forEach((a) => {
+          const g = gcd(Math.abs(mc), Math.abs(a.c));
+          const nM = Math.abs(a.c) / g, nA = Math.abs(mc) / g;
+          const wrap = (txt, n) => (n === 1 ? txt : (/^[A-Z][a-z]?$/.test(txt) ? txt : '(' + txt + ')') + n);
+          const formula = wrap(m, nM) + wrap(a.f, nA);
+          const parsed = ME.formula.parse(formula);
+          if (!parsed.ok) return;
+          const named = ME.naming.nameOf(formula);
+          if (!named.ok) return;
+          /* Only keep it if the name reads back to the same compound. That is a
+           * self-check: a generated problem nobody can answer is worse than no
+           * problem at all. */
+          const back = ME.naming.formulaOf(named.name);
+          if (!back.ok) return;
+          const bp = ME.formula.parse(back.formula);
+          if (!bp.ok || bp.text !== parsed.text) return;
+          out.push({ formula: formula, name: named.name, mass: parsed.mass, display: parsed.display });
+        });
+      });
+    });
+    ionicPool.cache = out;
+    return out;
+  }
+
+  function covalentPool() {
+    if (covalentPool.cache) return covalentPool.cache;
+    const list = ['CO', 'CO2', 'NO', 'NO2', 'N2O', 'N2O4', 'N2O5', 'SO2', 'SO3', 'PCl3', 'PCl5',
+      'CCl4', 'SF6', 'SF4', 'CS2', 'P2O5', 'ClF3', 'XeF4', 'IF7', 'SiO2', 'BF3'];
+    covalentPool.cache = list.map((x) => {
+      const p = ME.formula.parse(x);
+      const n = ME.naming.nameOf(x);
+      if (!p.ok || !n.ok) return null;
+      return { formula: x, name: n.name, mass: p.mass, display: p.display };
+    }).filter(Boolean);
+    return covalentPool.cache;
+  }
+
+  /* Ordinary molecules from the verified database, for mass questions. */
+  function moleculePool() {
+    if (moleculePool.cache) return moleculePool.cache;
+    moleculePool.cache = ME.search.all()
+      .filter((m) => m.f && m.n && ME.formula.parse(m.f).ok)
+      .filter((m) => {
+        const p = ME.formula.parse(m.f);
+        return p.atoms >= 3 && p.atoms <= 40 && p.mass < 400;
+      })
+      /* Database display names are capitalised, which reads badly in the
+       * middle of a sentence. The naming engine's names are already correctly
+       * cased, so only these need lowering. */
+      .map((m) => ({ formula: m.f, name: m.n.toLowerCase(), mass: ME.formula.parse(m.f).mass }));
+    return moleculePool.cache;
+  }
+
+  /* Balanced equations that are real reactions, checked by the balancer at
+   * generation time so a broken one can never reach the reader. */
+  const EQUATIONS = [
+    'CH4 + O2 -> CO2 + H2O', 'C2H6 + O2 -> CO2 + H2O', 'C3H8 + O2 -> CO2 + H2O',
+    'C4H10 + O2 -> CO2 + H2O', 'C2H5OH + O2 -> CO2 + H2O', 'C6H12O6 + O2 -> CO2 + H2O',
+    'H2 + O2 -> H2O', 'N2 + H2 -> NH3', 'Na + Cl2 -> NaCl', 'Mg + O2 -> MgO',
+    'Fe + O2 -> Fe2O3', 'Al + O2 -> Al2O3', 'K + H2O -> KOH + H2',
+    'Zn + HCl -> ZnCl2 + H2', 'Mg + HCl -> MgCl2 + H2', 'Al + HCl -> AlCl3 + H2',
+    'CaCO3 -> CaO + CO2', 'KClO3 -> KCl + O2', 'H2O2 -> H2O + O2', 'NaHCO3 -> Na2CO3 + H2O + CO2',
+    'AgNO3 + NaCl -> AgCl + NaNO3', 'Pb(NO3)2 + KI -> PbI2 + KNO3',
+    'BaCl2 + Na2SO4 -> BaSO4 + NaCl', 'NaOH + HCl -> NaCl + H2O',
+    'NaOH + H2SO4 -> Na2SO4 + H2O', 'Ca(OH)2 + HCl -> CaCl2 + H2O',
+    'Ca(OH)2 + H3PO4 -> Ca3(PO4)2 + H2O', 'Fe2O3 + CO -> Fe + CO2',
+    'N2O5 -> NO2 + O2', 'P4 + O2 -> P4O10', 'SO2 + O2 -> SO3',
+    'Cu + AgNO3 -> Cu(NO3)2 + Ag', 'Al + CuSO4 -> Al2(SO4)3 + Cu',
+  ];
+
+  function gcd(a, b) { while (b) { const t = a % b; a = b; b = t; } return a || 1; }
+
+  /* ============================================================ generators */
+
+  gen('molar-mass', {
+    name: 'Molar mass',
+    make(r) {
+      const pool = r.next() < 0.5 ? ionicPool() : moleculePool();
+      const c = r.pick(pool);
+      const m = ME.formula.molarMass(c.formula);
+      return {
+        kind: 'numeric',
+        q: 'What is the molar mass of ' + c.name + ', ' + c.formula + '?',
+        answer: m.mass, unit: 'g', tol: 0.005,
+        right: 'Yes — ' + f(m.mass, 6) + ' g/mol.',
+        wrong: 'Add up every atom: ' + m.rows.map((x) => x.count + ' × ' + f(x.mass, 5)).join(' + ') + '.',
+        solution: m.rows.map((x) => ({
+          text: x.count + ' ' + x.name.toLowerCase() + ' at ' + f(x.mass, 6) + ' = ' + f(x.total, 6) + ' g/mol',
+        })).concat([{ text: 'Total: ' + f(m.mass, 6) + ' g/mol.' }]),
+      };
+    },
+  });
+
+  gen('grams-moles', {
+    name: 'Grams and moles',
+    make(r) {
+      const c = r.pick(moleculePool().concat(ionicPool()));
+      const toMoles = r.next() < 0.5;
+      if (toMoles) {
+        const grams = r.round(r.int(5, 500) / (r.next() < 0.5 ? 1 : 10), 2);
+        const res = ME.stoich.gramsToMoles(grams, c.formula);
+        return {
+          kind: 'numeric',
+          q: 'How many moles are there in ' + grams + ' g of ' + c.name + ', ' + c.formula + '?',
+          answer: res.moles, unit: 'mol', tol: 0.01,
+          right: f(res.moles, 4) + ' mol. Grams divided by molar mass, every time.',
+          wrong: 'One mole of ' + c.formula + ' weighs ' + f(res.molarMass, 5) + ' g. Divide, do not multiply — check that the grams cancel.',
+          solution: res.steps,
+        };
+      }
+      const moles = r.round(r.int(5, 400) / 100, 2);
+      const res = ME.stoich.molesToGrams(moles, c.formula);
+      return {
+        kind: 'numeric',
+        q: 'What does ' + moles + ' mol of ' + c.name + ', ' + c.formula + ', weigh?',
+        answer: res.grams, unit: 'g', tol: 0.01,
+        right: f(res.grams, 4) + ' g.',
+        wrong: 'One mole weighs ' + f(res.molarMass, 5) + ' g, so multiply by how many moles you have.',
+        solution: res.steps,
+      };
+    },
+  });
+
+  gen('percent-composition', {
+    name: 'Percent composition',
+    make(r) {
+      const c = r.pick(moleculePool().concat(ionicPool()));
+      const res = ME.formula.percentComposition(c.formula);
+      const row = r.pick(res.rows);
+      return {
+        kind: 'numeric',
+        q: 'What percentage of ' + c.formula + ' is ' + row.name.toLowerCase() + ', by mass?',
+        answer: row.percent, unit: null, tol: 0.01,
+        right: f(row.percent, 4) + '%.',
+        wrong: 'Work out the mass of that element in one mole, then divide by the mass of the whole mole.',
+        solution: [
+          { text: 'One mole of ' + c.formula + ' weighs ' + f(res.mass, 6) + ' g.' },
+          { text: 'Of that, ' + row.name.toLowerCase() + ' accounts for ' + row.count + ' × ' +
+              f(row.mass, 5) + ' = ' + f(row.total, 5) + ' g.' },
+          { text: f(row.total, 5) + ' ÷ ' + f(res.mass, 6) + ' × 100 = ' + f(row.percent, 4) + '%.' },
+        ],
+      };
+    },
+  });
+
+  gen('balance', {
+    name: 'Balancing equations',
+    make(r) {
+      const eq = r.pick(EQUATIONS);
+      const bal = ME.balance.balance(eq);
+      if (!bal.ok) return null;
+      return {
+        kind: 'balance', equation: eq,
+        q: 'Balance this: ' + eq.replace(/->/g, '→'),
+        right: 'Balanced. ' + bal.text + ' — and it is ' + bal.type.label.toLowerCase() + '.',
+        solution: ME.balance.explain(bal).map((s) => ({ text: s.heading + ' — ' + s.body })),
+      };
+    },
+  });
+
+  gen('formula-to-name', {
+    name: 'Name the compound',
+    make(r) {
+      const pool = r.next() < 0.65 ? ionicPool() : covalentPool();
+      const c = r.pick(pool);
+      const named = ME.naming.nameOf(c.formula);
+      return {
+        kind: 'name', mode: 'name',
+        q: 'What is the name of ' + c.formula + '?',
+        answer: named.name,
+        right: 'Yes: ' + named.name + '.',
+        wrong: 'Positive part first, negative part second.',
+        solution: named.steps,
+      };
+    },
+  });
+
+  gen('name-to-formula', {
+    name: 'Write the formula',
+    make(r) {
+      const pool = r.next() < 0.65 ? ionicPool() : covalentPool();
+      const c = r.pick(pool);
+      const back = ME.naming.formulaOf(c.name);
+      if (!back.ok) return null;
+      return {
+        kind: 'name', mode: 'formula',
+        q: 'Write the formula for ' + c.name + '.',
+        answer: back.formula,
+        right: 'Yes: ' + back.formula + '.',
+        wrong: 'Find the charge on each part, then work out how many of each you need for them to cancel.',
+        solution: back.steps.map((s) => ({ text: s })),
+      };
+    },
+  });
+
+  gen('stoichiometry', {
+    name: 'Mass to mass',
+    make(r) {
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const eq = r.pick(EQUATIONS);
+        const bal = ME.balance.balance(eq);
+        if (!bal.ok) continue;
+        const from = r.pick(bal.left);
+        const to = r.pick(bal.right);
+        const grams = r.round(r.int(20, 400) / (r.next() < 0.5 ? 1 : 10), 2);
+        const res = ME.stoich.massToMass(eq, from.species.formula.text, grams, to.species.formula.text);
+        if (!res.ok || !isFinite(res.grams)) continue;
+        return {
+          kind: 'numeric',
+          q: grams + ' g of ' + from.species.formula.display + ' reacts as in ' +
+            eq.replace(/->/g, '→') + '. What mass of ' + to.species.formula.display + ' does that make?',
+          answer: res.grams, unit: 'g', tol: 0.015,
+          right: f(res.grams, 4) + ' g.',
+          wrong: 'Grams to moles, then use the coefficients, then moles back to grams. Four steps, always the same four.',
+          solution: res.steps,
+        };
+      }
+      return null;
+    },
+  });
+
+  gen('limiting', {
+    name: 'Limiting reactant',
+    make(r) {
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const eq = r.pick(EQUATIONS);
+        const bal = ME.balance.balance(eq);
+        if (!bal.ok || bal.left.length < 2) continue;
+        const given = bal.left.map((x) => ({
+          name: x.species.formula.text,
+          grams: r.round(r.int(10, 300) / (r.next() < 0.5 ? 1 : 10), 2),
+        }));
+        const res = ME.stoich.limiting(eq, given);
+        if (!res.ok) continue;
+        /* Skip the ones where two reactants tie, since then there is no
+         * single right answer to grade. */
+        if (res.rows.length > 1 && Math.abs(res.rows[0].batches - res.rows[1].batches) < 1e-6) continue;
+        return {
+          kind: 'choice',
+          q: 'In ' + eq.replace(/->/g, '→') + ', you have ' +
+            given.map((g, i) => g.grams + ' g of ' + bal.left[i].species.formula.display).join(' and ') +
+            '. Which one runs out first?',
+          options: bal.left.map((x) => ({
+            t: x.species.formula.display,
+            ok: x.species.formula.display === res.limiting.name,
+            why: x.species.formula.display === res.limiting.name
+              ? 'Right. It supports only ' + f(res.limiting.batches, 3) + ' batches of the reaction, fewer than the other, so it is the one that runs out and it decides how much product you get.'
+              : 'No — there is more than enough of that one. Turn each mass into moles and then divide by its coefficient; the smallest result is the one that runs out.',
+          })),
+          solution: res.steps,
+        };
+      }
+      return null;
+    },
+  });
+
+  gen('gas-law', {
+    name: 'The ideal gas law',
+    make(r) {
+      const solveFor = r.pick(['P', 'V', 'n', 'T']);
+      const units = {
+        P: r.pick(['atm', 'kPa', 'mmHg']), V: 'L',
+        n: 'mol', T: r.pick(['K', 'C']),
+      };
+      /* Pick three values a reader could meet in a lab and derive the
+       * fourth, rather than picking all four independently - that produced
+       * "85 L at 267 kPa with half a mole", which needs 5469 K and is a
+       * plasma, not a chemistry question. */
+      const Patm = r.round(r.int(50, 400) / 100, 2);          /* 0.5 to 4 atm */
+      const n = r.round(r.int(10, 300) / 100, 2);             /* 0.1 to 3 mol */
+      const TK = r.int(250, 500);                             /* -23 to 227 C */
+      const si = { P: Patm * 101325, n: n, T: TK };
+      si.V = ME.gas.solveSI(si, 'V');
+
+      const input = { units: units };
+      ['P', 'V', 'n', 'T'].forEach((k) => {
+        if (k === solveFor) { input[k] = null; return; }
+        const base = k === 'T' ? 'K' : ME.gas.baseOf({ P: 'pressure', V: 'volume', n: 'amount' }[k]);
+        input[k] = ME.fmt.roundSig(ME.fmt.convert(si[k], base, units[k]), 4);
+      });
+      /* Rebuild the state from the rounded numbers the reader will actually
+       * see, so the answer matches what they can compute from the question. */
+      ['P', 'V', 'n', 'T'].forEach((k) => {
+        if (k === solveFor || input[k] === null) return;
+        const base = k === 'T' ? 'K' : ME.gas.baseOf({ P: 'pressure', V: 'volume', n: 'amount' }[k]);
+        si[k] = ME.fmt.convert(input[k], units[k], base);
+      });
+      si[solveFor] = ME.gas.solveSI(si, solveFor);
+      const res = ME.gas.solve(input, solveFor);
+      if (!res.ok) return null;
+      const label = { P: 'the pressure', V: 'the volume', n: 'how many moles there are', T: 'the temperature' }[solveFor];
+      const given = ['P', 'V', 'n', 'T'].filter((k) => k !== solveFor)
+        .map((k) => k + ' = ' + f(input[k], 4) + ' ' + ME.fmt.unitLabel(units[k]));
+      return {
+        kind: 'numeric',
+        q: 'A gas has ' + given.join(', ') + '. Work out ' + label + ', in ' + ME.fmt.unitLabel(units[solveFor]) + '.',
+        answer: res.value, unit: solveFor === 'n' ? 'mol' : units[solveFor], tol: 0.015,
+        right: f(res.value, 4) + ' ' + ME.fmt.unitLabel(units[solveFor]) + '.',
+        wrong: 'Rearrange PV = nRT for ' + solveFor + ', and check the temperature went in as kelvin.',
+        solution: [{ text: 'PV = nRT, rearranged: ' +
+            { P: 'P = nRT/V', V: 'V = nRT/P', n: 'n = PV/RT', T: 'T = PV/nR' }[solveFor] }]
+          .concat(res.steps.map((s) => ({ text: f(s.from, 5) + ' ' + ME.fmt.unitLabel(s.fromUnit) +
+            ' becomes ' + f(s.to, 5) + ' ' + ME.fmt.unitLabel(s.toUnit) + '.' + (s.why ? ' ' + s.why : '') })))
+          .concat([{ text: 'With R = ' + f(res.R, 6) + ' ' + res.RUnit + ', that gives ' + f(res.value, 5) + ' ' + ME.fmt.unitLabel(units[solveFor]) + '.' }]),
+      };
+    },
+  });
+
+  gen('dilution', {
+    name: 'Dilution',
+    make(r) {
+      const M1 = r.round(r.int(10, 120) / 10, 1);
+      const M2 = r.round(M1 / r.int(2, 10), 3);
+      const V2 = r.int(50, 1000);
+      const res = ME.solution.dilute(M1, null, M2, V2);
+      return {
+        kind: 'numeric',
+        q: 'You need ' + V2 + ' mL of ' + M2 + ' M solution, and the bottle on the shelf is ' + M1 +
+          ' M. What volume of the concentrated stuff do you measure out, in mL?',
+        answer: res.value, unit: null, tol: 0.015,
+        right: f(res.value, 4) + ' mL, then top up to ' + V2 + ' mL with water.',
+        wrong: 'M₁V₁ = M₂V₂, because diluting does not change how much solute there is.',
+        solution: res.steps,
+      };
+    },
+  });
+
+  gen('ph', {
+    name: 'pH',
+    make(r) {
+      if (r.next() < 0.5) {
+        const exp = r.int(1, 13);
+        const mant = r.pick([1, 2, 5]);
+        const H = mant * Math.pow(10, -exp);
+        const res = ME.solution.pHfromH(H);
+        return {
+          kind: 'numeric',
+          q: 'A solution has [H⁺] = ' + ME.fmt.sciText(H, 2) + ' mol/L. What is its pH?',
+          answer: res.pH, unit: null, tol: 0.01, abs: 0.03,
+          right: 'pH ' + f(res.pH, 3) + '.',
+          wrong: 'pH = −log[H⁺]. If the concentration is 10⁻ⁿ exactly, the pH is just n.',
+          solution: res.steps,
+        };
+      }
+      const pH = r.round(r.int(5, 130) / 10, 1);
+      const res = ME.solution.HfrompH(pH);
+      return {
+        kind: 'numeric',
+        q: 'A solution has pH ' + pH + '. What is [H⁺], in mol/L?',
+        answer: res.H, unit: null, tol: 0.03,
+        right: ME.fmt.sciText(res.H, 3) + ' mol/L.',
+        wrong: '[H⁺] = 10 to the power of minus the pH.',
+        solution: res.steps,
+      };
+    },
+  });
+
+  gen('heat', {
+    name: 'q = mcΔT',
+    make(r) {
+      const names = Object.keys(ME.ref.SPECIFIC_HEAT.values);
+      const sub = r.pick(names);
+      const c = ME.ref.SPECIFIC_HEAT.values[sub];
+      const mass = r.int(20, 800);
+      const dT = r.int(5, 80) * (r.next() < 0.25 ? -1 : 1);
+      const res = ME.solution.heat(mass, c, dT);
+      return {
+        kind: 'numeric',
+        q: 'How much energy does it take to change the temperature of ' + mass + ' g of ' + sub +
+          ' by ' + dT + ' °C? Its specific heat is ' + c + ' J/(g·K). Answer in joules.',
+        answer: res.q, unit: 'J', tol: 0.01,
+        right: f(res.q, 4) + ' J.',
+        wrong: 'q = mcΔT — just the three multiplied together.',
+        solution: res.steps,
+      };
+    },
+  });
+
+  gen('unit-conversion', {
+    name: 'Unit conversion',
+    make(r) {
+      const dim = r.pick(['pressure', 'volume', 'temperature', 'mass', 'energy', 'length']);
+      const units = ME.fmt.unitsFor(dim);
+      const from = r.pick(units);
+      let to = r.pick(units);
+      let guard = 0;
+      while (to === from && guard++ < 10) to = r.pick(units);
+      const value = dim === 'temperature' ? r.int(-50, 400) : r.round(r.int(1, 900) / (r.next() < 0.5 ? 1 : 10), 2);
+      const answer = ME.fmt.convert(value, from, to);
+      return {
+        kind: 'numeric',
+        q: 'Convert ' + value + ' ' + ME.fmt.unitLabel(from) + ' into ' + ME.fmt.unitLabel(to) + '.',
+        answer: answer, unit: null, tol: 0.005,
+        right: f(answer, 5) + ' ' + ME.fmt.unitLabel(to) + '.',
+        wrong: 'Multiply by a fraction that equals one, arranged so the old unit cancels.',
+        solution: [
+          { text: '1 ' + ME.fmt.unitLabel(from) + ' = ' + f(ME.fmt.convert(1, from, to), 6) + ' ' + ME.fmt.unitLabel(to) + '.' },
+          { text: value + ' × that = ' + f(answer, 6) + ' ' + ME.fmt.unitLabel(to) + '.' },
+        ],
+      };
+    },
+  });
+
+  gen('sigfigs', {
+    name: 'Significant figures',
+    make(r) {
+      const shapes = ['0.00#0', '#.##0', '##00', '#.#0e3', '0.0##', '###.#'];
+      const shape = r.pick(shapes);
+      const text = shape.replace(/#/g, () => String(r.int(1, 9)));
+      const answer = ME.fmt.sigFigs(text);
+      if (answer === null) return null;
+      return {
+        kind: 'count',
+        q: 'How many significant figures does ' + text + ' have?',
+        answer: answer,
+        right: answer + '. ' + (text.indexOf('.') >= 0
+          ? 'The decimal point means the trailing zeros were measured, so they count.'
+          : 'With no decimal point the trailing zeros are just placeholders, so they do not count.'),
+        wrong: 'Leading zeros never count. Trailing zeros count only if there is a decimal point.',
+        solution: [
+          { text: 'Strip the leading zeros — they only say where the decimal point is.' },
+          { text: text.indexOf('.') >= 0
+              ? 'There is a decimal point, so every remaining digit counts, trailing zeros included.'
+              : 'There is no decimal point, so trailing zeros are ambiguous and do not count.' },
+          { text: 'That leaves ' + answer + '.' },
+        ],
+      };
+    },
+  });
+
+  gen('ion-charge', {
+    name: 'Ion charges',
+    make(r) {
+      const useIon = r.next() < 0.5 && ME.ref.ions.length;
+      if (useIon) {
+        const ion = r.pick(ME.ref.ions);
+        return {
+          kind: 'count',
+          q: 'What is the size of the charge on the ' + ion.n.toLowerCase() + ' ion, ' + ion.f + '?',
+          answer: Math.abs(ion.c),
+          right: ion.f + ' carries ' + Math.abs(ion.c) + (ion.c < 0 ? '−' : '+') + '. ' + (ion.note || ''),
+          wrong: 'This one has to be learned — it is in the Reference tab, grouped by charge.',
+          solution: [{ text: ion.n + ' is ' + ion.f + ' with a charge of ' + ion.c + '.' }],
+        };
+      }
+      const syms = ME.chem.elements.filter((e) => {
+        const t = ME.ref.typicalCharge(e.sym);
+        return t && t.charge !== null && !t.variable && t.charge !== 0 && e.z <= 56;
+      }).map((e) => e.sym);
+      const sym = r.pick(syms);
+      const t = ME.ref.typicalCharge(sym);
+      return {
+        kind: 'choice',
+        q: 'What charge does ' + ME.chem.element(sym).name.toLowerCase() + ' take when it forms an ion?',
+        options: ME.quiz.shuffle([t.charge, -t.charge, t.charge > 0 ? t.charge + 1 : t.charge - 1, 0])
+          .filter((v, i, a) => a.indexOf(v) === i)
+          .map((v) => ({
+            t: v === 0 ? 'none — it does not form an ion' : (Math.abs(v) === 1 ? '' : Math.abs(v)) + (v > 0 ? '+' : '−'),
+            ok: v === t.charge,
+            why: v === t.charge ? 'Right. ' + t.why
+              : 'No. ' + t.why + ' So it is ' + (Math.abs(t.charge) === 1 ? '' : Math.abs(t.charge)) + (t.charge > 0 ? '+' : '−') + '.',
+          })),
+        solution: [{ text: t.why }],
+      };
+    },
+  });
+
+  gen('reaction-type', {
+    name: 'Reaction types',
+    make(r) {
+      const LABELS = {
+        synthesis: 'Synthesis', decomposition: 'Decomposition',
+        single: 'Single replacement', double: 'Double replacement', combustion: 'Combustion',
+      };
+      /* Some of the equations in the pool are redox and do not fit the five
+       * basic types. Keep picking rather than giving up, or the generator
+       * returns nothing about one time in ten. */
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const eq = r.pick(EQUATIONS);
+        const bal = ME.balance.balance(eq);
+        if (!bal.ok || !LABELS[bal.type.key]) continue;
+        return {
+          kind: 'choice',
+          q: 'What kind of reaction is this? ' + eq.replace(/->/g, '\u2192'),
+          options: ME.quiz.shuffle(Object.keys(LABELS)).map((k) => ({
+            t: LABELS[k], ok: k === bal.type.key,
+            why: k === bal.type.key ? 'Right. ' + bal.type.why : 'Not that one. ' + bal.type.why,
+          })),
+          solution: [{ text: bal.type.why }, { text: 'Balanced, it is ' + bal.text + '.' }],
+        };
+      }
+      return null;
+    },
+  });
+
+  gen('empirical', {
+    name: 'Empirical formulas',
+    make(r) {
+      const c = r.pick(moleculePool());
+      const comp = ME.formula.percentComposition(c.formula);
+      if (!comp.ok) return null;
+      const entries = comp.rows.map((x) => ({ sym: x.sym, value: r.round(x.percent, 2) }));
+      const res = ME.stoich.empiricalFormula(entries);
+      if (!res.ok) return null;
+      return {
+        kind: 'name', mode: 'formula',
+        q: 'A compound is ' + entries.map((e) => e.value + '% ' + ME.chem.element(e.sym).name.toLowerCase()).join(', ') +
+          ' by mass. What is its empirical formula?',
+        answer: res.formula,
+        right: res.formula + '.',
+        wrong: 'Percentages are masses, so turn each into moles first, then divide by the smallest.',
+        solution: res.steps,
+      };
+    },
+  });
+
+  gen('molarity', {
+    name: 'Molarity',
+    make(r) {
+      const c = r.pick(ionicPool());
+      const grams = r.round(r.int(20, 500) / 10, 1);
+      const litres = r.round(r.int(1, 30) / 10, 2);
+      const res = ME.solution.molarityFromGrams(grams, c.formula, litres);
+      if (!res.ok) return null;
+      return {
+        kind: 'numeric',
+        q: grams + ' g of ' + c.name + ' (' + c.formula + ') is dissolved and made up to ' +
+          litres + ' L. What is the molarity?',
+        answer: res.value, unit: null, tol: 0.015,
+        right: f(res.value, 4) + ' M.',
+        wrong: 'Grams to moles first — molarity counts moles, not mass — then divide by the litres.',
+        solution: res.steps,
+      };
+    },
+  });
+
+  /* Every generator above has to actually work. This runs each one once at
+   * startup in development, and the test suite runs each 400 times. */
+  ME.practice.selfTest = function (times) {
+    const problems = [];
+    ME.practice.keys.forEach((k) => {
+      for (let i = 0; i < (times || 1); i++) {
+        try {
+          const p = ME.practice.generate(k, (i + 1) * 7919);
+          if (!p) { problems.push([k, 'returned nothing', i]); continue; }
+          if (!p.q || p.q.length < 10) problems.push([k, 'no question text', i]);
+          if (p.kind === 'numeric' && !isFinite(p.answer)) problems.push([k, 'answer is not a number', i]);
+          if (p.kind === 'count' && !Number.isInteger(p.answer)) problems.push([k, 'count answer is not a whole number', i]);
+          if (p.kind === 'choice' && p.options.filter((o) => o.ok).length !== 1) problems.push([k, 'not exactly one right option', i]);
+          if (p.kind === 'name' && !p.answer) problems.push([k, 'no answer', i]);
+        } catch (e) { problems.push([k, 'threw: ' + e.message, i]); }
+      }
+    });
+    return problems;
+  };
+})();
+
+
 /* ================= 80-learn.js ================= */
 /* The guided lessons.
  *
@@ -12686,275 +14058,177 @@ window.ME = window.ME || {};
     });
   }
 
-  /* --------------------------------------------------------- quiz render */
-  /* Each lesson carries a short set of questions rather than a single one.
-   *
-   * A wrong answer is never just "no". It says what was actually chosen, why
-   * that is not the answer, and leaves the question open to try again, because
-   * the point is to make the rule stick rather than to score anybody. */
+  /* ------------------------------------------------- register as a unit */
+  /* The twelve lessons above are the reading-structures half of the organic
+   * unit. They register themselves like every other unit, so the course map
+   * does not need to know that they were written first and in a different
+   * format. */
+  ME.course.unit({
+    n: 15, id: 'organic-reading',
+    title: 'Organic chemistry: reading structures',
+    blurb: 'How chemists actually draw molecules, and how to read a drawing at a glance. Start here if you want to understand the pictures.',
+    lessons: LESSONS,
+  });
 
-  function questionsOf(lesson) {
-    return lesson.quizzes || (lesson.quiz ? [lesson.quiz] : []);
-  }
+  /* ------------------------------------------------------------- progress */
+  const St = {
+    built: false, host: null, view: null, done: {}, current: null,
+  };
 
-  /* Small numbers read better as words in a sentence. */
-  const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-  const spell = (n) => (n >= 0 && n < WORDS.length ? WORDS[n] : String(n));
-  const plural = (n, word) => spell(n) + ' ' + word + (n === 1 ? '' : 's');
-
-  /* What did they actually click? Said back to them in the lesson's own terms. */
-  function describeClick(a) {
-    if (a.sym !== 'C') {
-      const h = a.hydrogens ? ', holding ' + plural(a.hydrogens, 'hydrogen') : '';
-      return 'That is the ' + ME.chem.elementName(a.sym).toLowerCase() + h + '. ';
-    }
-    const lines = plural(a.bondCount, 'line');
-    if (a.hydrogens === 0) {
-      return 'That carbon has ' + lines + ' meeting it, so all four of its hands are used and it has no hydrogens. ';
-    }
-    return 'That carbon has ' + lines + ' meeting it, so it is carrying ' +
-      plural(a.hydrogens, 'hidden hydrogen') + '. ';
-  }
-
-  function buildQuizBlock(lesson, passed, onPass) {
-    const qs = questionsOf(lesson);
-    const box = el('div', { class: 'quiz' });
-
-    const head = el('h3');
-    head.appendChild(ME.icon('check'));
-    head.appendChild(document.createTextNode(qs.length > 1 ? 'Quick check' : 'Quick check'));
-    const tally = el('span', { class: 'quiz-tally' });
-    head.appendChild(tally);
-    box.appendChild(head);
-
-    if (qs.length > 1) {
-      box.appendChild(el('p', { class: 'note quiz-intro' },
-        'Get one wrong and it will explain why before letting you try again.'));
-    }
-
-    function syncTally() {
-      tally.textContent = passed.size + ' / ' + qs.length;
-      tally.classList.toggle('all', passed.size === qs.length);
-    }
-
-    qs.forEach((q, i) => {
-      box.appendChild(buildQuestion(q, i, qs.length, passed.has(i), () => {
-        if (passed.has(i)) return;
-        passed.add(i);
-        syncTally();
-        onPass(i);
-      }));
-    });
-    syncTally();
-    return box;
-  }
-
-  function buildQuestion(q, index, total, alreadyPassed, onSolved) {
-    const item = el('div', { class: 'quiz-item' + (alreadyPassed ? ' solved' : '') });
-    const numBadge = total > 1
-      ? el('span', { class: 'quiz-num', text: alreadyPassed ? '\u2713' : String(index + 1) })
-      : null;
-    if (numBadge) item.appendChild(numBadge);
-
-    const body = el('div', { class: 'quiz-body' });
-    item.appendChild(body);
-    body.appendChild(el('div', { class: 'quiz-q', text: q.q }));
-
-    const feedback = el('div', { class: 'quiz-feedback' });
-
-    let solved = alreadyPassed;
-    function say(ok, message) {
-      feedback.classList.add('show');
-      ME.clear(feedback);
-      feedback.appendChild(el('div', { class: 'callout ' + (ok ? 'ok' : 'warn'), text: message }));
-      if (ok && !solved) {
-        solved = true;
-        item.classList.add('solved');
-        if (numBadge) numBadge.textContent = '\u2713';
-        onSolved();
-      }
-    }
-
-    if (q.kind === 'choice') buildChoice(q, body, say);
-    else if (q.kind === 'count') buildCount(q, body, say);
-    else if (q.kind === 'clickatom') buildClickAtom(q, body, say);
-
-    if (q.note) body.appendChild(el('p', { class: 'note quiz-hint', text: q.note }));
-    body.appendChild(feedback);
-    return item;
-  }
-
-  /* ---- pick one of several answers ---- */
-  function buildChoice(q, body, say) {
-    const opts = q.optionsBuilder ? q.optionsBuilder() : q.options;
-    const list = el('div', { class: 'quiz-opts' });
-    const buttons = [];
-    opts.forEach((o, i) => {
-      const btn = el('button', { class: 'quiz-opt' });
-      if (o.node) btn.appendChild(o.node); else btn.textContent = o.t;
-      btn.addEventListener('click', () => {
-        if (btn.disabled) return;
-        if (o.ok) {
-          buttons.forEach((x) => { x.disabled = true; });
-          btn.classList.add('right');
-          say(true, o.why);
-        } else {
-          /* Rule out just this one and explain it, so the question stays open. */
-          btn.classList.add('wrong');
-          btn.disabled = true;
-          say(false, o.why);
-          const left = buttons.filter((x) => !x.disabled);
-          if (left.length === 1) {
-            const correct = opts.findIndex((x) => x.ok);
-            buttons[correct].classList.add('right');
-          }
-        }
-      });
-      buttons.push(btn);
-      list.appendChild(btn);
-    });
-    body.appendChild(list);
-  }
-
-  /* ---- type a number ---- */
-  function buildCount(q, body, say) {
-    if (q.smiles) body.appendChild(drawing(q.smiles, Object.assign({ xray: 0, width: 360, height: 220 }, q.render || {})));
-    const row = el('div', { class: 'quiz-count' });
-    const input = el('input', { type: 'number', min: '0', 'aria-label': 'Your answer' });
-    const go = el('button', { class: 'btn btn-primary btn-sm', text: 'Check' });
-    const submit = () => {
-      const v = parseInt(input.value, 10);
-      if (isNaN(v)) return;
-      if (v === q.answer) { say(true, q.right); return; }
-      /* Explain the specific mistake where we can name it, and otherwise at
-       * least say which way they are out. Never hand over the number. */
-      const named = q.hints && q.hints[v];
-      const direction = v < q.answer ? 'Too few. ' : 'Too many. ';
-      say(false, direction + (named || q.wrong));
-    };
-    go.addEventListener('click', submit);
-    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') submit(); });
-    row.appendChild(input);
-    row.appendChild(go);
-    body.appendChild(row);
-  }
-
-  /* ---- click the right atom in a drawing ---- */
-  function buildClickAtom(q, body, say) {
-    const mol = q.mol ? q.mol() : molOf(q.smiles);
-    const info = ME.render2d.describe(mol, {});
-    const holder = el('div', { class: 'clickmol' });
-    holder.appendChild(ME.render2d.render(mol, {
-      xray: q.xray || 0, width: q.width || 440, height: q.height || 290,
-      onAtomClick(i, atom) {
-        /* Still answers after it has been got right, so the drawing stays
-         * something you can poke at; it just will not be counted twice. */
-        const enriched = Object.assign({}, atom, { bondCount: info.atoms[i].bonds.length });
-        if (q.test(enriched)) say(true, q.right);
-        else say(false, describeClick(enriched) + q.wrong);
-      },
-    }));
-    body.appendChild(holder);
-    body.appendChild(el('p', { class: 'note', text: 'Click an atom in the drawing above.' }));
-  }
-
-  /* -------------------------------------------------------------- view */
-  const St = { built: false, index: 0, done: {}, navNode: null, bodyNode: null, barNode: null };
-
-  /* Progress is kept between visits by default, but that is the reader's call.
-   * With remembering switched off nothing is written at all and the answers
-   * live only in this tab, so reloading starts the questions over. */
   function remembering() { return ME.store.get('remember', true) !== false; }
-
-  function loadProgress() {
-    St.done = remembering() ? (ME.store.get('lessons', {}) || {}) : {};
-  }
-  function saveProgress() {
-    if (remembering()) ME.store.set('lessons', St.done);
-  }
+  function loadProgress() { St.done = remembering() ? (ME.store.get('lessons', {}) || {}) : {}; }
+  function saveProgress() { if (remembering()) ME.store.set('lessons', St.done); }
   function forgetStored() {
     ME.store.remove('lessons');
     ME.store.remove('lessonIndex');
+    ME.store.remove('lastLesson');
   }
-
-  /* Wipe the answers and put every question back on the board. */
   function resetProgress() {
     St.done = {};
     forgetStored();
-    showLesson(St.index);
-    syncNav();
+    if (St.current) showLesson(St.current.id); else showMap();
   }
-
   function setRemember(on) {
     ME.store.set('remember', !!on);
-    /* Switching it off should not leave yesterday's answers sitting on disk. */
-    if (!on) forgetStored();
-    else saveProgress();
+    if (!on) forgetStored(); else saveProgress();
   }
 
-  /* Which questions of a lesson have been answered. Progress used to be a
-   * single true/false per lesson, so an old saved value is read as "all of
-   * them" rather than throwing the reader's progress away. */
-  function passedFor(lesson) {
-    const total = questionsOf(lesson).length;
-    const v = St.done[lesson.id];
+  /* Which questions of a lesson have been answered. An old saved value of
+   * `true` meant "all of them", so it is read that way rather than throwing
+   * somebody's progress away. */
+  function passedFor(l) {
+    const total = ME.course.questionsOf(l).length;
+    const v = St.done[l.id];
     if (v === true) return new Set(Array.from({ length: total }, (_, i) => i));
     if (Array.isArray(v)) return new Set(v.filter((i) => i < total));
     return new Set();
   }
-  function totalQuestions() {
-    return LESSONS.reduce((n, l) => n + questionsOf(l).length, 0);
+  const lessonComplete = (l) => {
+    const t = ME.course.questionsOf(l).length;
+    return t > 0 && passedFor(l).size === t;
+  };
+  function unitProgress(u) {
+    let done = 0, total = 0;
+    u.lessons.forEach((l) => {
+      total += ME.course.questionsOf(l).length;
+      done += passedFor(l).size;
+    });
+    return { done: done, total: total, lessons: u.lessons.filter(lessonComplete).length,
+      minutes: u.lessons.reduce((n, l) => n + ME.course.minutesOf(l), 0) };
   }
-  function totalPassed() {
-    return LESSONS.reduce((n, l) => n + passedFor(l).size, 0);
-  }
-  function lessonComplete(lesson) {
-    const total = questionsOf(lesson).length;
-    return total > 0 && passedFor(lesson).size === total;
+  function courseProgress() {
+    let done = 0, total = 0;
+    ME.course.units.forEach((u) => {
+      const p = unitProgress(u);
+      done += p.done; total += p.total;
+    });
+    return { done: done, total: total };
   }
 
+  /* ------------------------------------------------------------ the shell */
   function build(host) {
+    St.host = host;
     loadProgress();
+    St.view = el('div');
+    host.appendChild(St.view);
+    St.built = true;
+  }
+
+  function ensureBuilt(host) { if (!St.built) build(host); }
+
+  /* --------------------------------------------------------- course map */
+  function showMap() {
+    St.current = null;
+    ME.clear(St.view);
     const wrap = el('div', { class: 'wrap' });
     wrap.appendChild(el('h1', { text: 'Learn' }));
-    wrap.appendChild(el('p', { class: 'note', style: { maxWidth: '64ch', marginBottom: '18px' } },
-      LESSONS.length + ' short lessons. Start at the top; each one assumes the one before it. Each ends with a few questions, and a wrong answer explains itself rather than just marking you down.'));
 
-    const prog = el('div', { class: 'progress-wrap' });
-    St.barNode = el('i');
-    prog.appendChild(el('div', { class: 'progress-bar' }, [St.barNode]));
+    const units = ME.course.units;
+    const lessons = ME.course.allLessons();
+    const prog = courseProgress();
+    const totalMins = lessons.reduce((n, l) => n + ME.course.minutesOf(l), 0);
 
+    wrap.appendChild(el('p', { class: 'note cm-intro' },
+      'A chemistry course from the very beginning. ' + units.length + ' units, ' + lessons.length +
+      ' lessons, about ' + Math.round(totalMins / 60) + ' hours of reading if you do all of it. ' +
+      'Nothing assumes you have done chemistry before. Each lesson says which earlier ones it leans on, ' +
+      'but nothing is locked — go wherever you like.'));
+
+    /* overall progress and the resume button */
+    const top = el('div', { class: 'cm-top' });
+    const bar = el('div', { class: 'progress-wrap' });
+    const fill = el('i');
+    fill.style.width = (prog.total ? Math.round((prog.done / prog.total) * 100) : 0) + '%';
+    bar.appendChild(el('div', { class: 'progress-bar' }, [fill]));
     const row = el('div', { class: 'progress-row' });
-    St.progText = el('div', { class: 'note', style: { fontSize: '.8rem' } });
-    row.appendChild(St.progText);
+    row.appendChild(el('div', { class: 'note', style: { fontSize: '.8rem' },
+      text: prog.done + ' of ' + prog.total + ' questions answered' }));
     row.appendChild(buildProgressControls());
-    prog.appendChild(row);
-    wrap.appendChild(prog);
+    bar.appendChild(row);
+    top.appendChild(bar);
 
-    const layout = el('div', { class: 'learn-layout' });
-    St.navNode = el('nav', { class: 'lesson-nav', 'aria-label': 'Lessons' });
-    St.bodyNode = el('div');
-    layout.appendChild(St.navNode);
-    layout.appendChild(St.bodyNode);
-    wrap.appendChild(layout);
-    host.appendChild(wrap);
+    const resumeId = ME.store.get('lastLesson', null);
+    const resume = resumeId && ME.course.lesson(resumeId);
+    const nextUp = resume || firstUnfinished() || lessons[0];
+    if (nextUp) {
+      const btn = el('button', { class: 'btn btn-primary cm-resume' });
+      btn.appendChild(el('span', {}, [
+        el('span', { class: 'cm-resume-k', text: resume ? 'Continue where you left off' : 'Start here' }),
+        el('span', { class: 'cm-resume-v', text: nextUp.title }),
+      ]));
+      btn.appendChild(ME.icon('chevron'));
+      btn.addEventListener('click', () => showLesson(nextUp.id));
+      top.appendChild(btn);
+    }
+    wrap.appendChild(top);
 
-    LESSONS.forEach((l, i) => {
-      const link = el('button', { class: 'lesson-link' });
-      link.appendChild(el('span', { class: 'lesson-num', text: String(i + 1) }));
-      link.appendChild(el('span', { text: l.title }));
-      link.addEventListener('click', () => showLesson(i));
-      St.navNode.appendChild(link);
+    /* the units */
+    units.forEach((u) => {
+      const p = unitProgress(u);
+      const card = el('div', { class: 'cm-unit' + (p.total && p.done === p.total ? ' done' : '') });
+      const head = el('div', { class: 'cm-unit-head' });
+      head.appendChild(el('span', { class: 'cm-unit-n', text: 'Unit ' + u.n }));
+      head.appendChild(el('span', { class: 'cm-unit-title', text: u.title }));
+      head.appendChild(el('span', { class: 'cm-unit-time', text: Math.round(p.minutes / 5) * 5 + ' min' }));
+      card.appendChild(head);
+      if (u.blurb) card.appendChild(el('p', { class: 'note cm-unit-blurb', text: u.blurb }));
+
+      const ubar = el('div', { class: 'cm-unit-bar' });
+      const ufill = el('i');
+      ufill.style.width = (p.total ? Math.round((p.done / p.total) * 100) : 0) + '%';
+      ubar.appendChild(ufill);
+      card.appendChild(ubar);
+      card.appendChild(el('div', { class: 'cm-unit-meta note',
+        text: p.lessons + ' of ' + u.lessons.length + ' lessons finished · ' + p.done + '/' + p.total + ' questions' }));
+
+      const list = el('div', { class: 'cm-lessons' });
+      u.lessons.forEach((l, i) => {
+        const b = el('button', { class: 'cm-lesson' + (lessonComplete(l) ? ' done' : '') });
+        b.appendChild(el('span', { class: 'cm-lesson-n', text: lessonComplete(l) ? '✓' : String(i + 1) }));
+        const mid = el('span', { class: 'cm-lesson-mid' });
+        mid.appendChild(el('span', { class: 'cm-lesson-title', text: l.title }));
+        const passed = passedFor(l).size;
+        const qtotal = ME.course.questionsOf(l).length;
+        mid.appendChild(el('span', { class: 'note cm-lesson-sub',
+          text: ME.course.minutesOf(l) + ' min · ' + passed + '/' + qtotal + ' questions' }));
+        b.appendChild(mid);
+        b.addEventListener('click', () => showLesson(l.id));
+        list.appendChild(b);
+      });
+      card.appendChild(list);
+      wrap.appendChild(card);
     });
 
-    St.built = true;
-    const saved = remembering() ? ME.store.get('lessonIndex', 0) : 0;
-    showLesson(Math.min(LESSONS.length - 1, Math.max(0, saved)));
+    St.view.appendChild(wrap);
+    window.scrollTo({ top: 0 });
+  }
+
+  function firstUnfinished() {
+    return ME.course.allLessons().filter((l) => !lessonComplete(l))[0] || null;
   }
 
   function buildProgressControls() {
     const box = el('div', { class: 'progress-controls' });
-
     const remember = el('label', { class: 'switch', title: 'Turn this off and your answers are forgotten as soon as you reload' });
     const cb = el('input', { type: 'checkbox' });
     cb.checked = remembering();
@@ -12962,7 +14236,7 @@ window.ME = window.ME || {};
       setRemember(cb.checked);
       ME.toast(cb.checked
         ? 'Your progress will be remembered on this device'
-        : 'Progress will not be saved \u2014 reloading starts you fresh');
+        : 'Progress will not be saved — reloading starts you fresh');
     });
     remember.appendChild(cb);
     remember.appendChild(el('span', { text: 'Remember my progress' }));
@@ -12978,72 +14252,308 @@ window.ME = window.ME || {};
     };
     reset.addEventListener('click', () => {
       if (!armed) {
-        reset.textContent = 'Reset \u2014 sure?';
+        reset.textContent = 'Reset — sure?';
         reset.classList.add('btn-primary');
         armed = setTimeout(disarm, 4000);
         return;
       }
       disarm();
+      const n = courseProgress().total;
       resetProgress();
-      ME.toast('All ' + totalQuestions() + ' questions are open again');
+      ME.toast('All ' + n + ' questions are open again');
     });
     box.appendChild(reset);
     return box;
   }
 
-  function syncNav() {
-    ME.$$('.lesson-link', St.navNode).forEach((link, i) => {
-      link.classList.toggle('on', i === St.index);
-      link.classList.toggle('done', lessonComplete(LESSONS[i]));
-    });
-    const n = totalPassed();
-    const total = totalQuestions();
-    St.barNode.style.width = Math.round((n / total) * 100) + '%';
-    St.progText.textContent = `${n} of ${total} questions answered`;
-  }
+  /* ------------------------------------------------------- lesson reader */
+  function showLesson(id) {
+    const l = ME.course.lesson(id);
+    if (!l) { showMap(); return; }
+    St.current = l;
+    if (remembering()) ME.store.set('lastLesson', id);
+    ME.clear(St.view);
 
-  function showLesson(i) {
-    St.index = i;
-    if (remembering()) ME.store.set('lessonIndex', i);
-    const lesson = LESSONS[i];
-    ME.clear(St.bodyNode);
+    const wrap = el('div', { class: 'wrap' });
+    /* A column of prose wants a reading measure of around 70 characters, and
+     * the crumb has to line up with its left edge, so both go in one holder
+     * that is centred rather than left-aligned in a wide page. */
+    const reader = el('div', { class: 'ls-reader' });
+    wrap.appendChild(reader);
+    const all = ME.course.allLessons();
+    const index = all.indexOf(l);
+
+    const crumb = el('button', { class: 'btn btn-sm btn-ghost ls-crumb' }, [ME.icon('back'), 'All units']);
+    crumb.addEventListener('click', () => showMap());
+    reader.appendChild(crumb);
 
     const art = el('article', { class: 'lesson' });
-    art.appendChild(el('div', { class: 'note', style: { fontSize: '.78rem', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: '700' }, text: `Lesson ${i + 1} of ${LESSONS.length}` }));
-    art.appendChild(el('h2', { text: lesson.title }));
-    const body = el('div', { class: 'lesson-body' });
-    body.appendChild(lesson.body());
-    art.appendChild(body);
+    art.appendChild(el('div', { class: 'ls-kicker',
+      text: 'Unit ' + l.unit.n + ' · ' + l.unit.title + ' · ' + ME.course.minutesOf(l) + ' min' }));
+    art.appendChild(el('h2', { text: l.title }));
 
-    const passed = passedFor(lesson);
-    art.appendChild(buildQuizBlock(lesson, passed, () => {
-      St.done[lesson.id] = Array.from(passed).sort((a, b) => a - b);
+    /* what it leans on, as a recommendation and never a lock */
+    if (l.builds_on && l.builds_on.length) {
+      const pre = el('div', { class: 'ls-builds note' });
+      pre.appendChild(document.createTextNode('This one goes more easily after '));
+      l.builds_on.forEach((pid, i) => {
+        const p = ME.course.lesson(pid);
+        if (!p) return;
+        if (i) pre.appendChild(document.createTextNode(i === l.builds_on.length - 1 ? ' and ' : ', '));
+        const a = el('button', { class: 'ls-prereq', text: p.title });
+        a.addEventListener('click', () => showLesson(p.id));
+        pre.appendChild(a);
+      });
+      pre.appendChild(document.createTextNode('. You can read it now regardless.'));
+      art.appendChild(pre);
+    }
+
+    const passed = passedFor(l);
+    const onPass = (qi) => {
+      if (passed.has(qi)) return;
+      passed.add(qi);
+      St.done[l.id] = Array.from(passed).sort((a, b) => a - b);
       saveProgress();
-      syncNav();
-    }));
+    };
 
+    if (l.pages) art.appendChild(renderPaged(l, passed, onPass));
+    else art.appendChild(renderSingle(l, passed, onPass));
+
+    /* common mistakes */
+    if (l.mistakes && l.mistakes.length) {
+      const box = el('section', { class: 'ls-mistakes' });
+      box.appendChild(el('h3', {}, [ME.icon('warn'), 'Where people go wrong']));
+      box.appendChild(el('p', { class: 'note',
+        text: 'Not a list of things to avoid so much as a list of things that are genuinely easy to think. Each one is worth reading even if you are sure you would not.' }));
+      l.mistakes.forEach((m) => {
+        const item = el('div', { class: 'ls-mistake' });
+        item.appendChild(el('div', { class: 'ls-mistake-claim', html: ME.formulaHTML(m.wrong) }));
+        item.appendChild(el('div', { class: 'ls-mistake-why', html: ME.formulaHTML(m.why) }));
+        box.appendChild(item);
+      });
+      art.appendChild(box);
+    }
+
+    /* the practice set */
+    const qs = ME.course.questionsOf(l);
+    const endQs = (l.quizzes || (l.quiz ? [l.quiz] : []));
+    if (endQs.length) {
+      const offset = (l.checkpoints || []).length;
+      art.appendChild(quizBlock(l, endQs, offset, passed, onPass,
+        l.pages ? 'Practice' : 'Quick check'));
+    }
+
+    /* unlimited practice */
+    if (l.practice) art.appendChild(practicePanel(l.practice));
+
+    /* recap */
+    if (l.recap) {
+      const box = el('section', { class: 'ls-recap' });
+      box.appendChild(el('h3', { text: 'What you now know' }));
+      (Array.isArray(l.recap) ? l.recap : [l.recap]).forEach((t) =>
+        box.appendChild(el('p', { html: ME.formulaHTML(t) })));
+      art.appendChild(box);
+    }
+
+    /* prev and next across the whole course */
     const foot = el('div', { class: 'lesson-foot' });
-    if (i > 0) {
-      const prev = el('button', { class: 'btn' }, [ME.icon('back'), LESSONS[i - 1].title]);
-      prev.addEventListener('click', () => { showLesson(i - 1); scrollUp(); });
-      foot.appendChild(prev);
+    if (index > 0) {
+      const prev = all[index - 1];
+      const b = el('button', { class: 'btn' }, [ME.icon('back'), prev.title]);
+      b.addEventListener('click', () => { showLesson(prev.id); scrollUp(); });
+      foot.appendChild(b);
     } else foot.appendChild(el('span'));
-    if (i < LESSONS.length - 1) {
-      const next = el('button', { class: 'btn btn-primary' }, [LESSONS[i + 1].title, ME.icon('chevron')]);
-      next.addEventListener('click', () => { showLesson(i + 1); scrollUp(); });
-      foot.appendChild(next);
+    if (index < all.length - 1) {
+      const next = all[index + 1];
+      const b = el('button', { class: 'btn btn-primary' }, [next.title, ME.icon('chevron')]);
+      b.addEventListener('click', () => { showLesson(next.id); scrollUp(); });
+      foot.appendChild(b);
     }
     art.appendChild(foot);
 
-    St.bodyNode.appendChild(art);
+    reader.appendChild(art);
+    St.view.appendChild(wrap);
     ME.bindTips(art);
-    syncNav();
+  }
+
+  /* An old-format lesson: one body, questions at the end. */
+  function renderSingle(l, passed, onPass) {
+    const body = el('div', { class: 'lesson-body' });
+    body.appendChild(l.body());
+    return body;
+  }
+
+  /* A long-form lesson: a hook, then pages you click through, with
+   * checkpoints sitting between them rather than all saved for the end. */
+  function renderPaged(l, passed, onPass) {
+    const holder = el('div', { class: 'ls-paged' });
+
+    if (l.hook) {
+      const hook = el('section', { class: 'ls-hook' });
+      hook.appendChild(l.hook());
+      holder.appendChild(hook);
+    }
+
+    const pagesWrap = el('div', { class: 'lesson-body' });
+    holder.appendChild(pagesWrap);
+
+    const dots = el('div', { class: 'ls-dots' });
+    holder.appendChild(dots);
+
+    const nav = el('div', { class: 'ls-pagenav' });
+    holder.appendChild(nav);
+
+    let at = 0;
+    const checkpoints = l.checkpoints || [];
+
+    function drawDots() {
+      ME.clear(dots);
+      l.pages.forEach((p, i) => {
+        const d = el('button', { class: 'ls-dot' + (i === at ? ' on' : '') + (i < at ? ' seen' : ''),
+          title: p.h || 'Page ' + (i + 1), 'aria-label': p.h || 'Page ' + (i + 1) });
+        d.addEventListener('click', () => go(i));
+        dots.appendChild(d);
+      });
+    }
+
+    function go(i) {
+      at = Math.max(0, Math.min(l.pages.length - 1, i));
+      ME.clear(pagesWrap);
+      const page = l.pages[at];
+      const sec = el('section', { class: 'ls-page' });
+      sec.appendChild(el('div', { class: 'ls-page-n', text: 'Part ' + (at + 1) + ' of ' + l.pages.length }));
+      if (page.h) sec.appendChild(el('h3', { text: page.h }));
+      sec.appendChild(page.body());
+      pagesWrap.appendChild(sec);
+
+      /* any checkpoint that belongs after this page */
+      checkpoints.forEach((q, qi) => {
+        if ((q.after === undefined ? -1 : q.after) !== at) return;
+        const box = el('div', { class: 'quiz quiz-checkpoint' });
+        const head = el('h3');
+        head.appendChild(ME.icon('check'));
+        head.appendChild(document.createTextNode('Checkpoint'));
+        box.appendChild(head);
+        box.appendChild(el('p', { class: 'note',
+          text: 'One question, here rather than at the end, because this is the bit that has to land before the next part makes sense.' }));
+        box.appendChild(ME.quiz.buildQuestion(q, qi, 1, passed.has(qi), () => onPass(qi)));
+        pagesWrap.appendChild(box);
+      });
+
+      ME.clear(nav);
+      if (at > 0) {
+        const b = el('button', { class: 'btn btn-sm' }, [ME.icon('back'), 'Back']);
+        b.addEventListener('click', () => { go(at - 1); pagesWrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+        nav.appendChild(b);
+      } else nav.appendChild(el('span'));
+      if (at < l.pages.length - 1) {
+        const b = el('button', { class: 'btn btn-primary btn-sm' }, ['Next: ' + (l.pages[at + 1].h || 'carry on'), ME.icon('chevron')]);
+        b.addEventListener('click', () => { go(at + 1); pagesWrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+        nav.appendChild(b);
+      } else {
+        nav.appendChild(el('span', { class: 'note', text: 'That is the reading. The questions are below.' }));
+      }
+      drawDots();
+      ME.bindTips(pagesWrap);
+    }
+    go(0);
+    return holder;
+  }
+
+  function quizBlock(l, qs, offset, passed, onPass, title) {
+    const box = el('div', { class: 'quiz' });
+    const head = el('h3');
+    head.appendChild(ME.icon('check'));
+    head.appendChild(document.createTextNode(title));
+    const tally = el('span', { class: 'quiz-tally' });
+    head.appendChild(tally);
+    box.appendChild(head);
+
+    if (qs.length > 1) {
+      box.appendChild(el('p', { class: 'note quiz-intro' },
+        'Get one wrong and it will explain why before letting you try again.'));
+    }
+    function sync() {
+      const mine = qs.map((q, i) => offset + i).filter((i) => passed.has(i)).length;
+      tally.textContent = mine + ' / ' + qs.length;
+      tally.classList.toggle('all', mine === qs.length);
+    }
+    qs.forEach((q, i) => {
+      const qi = offset + i;
+      box.appendChild(ME.quiz.buildQuestion(q, i, qs.length, passed.has(qi), () => { onPass(qi); sync(); }));
+    });
+    sync();
+    return box;
+  }
+
+  /* -------------------------------------------------- unlimited practice */
+  function practicePanel(spec) {
+    const keys = Array.isArray(spec) ? spec : [spec];
+    const box = el('section', { class: 'ls-practice' });
+    box.appendChild(el('h3', { text: 'Practice more' }));
+    box.appendChild(el('p', { class: 'note',
+      text: 'Fresh problems, as many as you want, with new numbers and new compounds every time. Nothing is scored — this is for the repetition, which is the only thing that makes this stuff automatic.' }));
+
+    const chooser = el('div', { class: 'ls-practice-kinds' });
+    let active = keys[0];
+    if (keys.length > 1) {
+      keys.forEach((k) => {
+        const b = el('button', { class: 'btn btn-sm' + (k === active ? ' on' : ''), text: practiceName(k) });
+        b.addEventListener('click', () => {
+          active = k;
+          ME.$$('.btn', chooser).forEach((x) => x.classList.toggle('on', x.textContent === practiceName(k)));
+          fresh();
+        });
+        chooser.appendChild(b);
+      });
+      box.appendChild(chooser);
+    }
+
+    const slot = el('div', { class: 'ls-practice-slot' });
+    box.appendChild(slot);
+
+    const acts = el('div', { class: 'ls-practice-acts' });
+    const another = el('button', { class: 'btn btn-primary btn-sm', text: 'Another one' });
+    another.addEventListener('click', () => fresh());
+    acts.appendChild(another);
+    const showBtn = el('button', { class: 'btn btn-sm', text: 'Show me the working' });
+    acts.appendChild(showBtn);
+    box.appendChild(acts);
+
+    let current = null;
+    function fresh() {
+      current = ME.practice.generate(active);
+      ME.clear(slot);
+      if (!current) { slot.appendChild(el('p', { class: 'note', text: 'Could not make one — try again.' })); return; }
+      slot.appendChild(ME.quiz.buildQuestion(current, 0, 1, false, null));
+    }
+    showBtn.addEventListener('click', () => {
+      if (!current || !current.solution) return;
+      const existing = ME.$('.ls-solution', slot);
+      if (existing) { existing.parentNode.removeChild(existing); return; }
+      const sol = el('div', { class: 'ls-solution' });
+      sol.appendChild(el('h4', { text: 'Worked through' }));
+      const list = el('ol');
+      current.solution.forEach((s) => list.appendChild(el('li', { html: ME.formulaHTML(typeof s === 'string' ? s : s.text) })));
+      sol.appendChild(list);
+      slot.appendChild(sol);
+    });
+    fresh();
+    return box;
+  }
+
+  function practiceName(key) {
+    const g = ME.practice.generate(key, 1);
+    return (g && g.name) || key.replace(/-/g, ' ');
   }
 
   function scrollUp() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  function ensureBuilt(host) { if (!St.built) build(host); }
 
-  ME.learn = { ensureBuilt, LESSONS, resetProgress, setRemember, remembering };
+  ME.learn = {
+    ensureBuilt, LESSONS, resetProgress, setRemember, remembering,
+    showMap, showLesson,
+    get current() { return St.current; },
+  };
 })();
 
 
@@ -13302,6 +14812,9 @@ window.ME = window.ME || {};
     }
     setView('learn');
     ME.learn.ensureBuilt(ME.$('#view-learn'));
+    /* #/learn is the course map; #/learn/<lesson id> opens that lesson. */
+    if (parts[1]) ME.learn.showLesson(decodeURIComponent(parts[1]));
+    else ME.learn.showMap();
   }
 
   function resolveMolecule(key) {
@@ -13385,6 +14898,350 @@ window.ME = window.ME || {};
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
+})();
+
+
+/* ================= lessons/01-what-is-chemistry.js ================= */
+/* Unit 1: What is chemistry?
+ *
+ * Six lessons, starting from nothing at all. The maths lessons at the end of
+ * the unit are the ones everything later depends on, so they get the most
+ * space and the most practice.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+  const el = ME.el;
+  const p = (...kids) => el('p', {}, kids.flat());
+  const b = (t) => el('strong', { text: t });
+  const em = (t) => el('em', { text: t });
+  const h4 = (t) => el('h4', { text: t });
+  const frag = (...kids) => {
+    const f = document.createDocumentFragment();
+    kids.flat().forEach((k) => f.appendChild(k));
+    return f;
+  };
+  const term = (w, d) => el('span', { class: 'term', 'data-tip': d, text: w });
+  const callout = (...kids) => el('div', { class: 'callout' }, kids.flat());
+  const eq = (text) => el('div', { class: 'lesson-eq', text: text });
+
+  /* A small table, for the unit-conversion and prefix lessons. */
+  function table(head, rows, caption) {
+    const t = el('table', { class: 'lesson-table reasons' });
+    const hr = el('tr');
+    head.forEach((h) => hr.appendChild(el('th', { text: h })));
+    t.appendChild(hr);
+    rows.forEach((r) => {
+      const tr = el('tr');
+      r.forEach((c, i) => {
+        const td = el('td', { 'data-label': head[i] });
+        if (typeof c === 'string') td.innerHTML = ME.formulaHTML(c); else td.appendChild(c);
+        tr.appendChild(td);
+      });
+      t.appendChild(tr);
+    });
+    const fg = el('figure', { class: 'figure' }, [t]);
+    if (caption) fg.appendChild(el('figcaption', { text: caption }));
+    return fg;
+  }
+
+  /* A worked example, laid out so the reasoning is the visible part and the
+   * arithmetic is the small part. */
+  function worked(title, lines) {
+    const box = el('div', { class: 'lesson-worked' });
+    box.appendChild(el('div', { class: 'lw-title', text: title }));
+    lines.forEach((line) => {
+      const row = el('div', { class: 'lw-step' });
+      if (line.q) row.appendChild(el('div', { class: 'lw-q', html: ME.formulaHTML(line.q) }));
+      if (line.why) row.appendChild(el('div', { class: 'lw-why', html: ME.formulaHTML(line.why) }));
+      if (line.maths) row.appendChild(el('div', { class: 'lw-maths', html: ME.formulaHTML(line.maths) }));
+      box.appendChild(row);
+    });
+    return box;
+  }
+
+  ME.course.unit({
+    n: 1, id: 'basics',
+    title: 'What is chemistry?',
+    blurb: 'What the subject is actually about, how anyone found any of it out, and the handful of number skills that everything else quietly assumes you already have.',
+    lessons: [
+
+    /* ------------------------------------------------------------ 1.1 */
+    {
+      id: 'what-chemistry-is',
+      title: 'What chemistry is, and why it is everywhere',
+      mins: 15,
+      hook() {
+        return frag(
+          p('Put a slice of bread in a toaster and it comes out brown, dry and smelling of something that was not there before. Leave a bicycle out in the rain and in a month there is orange dust where there was shiny metal. Mix baking soda into vinegar and the whole thing foams over the edge of the bowl.'),
+          p('Three everyday things, and all three are the same thing happening: ', b('the stuff changed into different stuff'), '. That is what chemistry studies. Not the toaster, not the bicycle — the change.'));
+      },
+      pages: [
+        {
+          h: 'Everything is made of a few dozen things',
+          body() {
+            return frag(
+              p('Start with the one fact the whole subject is built on. Everything around you — the air, the chair, the water in the tap, the tissue you are made of — is built out of about ninety different kinds of stuff, and they combine in different ways to make everything else.'),
+              p('Those ninety-odd are the ', term('elements', 'A substance made of only one kind of atom. Gold, oxygen and carbon are elements; water and salt are not, because each is two elements joined.'), '. Gold is one. Oxygen is one. Carbon is one. An element cannot be broken into anything simpler by chemical means — that is what makes it an element.'),
+              p('Everything else is elements joined together. Water is hydrogen joined to oxygen. Table salt is sodium joined to chlorine. The sugar in your tea is carbon, hydrogen and oxygen in a particular arrangement. A few dozen ingredients, and from them the entire material world.'),
+              callout(b('This is genuinely surprising when you stop on it. '), 'A living cell, a granite cliff and a plastic bottle are all made from the same short list of ingredients. What makes them different is which ones, how many, and how they are joined.'),
+              p('The app has the whole list of them in the ', b('Elements'), ' tab, with what each one is like. It is worth a look now, before anything else — not to learn, just to see how short the list is.'));
+          },
+        },
+        {
+          h: 'Chemistry is about change',
+          body() {
+            return frag(
+              p('Knowing what things are made of is only half of it. The half that makes chemistry useful is that the ingredients can be taken apart and put back together differently, and when they are, you get something with completely different properties.'),
+              p('Sodium on its own is a soft grey metal that catches fire in water. Chlorine on its own is a green gas that was used as a weapon in the First World War. Join them and you get ', b('table salt'), ', which you put on chips.'),
+              p('That is not a trick or an exception. It is the normal situation. The properties of a compound have almost nothing to do with the properties of the elements in it, because the joining changes everything about how the atoms behave.'),
+              h4('Why this makes chemistry predictive and not just descriptive'),
+              p('If changes were arbitrary, chemistry would be a very long list of things that happen. It is not arbitrary. There are reasons, and the reasons come from what the atoms are doing — which is why this course spends its early units on atoms and electrons before it gets to reactions. Once you know why sodium gives an electron away and chlorine takes one, you do not have to be told that they make salt. You can see it coming.'));
+          },
+        },
+        {
+          h: 'Where you have already met it today',
+          body() {
+            return frag(
+              p('Chemistry has a reputation for happening in laboratories. Almost none of it does.'),
+              table(['Something ordinary', 'The chemistry in it'], [
+                ['Cooking', 'Heat breaks some molecules apart and lets others join. Browning meat, baking bread and caramelising onions are all the same family of reactions, and none of them happens at room temperature.'],
+                ['Digestion', 'Your gut takes apart molecules too big to get into a cell and rebuilds them into ones that fit. It uses acid to do it, at about pH 2, which is roughly battery acid.'],
+                ['Breathing', 'Oxygen goes in, gets handed to a molecule that burns sugar, and carbon dioxide comes back out. You are running a slow, extremely well-controlled fire.'],
+                ['Cleaning', 'Soap works because one end of the molecule likes water and the other end likes grease. It is a shape problem, and Unit 6 explains it properly.'],
+                ['A phone battery', 'Lithium ions moving from one side to the other and back. Charging pushes them one way, using it lets them come back.'],
+                ['Rust', 'Iron reacting with oxygen and water. The orange stuff is a different substance from the metal, and it takes up more room, which is why it flakes off.'],
+              ], 'None of these needs a laboratory. All of them need the same set of ideas.'),
+              p('So the aim of this course is not to prepare you for a lab. It is to let you look at the toast, the rust and the fizzing bowl and know roughly what is going on — and, where the numbers matter, work them out.'));
+          },
+        },
+      ],
+      checkpoints: [
+        {
+          kind: 'choice', after: 1,
+          q: 'Sodium is a metal that catches fire in water. Chlorine is a poisonous green gas. Together they make table salt. What does that tell you?',
+          options: [
+            { t: 'A compound’s properties are not the properties of the elements in it.', ok: true,
+              why: 'Exactly, and this is the single most useful thing to take from this lesson. Joining atoms together changes how they behave completely, so you can never predict a compound from its ingredients by averaging them.' },
+            { t: 'Salt must be dangerous in small amounts.', ok: false,
+              why: 'It is not — you eat it. Once sodium and chlorine are joined, neither behaves the way it did on its own. That is the whole point.' },
+            { t: 'Sodium and chlorine cancel each other out.', ok: false,
+              why: 'Nothing is cancelled. Both atoms are still there in the salt, just changed by being joined. "Cancelling out" is not a thing atoms do.' },
+          ],
+        },
+      ],
+      quizzes: [
+        {
+          kind: 'choice',
+          q: 'Which of these is an element?',
+          options: [
+            { t: 'Carbon', ok: true, why: 'Yes. One kind of atom, nothing simpler inside it as far as chemistry is concerned.' },
+            { t: 'Water', ok: false, why: 'Water is two elements joined — hydrogen and oxygen. You can split it back into those two, which an element could never do.' },
+            { t: 'Air', ok: false, why: 'Air is a mixture of several different substances, mostly nitrogen and oxygen, not even a compound. Unit 2 sorts out the difference.' },
+            { t: 'Steel', ok: false, why: 'Steel is mostly iron with some carbon mixed in — a mixture, and one whose recipe can be varied.' },
+          ],
+        },
+        {
+          kind: 'choice',
+          q: 'Roughly how many elements are there?',
+          options: [
+            { t: 'About 90 that occur naturally, and a few more made in laboratories', ok: true,
+              why: 'Right — 118 are known, but the ones past about 92 are made artificially and mostly fall apart in seconds. Everything ordinary is built from the first 90 or so.' },
+            { t: 'Thousands', ok: false, why: 'There are millions of known compounds, but only about 90 natural elements to build them from. That ratio is the interesting part.' },
+            { t: 'Four — earth, air, fire and water', ok: false,
+              why: 'That was the Greek answer and it held for two thousand years. It was wrong, but it was the right kind of idea: that everything is made from a small number of basic things.' },
+            { t: 'Twenty-six', ok: false, why: 'No — you may be thinking of the alphabet. There are 118 known elements.' },
+          ],
+        },
+        {
+          kind: 'sort',
+          q: 'Sort these into things chemistry explains and things it does not.',
+          categories: ['Chemistry explains it', 'Not really chemistry'],
+          items: [
+            { t: 'Why bread goes brown in a toaster', cat: 'Chemistry explains it' },
+            { t: 'Why iron rusts but gold does not', cat: 'Chemistry explains it' },
+            { t: 'Why soap gets grease off a plate', cat: 'Chemistry explains it' },
+            { t: 'Why a battery goes flat', cat: 'Chemistry explains it' },
+            { t: 'Why the Earth orbits the Sun', cat: 'Not really chemistry' },
+            { t: 'Why a dropped plate falls', cat: 'Not really chemistry' },
+          ],
+          right: 'Yes. Chemistry is about what substances are and how they change into other substances. Gravity and orbits are physics — the same universe, a different question.',
+          wrong: 'The test is whether the question is about one substance turning into another.',
+        },
+        {
+          kind: 'choice',
+          q: 'What is the difference between a physicist and a chemist looking at a glass of water?',
+          options: [
+            { t: 'The chemist asks what it is made of and what it will react with; the physicist asks how it moves and how it carries heat.', ok: true,
+              why: 'A fair summary. The boundary is blurry and gets blurrier the deeper you go — the reason atoms bond at all turns out to be physics — but that is the everyday split.' },
+            { t: 'The chemist works with liquids and the physicist works with solids.', ok: false,
+              why: 'Neither is true. Both work with all of it.' },
+            { t: 'There is no difference.', ok: false,
+              why: 'They overlap enormously, and the overlap has its own name, physical chemistry. But the starting questions are different.' },
+          ],
+        },
+      ],
+      mistakes: [
+        { wrong: '"Chemicals" are the artificial, dangerous things, as opposed to natural ones.',
+          why: 'Everything is chemicals. Water is a chemical; so is caffeine, so is the DNA in your cells. The word says nothing at all about whether something is safe, natural or made in a factory — and the most poisonous substances known are made by living things.' },
+        { wrong: 'If a compound contains a dangerous element, the compound is dangerous.',
+          why: 'Table salt contains chlorine, and chlorine gas will kill you. Salt will not. Once atoms are joined, the compound has its own properties, unrelated to its ingredients’ properties.' },
+        { wrong: 'Chemistry is mostly about memorising.',
+          why: 'There is a little to learn by heart — some ion charges, some names. Almost everything else follows from a handful of reasons, and this course leads with the reasons on purpose. If a topic feels like memorising, you have probably missed a why.' },
+      ],
+      recap: [
+        'Everything is built from about ninety naturally occurring elements, and everything else is those elements joined up in different ways.',
+        'Chemistry studies how substances change into other substances — and a compound’s properties have essentially nothing to do with the properties of the elements in it.',
+        'It is not a laboratory subject. Cooking, rust, breathing, cleaning and batteries are all in scope.',
+        'And it is mostly not memorising. The rest of this course leads with the reason and lets the rule fall out.',
+      ],
+    },
+
+    /* ------------------------------------------------------------ 1.2 */
+    {
+      id: 'how-we-know',
+      title: 'How anyone found any of this out',
+      mins: 15,
+      builds_on: ['what-chemistry-is'],
+      hook() {
+        return frag(
+          p('Nobody has ever seen an atom with their eyes. They are far too small — smaller than the wavelength of light, which means light cannot make a picture of one even in principle.'),
+          p('So how are we so confident they exist? And why should you believe any of the things this course is about to tell you?'),
+          p('That question deserves an answer before the content starts, because the answer is the most transferable thing in the whole subject.'));
+      },
+      pages: [
+        {
+          h: 'You can measure what you cannot see',
+          body() {
+            return frag(
+              p('Here is how it was actually done, and it is worth following because the shape of the argument comes up again and again.'),
+              p('Around 1800, chemists noticed something odd about the masses in reactions. When hydrogen and oxygen make water, the masses that combine are always in the same ratio — 1 gram of hydrogen to 8 grams of oxygen. Not roughly. Always. Use more oxygen and the extra is simply left over.'),
+              p('Then they found something stranger. Carbon and oxygen make two different compounds. In one, 3 grams of carbon takes 4 grams of oxygen. In the other, 3 grams of carbon takes 8 grams of oxygen. And 8 is exactly twice 4.'),
+              callout('Ratios of small whole numbers, turning up over and over in the masses. That is not what you would expect if matter were a smooth continuous stuff you could divide however you liked. It is exactly what you would expect if matter came in fixed lumps, and compounds were made of a fixed number of lumps each.'),
+              p('So: atoms. Not seen, but the only explanation that accounts for whole-number mass ratios. That is how most of science works — you find the explanation that the measurements force on you.'));
+          },
+        },
+        {
+          h: 'Observation, hypothesis, test',
+          body() {
+            return frag(
+              p('The general shape of it:'),
+              table(['Step', 'What it means', 'In the atom story'], [
+                ['Observation', 'Something measurable that keeps happening.', 'Masses combine in ratios of small whole numbers.'],
+                ['Hypothesis', 'A guess at why, specific enough to be wrong.', 'Matter comes in indivisible lumps of fixed mass.'],
+                ['Prediction', 'Something the guess says must also be true, which nobody has checked yet.', 'Then there should be compounds where the ratio is 1:3, 2:3, and so on — but never 1:2.5.'],
+                ['Test', 'Go and look.', 'They looked. The ratios were always whole numbers.'],
+              ], 'The prediction step is the one that matters. A guess that explains what you already knew and predicts nothing new is not worth much.'),
+              p('The word ', b('specific enough to be wrong'), ' is doing real work there. "Things are made of stuff" explains everything and forbids nothing, so it is useless. "Matter comes in fixed lumps" forbids a mass ratio of 1:2.5, which makes it testable — and therefore worth something.'));
+          },
+        },
+        {
+          h: 'A law is not a theory, and a theory is not a guess',
+          body() {
+            return frag(
+              p('These three words get used loosely in ordinary speech and precisely in science, which causes endless confusion.'),
+              table(['Word', 'What it means here', 'Example'], [
+                ['Law', 'A description of what always happens. It says what, not why.', 'Mass is conserved in a reaction: the products weigh exactly what the reactants weighed.'],
+                ['Theory', 'An explanation of why the laws are the way they are. Tested, and currently the best account we have.', 'Atomic theory: matter is made of atoms, which are rearranged but never created or destroyed — which is why mass is conserved.'],
+                ['Hypothesis', 'A specific, testable guess, not yet established.', '"This white powder is a carbonate, so it will fizz with acid."'],
+              ]),
+              callout(b('A theory does not get promoted to a law. '), 'They are different kinds of thing. A law is a pattern; a theory is an explanation of the pattern. Saying "it is only a theory" is a bit like saying "it is only a reason".'),
+              h4('And they do change'),
+              p('The atom of 1808 was an indivisible sphere. By 1911 it had a tiny dense nucleus with electrons around it. By 1926 the electrons were not really orbiting at all. Each version explained everything the last one did and more.'),
+              p('This is not a weakness, and it is worth being straight about because this course will teach you the high-school picture of the atom, which is not the final word. It is a real picture: it makes correct predictions about essentially all of chemistry. A better picture exists, and it is harder, and it does not change any of the answers you are about to learn.'));
+          },
+        },
+      ],
+      checkpoints: [
+        {
+          kind: 'choice', after: 0,
+          q: 'Carbon and oxygen make one compound with a 3:4 mass ratio and another with 3:8. Why did that pattern point towards atoms?',
+          options: [
+            { t: 'Because 8 is exactly twice 4, and whole-number ratios are what you get if matter comes in fixed lumps.', ok: true,
+              why: 'Exactly. If oxygen could be divided however finely you liked, a ratio of 3:5.7 should be as possible as 3:4. The fact that only whole-number multiples turn up says the oxygen is arriving in indivisible pieces.' },
+            { t: 'Because it showed oxygen is heavier than carbon.', ok: false,
+              why: 'It is, but that was not the clue. The clue was the exact doubling — the *ratio between the ratios* being a whole number.' },
+            { t: 'Because two compounds means two kinds of atom.', ok: false,
+              why: 'Two compounds from the same pair of elements is interesting, but the argument comes from the numbers: 8 is twice 4, exactly.' },
+          ],
+        },
+        {
+          kind: 'match', after: 2,
+          q: 'Match each word to what it actually is.',
+          pairs: [
+            ['Law', 'a description of what always happens'],
+            ['Theory', 'an explanation of why it happens'],
+            ['Hypothesis', 'a specific guess, not yet tested'],
+          ],
+          right: 'Yes. And notice that a theory is the most substantial of the three, not the least — the opposite of how the word is used in everyday speech.',
+          wrong: 'The trap is "theory". In science it means a tested explanation, not a guess.',
+        },
+      ],
+      quizzes: [
+        {
+          kind: 'choice',
+          q: 'Someone says "evolution is only a theory, not a law". What is wrong with that sentence?',
+          options: [
+            { t: 'Laws and theories are different kinds of thing, so a theory cannot be promoted to a law.', ok: true,
+              why: 'Right. A law describes a pattern; a theory explains it. Neither outranks the other, and a theory never "graduates" into a law.' },
+            { t: 'Nothing — theories become laws once enough evidence piles up.', ok: false,
+              why: 'This is the common picture and it is not how the words work. Gravity has both: a law that says how strong the attraction is, and a theory that explains why.' },
+            { t: 'Evolution is actually a law.', ok: false,
+              why: 'No — it is a theory, and that is the right word for it, because it is an explanation.' },
+          ],
+        },
+        {
+          kind: 'choice',
+          q: 'Which of these is a testable hypothesis?',
+          options: [
+            { t: 'This colourless liquid is an acid, so it will turn blue litmus paper red.', ok: true,
+              why: 'Specific, and it forbids something — if the paper stays blue the guess is wrong. That is what makes it useful.' },
+            { t: 'Chemical reactions are complicated.', ok: false,
+              why: 'True, and it forbids nothing, so there is no way to find out whether it is wrong. Not a hypothesis.' },
+            { t: 'This substance has some kind of energy in it.', ok: false,
+              why: 'Too vague to test. What would it look like if it were false?' },
+          ],
+        },
+        {
+          kind: 'order',
+          q: 'Put the steps in the order they actually happen.',
+          items: ['Notice a pattern in what you measure', 'Guess an explanation, specific enough to be wrong',
+                  'Work out something the guess says must also be true', 'Go and check whether it is'],
+          right: 'That is the loop, and it runs continuously — the last step usually throws up a new pattern and it starts again.',
+          wrong: 'Think about which one cannot happen until the one before it has.',
+        },
+        {
+          kind: 'choice',
+          q: 'This course will teach you a picture of the atom that physicists know is not the final word. Is that a problem?',
+          options: [
+            { t: 'No — it makes correct predictions about essentially all of chemistry, which is what a model is for.', ok: true,
+              why: 'Right, and this is worth being comfortable with. A model is a tool, judged by whether it gets the right answers in the range you are using it. The high-school atom does.' },
+            { t: 'Yes — you should only ever learn things that are exactly true.', ok: false,
+              why: 'Then you would never learn anything, because nothing in science is finished. Worse, the exact version is far harder and gives the same answers here.' },
+            { t: 'Only if you plan to study physics.', ok: false,
+              why: 'Even then it is fine. Physicists use the simple picture constantly when it is good enough, which for chemistry it almost always is.' },
+          ],
+        },
+      ],
+      mistakes: [
+        { wrong: '"It is just a theory."',
+          why: 'In science a theory is a tested explanation, which is about as strong as it gets. The word for an untested guess is hypothesis.' },
+        { wrong: 'Science proves things.',
+          why: 'Mathematics proves things. Science accumulates evidence and rules explanations out. A theory that has survived a century of attempts to break it is extremely trustworthy, and still not proved in the mathematical sense — which is exactly why it can improve.' },
+        { wrong: 'If a model is not exactly right, it is useless.',
+          why: 'Every model is wrong somewhere; the question is whether it is wrong anywhere that matters for what you are doing. Treating a gas as tiny non-interacting dots is wrong, and it predicts the behaviour of the air in this room to better than a percent.' },
+      ],
+      recap: [
+        'Atoms were worked out, not seen: whole-number mass ratios in reactions are what you would get if matter came in fixed lumps, and nothing else explains them.',
+        'The loop is observation, hypothesis, prediction, test — and the prediction step is what makes it more than storytelling. A guess that forbids nothing cannot be checked.',
+        'A law says what happens. A theory says why. A hypothesis is a specific guess. None of them turns into another.',
+        'Models get replaced by better models, and a model that is not final can still be completely trustworthy inside its range.',
+      ],
+    },
+
+    ],
+  });
 })();
 </script>
 <script>

@@ -77,37 +77,94 @@ const navFits = await page.evaluate(() => {
 });
 check('the nav stays on one row', navFits.oneRow, JSON.stringify(navFits));
 check('Learn is the default view', await page.locator('#view-learn.active').count() === 1);
-check('lesson 1 rendered', (await page.locator('.lesson h2').innerText()).includes('Why draw'));
-check('lesson figures drew molecules', await page.locator('#view-learn svg.molcanvas').count() >= 2);
 
-await page.screenshot({ path: path.join(SHOTS, '01-learn.png'), fullPage: false });
-
-/* ------------------------------------------------------------- lessons */
-const lessonCount = await page.locator('.lesson-link').count();
+/* ---------------------------------------------------------- course map */
+/* #/learn is the course map now, not lesson one. */
 /* Counted from the app rather than pinned, so adding a lesson does not mean
    editing a pile of literals in here. */
-const QTOTAL = await page.evaluate(() =>
-  window.ME.learn.LESSONS.reduce((n, l) => n + (l.quizzes || [l.quiz]).filter(Boolean).length, 0));
-check('every lesson is listed in the sidebar', lessonCount === (await page.evaluate(() => window.ME.learn.LESSONS.length)),
-  'got ' + lessonCount);
-check('there is a lesson on degrees of unsaturation',
-  await page.evaluate(() => window.ME.learn.LESSONS.some((l) => l.id === 'unsaturation')));
+const QTOTAL = await page.evaluate(() => window.ME.course.allLessons()
+  .reduce((n, l) => n + window.ME.course.questionsOf(l).length, 0));
+const courseTotals = await page.evaluate(() => ({
+  units: window.ME.course.units.length,
+  lessons: window.ME.course.allLessons().length,
+  questions: window.ME.course.allLessons()
+    .reduce((n, l) => n + window.ME.course.questionsOf(l).length, 0),
+}));
+check('the course map lists every unit',
+  await page.locator('.cm-unit').count() === courseTotals.units, JSON.stringify(courseTotals));
+check('the course map lists every lesson',
+  await page.locator('.cm-lesson').count() === courseTotals.lessons, JSON.stringify(courseTotals));
+check('every unit shows a progress bar and an estimated time',
+  await page.locator('.cm-unit-bar i').count() === courseTotals.units &&
+  await page.locator('.cm-unit-time').count() === courseTotals.units);
+check('the map offers somewhere to start', await page.locator('.cm-resume').count() === 1,
+  await page.locator('.cm-resume').innerText());
+check('the organic lessons are still there, as their own unit',
+  await page.evaluate(() => window.ME.learn.LESSONS.length >= 12 &&
+    window.ME.learn.LESSONS.some((l) => l.id === 'unsaturation')));
+await page.screenshot({ path: path.join(SHOTS, '01-course-map.png'), fullPage: false });
 
-/* answer lesson 1's quiz correctly */
-await page.locator('.quiz-opt').nth(1).click();
+/* ------------------------------------------------------- lesson reader */
+/* Open a long-form lesson and walk it. */
+await page.locator('.cm-lesson').first().click();
+await page.waitForTimeout(400);
+check('a lesson opens with its hook', await page.locator('.ls-hook').count() === 1);
+check('and says which unit it belongs to',
+  /UNIT 1/i.test(await page.locator('.ls-kicker').innerText()),
+  await page.locator('.ls-kicker').innerText());
+const pageCount = await page.locator('.ls-dot').count();
+check('a long lesson is broken into pages', pageCount >= 3, 'pages: ' + pageCount);
+check('it starts on the first page',
+  /PART 1 OF/i.test(await page.locator('.ls-page-n').innerText()));
+check('it has a common-mistakes section', await page.locator('.ls-mistake').count() >= 3);
+check('it has a plain-words recap', await page.locator('.ls-recap p').count() >= 3);
+/* a checkpoint sits between pages, not all at the end */
+await page.locator('.ls-dot').nth(1).click();
+await page.waitForTimeout(300);
+check('a checkpoint appears part-way through, not only at the end',
+  await page.locator('.quiz-checkpoint').count() === 1);
+await page.locator('.quiz-checkpoint .quiz-opt').first().click();
+await page.waitForTimeout(250);
+check('the checkpoint grades itself', await page.locator('.quiz-checkpoint .callout.ok').count() === 1);
+/* the new question types */
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await page.waitForTimeout(200);
+check('a sort-into-categories question rendered', await page.locator('.quiz-sort-bin').count() >= 2);
+const poolBefore = await page.locator('.quiz-sort-pool .quiz-sort-item').count();
+await page.locator('.quiz-sort-item').first().click();
+await page.waitForTimeout(150);
+check('a sort item can be moved without dragging',
+  await page.locator('.quiz-sort-pool .quiz-sort-item').count() === poolBefore - 1);
+await page.locator('.ls-crumb').click();
+await page.waitForTimeout(300);
+check('progress from the checkpoint reached the map',
+  /^1 of /.test(await page.locator('.progress-row .note').first().innerText()),
+  await page.locator('.progress-row .note').first().innerText());
+
+/* an order question, in lesson 1.2 */
+await page.locator('.cm-lesson').nth(1).click();
+await page.waitForTimeout(400);
+check('a drag-to-order question rendered', await page.locator('.quiz-order-item').count() === 4);
+await page.locator('.ls-crumb').click();
+await page.waitForTimeout(300);
+
+/* --------------------------------------------- the original 12 lessons */
+/* These were written before the course existed and are still the same
+   lessons, in the same format, so their behaviour is pinned here. */
+const organicUnit = page.locator('.cm-unit', { hasText: 'Organic chemistry: reading structures' });
+await organicUnit.locator('.cm-lesson').first().click();
+await page.waitForTimeout(400);
+check('the first organic lesson still renders', (await page.locator('.lesson h2').innerText()).includes('Why draw'),
+  await page.locator('.lesson h2').innerText());
+check('lesson figures drew molecules', await page.locator('#view-learn svg.molcanvas').count() >= 2);
+check('it shows its set of questions', await page.locator('.quiz-item').count() === 3,
+  'got ' + (await page.locator('.quiz-item').count()));
+await page.locator('.quiz-item').nth(0).locator('.quiz-opt').nth(1).click();
 await page.waitForTimeout(250);
 check('quiz accepts the right answer', await page.locator('.quiz-feedback.show .callout.ok').count() === 1);
-check('progress recorded', (await page.locator('.progress-wrap .note').innerText()).startsWith('1 of ' + QTOTAL),
-  await page.locator('.progress-wrap .note').innerText());
-
-/* Each lesson carries a set of questions, and a wrong answer explains itself
-   rather than just locking the question. */
-check('lesson 1 shows a set of questions', await page.locator('.quiz-item').count() === 3,
-  'got ' + (await page.locator('.quiz-item').count()));
 check('the set keeps a running tally', /1 \/ 3/.test(await page.locator('.quiz-tally').innerText()),
   await page.locator('.quiz-tally').innerText());
 {
-  /* a wrong option should say why that option is wrong, and leave the rest open */
   const q2 = page.locator('.quiz-item').nth(1);
   await q2.locator('.quiz-opt').nth(1).click();
   await page.waitForTimeout(200);
@@ -118,8 +175,10 @@ check('the set keeps a running tally', /1 \/ 3/.test(await page.locator('.quiz-t
 }
 {
   /* a wrong count should say which way you are out, plus a hint for that number */
-  await page.locator('.lesson-link').nth(4).click();
-  await page.waitForTimeout(300);
+  await page.locator('.ls-crumb').click();
+  await page.waitForTimeout(250);
+  await organicUnit.locator('.cm-lesson').nth(4).click();
+  await page.waitForTimeout(350);
   const cq = page.locator('.quiz-item').nth(0);
   await cq.locator('input[type=number]').fill('4');
   await cq.locator('button', { hasText: 'Check' }).click();
@@ -130,23 +189,38 @@ check('the set keeps a running tally', /1 \/ 3/.test(await page.locator('.quiz-t
 }
 {
   /* a wrong click should describe the atom that was clicked */
-  await page.locator('.lesson-link').nth(5).click();
-  await page.waitForTimeout(400);
+  await page.locator('.ls-crumb').click();
+  await page.waitForTimeout(250);
+  await organicUnit.locator('.cm-lesson').nth(5).click();
+  await page.waitForTimeout(450);
   const aq = page.locator('.quiz-item').nth(0);
   await aq.locator('.clickmol .hit').nth(0).click();
   await page.waitForTimeout(200);
   const msg = await aq.locator('.quiz-feedback').innerText();
   check('a wrong click describes what was clicked', /That carbon has (one|two|three|four) line/i.test(msg), msg.slice(0, 90));
 }
-await page.locator('.lesson-link').nth(0).click();
+await page.locator('.ls-crumb').click();
 await page.waitForTimeout(200);
 
-/* walk every lesson to be sure none of them throws */
-for (let i = 0; i < lessonCount; i++) {
-  await page.locator('.lesson-link').nth(i).click();
-  await page.waitForTimeout(160);
+/* Walk every lesson in the whole course, page by page, to be sure none of
+   them throws. This is the check that catches a typo in lesson content. */
+const lessonIds = await page.evaluate(() => window.ME.course.allLessons().map((l) => l.id));
+for (const id of lessonIds) {
+  await page.evaluate((x) => window.ME.learn.showLesson(x), id);
+  await page.waitForTimeout(120);
+  /* click through every page of a long-form lesson too */
+  const dots = await page.locator('.ls-dot').count();
+  for (let d = 1; d < dots; d++) {
+    await page.locator('.ls-dot').nth(d).click();
+    await page.waitForTimeout(70);
+  }
 }
-check('every lesson renders without error', errors.length === 0, errors.slice(0, 2).join(' | '));
+check('every lesson in the course renders without error, on every page',
+  errors.length === 0, errors.slice(0, 3).join(' | '));
+check('and the course covers more than the original twelve',
+  lessonIds.length > 12, lessonIds.length + ' lessons');
+await page.evaluate(() => window.ME.learn.showMap());
+await page.waitForTimeout(200);
 await page.screenshot({ path: path.join(SHOTS, '02-lesson-caffeine.png') });
 
 /* --------------------------------------------------------------- search */
@@ -647,7 +721,7 @@ await page.screenshot({ path: path.join(SHOTS, '12-dark-gallery.png') });
 /* ------------------------------------------------- resetting and forgetting */
 /* These reload the page, so they come last in the offline run. */
 {
-  const progressText = () => page.locator('.progress-wrap .note').innerText();
+  const progressText = () => page.locator('.progress-row .note').first().innerText();
   const storedKeys = () => page.evaluate(() => {
     try {
       return {
@@ -656,18 +730,30 @@ await page.screenshot({ path: path.join(SHOTS, '12-dark-gallery.png') });
       };
     } catch (e) { return { lessons: null, theme: null }; }
   });
+  /* Answer two questions in the first organic lesson, which is the one whose
+     answers are known. Opened by id so the map layout cannot break it. */
   const answerTwo = async () => {
     await page.locator('.tab[data-view=learn]').click();
     await page.waitForTimeout(250);
-    await page.locator('.lesson-link').nth(0).click();
-    await page.waitForTimeout(300);
+    await page.evaluate(() => window.ME.learn.showLesson('why'));
+    await page.waitForTimeout(350);
     await page.locator('.quiz-item').nth(0).locator('.quiz-opt').nth(1).click();
     await page.waitForTimeout(150);
     await page.locator('.quiz-item').nth(1).locator('.quiz-opt').nth(0).click();
     await page.waitForTimeout(250);
+    await page.locator('.ls-crumb').click();
+    await page.waitForTimeout(300);
   };
 
-  await page.evaluate(() => { try { localStorage.removeItem('molx.remember'); } catch (e) { /* fine */ } });
+  await page.evaluate(() => {
+    try {
+      localStorage.removeItem('molx.remember');
+      /* Earlier checks answered a checkpoint, so start this block clean or
+         the counts below are off by one. */
+      localStorage.removeItem('molx.lessons');
+      localStorage.removeItem('molx.lastLesson');
+    } catch (e) { /* fine */ }
+  });
   await page.reload({ waitUntil: 'load' });
   await page.waitForTimeout(800);
 
@@ -688,10 +774,17 @@ await page.screenshot({ path: path.join(SHOTS, '12-dark-gallery.png') });
   await page.waitForTimeout(400);
   check('reset clears the count', (await progressText()).startsWith('0 of ' + QTOTAL), await progressText());
   check('reset clears storage', !(await storedKeys()).lessons);
-  check('reset reopens the questions', await page.locator('.quiz-item.solved').count() === 0);
-  check('reset leaves the options clickable',
-    await page.locator('.quiz-item').nth(0).locator('.quiz-opt:not([disabled])').count() === 3);
   check('reset does not touch the theme', !!(await storedKeys()).theme);
+  {
+    /* reopening the lesson has to show the questions unanswered again */
+    await page.evaluate(() => window.ME.learn.showLesson('why'));
+    await page.waitForTimeout(350);
+    check('reset reopens the questions', await page.locator('.quiz-item.solved').count() === 0);
+    check('reset leaves the options clickable',
+      await page.locator('.quiz-item').nth(0).locator('.quiz-opt:not([disabled])').count() === 3);
+    await page.locator('.ls-crumb').click();
+    await page.waitForTimeout(250);
+  }
 
   /* the first tap disarms itself if nothing follows */
   await resetBtn.click();

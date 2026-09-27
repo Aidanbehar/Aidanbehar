@@ -994,275 +994,177 @@
     });
   }
 
-  /* --------------------------------------------------------- quiz render */
-  /* Each lesson carries a short set of questions rather than a single one.
-   *
-   * A wrong answer is never just "no". It says what was actually chosen, why
-   * that is not the answer, and leaves the question open to try again, because
-   * the point is to make the rule stick rather than to score anybody. */
+  /* ------------------------------------------------- register as a unit */
+  /* The twelve lessons above are the reading-structures half of the organic
+   * unit. They register themselves like every other unit, so the course map
+   * does not need to know that they were written first and in a different
+   * format. */
+  ME.course.unit({
+    n: 15, id: 'organic-reading',
+    title: 'Organic chemistry: reading structures',
+    blurb: 'How chemists actually draw molecules, and how to read a drawing at a glance. Start here if you want to understand the pictures.',
+    lessons: LESSONS,
+  });
 
-  function questionsOf(lesson) {
-    return lesson.quizzes || (lesson.quiz ? [lesson.quiz] : []);
-  }
+  /* ------------------------------------------------------------- progress */
+  const St = {
+    built: false, host: null, view: null, done: {}, current: null,
+  };
 
-  /* Small numbers read better as words in a sentence. */
-  const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-  const spell = (n) => (n >= 0 && n < WORDS.length ? WORDS[n] : String(n));
-  const plural = (n, word) => spell(n) + ' ' + word + (n === 1 ? '' : 's');
-
-  /* What did they actually click? Said back to them in the lesson's own terms. */
-  function describeClick(a) {
-    if (a.sym !== 'C') {
-      const h = a.hydrogens ? ', holding ' + plural(a.hydrogens, 'hydrogen') : '';
-      return 'That is the ' + ME.chem.elementName(a.sym).toLowerCase() + h + '. ';
-    }
-    const lines = plural(a.bondCount, 'line');
-    if (a.hydrogens === 0) {
-      return 'That carbon has ' + lines + ' meeting it, so all four of its hands are used and it has no hydrogens. ';
-    }
-    return 'That carbon has ' + lines + ' meeting it, so it is carrying ' +
-      plural(a.hydrogens, 'hidden hydrogen') + '. ';
-  }
-
-  function buildQuizBlock(lesson, passed, onPass) {
-    const qs = questionsOf(lesson);
-    const box = el('div', { class: 'quiz' });
-
-    const head = el('h3');
-    head.appendChild(ME.icon('check'));
-    head.appendChild(document.createTextNode(qs.length > 1 ? 'Quick check' : 'Quick check'));
-    const tally = el('span', { class: 'quiz-tally' });
-    head.appendChild(tally);
-    box.appendChild(head);
-
-    if (qs.length > 1) {
-      box.appendChild(el('p', { class: 'note quiz-intro' },
-        'Get one wrong and it will explain why before letting you try again.'));
-    }
-
-    function syncTally() {
-      tally.textContent = passed.size + ' / ' + qs.length;
-      tally.classList.toggle('all', passed.size === qs.length);
-    }
-
-    qs.forEach((q, i) => {
-      box.appendChild(buildQuestion(q, i, qs.length, passed.has(i), () => {
-        if (passed.has(i)) return;
-        passed.add(i);
-        syncTally();
-        onPass(i);
-      }));
-    });
-    syncTally();
-    return box;
-  }
-
-  function buildQuestion(q, index, total, alreadyPassed, onSolved) {
-    const item = el('div', { class: 'quiz-item' + (alreadyPassed ? ' solved' : '') });
-    const numBadge = total > 1
-      ? el('span', { class: 'quiz-num', text: alreadyPassed ? '\u2713' : String(index + 1) })
-      : null;
-    if (numBadge) item.appendChild(numBadge);
-
-    const body = el('div', { class: 'quiz-body' });
-    item.appendChild(body);
-    body.appendChild(el('div', { class: 'quiz-q', text: q.q }));
-
-    const feedback = el('div', { class: 'quiz-feedback' });
-
-    let solved = alreadyPassed;
-    function say(ok, message) {
-      feedback.classList.add('show');
-      ME.clear(feedback);
-      feedback.appendChild(el('div', { class: 'callout ' + (ok ? 'ok' : 'warn'), text: message }));
-      if (ok && !solved) {
-        solved = true;
-        item.classList.add('solved');
-        if (numBadge) numBadge.textContent = '\u2713';
-        onSolved();
-      }
-    }
-
-    if (q.kind === 'choice') buildChoice(q, body, say);
-    else if (q.kind === 'count') buildCount(q, body, say);
-    else if (q.kind === 'clickatom') buildClickAtom(q, body, say);
-
-    if (q.note) body.appendChild(el('p', { class: 'note quiz-hint', text: q.note }));
-    body.appendChild(feedback);
-    return item;
-  }
-
-  /* ---- pick one of several answers ---- */
-  function buildChoice(q, body, say) {
-    const opts = q.optionsBuilder ? q.optionsBuilder() : q.options;
-    const list = el('div', { class: 'quiz-opts' });
-    const buttons = [];
-    opts.forEach((o, i) => {
-      const btn = el('button', { class: 'quiz-opt' });
-      if (o.node) btn.appendChild(o.node); else btn.textContent = o.t;
-      btn.addEventListener('click', () => {
-        if (btn.disabled) return;
-        if (o.ok) {
-          buttons.forEach((x) => { x.disabled = true; });
-          btn.classList.add('right');
-          say(true, o.why);
-        } else {
-          /* Rule out just this one and explain it, so the question stays open. */
-          btn.classList.add('wrong');
-          btn.disabled = true;
-          say(false, o.why);
-          const left = buttons.filter((x) => !x.disabled);
-          if (left.length === 1) {
-            const correct = opts.findIndex((x) => x.ok);
-            buttons[correct].classList.add('right');
-          }
-        }
-      });
-      buttons.push(btn);
-      list.appendChild(btn);
-    });
-    body.appendChild(list);
-  }
-
-  /* ---- type a number ---- */
-  function buildCount(q, body, say) {
-    if (q.smiles) body.appendChild(drawing(q.smiles, Object.assign({ xray: 0, width: 360, height: 220 }, q.render || {})));
-    const row = el('div', { class: 'quiz-count' });
-    const input = el('input', { type: 'number', min: '0', 'aria-label': 'Your answer' });
-    const go = el('button', { class: 'btn btn-primary btn-sm', text: 'Check' });
-    const submit = () => {
-      const v = parseInt(input.value, 10);
-      if (isNaN(v)) return;
-      if (v === q.answer) { say(true, q.right); return; }
-      /* Explain the specific mistake where we can name it, and otherwise at
-       * least say which way they are out. Never hand over the number. */
-      const named = q.hints && q.hints[v];
-      const direction = v < q.answer ? 'Too few. ' : 'Too many. ';
-      say(false, direction + (named || q.wrong));
-    };
-    go.addEventListener('click', submit);
-    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') submit(); });
-    row.appendChild(input);
-    row.appendChild(go);
-    body.appendChild(row);
-  }
-
-  /* ---- click the right atom in a drawing ---- */
-  function buildClickAtom(q, body, say) {
-    const mol = q.mol ? q.mol() : molOf(q.smiles);
-    const info = ME.render2d.describe(mol, {});
-    const holder = el('div', { class: 'clickmol' });
-    holder.appendChild(ME.render2d.render(mol, {
-      xray: q.xray || 0, width: q.width || 440, height: q.height || 290,
-      onAtomClick(i, atom) {
-        /* Still answers after it has been got right, so the drawing stays
-         * something you can poke at; it just will not be counted twice. */
-        const enriched = Object.assign({}, atom, { bondCount: info.atoms[i].bonds.length });
-        if (q.test(enriched)) say(true, q.right);
-        else say(false, describeClick(enriched) + q.wrong);
-      },
-    }));
-    body.appendChild(holder);
-    body.appendChild(el('p', { class: 'note', text: 'Click an atom in the drawing above.' }));
-  }
-
-  /* -------------------------------------------------------------- view */
-  const St = { built: false, index: 0, done: {}, navNode: null, bodyNode: null, barNode: null };
-
-  /* Progress is kept between visits by default, but that is the reader's call.
-   * With remembering switched off nothing is written at all and the answers
-   * live only in this tab, so reloading starts the questions over. */
   function remembering() { return ME.store.get('remember', true) !== false; }
-
-  function loadProgress() {
-    St.done = remembering() ? (ME.store.get('lessons', {}) || {}) : {};
-  }
-  function saveProgress() {
-    if (remembering()) ME.store.set('lessons', St.done);
-  }
+  function loadProgress() { St.done = remembering() ? (ME.store.get('lessons', {}) || {}) : {}; }
+  function saveProgress() { if (remembering()) ME.store.set('lessons', St.done); }
   function forgetStored() {
     ME.store.remove('lessons');
     ME.store.remove('lessonIndex');
+    ME.store.remove('lastLesson');
   }
-
-  /* Wipe the answers and put every question back on the board. */
   function resetProgress() {
     St.done = {};
     forgetStored();
-    showLesson(St.index);
-    syncNav();
+    if (St.current) showLesson(St.current.id); else showMap();
   }
-
   function setRemember(on) {
     ME.store.set('remember', !!on);
-    /* Switching it off should not leave yesterday's answers sitting on disk. */
-    if (!on) forgetStored();
-    else saveProgress();
+    if (!on) forgetStored(); else saveProgress();
   }
 
-  /* Which questions of a lesson have been answered. Progress used to be a
-   * single true/false per lesson, so an old saved value is read as "all of
-   * them" rather than throwing the reader's progress away. */
-  function passedFor(lesson) {
-    const total = questionsOf(lesson).length;
-    const v = St.done[lesson.id];
+  /* Which questions of a lesson have been answered. An old saved value of
+   * `true` meant "all of them", so it is read that way rather than throwing
+   * somebody's progress away. */
+  function passedFor(l) {
+    const total = ME.course.questionsOf(l).length;
+    const v = St.done[l.id];
     if (v === true) return new Set(Array.from({ length: total }, (_, i) => i));
     if (Array.isArray(v)) return new Set(v.filter((i) => i < total));
     return new Set();
   }
-  function totalQuestions() {
-    return LESSONS.reduce((n, l) => n + questionsOf(l).length, 0);
+  const lessonComplete = (l) => {
+    const t = ME.course.questionsOf(l).length;
+    return t > 0 && passedFor(l).size === t;
+  };
+  function unitProgress(u) {
+    let done = 0, total = 0;
+    u.lessons.forEach((l) => {
+      total += ME.course.questionsOf(l).length;
+      done += passedFor(l).size;
+    });
+    return { done: done, total: total, lessons: u.lessons.filter(lessonComplete).length,
+      minutes: u.lessons.reduce((n, l) => n + ME.course.minutesOf(l), 0) };
   }
-  function totalPassed() {
-    return LESSONS.reduce((n, l) => n + passedFor(l).size, 0);
-  }
-  function lessonComplete(lesson) {
-    const total = questionsOf(lesson).length;
-    return total > 0 && passedFor(lesson).size === total;
+  function courseProgress() {
+    let done = 0, total = 0;
+    ME.course.units.forEach((u) => {
+      const p = unitProgress(u);
+      done += p.done; total += p.total;
+    });
+    return { done: done, total: total };
   }
 
+  /* ------------------------------------------------------------ the shell */
   function build(host) {
+    St.host = host;
     loadProgress();
+    St.view = el('div');
+    host.appendChild(St.view);
+    St.built = true;
+  }
+
+  function ensureBuilt(host) { if (!St.built) build(host); }
+
+  /* --------------------------------------------------------- course map */
+  function showMap() {
+    St.current = null;
+    ME.clear(St.view);
     const wrap = el('div', { class: 'wrap' });
     wrap.appendChild(el('h1', { text: 'Learn' }));
-    wrap.appendChild(el('p', { class: 'note', style: { maxWidth: '64ch', marginBottom: '18px' } },
-      LESSONS.length + ' short lessons. Start at the top; each one assumes the one before it. Each ends with a few questions, and a wrong answer explains itself rather than just marking you down.'));
 
-    const prog = el('div', { class: 'progress-wrap' });
-    St.barNode = el('i');
-    prog.appendChild(el('div', { class: 'progress-bar' }, [St.barNode]));
+    const units = ME.course.units;
+    const lessons = ME.course.allLessons();
+    const prog = courseProgress();
+    const totalMins = lessons.reduce((n, l) => n + ME.course.minutesOf(l), 0);
 
+    wrap.appendChild(el('p', { class: 'note cm-intro' },
+      'A chemistry course from the very beginning. ' + units.length + ' units, ' + lessons.length +
+      ' lessons, about ' + Math.round(totalMins / 60) + ' hours of reading if you do all of it. ' +
+      'Nothing assumes you have done chemistry before. Each lesson says which earlier ones it leans on, ' +
+      'but nothing is locked — go wherever you like.'));
+
+    /* overall progress and the resume button */
+    const top = el('div', { class: 'cm-top' });
+    const bar = el('div', { class: 'progress-wrap' });
+    const fill = el('i');
+    fill.style.width = (prog.total ? Math.round((prog.done / prog.total) * 100) : 0) + '%';
+    bar.appendChild(el('div', { class: 'progress-bar' }, [fill]));
     const row = el('div', { class: 'progress-row' });
-    St.progText = el('div', { class: 'note', style: { fontSize: '.8rem' } });
-    row.appendChild(St.progText);
+    row.appendChild(el('div', { class: 'note', style: { fontSize: '.8rem' },
+      text: prog.done + ' of ' + prog.total + ' questions answered' }));
     row.appendChild(buildProgressControls());
-    prog.appendChild(row);
-    wrap.appendChild(prog);
+    bar.appendChild(row);
+    top.appendChild(bar);
 
-    const layout = el('div', { class: 'learn-layout' });
-    St.navNode = el('nav', { class: 'lesson-nav', 'aria-label': 'Lessons' });
-    St.bodyNode = el('div');
-    layout.appendChild(St.navNode);
-    layout.appendChild(St.bodyNode);
-    wrap.appendChild(layout);
-    host.appendChild(wrap);
+    const resumeId = ME.store.get('lastLesson', null);
+    const resume = resumeId && ME.course.lesson(resumeId);
+    const nextUp = resume || firstUnfinished() || lessons[0];
+    if (nextUp) {
+      const btn = el('button', { class: 'btn btn-primary cm-resume' });
+      btn.appendChild(el('span', {}, [
+        el('span', { class: 'cm-resume-k', text: resume ? 'Continue where you left off' : 'Start here' }),
+        el('span', { class: 'cm-resume-v', text: nextUp.title }),
+      ]));
+      btn.appendChild(ME.icon('chevron'));
+      btn.addEventListener('click', () => showLesson(nextUp.id));
+      top.appendChild(btn);
+    }
+    wrap.appendChild(top);
 
-    LESSONS.forEach((l, i) => {
-      const link = el('button', { class: 'lesson-link' });
-      link.appendChild(el('span', { class: 'lesson-num', text: String(i + 1) }));
-      link.appendChild(el('span', { text: l.title }));
-      link.addEventListener('click', () => showLesson(i));
-      St.navNode.appendChild(link);
+    /* the units */
+    units.forEach((u) => {
+      const p = unitProgress(u);
+      const card = el('div', { class: 'cm-unit' + (p.total && p.done === p.total ? ' done' : '') });
+      const head = el('div', { class: 'cm-unit-head' });
+      head.appendChild(el('span', { class: 'cm-unit-n', text: 'Unit ' + u.n }));
+      head.appendChild(el('span', { class: 'cm-unit-title', text: u.title }));
+      head.appendChild(el('span', { class: 'cm-unit-time', text: Math.round(p.minutes / 5) * 5 + ' min' }));
+      card.appendChild(head);
+      if (u.blurb) card.appendChild(el('p', { class: 'note cm-unit-blurb', text: u.blurb }));
+
+      const ubar = el('div', { class: 'cm-unit-bar' });
+      const ufill = el('i');
+      ufill.style.width = (p.total ? Math.round((p.done / p.total) * 100) : 0) + '%';
+      ubar.appendChild(ufill);
+      card.appendChild(ubar);
+      card.appendChild(el('div', { class: 'cm-unit-meta note',
+        text: p.lessons + ' of ' + u.lessons.length + ' lessons finished · ' + p.done + '/' + p.total + ' questions' }));
+
+      const list = el('div', { class: 'cm-lessons' });
+      u.lessons.forEach((l, i) => {
+        const b = el('button', { class: 'cm-lesson' + (lessonComplete(l) ? ' done' : '') });
+        b.appendChild(el('span', { class: 'cm-lesson-n', text: lessonComplete(l) ? '✓' : String(i + 1) }));
+        const mid = el('span', { class: 'cm-lesson-mid' });
+        mid.appendChild(el('span', { class: 'cm-lesson-title', text: l.title }));
+        const passed = passedFor(l).size;
+        const qtotal = ME.course.questionsOf(l).length;
+        mid.appendChild(el('span', { class: 'note cm-lesson-sub',
+          text: ME.course.minutesOf(l) + ' min · ' + passed + '/' + qtotal + ' questions' }));
+        b.appendChild(mid);
+        b.addEventListener('click', () => showLesson(l.id));
+        list.appendChild(b);
+      });
+      card.appendChild(list);
+      wrap.appendChild(card);
     });
 
-    St.built = true;
-    const saved = remembering() ? ME.store.get('lessonIndex', 0) : 0;
-    showLesson(Math.min(LESSONS.length - 1, Math.max(0, saved)));
+    St.view.appendChild(wrap);
+    window.scrollTo({ top: 0 });
+  }
+
+  function firstUnfinished() {
+    return ME.course.allLessons().filter((l) => !lessonComplete(l))[0] || null;
   }
 
   function buildProgressControls() {
     const box = el('div', { class: 'progress-controls' });
-
     const remember = el('label', { class: 'switch', title: 'Turn this off and your answers are forgotten as soon as you reload' });
     const cb = el('input', { type: 'checkbox' });
     cb.checked = remembering();
@@ -1270,7 +1172,7 @@
       setRemember(cb.checked);
       ME.toast(cb.checked
         ? 'Your progress will be remembered on this device'
-        : 'Progress will not be saved \u2014 reloading starts you fresh');
+        : 'Progress will not be saved — reloading starts you fresh');
     });
     remember.appendChild(cb);
     remember.appendChild(el('span', { text: 'Remember my progress' }));
@@ -1286,70 +1188,306 @@
     };
     reset.addEventListener('click', () => {
       if (!armed) {
-        reset.textContent = 'Reset \u2014 sure?';
+        reset.textContent = 'Reset — sure?';
         reset.classList.add('btn-primary');
         armed = setTimeout(disarm, 4000);
         return;
       }
       disarm();
+      const n = courseProgress().total;
       resetProgress();
-      ME.toast('All ' + totalQuestions() + ' questions are open again');
+      ME.toast('All ' + n + ' questions are open again');
     });
     box.appendChild(reset);
     return box;
   }
 
-  function syncNav() {
-    ME.$$('.lesson-link', St.navNode).forEach((link, i) => {
-      link.classList.toggle('on', i === St.index);
-      link.classList.toggle('done', lessonComplete(LESSONS[i]));
-    });
-    const n = totalPassed();
-    const total = totalQuestions();
-    St.barNode.style.width = Math.round((n / total) * 100) + '%';
-    St.progText.textContent = `${n} of ${total} questions answered`;
-  }
+  /* ------------------------------------------------------- lesson reader */
+  function showLesson(id) {
+    const l = ME.course.lesson(id);
+    if (!l) { showMap(); return; }
+    St.current = l;
+    if (remembering()) ME.store.set('lastLesson', id);
+    ME.clear(St.view);
 
-  function showLesson(i) {
-    St.index = i;
-    if (remembering()) ME.store.set('lessonIndex', i);
-    const lesson = LESSONS[i];
-    ME.clear(St.bodyNode);
+    const wrap = el('div', { class: 'wrap' });
+    /* A column of prose wants a reading measure of around 70 characters, and
+     * the crumb has to line up with its left edge, so both go in one holder
+     * that is centred rather than left-aligned in a wide page. */
+    const reader = el('div', { class: 'ls-reader' });
+    wrap.appendChild(reader);
+    const all = ME.course.allLessons();
+    const index = all.indexOf(l);
+
+    const crumb = el('button', { class: 'btn btn-sm btn-ghost ls-crumb' }, [ME.icon('back'), 'All units']);
+    crumb.addEventListener('click', () => showMap());
+    reader.appendChild(crumb);
 
     const art = el('article', { class: 'lesson' });
-    art.appendChild(el('div', { class: 'note', style: { fontSize: '.78rem', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: '700' }, text: `Lesson ${i + 1} of ${LESSONS.length}` }));
-    art.appendChild(el('h2', { text: lesson.title }));
-    const body = el('div', { class: 'lesson-body' });
-    body.appendChild(lesson.body());
-    art.appendChild(body);
+    art.appendChild(el('div', { class: 'ls-kicker',
+      text: 'Unit ' + l.unit.n + ' · ' + l.unit.title + ' · ' + ME.course.minutesOf(l) + ' min' }));
+    art.appendChild(el('h2', { text: l.title }));
 
-    const passed = passedFor(lesson);
-    art.appendChild(buildQuizBlock(lesson, passed, () => {
-      St.done[lesson.id] = Array.from(passed).sort((a, b) => a - b);
+    /* what it leans on, as a recommendation and never a lock */
+    if (l.builds_on && l.builds_on.length) {
+      const pre = el('div', { class: 'ls-builds note' });
+      pre.appendChild(document.createTextNode('This one goes more easily after '));
+      l.builds_on.forEach((pid, i) => {
+        const p = ME.course.lesson(pid);
+        if (!p) return;
+        if (i) pre.appendChild(document.createTextNode(i === l.builds_on.length - 1 ? ' and ' : ', '));
+        const a = el('button', { class: 'ls-prereq', text: p.title });
+        a.addEventListener('click', () => showLesson(p.id));
+        pre.appendChild(a);
+      });
+      pre.appendChild(document.createTextNode('. You can read it now regardless.'));
+      art.appendChild(pre);
+    }
+
+    const passed = passedFor(l);
+    const onPass = (qi) => {
+      if (passed.has(qi)) return;
+      passed.add(qi);
+      St.done[l.id] = Array.from(passed).sort((a, b) => a - b);
       saveProgress();
-      syncNav();
-    }));
+    };
 
+    if (l.pages) art.appendChild(renderPaged(l, passed, onPass));
+    else art.appendChild(renderSingle(l, passed, onPass));
+
+    /* common mistakes */
+    if (l.mistakes && l.mistakes.length) {
+      const box = el('section', { class: 'ls-mistakes' });
+      box.appendChild(el('h3', {}, [ME.icon('warn'), 'Where people go wrong']));
+      box.appendChild(el('p', { class: 'note',
+        text: 'Not a list of things to avoid so much as a list of things that are genuinely easy to think. Each one is worth reading even if you are sure you would not.' }));
+      l.mistakes.forEach((m) => {
+        const item = el('div', { class: 'ls-mistake' });
+        item.appendChild(el('div', { class: 'ls-mistake-claim', html: ME.formulaHTML(m.wrong) }));
+        item.appendChild(el('div', { class: 'ls-mistake-why', html: ME.formulaHTML(m.why) }));
+        box.appendChild(item);
+      });
+      art.appendChild(box);
+    }
+
+    /* the practice set */
+    const qs = ME.course.questionsOf(l);
+    const endQs = (l.quizzes || (l.quiz ? [l.quiz] : []));
+    if (endQs.length) {
+      const offset = (l.checkpoints || []).length;
+      art.appendChild(quizBlock(l, endQs, offset, passed, onPass,
+        l.pages ? 'Practice' : 'Quick check'));
+    }
+
+    /* unlimited practice */
+    if (l.practice) art.appendChild(practicePanel(l.practice));
+
+    /* recap */
+    if (l.recap) {
+      const box = el('section', { class: 'ls-recap' });
+      box.appendChild(el('h3', { text: 'What you now know' }));
+      (Array.isArray(l.recap) ? l.recap : [l.recap]).forEach((t) =>
+        box.appendChild(el('p', { html: ME.formulaHTML(t) })));
+      art.appendChild(box);
+    }
+
+    /* prev and next across the whole course */
     const foot = el('div', { class: 'lesson-foot' });
-    if (i > 0) {
-      const prev = el('button', { class: 'btn' }, [ME.icon('back'), LESSONS[i - 1].title]);
-      prev.addEventListener('click', () => { showLesson(i - 1); scrollUp(); });
-      foot.appendChild(prev);
+    if (index > 0) {
+      const prev = all[index - 1];
+      const b = el('button', { class: 'btn' }, [ME.icon('back'), prev.title]);
+      b.addEventListener('click', () => { showLesson(prev.id); scrollUp(); });
+      foot.appendChild(b);
     } else foot.appendChild(el('span'));
-    if (i < LESSONS.length - 1) {
-      const next = el('button', { class: 'btn btn-primary' }, [LESSONS[i + 1].title, ME.icon('chevron')]);
-      next.addEventListener('click', () => { showLesson(i + 1); scrollUp(); });
-      foot.appendChild(next);
+    if (index < all.length - 1) {
+      const next = all[index + 1];
+      const b = el('button', { class: 'btn btn-primary' }, [next.title, ME.icon('chevron')]);
+      b.addEventListener('click', () => { showLesson(next.id); scrollUp(); });
+      foot.appendChild(b);
     }
     art.appendChild(foot);
 
-    St.bodyNode.appendChild(art);
+    reader.appendChild(art);
+    St.view.appendChild(wrap);
     ME.bindTips(art);
-    syncNav();
+  }
+
+  /* An old-format lesson: one body, questions at the end. */
+  function renderSingle(l, passed, onPass) {
+    const body = el('div', { class: 'lesson-body' });
+    body.appendChild(l.body());
+    return body;
+  }
+
+  /* A long-form lesson: a hook, then pages you click through, with
+   * checkpoints sitting between them rather than all saved for the end. */
+  function renderPaged(l, passed, onPass) {
+    const holder = el('div', { class: 'ls-paged' });
+
+    if (l.hook) {
+      const hook = el('section', { class: 'ls-hook' });
+      hook.appendChild(l.hook());
+      holder.appendChild(hook);
+    }
+
+    const pagesWrap = el('div', { class: 'lesson-body' });
+    holder.appendChild(pagesWrap);
+
+    const dots = el('div', { class: 'ls-dots' });
+    holder.appendChild(dots);
+
+    const nav = el('div', { class: 'ls-pagenav' });
+    holder.appendChild(nav);
+
+    let at = 0;
+    const checkpoints = l.checkpoints || [];
+
+    function drawDots() {
+      ME.clear(dots);
+      l.pages.forEach((p, i) => {
+        const d = el('button', { class: 'ls-dot' + (i === at ? ' on' : '') + (i < at ? ' seen' : ''),
+          title: p.h || 'Page ' + (i + 1), 'aria-label': p.h || 'Page ' + (i + 1) });
+        d.addEventListener('click', () => go(i));
+        dots.appendChild(d);
+      });
+    }
+
+    function go(i) {
+      at = Math.max(0, Math.min(l.pages.length - 1, i));
+      ME.clear(pagesWrap);
+      const page = l.pages[at];
+      const sec = el('section', { class: 'ls-page' });
+      sec.appendChild(el('div', { class: 'ls-page-n', text: 'Part ' + (at + 1) + ' of ' + l.pages.length }));
+      if (page.h) sec.appendChild(el('h3', { text: page.h }));
+      sec.appendChild(page.body());
+      pagesWrap.appendChild(sec);
+
+      /* any checkpoint that belongs after this page */
+      checkpoints.forEach((q, qi) => {
+        if ((q.after === undefined ? -1 : q.after) !== at) return;
+        const box = el('div', { class: 'quiz quiz-checkpoint' });
+        const head = el('h3');
+        head.appendChild(ME.icon('check'));
+        head.appendChild(document.createTextNode('Checkpoint'));
+        box.appendChild(head);
+        box.appendChild(el('p', { class: 'note',
+          text: 'One question, here rather than at the end, because this is the bit that has to land before the next part makes sense.' }));
+        box.appendChild(ME.quiz.buildQuestion(q, qi, 1, passed.has(qi), () => onPass(qi)));
+        pagesWrap.appendChild(box);
+      });
+
+      ME.clear(nav);
+      if (at > 0) {
+        const b = el('button', { class: 'btn btn-sm' }, [ME.icon('back'), 'Back']);
+        b.addEventListener('click', () => { go(at - 1); pagesWrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+        nav.appendChild(b);
+      } else nav.appendChild(el('span'));
+      if (at < l.pages.length - 1) {
+        const b = el('button', { class: 'btn btn-primary btn-sm' }, ['Next: ' + (l.pages[at + 1].h || 'carry on'), ME.icon('chevron')]);
+        b.addEventListener('click', () => { go(at + 1); pagesWrap.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+        nav.appendChild(b);
+      } else {
+        nav.appendChild(el('span', { class: 'note', text: 'That is the reading. The questions are below.' }));
+      }
+      drawDots();
+      ME.bindTips(pagesWrap);
+    }
+    go(0);
+    return holder;
+  }
+
+  function quizBlock(l, qs, offset, passed, onPass, title) {
+    const box = el('div', { class: 'quiz' });
+    const head = el('h3');
+    head.appendChild(ME.icon('check'));
+    head.appendChild(document.createTextNode(title));
+    const tally = el('span', { class: 'quiz-tally' });
+    head.appendChild(tally);
+    box.appendChild(head);
+
+    if (qs.length > 1) {
+      box.appendChild(el('p', { class: 'note quiz-intro' },
+        'Get one wrong and it will explain why before letting you try again.'));
+    }
+    function sync() {
+      const mine = qs.map((q, i) => offset + i).filter((i) => passed.has(i)).length;
+      tally.textContent = mine + ' / ' + qs.length;
+      tally.classList.toggle('all', mine === qs.length);
+    }
+    qs.forEach((q, i) => {
+      const qi = offset + i;
+      box.appendChild(ME.quiz.buildQuestion(q, i, qs.length, passed.has(qi), () => { onPass(qi); sync(); }));
+    });
+    sync();
+    return box;
+  }
+
+  /* -------------------------------------------------- unlimited practice */
+  function practicePanel(spec) {
+    const keys = Array.isArray(spec) ? spec : [spec];
+    const box = el('section', { class: 'ls-practice' });
+    box.appendChild(el('h3', { text: 'Practice more' }));
+    box.appendChild(el('p', { class: 'note',
+      text: 'Fresh problems, as many as you want, with new numbers and new compounds every time. Nothing is scored — this is for the repetition, which is the only thing that makes this stuff automatic.' }));
+
+    const chooser = el('div', { class: 'ls-practice-kinds' });
+    let active = keys[0];
+    if (keys.length > 1) {
+      keys.forEach((k) => {
+        const b = el('button', { class: 'btn btn-sm' + (k === active ? ' on' : ''), text: practiceName(k) });
+        b.addEventListener('click', () => {
+          active = k;
+          ME.$$('.btn', chooser).forEach((x) => x.classList.toggle('on', x.textContent === practiceName(k)));
+          fresh();
+        });
+        chooser.appendChild(b);
+      });
+      box.appendChild(chooser);
+    }
+
+    const slot = el('div', { class: 'ls-practice-slot' });
+    box.appendChild(slot);
+
+    const acts = el('div', { class: 'ls-practice-acts' });
+    const another = el('button', { class: 'btn btn-primary btn-sm', text: 'Another one' });
+    another.addEventListener('click', () => fresh());
+    acts.appendChild(another);
+    const showBtn = el('button', { class: 'btn btn-sm', text: 'Show me the working' });
+    acts.appendChild(showBtn);
+    box.appendChild(acts);
+
+    let current = null;
+    function fresh() {
+      current = ME.practice.generate(active);
+      ME.clear(slot);
+      if (!current) { slot.appendChild(el('p', { class: 'note', text: 'Could not make one — try again.' })); return; }
+      slot.appendChild(ME.quiz.buildQuestion(current, 0, 1, false, null));
+    }
+    showBtn.addEventListener('click', () => {
+      if (!current || !current.solution) return;
+      const existing = ME.$('.ls-solution', slot);
+      if (existing) { existing.parentNode.removeChild(existing); return; }
+      const sol = el('div', { class: 'ls-solution' });
+      sol.appendChild(el('h4', { text: 'Worked through' }));
+      const list = el('ol');
+      current.solution.forEach((s) => list.appendChild(el('li', { html: ME.formulaHTML(typeof s === 'string' ? s : s.text) })));
+      sol.appendChild(list);
+      slot.appendChild(sol);
+    });
+    fresh();
+    return box;
+  }
+
+  function practiceName(key) {
+    const g = ME.practice.generate(key, 1);
+    return (g && g.name) || key.replace(/-/g, ' ');
   }
 
   function scrollUp() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  function ensureBuilt(host) { if (!St.built) build(host); }
 
-  ME.learn = { ensureBuilt, LESSONS, resetProgress, setRemember, remembering };
+  ME.learn = {
+    ensureBuilt, LESSONS, resetProgress, setRemember, remembering,
+    showMap, showLesson,
+    get current() { return St.current; },
+  };
 })();

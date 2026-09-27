@@ -252,6 +252,9 @@
     }
     setView('learn');
     ME.learn.ensureBuilt(ME.$('#view-learn'));
+    /* #/learn is the course map; #/learn/<lesson id> opens that lesson. */
+    if (parts[1]) ME.learn.showLesson(decodeURIComponent(parts[1]));
+    else ME.learn.showMap();
   }
 
   function resolveMolecule(key) {
