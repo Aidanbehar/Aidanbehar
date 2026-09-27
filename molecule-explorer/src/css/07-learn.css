@@ -377,3 +377,58 @@
   background: var(--surface-2); padding: 8px 12px; border-radius: var(--r-sm);
   display: inline-block; font-weight: 600;
 }
+.ls-goto { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 18px 0; }
+.ls-goto .note { flex: 1; min-width: 200px; }
+
+/* --------------------------------------------------- lesson simulations */
+.sim {
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--surface); margin: 20px 0; overflow: hidden;
+}
+.sim-head {
+  padding: 11px 15px; border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.sim-title { font-weight: 650; font-size: .93rem; }
+.sim-hint { font-size: .8rem; color: var(--text-soft); margin-top: 2px; }
+.sim-body { padding: 14px 15px; }
+.sim canvas { display: block; width: 100%; height: auto; border-radius: var(--r-sm); }
+.sim-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.sim-control { display: flex; gap: 8px; align-items: center; flex: 1; min-width: 200px; }
+.sim-control label {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-faint); font-weight: 700; white-space: nowrap;
+}
+.sim-control input[type=range] { flex: 1; accent-color: var(--accent); }
+.sim-val { font-family: var(--font-mono); font-size: .88rem; font-weight: 700; min-width: 68px; text-align: right; }
+.sim-readout {
+  display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px;
+  font-size: .85rem;
+}
+.sim-readout b { font-family: var(--font-mono); }
+.sim-note { font-size: .86rem; color: var(--text-soft); line-height: 1.55; margin-top: 10px; max-width: 70ch; }
+.sim-buttons { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+
+.sim-trend {
+  display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px;
+  margin: 12px 0; font-size: .62rem;
+}
+.sim-trend-cell {
+  aspect-ratio: 1; border: 0; border-radius: 3px; cursor: pointer; padding: 0;
+  display: grid; place-items: center; font: inherit; font-weight: 700;
+  background: var(--surface-2); color: var(--text);
+}
+.sim-trend-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
+.sim-trend-cell.unknown { background: var(--surface-2); color: var(--text-faint); opacity: .45; }
+
+.sim-ph { display: grid; gap: 2px; margin: 4px 0 12px; }
+.sim-ph-row {
+  display: grid; grid-template-columns: 38px 1fr 150px; gap: 10px; align-items: center;
+  cursor: pointer; font: inherit; color: inherit; background: transparent;
+  border: 1px solid transparent; border-radius: var(--r-sm); padding: 2px 6px; text-align: left;
+}
+.sim-ph-row:hover { background: var(--surface-2); border-color: var(--border); }
+.sim-ph-row .n { font-family: var(--font-mono); font-size: .8rem; font-weight: 700; text-align: right; }
+.sim-ph-row .bar { display: block; height: 11px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.sim-ph-row .bar i { display: block; height: 100%; border-radius: 99px; }
+.sim-ph-row .l { font-size: .84rem; }
