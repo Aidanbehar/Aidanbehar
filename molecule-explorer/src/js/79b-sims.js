@@ -1559,10 +1559,128 @@
       'Where the two temperatures meet, and why it is never halfway.', body);
   }
 
+  /* ======================================================= organic reactions */
+  /* The four reaction types a first course needs, drawn as real structures
+   * rather than described. Each one carries the equation, which is balanced by
+   * ME.balance from the formulas the structures themselves report \u2014 so a
+   * typo in a SMILES string shows up as an unbalanced equation rather than as
+   * a plausible-looking lie. */
+  const ORGANIC_REACTIONS = [
+    {
+      key: 'addition', name: 'Addition',
+      left: [{ s: 'C=C', n: 'ethene' }, { s: 'Br', n: 'HBr' }],
+      right: [{ s: 'CCBr', n: 'bromoethane' }],
+      what: 'A double bond opens and something adds across it. Two molecules go in and one comes out, so nothing is left over \u2014 which is why addition is the only one of these four with no by-product.',
+      why: 'The double bond is the reactive part. Its second pair of electrons is more exposed than a single bond\u2019s, so anything looking for electrons attacks there. Alkenes are reactive and alkanes are not, and this is the whole reason.',
+    },
+    {
+      key: 'substitution', name: 'Substitution',
+      left: [{ s: 'CC', n: 'ethane' }, { s: 'ClCl', n: 'Cl2' }],
+      right: [{ s: 'CCCl', n: 'chloroethane' }, { s: 'Cl', n: 'HCl' }],
+      what: 'One atom or group is swapped for another. Something always leaves, so there is always a by-product \u2014 here the displaced hydrogen departs as HCl.',
+      why: 'An alkane has no double bond to attack, so the only way in is to knock something off. That takes real energy \u2014 ultraviolet light, in this case \u2014 which is why alkanes are unreactive enough to be useful as fuels and solvents.',
+    },
+    {
+      key: 'elimination', name: 'Elimination',
+      left: [{ s: 'CCO', n: 'ethanol' }],
+      right: [{ s: 'C=C', n: 'ethene' }, { s: 'O', n: 'H2O' }],
+      what: 'Two groups leave from neighbouring carbons and a double bond forms between them. One molecule in, two out \u2014 the reverse shape of addition.',
+      why: 'And it really is the reverse of addition, which means the two compete. Which one wins depends on the conditions: concentrated acid and heat drive off water and give the alkene, while dilute conditions push the other way.',
+    },
+    {
+      key: 'combustion', name: 'Combustion',
+      left: [{ s: 'C', n: 'methane' }, { s: 'O=O', n: 'O2' }],
+      right: [{ s: 'O=C=O', n: 'CO2' }, { s: 'O', n: 'H2O' }],
+      what: 'Everything burns to carbon dioxide and water. It is the least selective reaction in organic chemistry and by far the most used.',
+      why: 'The products have much stronger bonds than the reactants \u2014 C=O and O\u2013H against C\u2013H and O=O \u2014 so a great deal of energy comes out. Which is Unit 13\u2019s point about exothermic reactions, in the case that matters economically.',
+    },
+  ];
+
+  function organicReaction(opts) {
+    opts = opts || {};
+    let current = ORGANIC_REACTIONS.filter((r) => r.key === (opts.start || 'addition'))[0] || ORGANIC_REACTIONS[0];
+
+    const body = el('div');
+    const chips = el('div', { class: 'sim-buttons' });
+    body.appendChild(chips);
+    ORGANIC_REACTIONS.forEach((r) => {
+      const btn = el('button', { class: 'btn btn-sm' + (r === current ? ' on' : ''), text: r.name });
+      btn.addEventListener('click', () => {
+        current = r;
+        ME.$$('.btn', chips).forEach((x) => x.classList.toggle('on', x.textContent === r.name));
+        draw();
+      });
+      chips.appendChild(btn);
+    });
+
+    const scene = el('div', { class: 'sim-reaction' });
+    body.appendChild(scene);
+    const equation = el('div', { class: 'sim-eq' });
+    body.appendChild(equation);
+    const note = el('div', { class: 'sim-note' });
+    body.appendChild(note);
+
+    /* One drawn molecule with its name underneath. */
+    function species(spec) {
+      const cell = el('div', { class: 'sim-rx-species' });
+      try {
+        const mol = ME.chem.fromSmiles(spec.s);
+        ME.chem.ensureCoordinates(mol);
+        cell.appendChild(ME.render2d.render(mol, {
+          width: 118, height: 92, maxScale: 22, interactive: false, xray: 1,
+        }));
+      } catch (e) {
+        cell.appendChild(el('div', { class: 'note', text: spec.n }));
+      }
+      cell.appendChild(el('div', { class: 'lbl', html: ME.chemHTML(spec.n) }));
+      return cell;
+    }
+
+    /* The formula each drawn structure actually reports, so the equation is
+     * built from the pictures rather than typed alongside them. */
+    function formulaOf(spec) {
+      try { return ME.chem.analyse(ME.chem.fromSmiles(spec.s)).formula; }
+      catch (e) { return null; }
+    }
+
+    function draw() {
+      ME.clear(scene); ME.clear(equation);
+      current.left.forEach((spec, i) => {
+        if (i) scene.appendChild(el('div', { class: 'sim-rx-op', text: '+' }));
+        scene.appendChild(species(spec));
+      });
+      scene.appendChild(el('div', { class: 'sim-rx-op', html: '&#8594;' }));
+      current.right.forEach((spec, i) => {
+        if (i) scene.appendChild(el('div', { class: 'sim-rx-op', text: '+' }));
+        scene.appendChild(species(spec));
+      });
+
+      const lf = current.left.map(formulaOf), rf = current.right.map(formulaOf);
+      if (lf.indexOf(null) >= 0 || rf.indexOf(null) >= 0) {
+        equation.textContent = 'One of these structures could not be read.';
+      } else {
+        const text = lf.join(' + ') + ' -> ' + rf.join(' + ');
+        const bal = ME.balance.balance(text);
+        equation.innerHTML = ME.chemHTML(bal.ok ? bal.text : text);
+        if (!bal.ok) {
+          equation.appendChild(el('div', { class: 'note', text: 'This equation does not balance: ' + bal.error }));
+        }
+      }
+
+      ME.clear(note);
+      note.appendChild(el('p', { html: ME.chemHTML(current.what) }));
+      note.appendChild(el('p', { html: ME.chemHTML(current.why) }));
+    }
+
+    draw();
+    return shell(opts.title || 'The four reaction types, drawn',
+      'The equation underneath is balanced from the formulas the drawings themselves report.', body);
+  }
+
   ME.sims = {
     statesOfMatter, heatingCurve, buildAtom, trendMap, phScale, titration, lewis,
     energyDiagram, equilibrium, solutionMixer, bondRotation, stoichMap, gasLaw,
-    calorimeter,
+    calorimeter, organicReaction, ORGANIC_REACTIONS,
     shell, slider, whenVisible, css,
   };
 })();

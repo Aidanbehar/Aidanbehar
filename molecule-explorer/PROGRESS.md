@@ -204,7 +204,13 @@ heading — Unit 15 would have had 21 lessons — so organic is split across
 three units: 15 for reading structures (unchanged), 16 for naming and
 isomers, and 17 for reactions and big molecules.
 
-69 lessons, 172 pages, 552 questions, about 15.5 hours of reading.
+- **Unit 17 — Organic reactions and big molecules** (3 lessons: what organic
+  molecules do, polymers, and the four biomolecule families; embeds the new
+  reaction-type viewer)
+
+**All seventeen units are written.** 72 lessons, 181 pages, 579 questions,
+about 16 hours of reading, 19 simulations, 21 practice generators, 18
+calculators, 11 reference tables and a 49-word glossary.
 
 **`src/js/20-calc-lewis.js` — Lewis structures and VSEPR**
 - Runs the counting method and returns electron totals, bond orders, lone
@@ -273,6 +279,10 @@ isomers, and 17 for reactions and big molecules.
   temperatures meet, and that it is never halfway. `ME.solution.mixTemperatures`
   solves conservation of energy for the final temperature rather than
   iterating, so it is exact, and the test asserts the two q values cancel.
+- The organic reaction viewer: the four reaction types drawn as real
+  structures, with the equation underneath **balanced from the formulas the
+  drawings themselves report** — so a typo in a SMILES string shows up as an
+  unbalanced equation rather than as a plausible-looking lie.
 - One gas law at a time: two variables pinned, one dragged, the fourth forced,
   with the relationship plotted so it is visible whether the line reaches the
   origin — which is the whole difference between Boyle and Charles. Every

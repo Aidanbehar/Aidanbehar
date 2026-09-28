@@ -1051,6 +1051,30 @@ describe('generated practice problems', () => {
     assert.match(got.formatted, /\u2212/);
     assert.equal(got.missing, null);
   });
+
+  /* The organic reaction viewer builds its equation from the formulas its own
+   * drawings report, so a typo in a SMILES string shows up as an unbalanced
+   * equation rather than as a plausible-looking lie. This checks all four. */
+  test('every organic reaction the sim draws actually balances', async () => {
+    const got = await run(() => window.ME.sims.ORGANIC_REACTIONS.map((r) => {
+      const f = (spec) => {
+        try { return window.ME.chem.analyse(window.ME.chem.fromSmiles(spec.s)).formula; }
+        catch (e) { return 'UNREADABLE(' + spec.s + ')'; }
+      };
+      const text = r.left.map(f).join(' + ') + ' -> ' + r.right.map(f).join(' + ');
+      const bal = window.ME.balance.balance(text);
+      return [r.key, bal.ok ? 'ok' : 'FAILED: ' + bal.error, text];
+    }));
+    const bad = got.filter((g) => g[1] !== 'ok');
+    assert.deepEqual(bad, [], JSON.stringify(bad, null, 1));
+    /* And the formulas are what the lessons claim they are. */
+    const byKey = {};
+    got.forEach((g) => { byKey[g[0]] = g[2]; });
+    assert.equal(byKey.addition, 'C2H4 + HBr -> C2H5Br');
+    assert.equal(byKey.substitution, 'C2H6 + Cl2 -> C2H5Cl + HCl');
+    assert.equal(byKey.elimination, 'C2H6O -> C2H4 + H2O');
+    assert.equal(byKey.combustion, 'CH4 + O2 -> CO2 + H2O');
+  });
 });
 
 /* ------------------------------------------------------- searching the app */

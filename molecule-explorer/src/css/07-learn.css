@@ -502,3 +502,17 @@
 @media (max-width: 640px) {
   .sim-controls.grid2 { grid-template-columns: 1fr; }
 }
+
+/* the organic reaction viewer */
+.sim-reaction {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 4px; padding: 10px 0 4px;
+}
+.sim-rx-species { text-align: center; }
+.sim-rx-species .lbl {
+  font-size: .8rem; color: var(--text-soft); margin-top: -6px;
+}
+.sim-rx-op {
+  font-size: 1.15rem; color: var(--text-faint); padding: 0 6px;
+  align-self: center; margin-bottom: 14px;
+}
