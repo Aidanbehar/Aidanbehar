@@ -189,10 +189,14 @@ network switched off.
 - **Unit 13 — Energy in reactions** (3 lessons: heat and q = mcΔT, enthalpy
   with bond energies and Hess's law, and entropy with ΔG; embeds the new
   calorimetry simulation and the energy diagram)
+- **Unit 14 — Rates and equilibrium** (3 lessons: what sets a reaction's speed,
+  equilibrium as two matched rates, and Le Chatelier; embeds the energy-diagram
+  and equilibrium simulations)
 - **Unit 15 — Organic chemistry: reading structures** (the original 12 lessons,
   kept working unchanged)
 
-61 lessons, 148 pages, 480 questions, about 13.5 hours of reading.
+**All fifteen units now exist.** 64 lessons, 157 pages, 507 questions, about
+14 hours of reading.
 
 **`src/js/20-calc-lewis.js` — Lewis structures and VSEPR**
 - Runs the counting method and returns electron totals, bond orders, lone
