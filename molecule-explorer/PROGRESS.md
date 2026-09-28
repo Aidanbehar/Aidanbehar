@@ -223,6 +223,29 @@ network switched off.
   generated name goes through it; both spellings are still accepted as input,
   and a test checks both halves.
 
+**`src/js/81-siteindex.js` — the search bar finds the course too**
+- The search box was built for molecules, which left 64 lessons, 18
+  calculators, 10 reference tables and a 49-word glossary reachable only by
+  knowing which tab they lived in. Typing "limiting reactant" or
+  "Le Chatelier" returned nothing at all.
+- A lesson's searchable text is its title, an explicit `keywords` field, its
+  recap, the mistakes it warns about, and **the text of every question it
+  asks** — which matters more than it looks, since a named principle often
+  appears only in the question asking you to state it.
+- Molecules still come first everywhere, because that is what most queries
+  are; the app results follow, and a concept query has nothing above them but
+  a one-line "no match".
+- A glossary hit links to that one word, highlighted, via a new third part in
+  the reference route.
+- Ranking was wrong twice while building it: "hydrogen bonding" found the
+  polyatomic-ions lesson, which mentions hydrogen carbonate and bonding in
+  unrelated sentences (fixed by scoring keyword phrases above scattered word
+  matches), and "pH" matched every lesson containing "physical" or "phase"
+  (fixed by requiring a whole-word match for queries of one or two letters).
+- 17 real queries are pinned in the tests, along with the assertion that every
+  lesson, tool, table and glossary word is in the index and that every
+  indexed link resolves.
+
 **Simulations added for these units**
 - The Lewis-structure builder: type any formula, including impossible ones,
   and it refuses with a reason rather than drawing something wrong.

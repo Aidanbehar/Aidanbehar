@@ -14,6 +14,7 @@
 
     {
       id: 'what-matter-is',
+      keywords: 'matter mass volume atoms particles',
       title: 'What matter is, and the particle idea',
       mins: 14,
       builds_on: ['what-chemistry-is'],
@@ -135,6 +136,7 @@
 
     {
       id: 'pure-and-mixtures',
+      keywords: 'pure substance mixture element compound homogeneous heterogeneous separation',
       title: 'Pure substances and mixtures',
       mins: 15,
       builds_on: ['what-matter-is'],
@@ -279,6 +281,7 @@
 
     {
       id: 'physical-chemical',
+      keywords: 'physical change chemical change reaction evidence reversible',
       title: 'Physical and chemical change',
       mins: 15,
       builds_on: ['pure-and-mixtures'],
@@ -439,6 +442,7 @@
 
     {
       id: 'states',
+      keywords: 'solid liquid gas states of matter plasma particle arrangement',
       title: 'Solid, liquid, gas — and why',
       mins: 16,
       builds_on: ['what-matter-is'],
@@ -575,6 +579,7 @@
 
     {
       id: 'phase-changes',
+      keywords: 'melting boiling freezing condensation sublimation latent heat heating curve',
       title: 'Phase changes, and why the temperature stops',
       mins: 18,
       builds_on: ['states'],
@@ -721,6 +726,7 @@
 
     {
       id: 'density',
+      keywords: 'density mass per volume floating sinking g per cm3',
       title: 'Density, and why ice floats',
       mins: 14,
       builds_on: ['physical-chemical', 'states'],

@@ -15,6 +15,7 @@
     {
       id: 'the-mole',
       title: 'The mole: counting things you cannot see',
+      keywords: 'mole avogadro number molar mass grams particles',
       mins: 16,
       builds_on: ['balancing', 'atomic-number'],
       hook() {
@@ -160,6 +161,7 @@
     {
       id: 'molar-mass',
       title: 'Molar mass, and formulas from data',
+      keywords: 'molar mass percent composition empirical formula molecular formula combustion analysis',
       mins: 17,
       builds_on: ['the-mole'],
       hook() {
@@ -298,6 +300,7 @@
     {
       id: 'stoichiometry',
       title: 'Stoichiometry: four stations, every time',
+      keywords: 'stoichiometry mole ratio limiting reactant excess percent yield theoretical yield',
       mins: 18,
       builds_on: ['molar-mass', 'balancing'],
       hook() {

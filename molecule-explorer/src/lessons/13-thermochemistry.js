@@ -14,6 +14,7 @@
     {
       id: 'heat-and-energy',
       title: 'Heat, temperature, and q = mcΔT',
+      keywords: 'specific heat capacity calorimetry calorimeter joule calorie q mcdeltat',
       mins: 16,
       builds_on: ['phase-changes', 'kinetic-theory'],
       hook() {
@@ -183,6 +184,7 @@
     {
       id: 'enthalpy',
       title: 'Enthalpy, bond energies and Hess’s law',
+      keywords: 'enthalpy delta H exothermic endothermic bond energy hess law activation energy energy diagram',
       mins: 17,
       builds_on: ['heat-and-energy', 'why-bond'],
       hook() {
@@ -355,6 +357,7 @@
     {
       id: 'spontaneity',
       title: 'Entropy, and why some things happen anyway',
+      keywords: 'entropy gibbs free energy delta G spontaneous second law thermodynamics',
       mins: 16,
       builds_on: ['enthalpy', 'dissolving'],
       hook() {

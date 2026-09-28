@@ -13,6 +13,7 @@
 
     {
       id: 'what-is-a-reaction',
+      keywords: 'chemical reaction conservation of mass lavoisier reactants products state symbols',
       title: 'What a reaction is, and conservation of mass',
       mins: 15,
       builds_on: ['why-bond', 'physical-chemical'],
@@ -176,6 +177,7 @@
 
     {
       id: 'balancing',
+      keywords: 'balancing equations coefficients subscripts algebra fractional coefficients',
       title: 'Balancing equations',
       mins: 18,
       builds_on: ['what-is-a-reaction'],
@@ -321,6 +323,7 @@
 
     {
       id: 'reaction-types',
+      keywords: 'synthesis decomposition single replacement double replacement combustion precipitate activity series solubility redox',
       title: 'The five reaction types',
       mins: 17,
       builds_on: ['balancing'],

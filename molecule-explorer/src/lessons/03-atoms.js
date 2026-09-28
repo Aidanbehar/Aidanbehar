@@ -14,6 +14,7 @@
 
     {
       id: 'atom-story',
+      keywords: 'dalton thomson rutherford bohr gold foil nucleus discovery atomic model',
       title: 'How we found out what is inside',
       mins: 15,
       builds_on: ['how-we-know'],
@@ -145,6 +146,7 @@
 
     {
       id: 'atomic-number',
+      keywords: 'atomic number mass number protons neutrons electrons nuclear notation',
       title: 'Atomic number, mass number, and reading an element’s box',
       mins: 16,
       builds_on: ['atom-story'],
@@ -271,6 +273,7 @@
 
     {
       id: 'isotopes',
+      keywords: 'isotope relative atomic mass weighted average carbon-14 radioactive tracer',
       title: 'Isotopes, and why chlorine weighs 35.45',
       mins: 16,
       builds_on: ['atomic-number'],
@@ -417,6 +420,7 @@
 
     {
       id: 'ions',
+      keywords: 'ion cation anion charge losing gaining electrons',
       title: 'Ions: why atoms gain and lose electrons',
       mins: 16,
       builds_on: ['atomic-number'],

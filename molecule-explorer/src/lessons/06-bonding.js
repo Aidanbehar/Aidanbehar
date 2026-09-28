@@ -174,6 +174,7 @@
     {
       id: 'covalent',
       title: 'Covalent bonding and Lewis structures',
+      keywords: 'octet rule lone pair resonance expanded octet radical double triple bond electron dot',
       mins: 20,
       builds_on: ['why-bond'],
       hook() {
@@ -370,6 +371,7 @@
     {
       id: 'shapes',
       title: 'Molecular shapes: VSEPR',
+      keywords: 'bond angle tetrahedral trigonal planar bent linear octahedral lone pair repulsion geometry',
       mins: 17,
       builds_on: ['covalent'],
       hook() {
@@ -716,6 +718,7 @@
     {
       id: 'intermolecular',
       title: 'Forces between molecules, and why water is strange',
+      keywords: 'hydrogen bonding dispersion london van der waals dipole boiling point surface tension ice floats',
       mins: 18,
       builds_on: ['polarity'],
       hook() {

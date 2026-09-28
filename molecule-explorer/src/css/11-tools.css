@@ -152,3 +152,19 @@
 .rf-gloss { display: grid; gap: 12px; }
 .rf-gloss-item dt { font-weight: 650; font-size: .95rem; margin-bottom: 2px; }
 .rf-gloss-item dd { margin: 0; font-size: .9rem; color: var(--text-soft); line-height: 1.6; max-width: 76ch; }
+
+/* A glossary entry linked to directly from the search bar. */
+.rf-gloss-item.on {
+  background: var(--accent-soft); border-radius: var(--r-sm);
+  box-shadow: inset 3px 0 0 var(--accent); padding-left: 12px;
+}
+
+/* A search result that is a lesson, calculator or glossary word rather than
+ * a molecule: no thumbnail, and a label saying what kind of thing it is. */
+.res-site { align-items: flex-start; }
+.res-kind {
+  flex: none; width: 78px; padding-top: 2px;
+  font-size: .7rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--accent-text);
+}
+.res-site .sub { white-space: normal; }

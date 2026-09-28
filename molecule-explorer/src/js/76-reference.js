@@ -126,11 +126,13 @@
     show('ions');
   }
 
-  function show(key) {
+  /* `focus` lets a link point at one entry rather than a whole section, which
+   * is what the search bar needs for a glossary word. */
+  function show(key, focus) {
     const sec = SECTIONS.filter((s) => s.key === key)[0] || SECTIONS[0];
     ME.$$('.rf-navbtn', St.host).forEach((b) => b.classList.toggle('on', b.dataset.sec === sec.key));
     ME.clear(St.panel);
-    St.panel.appendChild(sec.render());
+    St.panel.appendChild(sec.render(focus));
     ME.bindTips(St.panel);
   }
 
@@ -340,15 +342,15 @@
     return card('Specific heats', ME.ref.SPECIFIC_HEAT.source, body);
   }
 
-  function glossary() {
+  function glossary(focus) {
     const body = el('div');
     const search = el('input', { class: 'rf-search', type: 'search', placeholder: 'Find a word…',
-      'aria-label': 'Search the glossary', autocomplete: 'off' });
+      'aria-label': 'Search the glossary', autocomplete: 'off', value: focus || '' });
     body.appendChild(search);
     const list = el('div', { class: 'rf-gloss' });
     body.appendChild(list);
 
-    function draw(q) {
+    function draw(q, highlight) {
       ME.clear(list);
       const n = String(q || '').toLowerCase().trim();
       const hits = GLOSSARY.filter(([w, d]) => !n || w.toLowerCase().indexOf(n) >= 0 || d.toLowerCase().indexOf(n) >= 0);
@@ -357,13 +359,19 @@
         return;
       }
       hits.forEach(([word, def]) => {
-        list.appendChild(el('div', { class: 'rf-gloss-item' }, [
+        const item = el('div', { class: 'rf-gloss-item' }, [
           el('dt', { text: word }), el('dd', { text: def }),
-        ]));
+        ]);
+        /* Arriving from the search bar, the word asked for is marked so it is
+         * findable even when the filter left several entries showing. */
+        if (highlight && word.toLowerCase() === String(highlight).toLowerCase()) {
+          item.classList.add('on');
+        }
+        list.appendChild(item);
       });
     }
     search.addEventListener('input', ME.debounce(() => draw(search.value), 120));
-    draw('');
+    draw(focus || '', focus);
     return card('Glossary', 'Definitions written the way the lessons write them: what it is, and why it matters.', body);
   }
 

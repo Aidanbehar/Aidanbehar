@@ -1018,6 +1018,95 @@ describe('generated practice problems', () => {
   });
 });
 
+/* ------------------------------------------------------- searching the app */
+describe('the search bar finds more than molecules', () => {
+  /* The search box was built for molecules, which left the course, the
+   * calculators and the reference tables reachable only by knowing which tab
+   * they lived in. These are the queries a reader would actually type. */
+  const EXPECTED = [
+    ['limiting reactant', 'Limiting reactant'],
+    ['molar mass', 'Molar mass'],
+    ['le chatelier', 'Pushing an equilibrium about'],
+    ['octet', 'Covalent bonding and Lewis structures'],
+    ['vsepr', 'Molecular shapes: VSEPR'],
+    ['hydrogen bonding', 'Forces between molecules, and why water is strange'],
+    ['electron configuration', 'Electron configurations, and the filling order'],
+    ['sublimation', 'Phase changes, and why the temperature stops'],
+    ['gold foil', 'How we found out what is inside'],
+    ['criss cross', 'Naming ionic compounds'],
+    ['activity series', 'Activity series'],
+    ['solubility rules', 'Solubility rules'],
+    ['significant figures', 'Significant figures, and not claiming what you do not know'],
+    ['freezing point', 'Why salt melts ice'],
+    ['ideal gas', 'PV = nRT, and gases in reactions'],
+    ['entropy', 'entropy'],
+    ['ph', 'pH'],
+  ];
+
+  test('every lesson, tool, table and glossary word is in the index', async () => {
+    const got = await run(() => {
+      const idx = window.ME.siteIndex.all();
+      const kinds = {};
+      idx.forEach((e) => { kinds[e.kind] = (kinds[e.kind] || 0) + 1; });
+      return {
+        total: idx.length, kinds: kinds,
+        lessons: window.ME.course.allLessons().length,
+        tools: window.ME.tools.TOOLS.length,
+        sections: window.ME.reference.SECTIONS.length,
+        glossary: window.ME.reference.GLOSSARY.length,
+        units: window.ME.course.units.length,
+      };
+    });
+    /* Nothing may be missing: every lesson, tool, section and word is indexed. */
+    assert.equal(got.kinds.lesson, got.lessons + 1, 'lessons indexed');   /* +1 for the course map */
+    assert.equal(got.kinds.unit, got.units);
+    assert.equal(got.kinds.reference, got.sections);
+    assert.equal(got.kinds.glossary, got.glossary);
+    assert.ok(got.kinds.tool >= got.tools, 'tools indexed: ' + got.kinds.tool + ' vs ' + got.tools);
+  });
+
+  /* The top three, rather than the first place. Several of these queries have
+   * two good answers — "molar mass" could reasonably mean the lesson or the
+   * calculator — and pinning an order between them would be testing a
+   * preference rather than the feature. */
+  test('the queries a reader would type land on the right thing', async () => {
+    const bad = await run((cs) => cs.map((c) => {
+      const hits = window.ME.siteIndex.search(c[0], 3).map((e) => e.title);
+      return hits.indexOf(c[1]) >= 0 ? null : [c[0], 'wanted ' + c[1] + ', got ' + JSON.stringify(hits)];
+    }).filter(Boolean), EXPECTED);
+    assert.deepEqual(bad, [], JSON.stringify(bad, null, 1));
+  });
+
+  test('every indexed link actually goes somewhere', async () => {
+    const bad = await run(() => {
+      const out = [];
+      const views = ['learn', 'draw', 'elements', 'balancer', 'gas', 'tools', 'reference', 'gallery', 'search'];
+      window.ME.siteIndex.all().forEach((e) => {
+        const parts = e.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+        if (!parts.length || views.indexOf(parts[0]) < 0) { out.push([e.title, e.hash]); return; }
+        if (parts[0] === 'learn' && parts[1] && !window.ME.course.lesson(parts[1])) out.push([e.title, e.hash, 'no such lesson']);
+        if (parts[0] === 'tools' && parts[1] && !window.ME.tools.TOOLS.some((t) => t.key === parts[1])) out.push([e.title, e.hash, 'no such tool']);
+        if (parts[0] === 'reference' && parts[1] && !window.ME.reference.SECTIONS.some((x) => x.key === parts[1])) out.push([e.title, e.hash, 'no such section']);
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad.slice(0, 6)));
+  });
+
+  test('nonsense finds nothing rather than everything', async () => {
+    const got = await run(() => [
+      window.ME.siteIndex.search('qzxwv', 5).length,
+      window.ME.siteIndex.search('', 5).length,
+      /* Two words that both occur, in different entries, should not match
+       * something that contains neither together. */
+      window.ME.siteIndex.search('entropy titration', 5).length,
+    ]);
+    assert.equal(got[0], 0);
+    assert.equal(got[1], 0);
+    assert.equal(got[2], 0);
+  });
+});
+
 /* ------------------------------------------------- colligative properties */
 describe('freezing and boiling point shifts', () => {
   /* The i factor is the whole content of the topic, and it is read off the

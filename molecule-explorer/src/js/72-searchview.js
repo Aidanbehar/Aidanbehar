@@ -7,7 +7,7 @@
   const ME = window.ME;
   const el = ME.el;
 
-  let host = null, queryNode = null, offlineNode = null, onlineNode = null;
+  let host = null, queryNode = null, siteNode = null, offlineNode = null, onlineNode = null;
   let lastQuery = '';
   let onlineToken = 0;
 
@@ -16,21 +16,27 @@
     host = el('div', { class: 'wrap' });
     queryNode = el('div');
     offlineNode = el('div');
+    /* Molecules first, because that is what the box is for and what most
+     * queries are. Lessons, calculators and glossary words follow — and
+     * when a query is a concept rather than a substance there is nothing
+     * above them but a one-line "no match", so they are not buried. */
+    siteNode = el('div');
     onlineNode = el('div');
     host.appendChild(queryNode);
     host.appendChild(offlineNode);
+    host.appendChild(siteNode);
     host.appendChild(onlineNode);
     h.appendChild(host);
   }
 
   function show(query) {
     lastQuery = query;
-    ME.clear(queryNode); ME.clear(offlineNode); ME.clear(onlineNode);
+    ME.clear(queryNode); ME.clear(siteNode); ME.clear(offlineNode); ME.clear(onlineNode);
 
     if (!query.trim()) {
       queryNode.appendChild(el('div', { class: 'empty' }, [
-        el('h3', { text: 'Search for a molecule' }),
-        el('p', { text: 'By name ("aspirin"), by what you call it ("table salt"), by formula ("C8H10N4O2"), or by SMILES ("CCO"). Spelling does not have to be perfect.' }),
+        el('h3', { text: 'Search this page' }),
+        el('p', { text: 'A molecule, by name ("aspirin"), by what you call it ("table salt"), by formula ("C8H10N4O2") or by SMILES ("CCO") — spelling does not have to be perfect. Or a lesson, a calculator or a word: try "limiting reactant", "molar mass" or "entropy".' }),
       ]));
       return;
     }
@@ -57,7 +63,29 @@
       offlineNode.appendChild(list);
     }
 
+    buildSiteSection(query);
     buildOnlineSection(query);
+  }
+
+  /* ------------------------------------------------- lessons, tools, words */
+  function buildSiteSection(query) {
+    const hits = ME.siteIndex.search(query, 8);
+    if (!hits.length) return;
+    siteNode.appendChild(el('div', { class: 'section-head' }, 'In this app'));
+    const list = el('div', { class: 'res-list' });
+    hits.forEach((e) => list.appendChild(siteRow(e)));
+    siteNode.appendChild(list);
+  }
+
+  function siteRow(entry) {
+    const row = el('button', { class: 'res res-site' });
+    row.appendChild(el('div', { class: 'res-kind', text: ME.siteIndex.label(entry.kind) }));
+    const meta = el('div', { class: 'meta' });
+    meta.appendChild(el('div', { class: 'nm', text: entry.title }));
+    if (entry.sub) meta.appendChild(el('div', { class: 'sub', text: entry.sub }));
+    row.appendChild(meta);
+    row.addEventListener('click', () => ME.router.go(entry.hash));
+    return row;
   }
 
   function resultRow(rec, why) {
@@ -158,7 +186,8 @@
   /* -------------------------------------------------- suggestion dropdown */
   function buildSuggestions(container, query, onPick) {
     ME.clear(container);
-    const res = ME.search.search(query, 8);
+    const site = ME.siteIndex.search(query, 4);
+    const res = ME.search.search(query, site.length ? 5 : 8);
     if (res.results.length) {
       container.appendChild(el('div', { class: 'suggest-group', text: 'Built in' }));
       res.results.forEach((r) => {
@@ -171,10 +200,24 @@
         b.addEventListener('mousedown', (ev) => { ev.preventDefault(); onPick(r.m); });
         container.appendChild(b);
       });
-    } else {
+    } else if (!site.length) {
       container.appendChild(el('div', { class: 'suggest-empty' },
-        'Nothing built in matches that. Press Enter to search PubChem as well.'));
+        'Nothing in this page matches that. Press Enter to search PubChem as well.'));
     }
+
+    if (site.length) {
+      container.appendChild(el('div', { class: 'suggest-group', text: 'In this app' }));
+      site.forEach((e) => {
+        const b = el('button', { class: 'suggest-item' });
+        b.appendChild(el('div', {}, [
+          el('div', { class: 'nm', text: e.title }),
+          el('span', { class: 'why', text: ME.siteIndex.label(e.kind) }),
+        ]));
+        b.addEventListener('mousedown', (ev) => { ev.preventDefault(); onPick(null, e.hash); });
+        container.appendChild(b);
+      });
+    }
+
     const all = el('button', { class: 'suggest-item' });
     all.appendChild(el('div', { class: 'nm', text: 'See all results for “' + query + '”' }));
     all.addEventListener('mousedown', (ev) => { ev.preventDefault(); onPick(null); });

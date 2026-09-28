@@ -49,7 +49,8 @@
     const mag = ME.icon('search', 'mag');
     searchWrap.appendChild(mag);
     searchInput = el('input', {
-      type: 'search', placeholder: 'Search molecules…', 'aria-label': 'Search molecules',
+      type: 'search', placeholder: 'Search molecules, lessons, tools…',
+      'aria-label': 'Search molecules, lessons and tools',
       autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false',
     });
     searchWrap.appendChild(searchInput);
@@ -101,9 +102,12 @@
     const q = searchInput.value;
     searchWrap.classList.toggle('has-value', !!q);
     if (!q.trim()) { suggestBox.classList.remove('open'); return; }
-    ME.searchview.buildSuggestions(suggestBox, q, (rec) => {
+    /* A suggestion is either a molecule record, or a hash for somewhere in
+     * the app, or neither — which means "show me the full results page". */
+    ME.searchview.buildSuggestions(suggestBox, q, (rec, hash) => {
       suggestBox.classList.remove('open');
       if (rec) goMolecule(rec);
+      else if (hash) go(hash);
       else go('#/search?q=' + encodeURIComponent(q));
     });
     suggestBox.classList.add('open');
@@ -231,7 +235,10 @@
     if (parts[0] === 'reference') {
       setView('reference');
       ME.reference.ensureBuilt(ME.$('#view-reference'));
-      if (parts[1]) ME.reference.show(decodeURIComponent(parts[1]));
+      /* A third part names one entry within the section, which is how the
+       * search bar links to a single glossary word. */
+      if (parts[1]) ME.reference.show(decodeURIComponent(parts[1]),
+        parts[2] ? decodeURIComponent(parts.slice(2).join('/')) : null);
       return;
     }
     if (parts[0] === 'gallery') {

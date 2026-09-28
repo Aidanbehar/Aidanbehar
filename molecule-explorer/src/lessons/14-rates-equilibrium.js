@@ -14,6 +14,7 @@
     {
       id: 'reaction-rates',
       title: 'What sets the speed of a reaction',
+      keywords: 'rate kinetics collision theory catalyst enzyme activation energy surface area concentration',
       mins: 16,
       builds_on: ['enthalpy', 'kinetic-theory'],
       hook() {
@@ -185,6 +186,7 @@
     {
       id: 'equilibrium',
       title: 'Reactions that stop before they finish',
+      keywords: 'equilibrium dynamic equilibrium constant Kc reversible haber process ammonia',
       mins: 17,
       builds_on: ['reaction-rates', 'strength-titration'],
       hook() {
@@ -356,6 +358,7 @@
     {
       id: 'le-chatelier',
       title: 'Pushing an equilibrium about',
+      keywords: 'le chatelier principle shift haber process pressure temperature yield',
       mins: 16,
       builds_on: ['equilibrium'],
       hook() {

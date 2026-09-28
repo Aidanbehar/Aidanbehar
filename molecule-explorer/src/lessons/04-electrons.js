@@ -14,6 +14,7 @@
 
     {
       id: 'energy-levels',
+      keywords: 'energy level shell emission spectrum flame test quantised',
       title: 'Energy levels: why electrons cannot sit anywhere',
       mins: 16,
       builds_on: ['atom-story'],
@@ -151,6 +152,7 @@
 
     {
       id: 'orbitals',
+      keywords: 's p d f orbital shape probability cloud',
       title: 'Orbitals: the shapes electrons actually occupy',
       mins: 16,
       builds_on: ['energy-levels'],
@@ -287,6 +289,7 @@
 
     {
       id: 'configurations',
+      keywords: 'electron configuration filling order aufbau noble gas shorthand diagonal rule',
       title: 'Electron configurations, and the filling order',
       mins: 18,
       builds_on: ['orbitals'],
@@ -444,6 +447,7 @@
 
     {
       id: 'valence',
+      keywords: 'valence electrons dot diagram lewis symbol group number core electrons',
       title: 'Valence electrons, and dot diagrams',
       mins: 15,
       builds_on: ['configurations'],

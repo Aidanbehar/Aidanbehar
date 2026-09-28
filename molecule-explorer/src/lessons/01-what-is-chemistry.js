@@ -66,6 +66,7 @@
     /* ------------------------------------------------------------ 1.1 */
     {
       id: 'what-chemistry-is',
+      keywords: 'chemistry matter substance scale atoms',
       title: 'What chemistry is, and why it is everywhere',
       mins: 15,
       hook() {
@@ -197,6 +198,7 @@
     /* ------------------------------------------------------------ 1.2 */
     {
       id: 'how-we-know',
+      keywords: 'scientific method evidence experiment hypothesis theory',
       title: 'How anyone found any of this out',
       mins: 15,
       builds_on: ['what-chemistry-is'],
@@ -339,6 +341,7 @@
     /* ------------------------------------------------------------ 1.3 */
     {
       id: 'measuring',
+      keywords: 'units SI measurement precision accuracy uncertainty',
       title: 'Measuring things, and why the units are agreed',
       mins: 16,
       builds_on: ['what-chemistry-is'],
@@ -467,6 +470,7 @@
     /* ------------------------------------------------------------ 1.4 */
     {
       id: 'scientific-notation',
+      keywords: 'scientific notation standard form powers of ten exponent',
       title: 'Scientific notation, and not counting zeros',
       mins: 14,
       builds_on: ['measuring'],
@@ -594,6 +598,7 @@
     /* ------------------------------------------------------------ 1.5 */
     {
       id: 'sig-figs',
+      keywords: 'significant figures sig figs rounding precision',
       title: 'Significant figures, and not claiming what you do not know',
       mins: 18,
       builds_on: ['scientific-notation'],
@@ -763,6 +768,7 @@
     /* ------------------------------------------------------------ 1.6 */
     {
       id: 'dimensional-analysis',
+      keywords: 'dimensional analysis unit conversion conversion factor cancelling units',
       title: 'Dimensional analysis: the trick that runs all of chemistry',
       mins: 20,
       builds_on: ['measuring', 'sig-figs'],

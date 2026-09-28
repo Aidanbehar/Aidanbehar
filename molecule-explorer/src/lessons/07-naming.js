@@ -13,6 +13,7 @@
 
     {
       id: 'ionic-names',
+      keywords: 'naming ionic compounds roman numerals criss cross charge balance ide ending',
       title: 'Naming ionic compounds',
       mins: 16,
       builds_on: ['why-bond', 'valence'],
@@ -178,6 +179,7 @@
 
     {
       id: 'polyatomic',
+      keywords: 'polyatomic ions ate ite per hypo hydroxide nitrate sulfate carbonate ammonium brackets',
       title: 'Polyatomic ions',
       mins: 15,
       builds_on: ['ionic-names'],
@@ -350,6 +352,7 @@
 
     {
       id: 'covalent-names',
+      keywords: 'greek prefixes mono di tri covalent naming acids hydro ic ous',
       title: 'Naming covalent compounds, and acids',
       mins: 16,
       builds_on: ['polyatomic', 'covalent'],

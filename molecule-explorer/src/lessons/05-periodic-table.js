@@ -13,6 +13,7 @@
 
     {
       id: 'why-this-shape',
+      keywords: 'periodic table mendeleev period group block shape prediction',
       title: 'Why the table is shaped the way it is',
       mins: 15,
       builds_on: ['valence'],
@@ -161,6 +162,7 @@
 
     {
       id: 'families',
+      keywords: 'alkali metals alkaline earth halogens noble gases transition metals metalloids reactivity',
       title: 'The families: who does what',
       mins: 16,
       builds_on: ['why-this-shape'],
@@ -313,6 +315,7 @@
 
     {
       id: 'trends',
+      keywords: 'periodic trends atomic radius ionisation energy electronegativity ionic radius shielding',
       title: 'Periodic trends, and the two forces behind all of them',
       mins: 18,
       builds_on: ['families'],

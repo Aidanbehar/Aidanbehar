@@ -1775,6 +1775,22 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
 .rf-gloss-item dt { font-weight: 650; font-size: .95rem; margin-bottom: 2px; }
 .rf-gloss-item dd { margin: 0; font-size: .9rem; color: var(--text-soft); line-height: 1.6; max-width: 76ch; }
 
+/* A glossary entry linked to directly from the search bar. */
+.rf-gloss-item.on {
+  background: var(--accent-soft); border-radius: var(--r-sm);
+  box-shadow: inset 3px 0 0 var(--accent); padding-left: 12px;
+}
+
+/* A search result that is a lesson, calculator or glossary word rather than
+ * a molecule: no thumbnail, and a label saying what kind of thing it is. */
+.res-site { align-items: flex-start; }
+.res-kind {
+  flex: none; width: 78px; padding-top: 2px;
+  font-size: .7rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--accent-text);
+}
+.res-site .sub { white-space: normal; }
+
 </style>
 </head>
 <body>
@@ -9896,7 +9912,7 @@ window.ME = window.ME || {};
   const ME = window.ME;
   const el = ME.el;
 
-  let host = null, queryNode = null, offlineNode = null, onlineNode = null;
+  let host = null, queryNode = null, siteNode = null, offlineNode = null, onlineNode = null;
   let lastQuery = '';
   let onlineToken = 0;
 
@@ -9905,21 +9921,27 @@ window.ME = window.ME || {};
     host = el('div', { class: 'wrap' });
     queryNode = el('div');
     offlineNode = el('div');
+    /* Molecules first, because that is what the box is for and what most
+     * queries are. Lessons, calculators and glossary words follow — and
+     * when a query is a concept rather than a substance there is nothing
+     * above them but a one-line "no match", so they are not buried. */
+    siteNode = el('div');
     onlineNode = el('div');
     host.appendChild(queryNode);
     host.appendChild(offlineNode);
+    host.appendChild(siteNode);
     host.appendChild(onlineNode);
     h.appendChild(host);
   }
 
   function show(query) {
     lastQuery = query;
-    ME.clear(queryNode); ME.clear(offlineNode); ME.clear(onlineNode);
+    ME.clear(queryNode); ME.clear(siteNode); ME.clear(offlineNode); ME.clear(onlineNode);
 
     if (!query.trim()) {
       queryNode.appendChild(el('div', { class: 'empty' }, [
-        el('h3', { text: 'Search for a molecule' }),
-        el('p', { text: 'By name ("aspirin"), by what you call it ("table salt"), by formula ("C8H10N4O2"), or by SMILES ("CCO"). Spelling does not have to be perfect.' }),
+        el('h3', { text: 'Search this page' }),
+        el('p', { text: 'A molecule, by name ("aspirin"), by what you call it ("table salt"), by formula ("C8H10N4O2") or by SMILES ("CCO") — spelling does not have to be perfect. Or a lesson, a calculator or a word: try "limiting reactant", "molar mass" or "entropy".' }),
       ]));
       return;
     }
@@ -9946,7 +9968,29 @@ window.ME = window.ME || {};
       offlineNode.appendChild(list);
     }
 
+    buildSiteSection(query);
     buildOnlineSection(query);
+  }
+
+  /* ------------------------------------------------- lessons, tools, words */
+  function buildSiteSection(query) {
+    const hits = ME.siteIndex.search(query, 8);
+    if (!hits.length) return;
+    siteNode.appendChild(el('div', { class: 'section-head' }, 'In this app'));
+    const list = el('div', { class: 'res-list' });
+    hits.forEach((e) => list.appendChild(siteRow(e)));
+    siteNode.appendChild(list);
+  }
+
+  function siteRow(entry) {
+    const row = el('button', { class: 'res res-site' });
+    row.appendChild(el('div', { class: 'res-kind', text: ME.siteIndex.label(entry.kind) }));
+    const meta = el('div', { class: 'meta' });
+    meta.appendChild(el('div', { class: 'nm', text: entry.title }));
+    if (entry.sub) meta.appendChild(el('div', { class: 'sub', text: entry.sub }));
+    row.appendChild(meta);
+    row.addEventListener('click', () => ME.router.go(entry.hash));
+    return row;
   }
 
   function resultRow(rec, why) {
@@ -10047,7 +10091,8 @@ window.ME = window.ME || {};
   /* -------------------------------------------------- suggestion dropdown */
   function buildSuggestions(container, query, onPick) {
     ME.clear(container);
-    const res = ME.search.search(query, 8);
+    const site = ME.siteIndex.search(query, 4);
+    const res = ME.search.search(query, site.length ? 5 : 8);
     if (res.results.length) {
       container.appendChild(el('div', { class: 'suggest-group', text: 'Built in' }));
       res.results.forEach((r) => {
@@ -10060,10 +10105,24 @@ window.ME = window.ME || {};
         b.addEventListener('mousedown', (ev) => { ev.preventDefault(); onPick(r.m); });
         container.appendChild(b);
       });
-    } else {
+    } else if (!site.length) {
       container.appendChild(el('div', { class: 'suggest-empty' },
-        'Nothing built in matches that. Press Enter to search PubChem as well.'));
+        'Nothing in this page matches that. Press Enter to search PubChem as well.'));
     }
+
+    if (site.length) {
+      container.appendChild(el('div', { class: 'suggest-group', text: 'In this app' }));
+      site.forEach((e) => {
+        const b = el('button', { class: 'suggest-item' });
+        b.appendChild(el('div', {}, [
+          el('div', { class: 'nm', text: e.title }),
+          el('span', { class: 'why', text: ME.siteIndex.label(e.kind) }),
+        ]));
+        b.addEventListener('mousedown', (ev) => { ev.preventDefault(); onPick(null, e.hash); });
+        container.appendChild(b);
+      });
+    }
+
     const all = el('button', { class: 'suggest-item' });
     all.appendChild(el('div', { class: 'nm', text: 'See all results for “' + query + '”' }));
     all.addEventListener('mousedown', (ev) => { ev.preventDefault(); onPick(null); });
@@ -12267,11 +12326,13 @@ window.ME = window.ME || {};
     show('ions');
   }
 
-  function show(key) {
+  /* `focus` lets a link point at one entry rather than a whole section, which
+   * is what the search bar needs for a glossary word. */
+  function show(key, focus) {
     const sec = SECTIONS.filter((s) => s.key === key)[0] || SECTIONS[0];
     ME.$$('.rf-navbtn', St.host).forEach((b) => b.classList.toggle('on', b.dataset.sec === sec.key));
     ME.clear(St.panel);
-    St.panel.appendChild(sec.render());
+    St.panel.appendChild(sec.render(focus));
     ME.bindTips(St.panel);
   }
 
@@ -12481,15 +12542,15 @@ window.ME = window.ME || {};
     return card('Specific heats', ME.ref.SPECIFIC_HEAT.source, body);
   }
 
-  function glossary() {
+  function glossary(focus) {
     const body = el('div');
     const search = el('input', { class: 'rf-search', type: 'search', placeholder: 'Find a word…',
-      'aria-label': 'Search the glossary', autocomplete: 'off' });
+      'aria-label': 'Search the glossary', autocomplete: 'off', value: focus || '' });
     body.appendChild(search);
     const list = el('div', { class: 'rf-gloss' });
     body.appendChild(list);
 
-    function draw(q) {
+    function draw(q, highlight) {
       ME.clear(list);
       const n = String(q || '').toLowerCase().trim();
       const hits = GLOSSARY.filter(([w, d]) => !n || w.toLowerCase().indexOf(n) >= 0 || d.toLowerCase().indexOf(n) >= 0);
@@ -12498,13 +12559,19 @@ window.ME = window.ME || {};
         return;
       }
       hits.forEach(([word, def]) => {
-        list.appendChild(el('div', { class: 'rf-gloss-item' }, [
+        const item = el('div', { class: 'rf-gloss-item' }, [
           el('dt', { text: word }), el('dd', { text: def }),
-        ]));
+        ]);
+        /* Arriving from the search bar, the word asked for is marked so it is
+         * findable even when the filter left several entries showing. */
+        if (highlight && word.toLowerCase() === String(highlight).toLowerCase()) {
+          item.classList.add('on');
+        }
+        list.appendChild(item);
       });
     }
     search.addEventListener('input', ME.debounce(() => draw(search.value), 120));
-    draw('');
+    draw(focus || '', focus);
     return card('Glossary', 'Definitions written the way the lessons write them: what it is, and why it matters.', body);
   }
 
@@ -16983,6 +17050,184 @@ window.ME = window.ME || {};
 })();
 
 
+/* ================= 81-siteindex.js ================= */
+/* An index of everything in this app that is not a molecule.
+ *
+ * The search box was built to find molecules, which left the course, the
+ * calculators, the reference tables and the glossary reachable only by
+ * knowing which tab they were in. A reader who types "limiting reactant" or
+ * "Le Chatelier" or "entropy" is asking a perfectly good question and was
+ * getting "no match" back.
+ *
+ * The index is built on first use rather than at load, because it reads the
+ * course, tools and reference registries, and those are populated by modules
+ * that load after this one.
+ */
+(function () {
+  'use strict';
+
+  const ME = window.ME;
+
+  let INDEX = null;
+
+  /* The fixed destinations: the tabs themselves, with the words someone might
+   * plausibly reach for. Nothing here is guessed from a registry, so it is
+   * written out. */
+  const PLACES = [
+    { kind: 'tool', title: 'Balancer', hash: '#/balancer',
+      sub: 'Balance any equation, with the working and the atom tally',
+      terms: 'balance balancing equation coefficients atom tally conservation of mass unbalanceable' },
+    { kind: 'tool', title: 'Gas Simulator', hash: '#/gas',
+      sub: 'Particles, a piston, and PV = nRT computed live',
+      terms: 'gas simulator piston pressure volume temperature moles pv nrt boyle charles gay-lussac avogadro ideal van der waals' },
+    { kind: 'tool', title: 'Draw', hash: '#/draw',
+      sub: 'Draw a molecule and read its formula, mass and shape back',
+      terms: 'draw drawing editor sketch structure bonds atoms build molecule' },
+    { kind: 'tool', title: 'Elements', hash: '#/elements',
+      sub: 'The periodic table, with shells, orbitals and properties',
+      terms: 'periodic table elements element shells orbitals trends atomic radius electronegativity ionisation' },
+    { kind: 'tool', title: 'Gallery', hash: '#/gallery',
+      sub: 'Molecules grouped by what they are for',
+      terms: 'gallery browse molecules categories pharmaceuticals household plastics psychoactive inorganic solvents' },
+    { kind: 'lesson', title: 'Course map', hash: '#/learn',
+      sub: 'All fifteen units, in order',
+      terms: 'course lessons learn units syllabus contents start beginning' },
+  ];
+
+  function norm(s) {
+    return String(s || '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function build() {
+    const out = PLACES.map((e) => Object.assign({}, e));
+
+    /* The course: every unit and every lesson. A lesson's searchable text is
+     * its title, its unit, and its recap lines — which is a fair summary of
+     * what it covers, written for a reader rather than for an index. */
+    if (ME.course && ME.course.units) {
+      ME.course.units.forEach((u) => {
+        out.push({
+          kind: 'unit', title: 'Unit ' + u.n + ': ' + u.title, hash: '#/learn',
+          sub: (u.lessons || []).length + ' lessons · ' + (u.blurb || ''),
+          terms: [u.title, u.blurb, (u.lessons || []).map((l) => l.title).join(' ')].join(' '),
+        });
+        (u.lessons || []).forEach((l) => {
+          /* The lesson's own words: title, its keywords, its recap, the
+           * mistakes it warns about, and the text of every question it asks.
+           * The questions matter more than they look — a named principle often
+           * appears only in the question that asks you to state it, and
+           * someone searching for it has no other way in. */
+          let questions = '';
+          try {
+            questions = ME.course.questionsOf(l).map((q) => q.q || '').join(' ');
+          } catch (e) { /* a lesson with an unbuildable question set is still findable */ }
+          out.push({
+            kind: 'lesson', title: l.title, hash: '#/learn/' + l.id,
+            sub: 'Unit ' + u.n + ' · ' + u.title + (l.mins ? ' · ' + l.mins + ' min' : ''),
+            keywords: l.keywords || '',
+            terms: [l.title, u.title, l.keywords || '', (l.recap || []).join(' '),
+              (l.mistakes || []).map((m) => m.wrong).join(' '), questions].join(' '),
+          });
+        });
+      });
+    }
+
+    if (ME.tools && ME.tools.TOOLS) {
+      ME.tools.TOOLS.forEach((t) => {
+        out.push({
+          kind: 'tool', title: t.name, hash: '#/tools/' + t.key,
+          sub: t.blurb || 'A calculator that shows its working',
+          terms: [t.name, t.blurb, t.key.replace(/-/g, ' ')].join(' '),
+        });
+      });
+    }
+
+    if (ME.reference && ME.reference.SECTIONS) {
+      ME.reference.SECTIONS.forEach((sec) => {
+        out.push({
+          kind: 'reference', title: sec.name, hash: '#/reference/' + sec.key,
+          sub: 'Reference table',
+          terms: [sec.name, sec.key.replace(/-/g, ' ')].join(' '),
+        });
+      });
+      (ME.reference.GLOSSARY || []).forEach((entry) => {
+        out.push({
+          kind: 'glossary', title: entry[0],
+          hash: '#/reference/glossary/' + encodeURIComponent(entry[0]),
+          sub: entry[1],
+          terms: entry[0] + ' ' + entry[1],
+        });
+      });
+    }
+
+    out.forEach((e) => {
+      e._t = norm(e.title);
+      e._kw = norm(e.keywords || '');
+      e._all = norm(e.title + ' ' + (e.sub || '') + ' ' + (e.terms || ''));
+    });
+    return out;
+  }
+
+  function all() {
+    if (!INDEX) INDEX = build();
+    return INDEX;
+  }
+
+  /* Ranked, so an exact title beats a word buried in a recap line. A match has
+   * to be worth showing: every query word must appear somewhere in the entry,
+   * which keeps a two-word query from matching everything containing "the". */
+  function search(query, limit) {
+    const q = norm(query);
+    if (!q) return [];
+    const words = q.split(' ').filter(Boolean);
+    const scored = [];
+
+    /* A one- or two-letter query has to match a whole word. Otherwise "pH"
+     * finds every lesson with "physical" or "phase" in it, and the short
+     * queries are exactly the ones where that noise is worst. */
+    const present = (w, text) => (w.length <= 2
+      ? new RegExp('\\b' + w + '\\b').test(text)
+      : text.indexOf(w) >= 0);
+
+    all().forEach((e) => {
+      if (!words.every((w) => present(w, e._all))) return;
+      let score = 0;
+      if (e._t === q) score += 100;
+      else if (e._t.indexOf(q) === 0) score += 60;
+      else if (e._t.indexOf(q) >= 0) score += 40;
+      else if (norm(e.sub).indexOf(q) >= 0) score += 14;
+      /* Keywords are the terms a lesson is about but does not have in its
+       * title, so a phrase found there should beat a lesson that merely
+       * happens to contain both words separately. Without this, searching
+       * "hydrogen bonding" finds the polyatomic-ions lesson, which mentions
+       * hydrogen carbonate and bonding in unrelated sentences. */
+      if (e._kw && e._kw.indexOf(q) >= 0) score += 30;
+      words.forEach((w) => {
+        if (new RegExp('\\b' + w).test(e._t)) score += 8;
+        else if (e._t.indexOf(w) >= 0) score += 4;
+        if (e._kw && new RegExp('\\b' + w).test(e._kw)) score += 6;
+      });
+      /* A glossary word is usually the most direct answer to a one-word
+       * query, and a lesson is the most useful answer to a longer one. */
+      if (e.kind === 'glossary' && words.length === 1) score += 6;
+      if (e.kind === 'lesson') score += 3;
+      if (e.kind === 'unit') score -= 2;
+      scored.push({ entry: e, score: score });
+    });
+
+    scored.sort((a, b) => b.score - a.score || a.entry.title.length - b.entry.title.length);
+    return scored.slice(0, limit || 8).map((x) => x.entry);
+  }
+
+  const LABEL = {
+    lesson: 'Lesson', unit: 'Unit', tool: 'Tool',
+    reference: 'Reference', glossary: 'Glossary',
+  };
+
+  ME.siteIndex = { search, all, label: (k) => LABEL[k] || '', norm: norm };
+})();
+
+
 /* ================= 90-app.js ================= */
 /* Application shell: navigation, routing, the always-present search box and
  * the theme switch. */
@@ -17035,7 +17280,8 @@ window.ME = window.ME || {};
     const mag = ME.icon('search', 'mag');
     searchWrap.appendChild(mag);
     searchInput = el('input', {
-      type: 'search', placeholder: 'Search molecules…', 'aria-label': 'Search molecules',
+      type: 'search', placeholder: 'Search molecules, lessons, tools…',
+      'aria-label': 'Search molecules, lessons and tools',
       autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false',
     });
     searchWrap.appendChild(searchInput);
@@ -17087,9 +17333,12 @@ window.ME = window.ME || {};
     const q = searchInput.value;
     searchWrap.classList.toggle('has-value', !!q);
     if (!q.trim()) { suggestBox.classList.remove('open'); return; }
-    ME.searchview.buildSuggestions(suggestBox, q, (rec) => {
+    /* A suggestion is either a molecule record, or a hash for somewhere in
+     * the app, or neither — which means "show me the full results page". */
+    ME.searchview.buildSuggestions(suggestBox, q, (rec, hash) => {
       suggestBox.classList.remove('open');
       if (rec) goMolecule(rec);
+      else if (hash) go(hash);
       else go('#/search?q=' + encodeURIComponent(q));
     });
     suggestBox.classList.add('open');
@@ -17217,7 +17466,10 @@ window.ME = window.ME || {};
     if (parts[0] === 'reference') {
       setView('reference');
       ME.reference.ensureBuilt(ME.$('#view-reference'));
-      if (parts[1]) ME.reference.show(decodeURIComponent(parts[1]));
+      /* A third part names one entry within the section, which is how the
+       * search bar links to a single glossary word. */
+      if (parts[1]) ME.reference.show(decodeURIComponent(parts[1]),
+        parts[2] ? decodeURIComponent(parts.slice(2).join('/')) : null);
       return;
     }
     if (parts[0] === 'gallery') {
@@ -17396,6 +17648,7 @@ window.ME = window.ME || {};
     /* ------------------------------------------------------------ 1.1 */
     {
       id: 'what-chemistry-is',
+      keywords: 'chemistry matter substance scale atoms',
       title: 'What chemistry is, and why it is everywhere',
       mins: 15,
       hook() {
@@ -17527,6 +17780,7 @@ window.ME = window.ME || {};
     /* ------------------------------------------------------------ 1.2 */
     {
       id: 'how-we-know',
+      keywords: 'scientific method evidence experiment hypothesis theory',
       title: 'How anyone found any of this out',
       mins: 15,
       builds_on: ['what-chemistry-is'],
@@ -17669,6 +17923,7 @@ window.ME = window.ME || {};
     /* ------------------------------------------------------------ 1.3 */
     {
       id: 'measuring',
+      keywords: 'units SI measurement precision accuracy uncertainty',
       title: 'Measuring things, and why the units are agreed',
       mins: 16,
       builds_on: ['what-chemistry-is'],
@@ -17797,6 +18052,7 @@ window.ME = window.ME || {};
     /* ------------------------------------------------------------ 1.4 */
     {
       id: 'scientific-notation',
+      keywords: 'scientific notation standard form powers of ten exponent',
       title: 'Scientific notation, and not counting zeros',
       mins: 14,
       builds_on: ['measuring'],
@@ -17924,6 +18180,7 @@ window.ME = window.ME || {};
     /* ------------------------------------------------------------ 1.5 */
     {
       id: 'sig-figs',
+      keywords: 'significant figures sig figs rounding precision',
       title: 'Significant figures, and not claiming what you do not know',
       mins: 18,
       builds_on: ['scientific-notation'],
@@ -18093,6 +18350,7 @@ window.ME = window.ME || {};
     /* ------------------------------------------------------------ 1.6 */
     {
       id: 'dimensional-analysis',
+      keywords: 'dimensional analysis unit conversion conversion factor cancelling units',
       title: 'Dimensional analysis: the trick that runs all of chemistry',
       mins: 20,
       builds_on: ['measuring', 'sig-figs'],
@@ -18272,6 +18530,7 @@ window.ME = window.ME || {};
 
     {
       id: 'what-matter-is',
+      keywords: 'matter mass volume atoms particles',
       title: 'What matter is, and the particle idea',
       mins: 14,
       builds_on: ['what-chemistry-is'],
@@ -18393,6 +18652,7 @@ window.ME = window.ME || {};
 
     {
       id: 'pure-and-mixtures',
+      keywords: 'pure substance mixture element compound homogeneous heterogeneous separation',
       title: 'Pure substances and mixtures',
       mins: 15,
       builds_on: ['what-matter-is'],
@@ -18537,6 +18797,7 @@ window.ME = window.ME || {};
 
     {
       id: 'physical-chemical',
+      keywords: 'physical change chemical change reaction evidence reversible',
       title: 'Physical and chemical change',
       mins: 15,
       builds_on: ['pure-and-mixtures'],
@@ -18697,6 +18958,7 @@ window.ME = window.ME || {};
 
     {
       id: 'states',
+      keywords: 'solid liquid gas states of matter plasma particle arrangement',
       title: 'Solid, liquid, gas — and why',
       mins: 16,
       builds_on: ['what-matter-is'],
@@ -18833,6 +19095,7 @@ window.ME = window.ME || {};
 
     {
       id: 'phase-changes',
+      keywords: 'melting boiling freezing condensation sublimation latent heat heating curve',
       title: 'Phase changes, and why the temperature stops',
       mins: 18,
       builds_on: ['states'],
@@ -18979,6 +19242,7 @@ window.ME = window.ME || {};
 
     {
       id: 'density',
+      keywords: 'density mass per volume floating sinking g per cm3',
       title: 'Density, and why ice floats',
       mins: 14,
       builds_on: ['physical-chemical', 'states'],
@@ -19138,6 +19402,7 @@ window.ME = window.ME || {};
 
     {
       id: 'atom-story',
+      keywords: 'dalton thomson rutherford bohr gold foil nucleus discovery atomic model',
       title: 'How we found out what is inside',
       mins: 15,
       builds_on: ['how-we-know'],
@@ -19269,6 +19534,7 @@ window.ME = window.ME || {};
 
     {
       id: 'atomic-number',
+      keywords: 'atomic number mass number protons neutrons electrons nuclear notation',
       title: 'Atomic number, mass number, and reading an element’s box',
       mins: 16,
       builds_on: ['atom-story'],
@@ -19395,6 +19661,7 @@ window.ME = window.ME || {};
 
     {
       id: 'isotopes',
+      keywords: 'isotope relative atomic mass weighted average carbon-14 radioactive tracer',
       title: 'Isotopes, and why chlorine weighs 35.45',
       mins: 16,
       builds_on: ['atomic-number'],
@@ -19541,6 +19808,7 @@ window.ME = window.ME || {};
 
     {
       id: 'ions',
+      keywords: 'ion cation anion charge losing gaining electrons',
       title: 'Ions: why atoms gain and lose electrons',
       mins: 16,
       builds_on: ['atomic-number'],
@@ -19726,6 +19994,7 @@ window.ME = window.ME || {};
 
     {
       id: 'energy-levels',
+      keywords: 'energy level shell emission spectrum flame test quantised',
       title: 'Energy levels: why electrons cannot sit anywhere',
       mins: 16,
       builds_on: ['atom-story'],
@@ -19863,6 +20132,7 @@ window.ME = window.ME || {};
 
     {
       id: 'orbitals',
+      keywords: 's p d f orbital shape probability cloud',
       title: 'Orbitals: the shapes electrons actually occupy',
       mins: 16,
       builds_on: ['energy-levels'],
@@ -19999,6 +20269,7 @@ window.ME = window.ME || {};
 
     {
       id: 'configurations',
+      keywords: 'electron configuration filling order aufbau noble gas shorthand diagonal rule',
       title: 'Electron configurations, and the filling order',
       mins: 18,
       builds_on: ['orbitals'],
@@ -20156,6 +20427,7 @@ window.ME = window.ME || {};
 
     {
       id: 'valence',
+      keywords: 'valence electrons dot diagram lewis symbol group number core electrons',
       title: 'Valence electrons, and dot diagrams',
       mins: 15,
       builds_on: ['configurations'],
@@ -20326,6 +20598,7 @@ window.ME = window.ME || {};
 
     {
       id: 'why-this-shape',
+      keywords: 'periodic table mendeleev period group block shape prediction',
       title: 'Why the table is shaped the way it is',
       mins: 15,
       builds_on: ['valence'],
@@ -20474,6 +20747,7 @@ window.ME = window.ME || {};
 
     {
       id: 'families',
+      keywords: 'alkali metals alkaline earth halogens noble gases transition metals metalloids reactivity',
       title: 'The families: who does what',
       mins: 16,
       builds_on: ['why-this-shape'],
@@ -20626,6 +20900,7 @@ window.ME = window.ME || {};
 
     {
       id: 'trends',
+      keywords: 'periodic trends atomic radius ionisation energy electronegativity ionic radius shielding',
       title: 'Periodic trends, and the two forces behind all of them',
       mins: 18,
       builds_on: ['families'],
@@ -20960,6 +21235,7 @@ window.ME = window.ME || {};
     {
       id: 'covalent',
       title: 'Covalent bonding and Lewis structures',
+      keywords: 'octet rule lone pair resonance expanded octet radical double triple bond electron dot',
       mins: 20,
       builds_on: ['why-bond'],
       hook() {
@@ -21156,6 +21432,7 @@ window.ME = window.ME || {};
     {
       id: 'shapes',
       title: 'Molecular shapes: VSEPR',
+      keywords: 'bond angle tetrahedral trigonal planar bent linear octahedral lone pair repulsion geometry',
       mins: 17,
       builds_on: ['covalent'],
       hook() {
@@ -21502,6 +21779,7 @@ window.ME = window.ME || {};
     {
       id: 'intermolecular',
       title: 'Forces between molecules, and why water is strange',
+      keywords: 'hydrogen bonding dispersion london van der waals dipole boiling point surface tension ice floats',
       mins: 18,
       builds_on: ['polarity'],
       hook() {
@@ -21696,6 +21974,7 @@ window.ME = window.ME || {};
 
     {
       id: 'ionic-names',
+      keywords: 'naming ionic compounds roman numerals criss cross charge balance ide ending',
       title: 'Naming ionic compounds',
       mins: 16,
       builds_on: ['why-bond', 'valence'],
@@ -21861,6 +22140,7 @@ window.ME = window.ME || {};
 
     {
       id: 'polyatomic',
+      keywords: 'polyatomic ions ate ite per hypo hydroxide nitrate sulfate carbonate ammonium brackets',
       title: 'Polyatomic ions',
       mins: 15,
       builds_on: ['ionic-names'],
@@ -22033,6 +22313,7 @@ window.ME = window.ME || {};
 
     {
       id: 'covalent-names',
+      keywords: 'greek prefixes mono di tri covalent naming acids hydro ic ous',
       title: 'Naming covalent compounds, and acids',
       mins: 16,
       builds_on: ['polyatomic', 'covalent'],
@@ -22216,6 +22497,7 @@ window.ME = window.ME || {};
 
     {
       id: 'what-is-a-reaction',
+      keywords: 'chemical reaction conservation of mass lavoisier reactants products state symbols',
       title: 'What a reaction is, and conservation of mass',
       mins: 15,
       builds_on: ['why-bond', 'physical-chemical'],
@@ -22379,6 +22661,7 @@ window.ME = window.ME || {};
 
     {
       id: 'balancing',
+      keywords: 'balancing equations coefficients subscripts algebra fractional coefficients',
       title: 'Balancing equations',
       mins: 18,
       builds_on: ['what-is-a-reaction'],
@@ -22524,6 +22807,7 @@ window.ME = window.ME || {};
 
     {
       id: 'reaction-types',
+      keywords: 'synthesis decomposition single replacement double replacement combustion precipitate activity series solubility redox',
       title: 'The five reaction types',
       mins: 17,
       builds_on: ['balancing'],
@@ -22725,6 +23009,7 @@ window.ME = window.ME || {};
     {
       id: 'the-mole',
       title: 'The mole: counting things you cannot see',
+      keywords: 'mole avogadro number molar mass grams particles',
       mins: 16,
       builds_on: ['balancing', 'atomic-number'],
       hook() {
@@ -22870,6 +23155,7 @@ window.ME = window.ME || {};
     {
       id: 'molar-mass',
       title: 'Molar mass, and formulas from data',
+      keywords: 'molar mass percent composition empirical formula molecular formula combustion analysis',
       mins: 17,
       builds_on: ['the-mole'],
       hook() {
@@ -23008,6 +23294,7 @@ window.ME = window.ME || {};
     {
       id: 'stoichiometry',
       title: 'Stoichiometry: four stations, every time',
+      keywords: 'stoichiometry mole ratio limiting reactant excess percent yield theoretical yield',
       mins: 18,
       builds_on: ['molar-mass', 'balancing'],
       hook() {
@@ -23196,6 +23483,7 @@ window.ME = window.ME || {};
     {
       id: 'kinetic-theory',
       title: 'What a gas is doing, and what pressure is',
+      keywords: 'kinetic molecular theory pressure absolute zero kelvin real gas ideal',
       mins: 15,
       builds_on: ['states', 'the-mole'],
       hook() {
@@ -23501,6 +23789,7 @@ window.ME = window.ME || {};
     {
       id: 'ideal-gas',
       title: 'PV = nRT, and gases in reactions',
+      keywords: 'ideal gas law gas constant R molar volume STP partial pressure dalton gas stoichiometry density',
       mins: 17,
       builds_on: ['gas-laws', 'stoichiometry'],
       hook() {
@@ -23689,6 +23978,7 @@ window.ME = window.ME || {};
     {
       id: 'dissolving',
       title: 'What dissolving actually is',
+      keywords: 'solubility solvent solute hydration saturated supersaturated electrolyte like dissolves like',
       mins: 16,
       builds_on: ['polarity', 'intermolecular'],
       hook() {
@@ -23865,6 +24155,7 @@ window.ME = window.ME || {};
     {
       id: 'concentration',
       title: 'Concentration and dilution',
+      keywords: 'molarity molality ppm mass percent dilution titration stock solution',
       mins: 16,
       builds_on: ['dissolving', 'the-mole'],
       hook() {
@@ -24031,6 +24322,7 @@ window.ME = window.ME || {};
     {
       id: 'colligative',
       title: 'Why salt melts ice',
+      keywords: 'colligative freezing point depression boiling point elevation osmosis osmotic pressure antifreeze molality',
       mins: 14,
       builds_on: ['concentration', 'phase-changes'],
       hook() {
@@ -24222,6 +24514,7 @@ window.ME = window.ME || {};
     {
       id: 'acid-base-basics',
       title: 'What acids and bases actually are',
+      keywords: 'acid base arrhenius bronsted lowry proton donor acceptor conjugate pair amphoteric hydronium',
       mins: 16,
       builds_on: ['dissolving', 'covalent-names'],
       hook() {
@@ -24392,6 +24685,7 @@ window.ME = window.ME || {};
     {
       id: 'ph',
       title: 'The pH scale, and why it is logarithmic',
+      keywords: 'pH pOH Kw water ionisation buffer logarithm acid rain ocean acidification',
       mins: 16,
       builds_on: ['acid-base-basics', 'scientific-notation'],
       hook() {
@@ -24564,6 +24858,7 @@ window.ME = window.ME || {};
     {
       id: 'strength-titration',
       title: 'Strong and weak, and finding out how much',
+      keywords: 'strong weak acid base titration neutralisation salt indicator endpoint buffer region',
       mins: 17,
       builds_on: ['ph', 'concentration'],
       hook() {
@@ -24767,6 +25062,7 @@ window.ME = window.ME || {};
     {
       id: 'heat-and-energy',
       title: 'Heat, temperature, and q = mcΔT',
+      keywords: 'specific heat capacity calorimetry calorimeter joule calorie q mcdeltat',
       mins: 16,
       builds_on: ['phase-changes', 'kinetic-theory'],
       hook() {
@@ -24936,6 +25232,7 @@ window.ME = window.ME || {};
     {
       id: 'enthalpy',
       title: 'Enthalpy, bond energies and Hess’s law',
+      keywords: 'enthalpy delta H exothermic endothermic bond energy hess law activation energy energy diagram',
       mins: 17,
       builds_on: ['heat-and-energy', 'why-bond'],
       hook() {
@@ -25108,6 +25405,7 @@ window.ME = window.ME || {};
     {
       id: 'spontaneity',
       title: 'Entropy, and why some things happen anyway',
+      keywords: 'entropy gibbs free energy delta G spontaneous second law thermodynamics',
       mins: 16,
       builds_on: ['enthalpy', 'dissolving'],
       hook() {
@@ -25303,6 +25601,7 @@ window.ME = window.ME || {};
     {
       id: 'reaction-rates',
       title: 'What sets the speed of a reaction',
+      keywords: 'rate kinetics collision theory catalyst enzyme activation energy surface area concentration',
       mins: 16,
       builds_on: ['enthalpy', 'kinetic-theory'],
       hook() {
@@ -25474,6 +25773,7 @@ window.ME = window.ME || {};
     {
       id: 'equilibrium',
       title: 'Reactions that stop before they finish',
+      keywords: 'equilibrium dynamic equilibrium constant Kc reversible haber process ammonia',
       mins: 17,
       builds_on: ['reaction-rates', 'strength-titration'],
       hook() {
@@ -25645,6 +25945,7 @@ window.ME = window.ME || {};
     {
       id: 'le-chatelier',
       title: 'Pushing an equilibrium about',
+      keywords: 'le chatelier principle shift haber process pressure temperature yield',
       mins: 16,
       builds_on: ['equilibrium'],
       hook() {

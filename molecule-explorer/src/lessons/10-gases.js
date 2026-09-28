@@ -14,6 +14,7 @@
     {
       id: 'kinetic-theory',
       title: 'What a gas is doing, and what pressure is',
+      keywords: 'kinetic molecular theory pressure absolute zero kelvin real gas ideal',
       mins: 15,
       builds_on: ['states', 'the-mole'],
       hook() {
@@ -319,6 +320,7 @@
     {
       id: 'ideal-gas',
       title: 'PV = nRT, and gases in reactions',
+      keywords: 'ideal gas law gas constant R molar volume STP partial pressure dalton gas stoichiometry density',
       mins: 17,
       builds_on: ['gas-laws', 'stoichiometry'],
       hook() {

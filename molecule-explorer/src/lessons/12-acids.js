@@ -14,6 +14,7 @@
     {
       id: 'acid-base-basics',
       title: 'What acids and bases actually are',
+      keywords: 'acid base arrhenius bronsted lowry proton donor acceptor conjugate pair amphoteric hydronium',
       mins: 16,
       builds_on: ['dissolving', 'covalent-names'],
       hook() {
@@ -184,6 +185,7 @@
     {
       id: 'ph',
       title: 'The pH scale, and why it is logarithmic',
+      keywords: 'pH pOH Kw water ionisation buffer logarithm acid rain ocean acidification',
       mins: 16,
       builds_on: ['acid-base-basics', 'scientific-notation'],
       hook() {
@@ -356,6 +358,7 @@
     {
       id: 'strength-titration',
       title: 'Strong and weak, and finding out how much',
+      keywords: 'strong weak acid base titration neutralisation salt indicator endpoint buffer region',
       mins: 17,
       builds_on: ['ph', 'concentration'],
       hook() {

@@ -14,6 +14,7 @@
     {
       id: 'dissolving',
       title: 'What dissolving actually is',
+      keywords: 'solubility solvent solute hydration saturated supersaturated electrolyte like dissolves like',
       mins: 16,
       builds_on: ['polarity', 'intermolecular'],
       hook() {
@@ -190,6 +191,7 @@
     {
       id: 'concentration',
       title: 'Concentration and dilution',
+      keywords: 'molarity molality ppm mass percent dilution titration stock solution',
       mins: 16,
       builds_on: ['dissolving', 'the-mole'],
       hook() {
@@ -356,6 +358,7 @@
     {
       id: 'colligative',
       title: 'Why salt melts ice',
+      keywords: 'colligative freezing point depression boiling point elevation osmosis osmotic pressure antifreeze molality',
       mins: 14,
       builds_on: ['concentration', 'phase-changes'],
       hook() {

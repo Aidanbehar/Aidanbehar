@@ -818,6 +818,42 @@ await page.screenshot({ path: path.join(SHOTS, '12-dark-gallery.png') });
 
 /* -------------------------------------------------------------- summary */
 check('still no script errors at the end', errors.length === 0, errors.slice(0, 4).join(' | '));
+/* The search box finds the course and the calculators, not only molecules.
+   Before this, typing "limiting reactant" returned nothing at all, because
+   the whole course was reachable only by knowing which tab it was in. */
+await page.fill('.searchbox input', 'limiting reactant');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(600);
+const siteText = await page.locator('#view-search').innerText();
+check('search results include an "In this app" section',
+  /in this app/i.test(siteText), siteText.slice(0, 200));
+check('and it names the limiting-reactant material',
+  /limiting reactant/i.test(siteText));
+await page.screenshot({ path: path.join(SHOTS, '06b-search-app.png'), fullPage: true });
+
+/* And clicking one actually goes there. */
+const siteRows = page.locator('#view-search .res-site');
+check('app results are shown as their own kind of row', await siteRows.count() > 0);
+await siteRows.first().click();
+await page.waitForTimeout(700);
+check('clicking an app result navigates away from the search view',
+  !/^#\/search/.test(await page.evaluate(() => location.hash)),
+  await page.evaluate(() => location.hash));
+
+/* A concept with no molecule of that name still finds its lesson. */
+await page.fill('.searchbox input', 'le chatelier');
+await page.waitForTimeout(500);
+const suggestText = await page.locator('.suggest').innerText();
+check('the dropdown offers app results for a concept query',
+  /in this app/i.test(suggestText), suggestText.slice(0, 200));
+
+/* A glossary word links to that one entry, highlighted. */
+await page.evaluate(() => { location.hash = '#/reference/glossary/' + encodeURIComponent('entropy'); });
+await page.waitForTimeout(600);
+check('a glossary link highlights the word it named',
+  await page.locator('#view-reference .rf-gloss-item.on').count() === 1,
+  String(await page.locator('#view-reference .rf-gloss-item.on').count()));
+
 check('never touched the network in the whole offline run', attempted.length === 0, attempted.slice(0, 5).join(', '));
 
 /* ============================ online phase ============================ */
