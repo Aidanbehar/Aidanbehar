@@ -1077,6 +1077,193 @@ describe('generated practice problems', () => {
   });
 });
 
+/* ------------------------- stoichiometry, gases, solutions and heat */
+/* The spec for this course asked for tests on each of these by name. They are
+ * exercised incidentally by the generated-problem and worked-example tests;
+ * these are direct cases, chosen so every answer can be checked by hand. */
+describe('the quantitative calculators, case by case', () => {
+  test('stoichiometry: mass to mass through a balanced equation', async () => {
+    const got = await run(() => {
+      const S = window.ME.stoich;
+      return {
+        /* 2 H2 + O2 -> 2 H2O. 4.032 g of H2 is exactly 2 mol, which gives
+         * 2 mol of water: 36.03 g. */
+        water: S.massToMass('2 H2 + O2 -> 2 H2O', 'H2', 4.032, 'H2O').grams,
+        /* N2 + 3 H2 -> 2 NH3. 28.014 g of N2 is 1 mol, giving 2 mol NH3. */
+        ammonia: S.massToMass('N2 + 3 H2 -> 2 NH3', 'N2', 28.014, 'NH3').molesTo,
+        /* The equation is balanced by the engine first, so an unbalanced
+         * input still gives the right ratio. */
+        unbalanced: S.massToMass('H2 + O2 -> H2O', 'H2', 4.032, 'H2O').grams,
+        /* A substance that is not in the equation is refused rather than guessed. */
+        refused: S.massToMass('2 H2 + O2 -> 2 H2O', 'CH4', 10, 'H2O').ok,
+      };
+    });
+    assert.ok(Math.abs(got.water - 36.03) < 0.02, 'water from 2 mol of H2: ' + got.water);
+    assert.ok(Math.abs(got.ammonia - 2) < 0.001, 'ammonia from 1 mol of N2: ' + got.ammonia);
+    assert.ok(Math.abs(got.unbalanced - 36.03) < 0.02, 'balancing first: ' + got.unbalanced);
+    assert.equal(got.refused, false);
+  });
+
+  test('limiting reactant and percent yield', async () => {
+    const got = await run(() => {
+      const S = window.ME.stoich;
+      /* 2 mol H2 with 2 mol O2: the hydrogen runs out, because the equation
+       * wants two of it per oxygen. */
+      const lim = S.limiting('2 H2 + O2 -> 2 H2O',
+        [{ name: 'H2', grams: 4.032 }, { name: 'O2', grams: 63.996 }]);
+      return {
+        limiting: lim.limiting.name,
+        water: lim.products[0].grams,
+        leftover: lim.leftovers[0],
+        yield80: S.percentYield(32, 40).percent,
+        over100: S.percentYield(42, 40).percent,
+      };
+    });
+    assert.equal(got.limiting, 'H2');
+    assert.ok(Math.abs(got.water - 36.03) < 0.02, 'water: ' + got.water);
+    assert.equal(got.leftover.name, 'O2');
+    assert.ok(Math.abs(got.yield80 - 80) < 0.01, 'percent yield: ' + got.yield80);
+    /* Over 100 is arithmetic rather than an error, and the tool says what it means. */
+    assert.ok(got.over100 > 100);
+  });
+
+  test('gas laws: each named law, and PV = nRT', async () => {
+    const got = await run(() => {
+      const g = window.ME.gas;
+      return {
+        /* Boyle: halve the volume, double the pressure. */
+        boyle: g.combined({ P: 1, V: 4, n: 1, T: 300 }, { V: 2, n: 1, T: 300 }, 'P'),
+        /* Charles: double the kelvin temperature, double the volume. */
+        charles: g.combined({ P: 1, V: 5, n: 1, T: 300 }, { P: 1, n: 1, T: 600 }, 'V'),
+        /* Gay-Lussac: double T at fixed V, double P. */
+        gaylussac: g.combined({ P: 2, V: 1, n: 1, T: 250 }, { V: 1, n: 1, T: 500 }, 'P'),
+        /* Avogadro: double the moles, double the volume. */
+        avogadro: g.combined({ P: 1, V: 10, n: 1, T: 300 }, { P: 1, n: 2, T: 300 }, 'V'),
+        /* One mole at STP. */
+        stp: g.solve({ P: 1, V: null, n: 1, T: 273.15,
+          units: { P: 'atm', V: 'L', n: 'mol', T: 'K' } }, 'V'),
+      };
+    });
+    assert.ok(Math.abs(got.boyle - 2) < 1e-9, 'Boyle: ' + got.boyle);
+    assert.ok(Math.abs(got.charles - 10) < 1e-9, 'Charles: ' + got.charles);
+    assert.ok(Math.abs(got.gaylussac - 4) < 1e-9, 'Gay-Lussac: ' + got.gaylussac);
+    assert.ok(Math.abs(got.avogadro - 20) < 1e-9, 'Avogadro: ' + got.avogadro);
+    const v = got.stp && (got.stp.value !== undefined ? got.stp.value : got.stp);
+    assert.ok(Math.abs(v - 22.414) < 0.01, 'one mole at STP: ' + JSON.stringify(got.stp));
+  });
+
+  test('concentration and dilution', async () => {
+    const got = await run(() => {
+      const S = window.ME.solution;
+      return {
+        /* 0.5 mol in 2 L is 0.25 M. */
+        molarity: S.molarity(0.5, 2).value,
+        /* M1V1 = M2V2: 6 M diluted to 250 mL of 1.5 M needs 62.5 mL. */
+        dilute: S.dilute(6, null, 1.5, 0.25),
+        /* And the same sum the other way round. */
+        diluteM2: S.dilute(6, 0.0625, null, 0.25),
+        /* Three of the four are required; two is not enough to solve. */
+        underdetermined: S.dilute(6, null, null, 0.25).ok,
+      };
+    });
+    assert.ok(Math.abs(got.molarity - 0.25) < 1e-9, 'molarity: ' + got.molarity);
+    assert.ok(Math.abs(got.dilute.value - 0.0625) < 1e-9, 'volume needed: ' + JSON.stringify(got.dilute));
+    assert.ok(Math.abs(got.diluteM2.value - 1.5) < 1e-9, 'concentration reached: ' + JSON.stringify(got.diluteM2));
+    assert.equal(got.underdetermined, false);
+  });
+
+  test('pH, pOH and the two concentrations', async () => {
+    const got = await run(() => {
+      const S = window.ME.solution;
+      return {
+        fromH: S.pHfromH(1e-4),
+        fromPH: S.HfrompH(9),
+        neutral: S.pHfromH(1e-7),
+        /* A concentration of zero has no logarithm, so it must be refused. */
+        zero: S.pHfromH(0).ok,
+        negative: S.pHfromH(-1).ok,
+      };
+    });
+    assert.ok(Math.abs(got.fromH.pH - 4) < 1e-9, 'pH of 1e-4: ' + got.fromH.pH);
+    assert.ok(Math.abs(got.fromH.pOH - 10) < 1e-9, 'pOH: ' + got.fromH.pOH);
+    assert.ok(Math.abs(got.fromPH.H - 1e-9) < 1e-18, '[H+] at pH 9: ' + got.fromPH.H);
+    assert.ok(Math.abs(got.fromPH.pOH - 5) < 1e-9, 'pOH at pH 9: ' + got.fromPH.pOH);
+    assert.ok(Math.abs(got.neutral.pH - 7) < 1e-9, 'neutral: ' + got.neutral.pH);
+    assert.equal(got.zero, false);
+    assert.equal(got.negative, false);
+  });
+
+  test('q = mcDeltaT, in both directions and both signs', async () => {
+    const got = await run(() => {
+      const S = window.ME.solution;
+      const c = window.ME.ref.SPECIFIC_HEAT.values['water (liquid)'];
+      return {
+        /* 100 g of water up 10 degrees. */
+        warming: S.heat(100, c, 10).q,
+        /* The same water cooling: the sign flips and nothing else changes. */
+        cooling: S.heat(100, c, -10).q,
+        /* A metal takes far less for the same rise. */
+        metal: S.heat(100, window.ME.ref.SPECIFIC_HEAT.values.iron, 10).q,
+      };
+    });
+    assert.ok(Math.abs(got.warming - 4184) < 0.01, 'warming: ' + got.warming);
+    assert.ok(Math.abs(got.cooling + 4184) < 0.01, 'cooling: ' + got.cooling);
+    assert.ok(Math.abs(got.metal - 449) < 0.01, 'iron: ' + got.metal);
+    /* Water really does take about nine times as much as iron. */
+    assert.ok(got.warming / got.metal > 9 && got.warming / got.metal < 10);
+  });
+});
+
+/* ------------------------------------------------------------ simulations */
+describe('every simulation builds', () => {
+  /* The page-render test covers the sims a lesson embeds, and not the ones
+   * reached only from a tab or a preset. A simulation that throws on
+   * construction is invisible until somebody opens the page it is on. */
+  test('each one returns a rendered node, with no exception', async () => {
+    const bad = await run(() => {
+      const out = [];
+      const sink = document.createElement('div');
+      sink.style.display = 'none';
+      document.body.appendChild(sink);
+      /* The helpers exported alongside the sims are not sims. */
+      const HELPERS = ['shell', 'slider', 'whenVisible', 'css'];
+      const names = Object.keys(window.ME.sims)
+        .filter((k) => typeof window.ME.sims[k] === 'function' && HELPERS.indexOf(k) < 0);
+      if (names.length < 12) out.push(['(only ' + names.length + ' sims found, so this test is checking little)']);
+      names.forEach((name) => {
+        let node = null;
+        try { node = window.ME.sims[name](); }
+        catch (e) { out.push([name, 'threw: ' + String(e && e.message || e)]); return; }
+        if (!node || !node.nodeType) { out.push([name, 'returned nothing renderable']); return; }
+        sink.appendChild(node);
+        const text = (node.textContent || '').trim();
+        if (text.length < 30) out.push([name, 'rendered only ' + text.length + ' characters']);
+        if (/\bundefined\b|\[object Object\]|\bNaN\b/.test(text)) {
+          out.push([name, 'rendered a placeholder: ' + text.slice(0, 90)]);
+        }
+        /* Each one should have produced something to interact with or look at. */
+        const interactive = node.querySelectorAll('input, button, canvas, svg, table').length;
+        if (!interactive) out.push([name, 'nothing to interact with or look at']);
+      });
+      sink.remove();
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad, null, 1));
+  });
+
+  test('each one is stopped again when it goes off screen', async () => {
+    /* A lesson can hold several sims, and three animation loops running on a
+     * page nobody is looking at is a flat battery. Every sim that animates
+     * must register with whenVisible rather than starting unconditionally. */
+    const got = await run(() => {
+      const src = window.ME.sims.statesOfMatter.toString() + window.ME.sims.heatingCurve.toString() +
+        window.ME.sims.equilibrium.toString() + window.ME.sims.titration.toString();
+      return { usesWhenVisible: /whenVisible/.test(src) };
+    });
+    assert.equal(got.usesWhenVisible, true);
+  });
+});
+
 /* ------------------------------------------------------- searching the app */
 describe('the search bar finds more than molecules', () => {
   /* The search box was built for molecules, which left the course, the

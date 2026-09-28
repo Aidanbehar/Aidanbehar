@@ -1,21 +1,35 @@
 # Molecule Explorer
 
-An interactive organic chemistry teaching app. The finished product is **one
-HTML file** that works with the internet unplugged.
+An interactive chemistry course and toolkit. The finished product is **one HTML
+file** that works with the internet unplugged.
 
-- **`dist/molecule-explorer.html`** — the whole app, 3.3 MB, no installation.
+- **`dist/molecule-explorer.html`** — the whole app, 4.99 MB, no installation.
   Copy it anywhere, double-click it, and it opens in a browser.
 
 Everything is inlined: the styles, the JavaScript, the chemistry libraries, the
-icons, and a database of 513 molecules verified against PubChem. There are no
+icons, and a database of 688 molecules verified against PubChem. There are no
 CDN links, no external fonts, no asset folders, no server, and no Node needed
 to *run* it. Nothing in it costs money and nothing needs an account.
 
-The single exception is the **Search online (PubChem)** section, which fetches
-extra molecules when there is a connection, and says so plainly when there is
-not. Everything else — Learn, Draw, Gallery, search of the built-in database,
-molecule pages, the X-ray slider, the 3D viewer, validation and recognition —
-runs entirely from the file.
+What is in it:
+
+| | |
+|---|---|
+| **Learn** | A chemistry course from the beginning: 17 units, 72 lessons, 579 questions, about 18 hours of reading. Long-form lessons with a hook, a multi-page body, checkpoints between pages, worked examples, a common-mistakes section, a question set, unlimited randomised practice and a recap. |
+| **Draw** | A structure editor that reads back the formula, mass, shape and functional groups of whatever you draw. |
+| **Elements** | All 118 elements with shells, orbital diagrams, 3D orbital shapes and properties. |
+| **Balancer** | Balances any equation in exact arithmetic, with the working, an atom tally, a by-hand walkthrough and a try-it-yourself mode. |
+| **Gas Simulator** | Particles with a draggable piston, PV = nRT computed live in whatever units you pick, four graphs and a real-gas comparison. |
+| **Tools** | 18 calculators, every one showing its working. |
+| **Reference** | 11 tables, each stating where its data came from, and a 49-word glossary. |
+| **Gallery** | 688 molecules grouped by what they are for. |
+| **Search** | Molecules by name, nickname, formula or SMILES — and lessons, calculators, tables and glossary words. |
+
+19 interactive simulations are embedded in the lessons that need them.
+
+The single exception to working offline is the **Search online (PubChem)**
+section, which fetches extra molecules when there is a connection, and says so
+plainly when there is not. Everything else runs entirely from the file.
 
 ---
 
@@ -27,13 +41,14 @@ You only need this if you want to change the app. To *use* it, just open
 ```bash
 cd molecule-explorer
 npm install          # OpenChemLib, 3Dmol.js, esbuild, Playwright
-npm run build-db     # needs internet: verifies all 513 molecules against PubChem
+npm run build-db     # needs internet: verifies all 688 molecules against PubChem
 npm run build        # writes dist/molecule-explorer.html
 npm test             # unit tests + a real-browser run with the network off
 ```
 
-`npm run build-db` is only needed when `src/data/seed.js` changes. The built
-database is committed, so day-to-day you just run `npm run build`.
+`npm run build-db` is only needed when `src/data/seed.js` or `src/data/ions.js`
+changes. The built database is committed, so day-to-day you just run
+`npm run build`.
 
 ### What each step does
 
@@ -62,20 +77,46 @@ self-contained: any surviving `src=`/`href=` pointing outside the file, any
 `<link rel=stylesheet>`, any `@import url()`, or any `fetch()` outside the
 PubChem module fails the build.
 
-**`npm test`** runs both suites:
+**`npm test`** runs three suites — 167 logic tests and 175 browser checks:
 
-- `test/unit.mjs` — 67 logic tests (search by case, typo, synonym, formula and
-  SMILES; the five-bond-carbon message; twenty-odd valid ions and hypervalent
-  species that must *not* be flagged; formula and molar mass against known
-  values; drawing → recognition; label spacing in the drawings; crowding in the
-  editor; plus a sweep confirming every database entry's stored formula and mass
-  agree with its structure).
-- `test/smoke.mjs` — 119 checks in a real browser, loaded from `file://` with
-  the network switched off, covering all eleven lessons, the X-ray slider, the
-  molecule page, the gallery, the drawing editor, the periodic table and dark
-  mode. It asserts the page makes **zero** network requests. A final phase
-  re-enables the network and exercises the PubChem path; it is skipped, not
-  failed, on a machine with no connection.
+- `test/unit.mjs` — 73 tests on search (by case, typo, synonym, formula and
+  SMILES), the five-bond-carbon message, twenty-odd valid ions and hypervalent
+  species that must *not* be flagged, formula and molar mass against known
+  values, drawing → recognition, label spacing, crowding in the editor, plus a
+  sweep confirming every database entry's stored formula and mass agree with
+  its structure.
+- `test/engine.mjs` — 94 tests on the calculation engine, run inside the real
+  built file. Every number a lesson shows and every answer a lesson grades
+  comes out of this code, so these tests are the guarantee that the app cannot
+  teach one thing and mark another. They cover:
+  - the physical constants, derived from the SI definitions rather than copied;
+  - every unit conversion, in both directions, for every dimension;
+  - significant figures read from the written text;
+  - formula parsing and molar mass, including charges, brackets and hydrates;
+  - equation balancing, including the unbalanceable and ambiguous cases;
+  - inorganic naming, both directions, and every name round-tripping;
+  - Lewis structures and VSEPR shapes for 27 molecules with settled textbook
+    answers, plus electron conservation and formal charges;
+  - stoichiometry, limiting reactant, percent yield, all four gas laws,
+    PV = nRT, concentration, dilution, pH/pOH and q = mcΔT, each with cases
+    checkable by hand;
+  - freezing- and boiling-point shifts, with the particle count read off the
+    formula rather than supplied;
+  - answer grading, including a wrong unit, an answer out by a power of ten and
+    an answer upside down;
+  - every practice generator, run many times, with each problem re-derived a
+    second independent way;
+  - every course page, hook and question, **rendered for real** — because a
+    typo inside a page body is invisible to a structural check;
+  - every simulation, built for real;
+  - every hand-written link in a lesson, checked to resolve;
+  - the search index, with 17 real queries pinned.
+- `test/smoke.mjs` — 175 checks in a real browser, loaded from `file://` with
+  the network switched off, covering the course reader, the X-ray slider, the
+  molecule page, the gallery, the drawing editor, the periodic table, the four
+  newer tabs, the search bar and dark mode. It asserts the page makes **zero**
+  network requests. A final phase re-enables the network and exercises the
+  PubChem path; it is skipped, not failed, on a machine with no connection.
 
 ---
 
@@ -99,12 +140,23 @@ a dependency, and every icon is an inline SVG path.
 src/
   index.html            shell with the build's placeholders
   css/01-tokens.css …   design tokens, base, nav, components, per-view styles
-  js/10-core.js         DOM helpers, storage, toasts, tooltips, icons, theme
+  js/10-core.js         DOM helpers, storage, toasts, tooltips, icons, theme,
+                        and the two formula-markup renderers
+  js/12-format.js       constants, units, significant figures, answer grading
+  js/13-refdata.js      reference tables, each marked VERIFIED, DERIVED or
+                        LITERATURE
+  js/14-calc-formula.js formula parsing and molar mass
+  js/15-calc-balance.js the balancer, in exact rational arithmetic
+  js/16-calc-naming.js  inorganic naming, both directions
+  js/17-calc-stoich.js  stoichiometry, limiting reactant, empirical formulas
+  js/18-calc-gas.js     the gas laws and PV = nRT in any units
+  js/19-calc-solution.js concentration, dilution, pH, heat, colligative, ΔG
   js/20-chem.js         valence rules, functional groups, condensed formulas,
                         plain-English validation
+  js/21-calc-lewis.js   Lewis structures and VSEPR shapes
   js/30-render2d.js     the SVG renderer and the X-ray slider
   js/35-render3d.js     3Dmol wrapper and offline conformer generation
-  js/40-search.js       the offline index: names, synonyms, formulas, structures
+  js/40-search.js       the offline molecule index
   js/45-pubchem.js      the only module that touches the network
   js/50-molpage.js      the molecule page
   js/60/61/62-draw-*.js the editor's model, its canvas painter, and its UI
@@ -112,9 +164,20 @@ src/
   js/68-elements.js     the periodic table and the element pages
   js/70-gallery.js      the gallery
   js/72-searchview.js   search results and the suggestion dropdown
-  js/80-learn.js        the eleven lessons
+  js/73-balancer.js     the Balancer tab
+  js/74-gassim.js       the Gas Simulator tab
+  js/75-tools.js        the 18 calculators
+  js/76-reference.js    the reference tables and the glossary
+  js/77-course.js       the course engine and the question types
+  js/78-generators.js   the 21 practice generators
+  js/79-lesson-kit.js   the helpers lesson files are written with
+  js/79b-sims.js        the 19 simulations
+  js/80-learn.js        the course map, the lesson reader, and Unit 15
+  js/81-siteindex.js    the search index for lessons, tools and glossary words
   js/90-app.js          shell, router, navigation
+  lessons/01-…-17-…js   one file per unit of course content
   data/seed.js          names, categories, facts and formula tripwires
+  data/ions.js          the polyatomic ions, with formula and charge tripwires
   data/molecules.json   generated: the verified database
 scripts/
   build-db.js           PubChem verification
@@ -122,11 +185,18 @@ scripts/
   ocl.js                shared OpenChemLib loader for build scripts
 test/
   unit.mjs              logic tests
+  engine.mjs            the calculation engine, tested inside the built file
   smoke.mjs             offline browser run
 ```
 
 Each JS file is its own IIFE hanging off a shared `ME` namespace, so
-concatenation order is the only coupling between them.
+concatenation order is the only coupling between them. `src/js/*.js` are
+concatenated in filename order and `src/lessons/*.js` follow, so a lesson file
+can register itself with the course engine.
+
+The lesson content is in `src/lessons/` rather than `src/js/` for one practical
+reason: there is a great deal of it, and mixing it in with the app code buries
+the app code.
 
 ---
 
@@ -176,10 +246,27 @@ Deep links work: `#/elements/Fe` and `#/elements/26` both open iron. The Draw
 tool's element picker shares the same layout, categories and data, so the two
 tables cannot drift apart.
 
-## The lessons
+## The course
 
-Eleven lessons, each ending with three questions — 33 in all. Progress is
-counted in questions rather than lessons, and kept in `localStorage`.
+17 units, 72 lessons, 579 questions. Progress is counted in questions rather
+than lessons, and kept in `localStorage`.
+
+Each lesson has the same shape: a hook that opens on something concrete, a body
+of two to four pages with a checkpoint question between them, worked examples,
+a "where people go wrong" section, a question set, unlimited randomised
+practice where a generator exists, and a recap.
+
+**Every number a lesson prints comes from the app's own calculation code**, or,
+where no free machine-readable source exists, from one reference table that
+says so. That rule is enforced by tests: the worked examples' figures are
+re-computed from the engine, and a table marked LITERATURE has its provenance
+shown in the Reference tab rather than being presented as verified.
+
+Two tests exist because structural checks could not catch what they catch:
+one renders **every** page, hook and question for real and fails on an
+exception, an empty render, or a stray `undefined` reaching the text; the other
+builds every simulation. A page body is a function nobody has called until a
+reader opens it.
 
 A wrong answer never just says no:
 
@@ -194,7 +281,7 @@ A wrong answer never just says no:
   hydrogens" — and then points you at what to look for.
 
 Progress is yours to throw away. Above the lessons there is a **Reset answers**
-button, which asks once and then puts all 33 questions back on the board, and a
+button, which asks once and then puts all 579 questions back on the board, and a
 **Remember my progress** switch. Turn the switch off and nothing is written to
 the browser at all: answers still count while the tab is open, but reloading
 starts you fresh. Switching it off also deletes whatever was already saved. The
@@ -204,6 +291,45 @@ Tests enforce that every question is answerable: each click-an-atom question
 must have at least one correct atom and must not accept every atom, each
 counting question must match its own molecule, and no question may ask for
 something its accepted answer does not have.
+
+## The four newer tabs
+
+**Balancer.** One box, loose input — formulas or names, in any spelling. The
+arithmetic is exact rational (BigInt fractions), never floating point, so a
+coefficient is never 2.99999 and the app can say for certain whether an
+equation balances. Three outcomes are all explained in words: one answer; none,
+and which element appears on only one side; or several independent ones, which
+means two reactions have been written as one. Also an atom table that goes
+green element by element, a conservation-of-mass check, the reaction type with
+a reason, mole ratios, a by-hand walkthrough and a try-it-yourself mode.
+
+Typing a name resolves the seven diatomic elements plus P₄ and S₈ to their real
+molecular forms, and says why. Before that fix, "methane + oxygen" balanced as
+CH₄ + 4O → CO₂ + 2H₂O: arithmetically perfect and chemically nonsense.
+
+**Gas Simulator.** Particles in a box with a draggable piston and visible
+wall-hit flashes. A slider *and* a number box for P, V, T and n, each with its
+own unit dropdown, remembered between visits. Hold-still locks with one-click
+Boyle, Charles, Gay-Lussac and Avogadro presets. 13 gases with real molar
+masses, so the heavy ones visibly move more slowly. A live PV = nRT panel using
+the right R for the chosen units, with every conversion shown. Absolute zero is
+blocked, with the reason.
+
+A gas has three degrees of freedom, not four, so one variable is always
+recomputed from the other three — including at startup, which is how the first
+version came to violate PV = nRT by 1.4% on its opening frame.
+
+**Tools.** 18 calculators, all sharing the engine the lessons and the graders
+use, so an answer here and an answer there can never disagree. Each one shows
+its working in the same voice as the lessons.
+
+**Reference.** 11 tables, and each one states its provenance, because that
+genuinely differs: the polyatomic ions are re-verified against PubChem on every
+build, the monatomic ion charges are *derived* from the periodic table so they
+cannot contradict it, and the solubility rules, activity series, specific
+heats, colligative constants and organic boiling points are literature values
+with no free machine-readable source — so they say so. Plus a 49-word glossary,
+searchable, and linkable to a single word from the search bar.
 
 ## Notes on the chemistry
 
@@ -269,8 +395,13 @@ the 3D viewer.
 
 ## Browser support
 
-Any current Chrome, Firefox, Safari or Edge, on desktop, tablet or phone. The
+Any current Chrome, Firefox, Safari or Edge on a desktop or a laptop. The
 drawing canvas takes touch input. The 3D viewer needs WebGL and says so if it
-is unavailable. Lesson progress uses `localStorage`, wrapped in `try`/`catch`,
-so private-browsing modes degrade to "progress is not remembered" rather than
+is unavailable. Progress uses `localStorage`, wrapped in `try`/`catch`, so
+private-browsing modes degrade to "progress is not remembered" rather than
 breaking.
+
+**A phone and tablet layout has not been done yet**, at the user's explicit
+request to leave it until later. The nav carries nine tabs on one row, which
+needs a scrollable tab row or a "More" menu before the app is comfortable on a
+small screen. Everything works on a small screen; some of it is cramped.
