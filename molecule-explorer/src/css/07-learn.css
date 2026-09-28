@@ -490,3 +490,15 @@
   .sim-rm-glyph::before { content: '\2193'; }
 }
 .sim-rm-station.on { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Four sliders in a wrapping flex row end up with their labels colliding,
+ * because each label is nowrap and the input beside it can shrink to nothing.
+ * A grid gives every control a column of its own width. */
+.sim-controls.grid2 {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 18px; align-items: center;
+}
+.sim-controls.grid2 .sim-control { min-width: 0; }
+@media (max-width: 640px) {
+  .sim-controls.grid2 { grid-template-columns: 1fr; }
+}

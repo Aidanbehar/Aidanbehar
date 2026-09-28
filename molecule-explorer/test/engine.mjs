@@ -983,6 +983,39 @@ describe('generated practice problems', () => {
     /* The lesson says six, and names them. */
     assert.equal(got.strongAcidCount, 6);
   });
+
+  test('the worked examples in the thermochemistry unit still match the engine', async () => {
+    const got = await run(() => {
+      const S = window.ME.solution, R = window.ME.ref;
+      const c = R.SPECIFIC_HEAT.values;
+      const mix = S.mixTemperatures(
+        { mass: 100, c: c.aluminium, T: 95 },
+        { mass: 200, c: c['water (liquid)'], T: 20 });
+      return {
+        q250: S.heat(250, c['water (liquid)'], 80).q,
+        q100: S.heat(100, c['water (liquid)'], 25).q,
+        qAl: S.heat(50, c.aluminium, 40).q,
+        kettleSeconds: S.heat(250, c['water (liquid)'], 80).q / 2000,
+        table: [c['water (liquid)'], c.ethanol, c['air (dry)'], c.glass, c.aluminium, c.iron, c.lead],
+        mixFinal: mix.finalT,
+        mixImbalance: mix.imbalance,
+        gibbsMelting: S.gibbs(6.01, 22.0, 273.15).deltaG,
+      };
+    });
+    const near = (a, b, tol, what) => assert.ok(Math.abs(a - b) < tol, what + ': engine says ' + a + ', the lesson prints ' + b);
+    near(got.q250, 83680, 1, 'warming 250 g of water by 80 degrees');
+    near(got.q100, 10460, 1, 'warming 100 g of water by 25 degrees');
+    near(got.qAl, 1794, 1, 'warming 50 g of aluminium by 40 degrees');
+    near(got.kettleSeconds, 42, 0.5, 'how long a 2 kW kettle takes');
+    /* The specific-heat table the lesson prints, in its printed order. */
+    assert.deepEqual(got.table, [4.184, 2.44, 1.005, 0.84, 0.897, 0.449, 0.128]);
+    /* Calorimetry: energy in must equal energy out, to floating-point noise. */
+    assert.ok(Math.abs(got.mixImbalance) < 1e-6, 'calorimetry does not conserve energy: ' + got.mixImbalance);
+    near(got.mixFinal, 27.26, 0.01, 'the calorimeter simulation\u2019s default case');
+    /* Ice melting: uphill in enthalpy, up in entropy, and balanced at 0 C —
+     * which is the lesson's claim that a melting point is where dG crosses zero. */
+    assert.ok(Math.abs(got.gibbsMelting) < 0.05, 'melting at 0 C should have dG near zero, got ' + got.gibbsMelting);
+  });
 });
 
 /* ------------------------------------------------- colligative properties */

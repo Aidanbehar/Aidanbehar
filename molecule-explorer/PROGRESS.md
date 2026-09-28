@@ -186,10 +186,13 @@ network switched off.
 - **Unit 12 — Acids and bases** (3 lessons: what they actually are, the pH
   scale and why it is logarithmic, and strong versus weak with titration;
   embeds the pH-scale and titration simulations)
+- **Unit 13 — Energy in reactions** (3 lessons: heat and q = mcΔT, enthalpy
+  with bond energies and Hess's law, and entropy with ΔG; embeds the new
+  calorimetry simulation and the energy diagram)
 - **Unit 15 — Organic chemistry: reading structures** (the original 12 lessons,
   kept working unchanged)
 
-58 lessons, 139 pages, 450 questions, about 12.5 hours of reading.
+61 lessons, 148 pages, 480 questions, about 13.5 hours of reading.
 
 **`src/js/20-calc-lewis.js` — Lewis structures and VSEPR**
 - Runs the counting method and returns electron totals, bond orders, lone
@@ -223,6 +226,10 @@ network switched off.
   the arrow that performs it, computed by `ME.stoich.massToMass` — the same
   code the Tools tab and the graders use. It runs across on a wide screen and
   turns the corner downwards on a narrow one.
+- Calorimetry: drop something hot into water and see where the two
+  temperatures meet, and that it is never halfway. `ME.solution.mixTemperatures`
+  solves conservation of energy for the final temperature rather than
+  iterating, so it is exact, and the test asserts the two q values cancel.
 - One gas law at a time: two variables pinned, one dragged, the fourth forced,
   with the relationship plotted so it is visible whether the line reaches the
   origin — which is the whole difference between Boyle and Charles. Every

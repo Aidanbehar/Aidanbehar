@@ -127,6 +127,36 @@
     ] };
   }
 
+  /* Two things at different temperatures, put in contact. Energy leaves one
+   * and enters the other until they agree, and nothing is lost — so
+   *   m1 c1 (Tf - T1) + m2 c2 (Tf - T2) = 0
+   * which rearranges to a weighted average of the two starting temperatures,
+   * weighted by mc. Solving it rather than iterating means the final
+   * temperature is exact, and the q values on each side must cancel. */
+  function mixTemperatures(a, b) {
+    const w1 = a.mass * a.c, w2 = b.mass * b.c;
+    if (!(w1 > 0) || !(w2 > 0)) return { ok: false, error: 'Both masses and both specific heats have to be greater than zero.' };
+    const Tf = (w1 * a.T + w2 * b.T) / (w1 + w2);
+    const qA = w1 * (Tf - a.T);
+    const qB = w2 * (Tf - b.T);
+    const hotter = a.T > b.T ? a : b;
+    const cooler = a.T > b.T ? b : a;
+    return {
+      ok: true, finalT: Tf, qA: qA, qB: qB,
+      /* The check that matters: what one lost, the other gained. */
+      imbalance: qA + qB,
+      steps: [
+        { text: 'Energy is conserved, so whatever the hotter one loses, the cooler one gains. There is no third place for it to go, assuming the container itself absorbs nothing.' },
+        { text: 'Write q = mcΔT for each and set the total to zero: m₁c₁(T_final − T₁) + m₂c₂(T_final − T₂) = 0.' },
+        { text: 'Rearranged, the answer is a weighted average of the two starting temperatures, weighted by mass times specific heat.',
+          maths: 'T_final = (' + fmt(w1, 4) + ' × ' + fmt(a.T, 5) + ' + ' + fmt(w2, 4) + ' × ' + fmt(b.T, 5) + ') ÷ ' + fmt(w1 + w2, 4) + ' = ' + fmt(Tf, 5) },
+        { text: 'So the ' + (hotter === a ? 'first' : 'second') + ' one lost ' + fmt(Math.abs(hotter === a ? qA : qB), 4) +
+            ' J and the ' + (cooler === a ? 'first' : 'second') + ' one gained the same ' + fmt(Math.abs(cooler === a ? qA : qB), 4) + ' J.' },
+        { text: 'Notice the final temperature is not halfway between. It sits much closer to whichever side has the larger mc — which is why a hot spanner dropped in a bucket of water barely warms the water at all.' },
+      ],
+    };
+  }
+
   function gibbs(deltaH, deltaS, T) {
     /* deltaH in kJ/mol, deltaS in J/(mol K), T in K */
     const g = deltaH - (T * deltaS) / 1000;
@@ -212,7 +242,7 @@
 
   ME.solution = {
     molarity, molarityFromGrams, dilute, massPercent, ppm, molality,
-    pHfromH, HfrompH, neutralise, heat, gibbs,
+    pHfromH, HfrompH, neutralise, heat, mixTemperatures, gibbs,
     particlesPerUnit, freezingPoint, boilingPoint,
   };
 })();

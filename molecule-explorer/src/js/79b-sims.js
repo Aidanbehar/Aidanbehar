@@ -1438,9 +1438,131 @@
       'Two variables pinned, one dragged, and the fourth has no choice. Watch whether the graph is a line through the origin or a curve.', body);
   }
 
+  /* ================================================================ calorimetry */
+  /* Drop something hot into water and watch where the two temperatures meet.
+   * The final temperature comes from ME.solution.mixTemperatures, which solves
+   * conservation of energy rather than iterating, and the two q values are
+   * shown side by side so it is visible that they cancel. */
+  function calorimeter(opts) {
+    opts = opts || {};
+    const SUBSTANCES = ['aluminium', 'iron', 'copper', 'lead', 'glass', 'ethanol']
+      .filter((k) => ME.ref.SPECIFIC_HEAT.values[k] !== undefined);
+    let objName = opts.object || SUBSTANCES[0];
+    let objMass = 100, objT = 95, waterMass = 200, waterT = 20;
+
+    const body = el('div');
+    const chips = el('div', { class: 'sim-buttons' });
+    body.appendChild(chips);
+    SUBSTANCES.forEach((k) => {
+      const btn = el('button', { class: 'btn btn-sm' + (k === objName ? ' on' : ''), text: k });
+      btn.addEventListener('click', () => {
+        objName = k;
+        ME.$$('.btn', chips).forEach((x) => x.classList.toggle('on', x.textContent === k));
+        draw();
+      });
+      chips.appendChild(btn);
+    });
+
+    const controls = el('div', { class: 'sim-controls grid2' });
+    controls.appendChild(slider('Object mass', 10, 500, objMass, 5,
+      (v) => { objMass = v; draw(); }, (v) => v + ' g').node);
+    controls.appendChild(slider('Object temperature', 30, 300, objT, 1,
+      (v) => { objT = v; draw(); }, (v) => v + ' \u00b0C').node);
+    controls.appendChild(slider('Water mass', 25, 1000, waterMass, 5,
+      (v) => { waterMass = v; draw(); }, (v) => v + ' g').node);
+    controls.appendChild(slider('Water temperature', 1, 40, waterT, 1,
+      (v) => { waterT = v; draw(); }, (v) => v + ' \u00b0C').node);
+    body.appendChild(controls);
+
+    const canvas = el('canvas', { width: '680', height: '150' });
+    body.appendChild(canvas);
+    const readout = el('div', { class: 'sim-roadmap' });
+    body.appendChild(readout);
+    const note = el('div', { class: 'sim-note' });
+    body.appendChild(note);
+    const work = el('div', { class: 'sim-steps' });
+    body.appendChild(work);
+
+    function draw() {
+      const cObj = ME.ref.SPECIFIC_HEAT.values[objName];
+      const cWater = ME.ref.SPECIFIC_HEAT.values['water (liquid)'];
+      const r = ME.solution.mixTemperatures(
+        { mass: objMass, c: cObj, T: objT },
+        { mass: waterMass, c: cWater, T: waterT });
+      ME.clear(readout); ME.clear(work);
+      if (!r.ok) { note.textContent = r.error; return; }
+
+      const st = (label, value, cls) => el('div', { class: 'sim-rm-station' + (cls || '') }, [
+        el('div', { class: 'v', text: value }),
+        el('div', { class: 'k', text: label }),
+      ]);
+      readout.appendChild(st(objName + ', ' + objMass + ' g', ME.fmt.fmt(objT, 4) + ' \u00b0C'));
+      readout.appendChild(st('water, ' + waterMass + ' g', ME.fmt.fmt(waterT, 4) + ' \u00b0C'));
+      readout.appendChild(st('they settle at', ME.fmt.fmt(r.finalT, 4) + ' \u00b0C', ' on'));
+      readout.appendChild(st('the ' + objName + ' lost', ME.fmt.fmt(Math.abs(r.qA) / 1000, 4) + ' kJ'));
+      readout.appendChild(st('the water gained', ME.fmt.fmt(Math.abs(r.qB) / 1000, 4) + ' kJ'));
+
+      const halfway = (objT + waterT) / 2;
+      const Obj = objName.charAt(0).toUpperCase() + objName.slice(1);
+      note.textContent = 'Halfway between the two starting temperatures would be ' +
+        ME.fmt.fmt(halfway, 4) + ' \u00b0C, and they settle at ' + ME.fmt.fmt(r.finalT, 4) +
+        ' \u00b0C instead. ' + Obj + ' has a specific heat of ' + cObj +
+        ' J/(g\u00b7K) against water\u2019s ' + cWater +
+        ', so the water barely moves \u2014 it takes far more energy to shift a gram of water by a degree.';
+
+      drawBar(r.finalT);
+
+      const ol = el('ol', { class: 'sim-worklist' });
+      r.steps.forEach((s2) => {
+        const li = el('li');
+        li.appendChild(el('span', { html: ME.chemHTML(s2.text) }));
+        if (s2.maths) li.appendChild(el('div', { class: 'sim-workval', text: s2.maths }));
+        ol.appendChild(li);
+      });
+      work.appendChild(ol);
+    }
+
+    /* A thermometer strip: both starting points, the meeting point, and the
+     * halfway mark it is deliberately not at. */
+    function drawBar(finalT) {
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height, pad = 40;
+      ctx.clearRect(0, 0, W, H);
+      const lo = 0, hi = Math.max(objT, 100) + 10;
+      const x = (t) => pad + ((t - lo) / (hi - lo)) * (W - pad * 2);
+
+      ctx.strokeStyle = css('--border-strong', '#bbb');
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pad, H - 42); ctx.lineTo(W - pad, H - 42); ctx.stroke();
+      ctx.fillStyle = css('--text-faint', '#888');
+      ctx.font = '11px system-ui, sans-serif';
+      for (let t = 0; t <= hi; t += 50) {
+        ctx.beginPath(); ctx.moveTo(x(t), H - 42); ctx.lineTo(x(t), H - 36); ctx.stroke();
+        ctx.fillText(t + '\u00b0', x(t) - 8, H - 22);
+      }
+
+      const mark = (t, label, colour, up) => {
+        ctx.strokeStyle = colour; ctx.fillStyle = colour; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x(t), H - 42); ctx.lineTo(x(t), up); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x(t), up, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.font = '600 11px system-ui, sans-serif';
+        ctx.fillText(label, x(t) - ctx.measureText(label).width / 2, up - 8);
+      };
+      mark((objT + waterT) / 2, 'halfway', css('--border-strong', '#bbb'), 96);
+      mark(waterT, 'water', css('--text-faint', '#888'), 66);
+      mark(objT, objName, css('--text-faint', '#888'), 66);
+      mark(finalT, 'settles here', css('--accent', '#3b6ef0'), 34);
+    }
+
+    draw();
+    return shell(opts.title || 'Drop something hot into water',
+      'Where the two temperatures meet, and why it is never halfway.', body);
+  }
+
   ME.sims = {
     statesOfMatter, heatingCurve, buildAtom, trendMap, phScale, titration, lewis,
     energyDiagram, equilibrium, solutionMixer, bondRotation, stoichMap, gasLaw,
+    calorimeter,
     shell, slider, whenVisible, css,
   };
 })();
