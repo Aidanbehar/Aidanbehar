@@ -956,6 +956,33 @@ describe('generated practice problems', () => {
     near(got.rmsSF6, 225, 5, 'SF6 rms speed at room temperature');
     near(got.ch4Moles, 2.00, 0.01, 'moles in 32 g of methane');
   });
+
+  test('the worked examples in the acids unit still match the engine', async () => {
+    const got = await run(() => {
+      const S = window.ME.solution;
+      return {
+        ph1e3: S.pHfromH(1e-3).pH,
+        pohAtPh2: S.HfrompH(2).pOH,
+        stomachVsBlood: S.HfrompH(1.5).H / S.HfrompH(7.4).H,
+        oceanRise: (S.HfrompH(8.1).H / S.HfrompH(8.2).H - 1) * 100,
+        ph5e4: S.pHfromH(5e-4).pH,
+        titration1: (0.0274 * 0.100) / 0.0250,
+        titration2: (0.0250 * 0.200) / 0.0200,
+        strongAcidCount: window.ME.ref.STRONG_ACIDS.list.length,
+      };
+    });
+    const near = (a, b, tol, what) => assert.ok(Math.abs(a - b) < tol, what + ': engine says ' + a + ', the lesson prints ' + b);
+    near(got.ph1e3, 3, 0.001, 'pH of 1e-3 M');
+    near(got.pohAtPh2, 12, 0.001, 'pOH at pH 2');
+    /* "about eight hundred thousand times more acidic" */
+    near(got.stomachVsBlood, 794000, 2000, 'stomach acid against blood');
+    near(got.oceanRise, 26, 0.5, 'the ocean pH shift as a percentage rise in H+');
+    near(got.ph5e4, 3.3, 0.01, 'the pH of 5e-4, estimated without a calculator');
+    near(got.titration1, 0.110, 0.001, 'the first titration worked example');
+    near(got.titration2, 0.250, 0.001, 'the second titration question');
+    /* The lesson says six, and names them. */
+    assert.equal(got.strongAcidCount, 6);
+  });
 });
 
 /* ------------------------------------------------- colligative properties */

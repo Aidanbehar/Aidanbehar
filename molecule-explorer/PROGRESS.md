@@ -183,10 +183,13 @@ network switched off.
 - **Unit 11 — Solutions** (3 lessons: what dissolving actually is, concentration
   and dilution, and colligative properties — why salt melts ice and why
   seawater dehydrates you)
+- **Unit 12 — Acids and bases** (3 lessons: what they actually are, the pH
+  scale and why it is logarithmic, and strong versus weak with titration;
+  embeds the pH-scale and titration simulations)
 - **Unit 15 — Organic chemistry: reading structures** (the original 12 lessons,
   kept working unchanged)
 
-55 lessons, 130 pages, 421 questions, about 11.5 hours of reading.
+58 lessons, 139 pages, 450 questions, about 12.5 hours of reading.
 
 **`src/js/20-calc-lewis.js` — Lewis structures and VSEPR**
 - Runs the counting method and returns electron totals, bond orders, lone
