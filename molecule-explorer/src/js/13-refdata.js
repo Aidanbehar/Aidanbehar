@@ -246,6 +246,40 @@
     why: 'Water’s 1.86 means a solution of one mole of particles per kilogram freezes 1.86 °C lower. Cyclohexane’s 20.0 is why it is used to measure molar masses this way — the same solution shifts its freezing point ten times further, so the measurement is ten times easier to read.',
   };
 
+  /* Boiling points of a handful of small organic molecules, for the isomer
+   * lessons. The molecule database carries structures and masses but not
+   * boiling points, so these are literature values — stated here, once,
+   * marked as such, rather than typed into a lesson where nothing could check
+   * them. The lessons read them from here and a test pins them, so a number
+   * on the page and a number in the table cannot drift apart.
+   *
+   * Every pair below exists to make one point: the isomers have identical
+   * formulas and different boiling points, because shape decides how much
+   * contact a molecule makes with its neighbours. */
+  const ORGANIC_BP = {
+    source: 'Standard boiling points at 1 atm, in °C, from the usual reference tables. Literature values — the molecule database this app verifies against does not carry boiling points.',
+    values: {
+      'butane': -0.5,
+      '2-methylpropane': -11.7,
+      'pentane': 36.1,
+      '2-methylbutane': 27.8,
+      '2,2-dimethylpropane': 9.5,
+      'propan-1-ol': 97.2,
+      'propan-2-ol': 82.6,
+      'cis-but-2-ene': 3.7,
+      'trans-but-2-ene': 0.9,
+      'ethanol': 78.4,
+      'dimethyl ether': -24.0,
+      'ethanoic acid': 118.0,
+    },
+    why: 'Every pair here has one formula and two boiling points. Straight chains lie alongside their neighbours down their whole length; branched and kinked ones cannot, so there is less contact, weaker dispersion forces, and a lower boiling point.',
+  };
+  /* Formatted for a lesson, with a real minus sign. */
+  function boilingPoint(name) {
+    const v = ORGANIC_BP.values[name];
+    return v === undefined ? null : ME.fmt.fmtSigned(v, 3) + ' \u00b0C';
+  }
+
   /* PubChem's element table uses American spellings, and the rest of the app
    * is written in British English. Rather than let generated names say
    * "aluminum sulfate" in the middle of a lesson that says aluminium, the two
@@ -272,7 +306,7 @@
     setIons, get ions() { return IONS; }, ionByName, ionByFormula,
     typicalCharge, ideName, IDE_STEM, LATIN, FIXED_D_BLOCK,
     SOLUBILITY, ACTIVITY, moreReactive, STRONG_ACIDS, STRONG_BASES,
-    SPECIFIC_HEAT, LATENT, COLLIGATIVE, PREFIXES,
+    SPECIFIC_HEAT, LATENT, COLLIGATIVE, ORGANIC_BP, boilingPoint, PREFIXES,
     elementName, elementNameLower, SPELLING,
   };
 })();

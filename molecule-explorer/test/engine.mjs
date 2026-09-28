@@ -1016,6 +1016,41 @@ describe('generated practice problems', () => {
      * which is the lesson's claim that a melting point is where dG crosses zero. */
     assert.ok(Math.abs(got.gibbsMelting) < 0.05, 'melting at 0 C should have dG near zero, got ' + got.gibbsMelting);
   });
+
+  /* The isomer lessons quote boiling points, and the verified molecule
+   * database does not carry them, so they live in one marked literature
+   * table. This pins the numbers the lessons print and the fact that every
+   * pair still makes its point in the right direction. */
+  test('the organic boiling points the isomer lessons quote', async () => {
+    const got = await run(() => {
+      const v = window.ME.ref.ORGANIC_BP.values;
+      return {
+        values: v,
+        source: window.ME.ref.ORGANIC_BP.source,
+        formatted: window.ME.ref.boilingPoint('2-methylpropane'),
+        missing: window.ME.ref.boilingPoint('nothing at all'),
+      };
+    });
+    const v = got.values;
+    assert.equal(v.butane, -0.5);
+    assert.equal(v['2-methylpropane'], -11.7);
+    assert.equal(v['propan-1-ol'], 97.2);
+    assert.equal(v['propan-2-ol'], 82.6);
+    assert.equal(v['cis-but-2-ene'], 3.7);
+    assert.equal(v['trans-but-2-ene'], 0.9);
+    /* The direction of every comparison the lessons make. */
+    assert.ok(v.butane > v['2-methylpropane'], 'straight beats branched');
+    assert.ok(v.pentane > v['2-methylbutane'], 'one branch lowers it');
+    assert.ok(v['2-methylbutane'] > v['2,2-dimethylpropane'], 'two branches lower it further');
+    assert.ok(v['propan-1-ol'] > v['propan-2-ol'], 'the end-carbon alcohol boils higher');
+    assert.ok(v['cis-but-2-ene'] > v['trans-but-2-ene'], 'cis boils higher than trans');
+    assert.ok(v.ethanol > v['dimethyl ether'], 'the alcohol hydrogen-bonds and the ether does not');
+    /* It has to say it is literature data rather than verified. */
+    assert.match(got.source, /literature/i);
+    /* And the formatter uses a real minus sign, not a hyphen. */
+    assert.match(got.formatted, /\u2212/);
+    assert.equal(got.missing, null);
+  });
 });
 
 /* ------------------------------------------------------- searching the app */

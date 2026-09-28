@@ -75,6 +75,7 @@
     { key: 'prefixes', name: 'SI prefixes', render: prefixes },
     { key: 'heats', name: 'Specific heats', render: heats },
     { key: 'colligative', name: 'Freezing and boiling constants', render: colligative },
+    { key: 'organic-bp', name: 'Boiling points of small isomers', render: organicBP },
     { key: 'glossary', name: 'Glossary', render: glossary },
   ];
 
@@ -98,6 +99,36 @@
     });
     box.appendChild(t);
     box.appendChild(el('p', { class: 'note rf-src', text: c.source + ' Literature values, not verified by the build.' }));
+    return box;
+  }
+
+  /* Boiling points of the small organic molecules the isomer lessons compare.
+   * Grouped into pairs, because every pair exists to make the same point. */
+  function organicBP() {
+    const t = ME.ref.ORGANIC_BP;
+    const PAIRS = [
+      ['butane', '2-methylpropane', 'C\u2084H\u2081\u2080 \u2014 straight against branched'],
+      ['pentane', '2-methylbutane', 'C\u2085H\u2081\u2082 \u2014 one branch'],
+      ['pentane', '2,2-dimethylpropane', 'C\u2085H\u2081\u2082 \u2014 two branches, and 27 degrees lower'],
+      ['propan-1-ol', 'propan-2-ol', 'C\u2083H\u2088O \u2014 the group moved one carbon'],
+      ['cis-but-2-ene', 'trans-but-2-ene', 'C\u2084H\u2088 \u2014 one bond turned round'],
+      ['ethanol', 'dimethyl ether', 'C\u2082H\u2086O \u2014 a different family entirely'],
+    ];
+    const box = el('div');
+    box.appendChild(el('p', { class: 'note', text: t.why }));
+    const table = el('table', { class: 'rf-table' });
+    const head = el('tr');
+    ['', 'Boils at', '', 'Boils at', 'The pair'].forEach((h) => head.appendChild(el('th', { text: h })));
+    table.appendChild(head);
+    PAIRS.forEach(([a, b, note]) => {
+      const tr = el('tr');
+      [a, ME.ref.boilingPoint(a), b, ME.ref.boilingPoint(b)].forEach((x, i) =>
+        tr.appendChild(el('td', { class: i % 2 ? 'num' : '', text: x })));
+      tr.appendChild(el('td', { class: 'note', text: note }));
+      table.appendChild(tr);
+    });
+    box.appendChild(table);
+    box.appendChild(el('p', { class: 'note rf-src', text: t.source }));
     return box;
   }
 

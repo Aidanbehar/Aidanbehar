@@ -195,8 +195,16 @@ network switched off.
 - **Unit 15 — Organic chemistry: reading structures** (the original 12 lessons,
   kept working unchanged)
 
-**All fifteen units now exist.** 64 lessons, 157 pages, 507 questions, about
-14 hours of reading.
+- **Unit 16 — Organic naming and isomers** (5 lessons: naming a carbon
+  skeleton, naming with functional groups, structural isomers, cis/trans, and
+  chirality; embeds the bond-rotation simulation)
+
+The nine extra organic lessons the spec asked for did not fit under one unit
+heading — Unit 15 would have had 21 lessons — so organic is split across
+three units: 15 for reading structures (unchanged), 16 for naming and
+isomers, and 17 for reactions and big molecules.
+
+69 lessons, 172 pages, 552 questions, about 15.5 hours of reading.
 
 **`src/js/20-calc-lewis.js` — Lewis structures and VSEPR**
 - Runs the counting method and returns electron totals, bond orders, lone
@@ -222,6 +230,14 @@ network switched off.
   aluminium. `ME.ref.elementName` maps the two differing names once and every
   generated name goes through it; both spellings are still accepted as input,
   and a test checks both halves.
+
+**`ME.ref.ORGANIC_BP` — boiling points, marked as learned**
+- The isomer lessons compare boiling points, and the verified molecule
+  database carries structures and masses but not boiling points. The numbers
+  were typed from memory into the lesson first, which is exactly what this
+  project's build script exists to prevent. They now live in one marked
+  literature table with a Reference section, the lessons read them from there,
+  and a test pins both the values and the direction of every comparison.
 
 **`src/js/81-siteindex.js` — the search bar finds the course too**
 - The search box was built for molecules, which left 64 lessons, 18
