@@ -1,0 +1,2 @@
+/* Natural Earth 1:10m admin-1 for MCO, dissolved & simplified with mapshaper. Public domain. */
+(window.GEO_REGIONS = window.GEO_REGIONS || {})["MCO"] = {"type":"Topology","arcs":[[[57484,99999],[26884,-17660],[15631,-26578],[-27191,-27356],[-19019,-28405],[-53789,10455],[9630,50732],[20756,26499],[27098,12313]]],"transform":{"scale":[7.170471704717002e-7,4.5537455374556796e-7],"translate":[7.365750000000001,43.717969]},"objects":{"MCO":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"id":"monaco","en":"Monaco","key":"Monaco"}}]}}};

@@ -1,0 +1,2 @@
+/* Natural Earth 1:10m admin-1 for VAT, dissolved & simplified with mapshaper. Public domain. */
+(window.GEO_REGIONS = window.GEO_REGIONS || {})["VAT"] = {"type":"Topology","arcs":[[[23997,99999],[72066,-4557],[3936,-95442],[-67978,0],[-32021,22700],[23997,77299]]],"transform":{"scale":[1.3210132101311187e-8,1.16301163011455e-8],"translate":[12.452714,41.902752]},"objects":{"VAT":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"id":"vatican","en":"Vatican","key":"Vatican"}}]}}};

@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Europe Alcohol Laws</title>
+<meta name="description" content="Interactive map of drinking-age and alcohol laws across Europe, with regional maps and cited sources.">
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f0f2f5; --text:#1b1f24; --muted:#5b6470; --border:#d9dee5;
+  --accent:#0b5cad; --accent-weak:#e6f0fb; --sea:#e9f1f8; --ctx:#e3e5e8; --ctx-stroke:#c9cdd3; --stroke:#ffffff;
+  --hl:#111; --warn-bg:#fff4d6; --warn:#8a5a00; --low-bg:#fde2e1; --low:#a1261d; --shadow:0 6px 24px rgba(15,23,42,.12);
+  --radius:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1318; --surface:#171c22; --surface-2:#1f262e; --text:#e8edf3; --muted:#9aa5b1; --border:#2c353f;
+    --accent:#6fb1ff; --accent-weak:#16283d; --sea:#121a23; --ctx:#262d35; --ctx-stroke:#323b45; --stroke:#0f1318;
+    --hl:#fff; --warn-bg:#3a2c08; --warn:#f3c969; --low-bg:#3d1714; --low:#ff9b92; --shadow:0 6px 24px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1318; --surface:#171c22; --surface-2:#1f262e; --text:#e8edf3; --muted:#9aa5b1; --border:#2c353f;
+  --accent:#6fb1ff; --accent-weak:#16283d; --sea:#121a23; --ctx:#262d35; --ctx-stroke:#323b45; --stroke:#0f1318;
+  --hl:#fff; --warn-bg:#3a2c08; --warn:#f3c969; --low-bg:#3d1714; --low:#ff9b92; --shadow:0 6px 24px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+a{color:var(--accent)}
+button,select,input{font:inherit;color:inherit}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);z-index:5}
+header h1{font-size:17px;margin:0;font-weight:650;letter-spacing:-.01em;white-space:nowrap}
+header h1 span{color:var(--muted);font-weight:500}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:auto}
+.ctl{height:36px;border:1px solid var(--border);border-radius:9px;background:var(--surface);padding:0 10px}
+select.ctl{padding-right:6px;max-width:300px}
+.btn{height:36px;border:1px solid var(--border);border-radius:9px;background:var(--surface);padding:0 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn:focus-visible,.ctl:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.search{position:relative}
+.search input{width:220px}
+.suggest{position:absolute;top:40px;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:9px;box-shadow:var(--shadow);max-height:300px;overflow:auto;z-index:20;display:none}
+.suggest div{padding:7px 10px;cursor:pointer}
+.suggest div.active,.suggest div:hover{background:var(--accent-weak)}
+main{position:relative;flex:1;min-height:0;display:flex}
+#mapwrap{position:relative;flex:1;min-width:0;background:var(--sea);overflow:hidden}
+#map{width:100%;height:100%;display:block;touch-action:none}
+#map path.land{stroke:var(--stroke);stroke-width:.7;vector-effect:non-scaling-stroke;cursor:pointer;transition:fill .5s ease}
+#map path.land:hover{filter:brightness(1.08) saturate(1.1)}
+#map path.ctx{fill:var(--ctx);stroke:var(--ctx-stroke);stroke-width:.5;vector-effect:non-scaling-stroke}
+#map path.sel{stroke:var(--hl);stroke-width:2.2}
+#map path:focus,#map circle:focus,#map:focus{outline:none}
+#map path.land:focus-visible{stroke:var(--accent);stroke-width:2.5}
+#map circle.micro{stroke:var(--hl);stroke-width:1.2;vector-effect:non-scaling-stroke;cursor:pointer;transition:fill .5s ease}
+#map circle.micro.sel{stroke-width:2.6}
+#map text.mlabel{font-size:10px;fill:var(--text);paint-order:stroke;stroke:var(--sea);stroke-width:3px;pointer-events:none}
+.breadcrumb{position:absolute;top:12px;left:12px;display:flex;gap:8px;align-items:center;z-index:4;flex-wrap:wrap;max-width:calc(100% - 90px)}
+.crumb{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:6px 10px;box-shadow:var(--shadow);font-weight:600}
+.zoomctl{position:absolute;right:calc(12px + var(--pw, 0px));top:12px;transition:right .25s;display:flex;flex-direction:column;gap:6px;z-index:4}
+.zoomctl button{width:36px;height:36px;border:1px solid var(--border);border-radius:9px;background:var(--surface);cursor:pointer;font-size:18px;box-shadow:var(--shadow)}
+.legend{position:absolute;left:12px;bottom:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow);max-width:min(360px,calc(100% - 24px));z-index:4;font-size:13px;max-height:55%;overflow:auto}
+.legend h3{margin:0 0 6px;font-size:13px;font-weight:650}
+.legend .row{display:flex;align-items:center;gap:8px;margin:3px 0}
+.legend .sw{width:16px;height:16px;border-radius:4px;flex:none;border:1px solid rgba(0,0,0,.15)}
+.legend .note{color:var(--muted);margin-top:6px;font-size:12px}
+.legend .toggle{border:none;background:none;color:var(--accent);cursor:pointer;padding:0;font-size:12px}
+.legend.collapsed .body{display:none}
+#tooltip{position:fixed;pointer-events:none;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:13px;box-shadow:var(--shadow);opacity:0;transition:opacity .12s;z-index:30;max-width:320px}
+#tooltip b{display:block}
+aside#panel{position:absolute;top:0;right:0;bottom:0;width:420px;max-width:100%;background:var(--surface);border-left:1px solid var(--border);overflow:auto;display:none;z-index:8;box-shadow:var(--shadow)}
+aside#panel.open{display:block;animation:slidein .25s ease}
+@keyframes slidein{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+.pinner{padding:18px 18px 28px}
+.pclose{position:sticky;top:0;float:right;margin:-6px -6px 0 0;width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:18px;z-index:2}
+.ptitle{display:flex;align-items:center;gap:10px;margin:0 0 4px;font-size:22px;line-height:1.2}
+.ptitle .flag{font-size:30px}
+.sub{color:var(--muted);font-size:13px}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}
+.badge{font-size:12px;border-radius:999px;padding:2px 9px;border:1px solid var(--border);background:var(--surface-2);white-space:nowrap}
+.badge.cat{border:none;color:#111}
+.badge.conf-high{background:#e3f4ea;color:#11643a;border-color:#bfe6cd}
+.badge.conf-medium{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.badge.conf-low,.badge.unverified{background:var(--low-bg);color:var(--low);border-color:transparent;font-weight:600}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .badge.conf-high{background:#11331f;color:#8fe0ae;border-color:transparent}}
+:root[data-theme="dark"] .badge.conf-high{background:#11331f;color:#8fe0ae;border-color:transparent}
+h4{margin:18px 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+table.ages{width:100%;border-collapse:collapse;font-size:14px}
+table.ages th,table.ages td{border:1px solid var(--border);padding:7px 8px;text-align:center}
+table.ages th{background:var(--surface-2);font-weight:600}
+table.ages td.age{font-size:18px;font-weight:700}
+table.ages th:first-child{text-align:left}
+.facts{margin:0;padding:0;list-style:none}
+.facts li{padding:7px 0;border-bottom:1px dashed var(--border)}
+.facts li b{display:block;font-size:13px;color:var(--muted);font-weight:600}
+.summary{margin:0}
+a.cite{text-decoration:none;font-size:.78em;vertical-align:super;line-height:0;margin-left:1px;font-weight:600;white-space:nowrap}
+a.cite:hover{text-decoration:underline}
+.psources{font-size:13px;padding-left:20px;margin:6px 0}
+.psources li{margin:4px 0}
+.disclaimer{background:var(--warn-bg);color:var(--warn);border-radius:9px;padding:9px 11px;font-size:13px;margin-top:16px}
+.pactions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.catnote{background:var(--surface-2);border-radius:9px;padding:8px 10px;font-size:13.5px;margin-top:8px}
+footer{font-size:12px;color:var(--muted);padding:6px 16px;background:var(--surface);border-top:1px solid var(--border);display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between}
+/* Sources page */
+#sources{position:absolute;inset:0;background:var(--bg);overflow:auto;display:none;z-index:10}
+#sources.open{display:block;animation:fadein .2s ease}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.sinner{max-width:980px;margin:0 auto;padding:20px 16px 60px}
+.shead{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:2;border-bottom:1px solid var(--border)}
+.shead h2{margin:0;font-size:22px}
+.shead input{width:280px;max-width:100%}
+.sgroup{margin-top:22px}
+.sgroup h3{margin:0 0 8px;font-size:17px;display:flex;gap:8px;align-items:center}
+.sgroup h3 .count{font-size:12px;color:var(--muted);font-weight:500}
+.src{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:11px 13px;margin:8px 0;transition:box-shadow .3s,border-color .3s}
+.src.hl{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
+.src .t{font-weight:600}
+.src .id{display:inline-block;min-width:34px;font-weight:700;color:var(--accent)}
+.src .meta{font-size:13px;color:var(--muted);margin-top:2px}
+.src .url{font-size:13px;word-break:break-all}
+.src .sup{font-size:13.5px;margin-top:4px}
+.src .back{font-size:12.5px;margin-top:4px}
+.type{font-size:11.5px;border-radius:999px;padding:1px 8px;margin-left:6px;background:var(--surface-2);border:1px solid var(--border);white-space:nowrap}
+.type.official{background:#e3f4ea;color:#11643a;border-color:#bfe6cd}
+.type.intl{background:#e6f0fb;color:#0b4f94;border-color:#c7dcf3}
+.type.news{background:#fdeedd;color:#8a4a00;border-color:#f3d6b2}
+.type.academic{background:#efe7fb;color:#5b2a9a;border-color:#dccbf5}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .type{filter:brightness(.85) contrast(1.1)}}
+.empty{color:var(--muted);padding:20px 0}
+.loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);pointer-events:none}
+.loading[hidden]{display:none}
+@media (max-width: 820px){
+  header h1 span{display:none}
+  .controls{margin-left:0;width:100%}
+  .search{flex:1}
+  .search input{width:100%}
+  select.ctl{flex:1;min-width:0}
+  main{flex-direction:column}
+  aside#panel{position:absolute;left:0;right:0;bottom:0;width:100%;max-height:62%;border-left:none;border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:var(--shadow);z-index:8}
+  aside#panel.open{animation:slideup .25s ease}
+  @keyframes slideup{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+  .legend{font-size:12px;max-width:calc(100% - 70px)}
+  footer{font-size:11px}
+}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🍷 Europe Alcohol Laws <span>· drinking &amp; purchase ages</span></h1>
+  <div class="controls">
+    <div class="search">
+      <input id="search" class="ctl" type="search" placeholder="Jump to a country…" autocomplete="off" aria-label="Search for a country">
+      <div class="suggest" id="suggest" role="listbox"></div>
+    </div>
+    <select id="mode" class="ctl" aria-label="Colour the map by"></select>
+    <button class="btn" id="btnSources" title="All sources and references">📚 Sources</button>
+  </div>
+</header>
+<main>
+  <div id="mapwrap">
+    <svg id="map" role="img" aria-label="Map"></svg>
+    <div class="breadcrumb" id="breadcrumb"></div>
+    <div class="zoomctl">
+      <button id="zin" title="Zoom in" aria-label="Zoom in">+</button>
+      <button id="zout" title="Zoom out" aria-label="Zoom out">−</button>
+      <button id="zreset" title="Reset view" aria-label="Reset view">⟲</button>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="loading" id="loading" hidden>Loading map…</div>
+    <div id="sources"></div>
+  </div>
+  <aside id="panel" aria-live="polite"></aside>
+</main>
+<footer>
+  <span>⚠️ Informational only — not legal advice. Laws change; verify with official sources.</span>
+  <span id="footmeta"></span>
+</footer>
+<div id="tooltip" role="tooltip"></div>
+
+<script src="lib/d3.min.js"></script>
+<script src="lib/topojson-client.min.js"></script>
+<script src="data/alcohol-data.js"></script>
+<script src="data/geo-europe.js"></script>
+<script>
+(function(){
+"use strict";
+const D = window.ALCOHOL_DATA;
+const C = D.countries;
+const SRC = new Map(D.sources.map(s => [s.id, s]));
+const CAT = new Map(D.categories.map(c => [c.id, c]));
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+
+/* ---------------- state ---------------- */
+const state = { view: "europe", mode: "category", selected: null, region: null, country: null, lastContext: null };
+
+/* ---------------- DOM refs ---------------- */
+const svg = d3.select("#map");
+const gRoot = svg.append("g");
+const gLand = gRoot.append("g");
+const gMarks = gRoot.append("g");
+const tooltip = $("#tooltip");
+const panel = $("#panel");
+const legend = $("#legend");
+
+$("#footmeta").textContent = `Data last updated ${D.meta.lastUpdated} · ${Object.keys(C).length} countries · ${D.sources.length} sources`;
+
+/* ---------------- modes ---------------- */
+const modeSel = $("#mode");
+D.modes.forEach(m => { const o = document.createElement("option"); o.value = m.id; o.textContent = "Colour by: " + m.label; modeSel.appendChild(o); });
+modeSel.addEventListener("change", () => { state.mode = modeSel.value; if (state.view === "europe") { recolor(); renderLegend(); } });
+
+function ageColor(v){ return v == null ? D.ageColors.none : (D.ageColors[String(v)] || D.ageColors.none); }
+function fillFor(code){
+  const c = C[code]; if (!c) return null;
+  if (state.mode === "category") return (CAT.get(c.category) || CAT.get("unknown")).color;
+  return ageColor(c.derived[state.mode]);
+}
+
+/* ---------------- zoom ---------------- */
+let width = 0, height = 0;
+const zoom = d3.zoom().scaleExtent([1, 40]).on("zoom", ev => {
+  gRoot.attr("transform", ev.transform);
+  const k = ev.transform.k;
+  gMarks.selectAll("circle.micro").attr("r", markerR / Math.sqrt(k));
+  gMarks.selectAll("text.mlabel").style("font-size", (10 / k) + "px").style("stroke-width", (3 / k) + "px").attr("display", k > 2.5 ? null : "none");
+});
+svg.call(zoom).on("dblclick.zoom", null);
+$("#zin").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 1.6);
+$("#zout").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 1/1.6);
+$("#zreset").onclick = () => svg.transition().duration(600).call(zoom.transform, d3.zoomIdentity);
+let markerR = 6;
+const isMobile = () => window.innerWidth <= 820;
+function panelW(){ return panel.classList.contains("open") && !isMobile() ? panel.offsetWidth : 0; }
+function panelH(){ return panel.classList.contains("open") && isMobile() ? panel.offsetHeight : 0; }
+
+function zoomToBounds(b, maxK){
+  const [[x0,y0],[x1,y1]] = b;
+  const pw = panelW(), ph = panelH();
+  const w = width - pw, h = height - ph;
+  const k = Math.max(1, Math.min(maxK || 8, 0.8 / Math.max((x1-x0)/w, (y1-y0)/h)));
+  const t = d3.zoomIdentity.translate(w/2, h/2).scale(k).translate(-(x0+x1)/2, -(y0+y1)/2);
+  svg.transition().duration(750).call(zoom.transform, t);
+}
+
+/* ---------------- tooltip ---------------- */
+function showTip(ev, html){ tooltip.innerHTML = html; tooltip.style.opacity = 1; moveTip(ev); }
+function moveTip(ev){
+  const pad = 14; let x = ev.clientX + pad, y = ev.clientY + pad;
+  const r = tooltip.getBoundingClientRect();
+  if (x + r.width > window.innerWidth - 8) x = ev.clientX - r.width - pad;
+  if (y + r.height > window.innerHeight - 8) y = ev.clientY - r.height - pad;
+  tooltip.style.left = x + "px"; tooltip.style.top = y + "px";
+}
+function hideTip(){ tooltip.style.opacity = 0; }
+
+/* ---------------- citations ---------------- */
+function cites(ids, ctx){
+  if (!ids || !ids.length) return "";
+  return ids.map(id => `<a class="cite" href="#/sources/${id}" data-src="${id}" title="${esc((SRC.get(id)||{}).title)}">[${id}]</a>`).join("");
+}
+document.addEventListener("click", ev => {
+  const a = ev.target.closest("a.cite, a.tosrc");
+  if (a) { ev.preventDefault(); state.lastContext = currentContext(); openSources(+a.dataset.src || null, a.dataset.group || null); }
+});
+function currentContext(){
+  if (state.view === "country") return state.region ? `#/r/${state.country}/${state.region}` : `#/r/${state.country}`;
+  if (state.selected) return `#/c/${state.selected}`;
+  return "#/";
+}
+
+/* ---------------- Europe map ---------------- */
+const topo = window.GEO_EUROPE;
+const obj = topo.objects[Object.keys(topo.objects)[0]];
+const feats = topojson.feature(topo, obj).features.filter(f => f.geometry);
+let projection, path;
+
+function setupEuropeProjection(){
+  projection = d3.geoConicConformal().rotate([-14, 0]).parallels([40, 64]);
+  const frame = {type:"MultiPoint", coordinates:[[-24,34.5],[44,34.5],[44,71],[-24,71],[10,71.5],[10,34]]};
+  projection.fitExtent([[10,10],[width-10,height-10]], frame);
+  path = d3.geoPath(projection);
+}
+
+function renderEurope(){
+  state.view = "europe"; state.country = null; state.region = null;
+  setupEuropeProjection();
+  gLand.selectAll("*").remove(); gMarks.selectAll("*").remove();
+  svg.attr("aria-label", "Map of Europe coloured by alcohol age rules");
+  gLand.selectAll("path").data(feats, d => d.properties.id).join("path")
+    .attr("d", path)
+    .attr("class", d => C[d.properties.id] ? "land" : "ctx")
+    .attr("fill", d => C[d.properties.id] ? fillFor(d.properties.id) : null)
+    .attr("tabindex", d => C[d.properties.id] ? 0 : null)
+    .attr("aria-label", d => C[d.properties.id] ? C[d.properties.id].name : null)
+    .on("mousemove", (ev, d) => {
+      const code = d.properties.id, c = C[code];
+      if (c) showTip(ev, `<b>${c.flag} ${esc(c.name)}</b>${esc(tipLine(code))}`);
+      else showTip(ev, `<b>${esc(d.properties.name)}</b><span style="color:var(--muted)">Not covered by this map</span>`);
+    })
+    .on("mouseleave", hideTip)
+    .on("click", (ev, d) => { if (C[d.properties.id]) { ev.currentTarget.blur(); go(countryHash(d.properties.id)); } })
+    .on("keydown", (ev, d) => { if ((ev.key === "Enter" || ev.key === " ") && C[d.properties.id]) { ev.preventDefault(); go(`#/c/${d.properties.id}`); } });
+  // microstate markers
+  markerR = Math.max(4, Math.min(7, width / 160));
+  const micro = Object.entries(D.microstates).filter(([k]) => C[k]);
+  const mg = gMarks.selectAll("g").data(micro).join("g").attr("transform", d => `translate(${projection(d[1])})`);
+  mg.append("circle").attr("class", "micro").attr("r", markerR).attr("fill", d => fillFor(d[0]))
+    .attr("tabindex", 0).attr("aria-label", d => C[d[0]].name)
+    .on("mousemove", (ev, d) => showTip(ev, `<b>${C[d[0]].flag} ${esc(C[d[0]].name)}</b>${esc(tipLine(d[0]))}`))
+    .on("mouseleave", hideTip)
+    .on("click", (ev, d) => go(`#/c/${d[0]}`))
+    .on("keydown", (ev, d) => { if (ev.key === "Enter") go(`#/c/${d[0]}`); });
+  mg.append("text").attr("class", "mlabel").attr("x", 8).attr("y", 3).attr("display", "none").text(d => C[d[0]].name);
+  markSelected();
+  renderLegend();
+  renderBreadcrumb();
+  svg.call(zoom.transform, d3.zoomIdentity);
+}
+// Countries whose click opens their regional map straight away
+const DIRECT_REGIONAL = new Set(["CHE"]);
+function countryHash(code){ return DIRECT_REGIONAL.has(code) ? `#/r/${code}` : `#/c/${code}`; }
+function tipLine(code){
+  const c = C[code];
+  let s = c.line;
+  if (state.mode !== "category") { const v = c.derived[state.mode]; s = `${modeLabel()}: ${v == null ? "no verified data" : v}`; }
+  if (c.confidence === "low") s += " · ⚠ unverified";
+  return s;
+}
+function modeLabel(){ return (D.modes.find(m => m.id === state.mode) || {}).label; }
+function recolor(){
+  gLand.selectAll("path.land").attr("fill", d => fillFor(d.properties.id));
+  gMarks.selectAll("circle.micro").attr("fill", d => fillFor(d[0]));
+}
+function markSelected(){
+  gLand.selectAll("path.land").classed("sel", d => d.properties.id === state.selected).filter(d => d.properties.id === state.selected).raise();
+  gMarks.selectAll("circle.micro").classed("sel", d => d[0] === state.selected);
+}
+
+/* ---------------- legend ---------------- */
+function renderLegend(){
+  let html = "";
+  if (state.view === "europe") {
+    html += `<h3>${esc(modeLabel())}</h3>`;
+    if (state.mode === "category") {
+      const used = new Set(Object.values(C).map(c => c.category));
+      D.categories.filter(c => used.has(c.id)).forEach(c => {
+        html += `<div class="row" title="${esc(c.description)}"><span class="sw" style="background:${c.color}"></span><span>${esc(c.label)}</span></div>`;
+      });
+      html += `<div class="note">Hover a swatch for its definition. ● Circles mark microstates. Grey = outside the map's scope.</div>`;
+    } else {
+      const vals = [...new Set(Object.values(C).map(c => c.derived[state.mode]))].sort((a,b) => (a ?? 99) - (b ?? 99));
+      vals.forEach(v => { html += `<div class="row"><span class="sw" style="background:${ageColor(v)}"></span><span>${v == null ? "No verified data" : v + " years"}</span></div>`; });
+      const note = {beerWine:"Lowest age at which beer or wine can be bought or served anywhere (shop or bar). Narrow exceptions (e.g. with a parent or a meal) are ignored — see each country.",
+        spirits:"Lowest age at which spirits can be bought or served anywhere.",
+        offPremise:"Lowest age at which the main alcoholic products can be bought in shops (Denmark: drinks ≤6% ABV only).",
+        onPremise:"Lowest age at which alcohol can be served in bars and restaurants."}[state.mode];
+      html += `<div class="note">${esc(note)} Colours: ColorBrewer YlGnBu.</div>`;
+    }
+  } else {
+    const c = C[state.country], R = c.regions;
+    if (R.mode === "varies") {
+      html += `<h3>${esc(R.legend)}</h3>`;
+      const usedCls = new Set(currentRegionFeats.map(f => regionInfo(f).cls));
+      Object.entries(R.classes).filter(([k]) => usedCls.has(k)).forEach(([k, v]) => {
+        html += `<div class="row"><span class="sw" style="background:${v.color}"></span><span>${esc(v.label)}</span></div>`;
+      });
+    } else {
+      html += `<h3>No regional variation</h3><div class="row"><span class="sw" style="background:${UNIFORM}"></span><span>Same rules nationwide</span></div>`;
+    }
+    html += `<div class="note">${esc(R.note.text)} ${cites(R.note.cites)}</div>`;
+  }
+  legend.innerHTML = `<div class="body">${html}</div><button class="toggle" id="legToggle">${legend.classList.contains("collapsed") ? "Show legend" : "Hide legend"}</button>`;
+  $("#legToggle").onclick = () => { legend.classList.toggle("collapsed"); $("#legToggle").textContent = legend.classList.contains("collapsed") ? "Show legend" : "Hide legend"; };
+}
+
+/* ---------------- breadcrumb ---------------- */
+function renderBreadcrumb(){
+  const bc = $("#breadcrumb");
+  if (state.view === "europe") { bc.innerHTML = ""; return; }
+  const c = C[state.country];
+  bc.innerHTML = `<button class="btn primary" id="backEu">← Back to Europe</button><span class="crumb">${c.flag} ${esc(c.name)} · ${esc(c.regions.type)}</span>`;
+  $("#backEu").onclick = () => go(`#/c/${state.country}`);
+}
+
+/* ---------------- country panel ---------------- */
+function confBadge(c){
+  let h = `<span class="badge conf-${c.confidence}" title="How well this entry is supported by sources">Confidence: ${c.confidence}</span>`;
+  if (c.confidence === "low") h += `<span class="badge unverified" title="Not confirmed by an official or reputable source">⚠ unverified</span>`;
+  return h;
+}
+function countrySourceIds(code){
+  const c = C[code], ids = new Set();
+  const add = a => (a || []).forEach(i => ids.add(i));
+  add(c.ages.cites); c.summary.forEach(s => add(s.cites)); c.facts.forEach(f => add(f.cites));
+  add(c.regions.note.cites);
+  if (c.regions.items) Object.values(c.regions.items).forEach(r => add(r.cites));
+  if (c.regions.default) add(c.regions.default.cites);
+  return [...ids].sort((a,b) => a-b);
+}
+function ageCell(v){ return `<td class="age">${v == null ? "—" : v}</td>`; }
+function renderCountryPanel(code){
+  const c = C[code], cat = CAT.get(c.category);
+  const srcIds = countrySourceIds(code);
+  let h = `<div class="pinner"><button class="pclose" id="pclose" aria-label="Close panel">×</button>
+  <h2 class="ptitle"><span class="flag">${c.flag}</span>${esc(c.name)}</h2>
+  <div class="sub">${esc(c.line)}</div>
+  <div class="badges"><span class="badge cat" style="background:${cat.color};color:${textOn(cat.color)}">${esc(cat.label)}</span>${confBadge(c)}<span class="badge">📚 ${srcIds.length} source${srcIds.length === 1 ? "" : "s"}</span></div>`;
+  if (c.catNote) h += `<div class="catnote">${esc(c.catNote)} ${cites(c.ages.cites)}</div>`;
+  h += `<h4>Minimum ages ${cites(c.ages.cites)}</h4>
+  <table class="ages"><tr><th></th><th>Bars &amp; restaurants</th><th>Shops</th></tr>
+  <tr><th>Beer &amp; wine</th>${ageCell(c.ages.bw_on)}${ageCell(c.ages.bw_off)}</tr>
+  <tr><th>Spirits</th>${ageCell(c.ages.sp_on)}${ageCell(c.ages.sp_off)}</tr></table>`;
+  h += `<h4>Summary</h4><p class="summary">`;
+  if (c.summary.length) h += c.summary.map(s => `${esc(s.text)}${cites(s.cites)}`).join(" ");
+  else h += `<span class="badge unverified">unverified – no source found</span> ${esc(c.unverifiedSummary || "")}`;
+  h += `</p>`;
+  if (c.facts.length) {
+    h += `<h4>Details</h4><ul class="facts">` + c.facts.map(f => `<li><b>${esc(f.label)}</b>${esc(f.text)}${cites(f.cites)}</li>`).join("") + `</ul>`;
+  }
+  h += `<div class="pactions"><button class="btn primary" id="openRegions">🗺️ Regional map (${esc(c.regions.type)})</button><button class="btn" id="allSrc">📚 All sources</button></div>`;
+  h += `<h4>Sources for this country</h4>`;
+  if (srcIds.length) h += `<ol class="psources">` + srcIds.map(id => { const s = SRC.get(id); return `<li value="${id}"><a class="tosrc" href="#/sources/${id}" data-src="${id}">${esc(s.title)}</a> — ${esc(s.publisher)} <span class="type ${s.type}">${esc(D.sourceTypes[s.type])}</span></li>`; }).join("") + `</ol>`;
+  else h += `<p class="sub">No sources found for this entry.</p>`;
+  h += `<div class="sub">Last verified: ${esc(c.lastVerified)}</div>`;
+  h += `<div class="disclaimer">${esc(D.meta.disclaimer)}</div></div>`;
+  openPanel(h);
+  $("#openRegions").onclick = () => go(`#/r/${code}`);
+  $("#allSrc").onclick = () => { state.lastContext = currentContext(); openSources(null, code); };
+}
+function textOn(hex){
+  const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return (0.299*r + 0.587*g + 0.114*b) > 150 ? "#111" : "#fff";
+}
+function openPanel(html){ panel.innerHTML = html; panel.classList.add("open"); panel.scrollTop = 0; $("#pclose").onclick = closePanel; syncPW(); }
+function syncPW(){ document.documentElement.style.setProperty("--pw", panelW() + "px"); }
+function closePanel(){
+  panel.classList.remove("open"); syncPW();
+  if (state.view === "europe") { state.selected = null; markSelected(); setHash("#/"); }
+  else { state.region = null; markRegionSelected(); setHash(`#/r/${state.country}`); }
+}
+
+/* ---------------- regional map ---------------- */
+const UNIFORM = "#56B4E9";
+let currentRegionFeats = [];
+function loadRegions(code){
+  return new Promise((resolve, reject) => {
+    if (window.GEO_REGIONS && window.GEO_REGIONS[code]) return resolve(window.GEO_REGIONS[code]);
+    $("#loading").hidden = false;
+    const s = document.createElement("script");
+    s.src = `data/regions/${code}.js`;
+    s.onload = () => { $("#loading").hidden = true; (window.GEO_REGIONS && window.GEO_REGIONS[code]) ? resolve(window.GEO_REGIONS[code]) : reject(new Error("missing")); };
+    s.onerror = () => { $("#loading").hidden = true; reject(new Error("Could not load regional map for " + code)); };
+    document.head.appendChild(s);
+  });
+}
+function regionInfo(f){
+  const R = C[state.country].regions;
+  if (R.mode !== "varies") return { cls: null, color: UNIFORM, text: R.note.text, cites: R.note.cites, label: "Same rules nationwide" };
+  const it = R.items[f.properties.id];
+  const cls = it ? it.class : R.default.class;
+  const cl = R.classes[cls];
+  const text = it ? it.text : (R.default.text || "");
+  const cts = it ? it.cites : (R.default.cites || []);
+  return { cls, color: cl.color, label: cl.label, text, cites: cts };
+}
+async function renderCountryMap(code){
+  let t;
+  try { t = await loadRegions(code); }
+  catch (e) { alert(e.message); go(`#/c/${code}`); return; }
+  state.view = "country"; state.country = code;
+  const o = t.objects[Object.keys(t.objects)[0]];
+  currentRegionFeats = topojson.feature(t, o).features.filter(f => f.geometry);
+  const fc = {type:"FeatureCollection", features: currentRegionFeats};
+  const ctr = d3.geoCentroid(fc);
+  const wide = code === "RUS" || code === "NOR";
+  projection = wide ? d3.geoConicEqualArea().rotate([-(code === "RUS" ? 100 : 15), 0]).parallels(code === "RUS" ? [52, 68] : [60, 75])
+                    : d3.geoTransverseMercator().rotate([-ctr[0], -ctr[1]]);
+  const pwFit = isMobile() ? 0 : 420;
+  projection.fitExtent([[24, 64],[width - pwFit - 24, height - 24]], fc);
+  path = d3.geoPath(projection);
+  gLand.selectAll("*").remove(); gMarks.selectAll("*").remove();
+  svg.attr("aria-label", `Regional map of ${C[code].name}`);
+  gLand.selectAll("path").data(currentRegionFeats).join("path")
+    .attr("class", "land").attr("d", path)
+    .attr("fill", f => regionInfo(f).color)
+    .attr("tabindex", 0).attr("aria-label", f => f.properties.en)
+    .style("opacity", 0).transition().duration(450).style("opacity", 1);
+  gLand.selectAll("path")
+    .on("mousemove", (ev, f) => { const ri = regionInfo(f); showTip(ev, `<b>${esc(f.properties.en)}</b>${esc(ri.label)}`); })
+    .on("mouseleave", hideTip)
+    .on("click", (ev, f) => go(`#/r/${code}/${f.properties.id}`))
+    .on("keydown", (ev, f) => { if (ev.key === "Enter") go(`#/r/${code}/${f.properties.id}`); });
+  svg.call(zoom.transform, d3.zoomIdentity);
+  renderLegend(); renderBreadcrumb();
+}
+function markRegionSelected(){
+  gLand.selectAll("path.land").classed("sel", f => f.properties.id === state.region).filter(f => f.properties.id === state.region).raise();
+}
+function renderRegionPanel(code, rid){
+  const c = C[code];
+  const f = currentRegionFeats.find(x => x.properties.id === rid);
+  if (!f) { renderCountryPanel(code); return; }
+  const ri = regionInfo(f);
+  let h = `<div class="pinner"><button class="pclose" id="pclose" aria-label="Close panel">×</button>
+  <h2 class="ptitle">${esc(f.properties.en)}</h2>
+  <div class="sub">${c.flag} ${esc(c.name)} · ${esc(c.regions.type)}</div>
+  <div class="badges"><span class="badge cat" style="background:${ri.color};color:${textOn(ri.color)}">${esc(ri.label)}</span>${confBadge(c)}</div>`;
+  h += `<h4>What applies here</h4><p class="summary">${ri.text ? esc(ri.text) + cites(ri.cites) : "No region-specific information recorded."}</p>`;
+  h += `<h4>National rules</h4><p class="summary">${esc(c.line)}${cites(c.ages.cites)}</p>`;
+  h += `<table class="ages"><tr><th></th><th>Bars &amp; restaurants</th><th>Shops</th></tr>
+  <tr><th>Beer &amp; wine</th>${ageCell(c.ages.bw_on)}${ageCell(c.ages.bw_off)}</tr>
+  <tr><th>Spirits</th>${ageCell(c.ages.sp_on)}${ageCell(c.ages.sp_off)}</tr></table>`;
+  if (state.country === code && c.regions.mode === "varies" && c.regions.items[rid] === undefined && c.regions.default.class)
+    h += `<p class="sub" style="margin-top:10px">This region has no entry of its own in the data file; the default for ${esc(c.name)} is shown.</p>`;
+  h += `<div class="pactions"><button class="btn" id="cpanel">${c.flag} ${esc(c.name)} overview</button><button class="btn" id="allSrc">📚 All sources</button></div>`;
+  const ids = [...new Set([...(ri.cites || []), ...c.ages.cites])].sort((a,b) => a-b);
+  h += `<h4>Sources for this region</h4><ol class="psources">` + ids.map(id => { const s = SRC.get(id); return `<li value="${id}"><a class="tosrc" href="#/sources/${id}" data-src="${id}">${esc(s.title)}</a> — ${esc(s.publisher)}</li>`; }).join("") + `</ol>`;
+  h += `<div class="sub">Last verified: ${esc(c.lastVerified)}</div><div class="disclaimer">${esc(D.meta.disclaimer)}</div></div>`;
+  openPanel(h);
+  $("#cpanel").onclick = () => { state.region = null; markRegionSelected(); renderCountryPanel(code); setHash(`#/r/${code}`); };
+  $("#allSrc").onclick = () => { state.lastContext = currentContext(); openSources(null, code); };
+}
+
+/* ---------------- Sources page ---------------- */
+const srcEl = $("#sources");
+function groupName(g){ return g === "GENERAL" ? "General / Europe-wide" : g === "MAPDATA" ? "Map data & software" : (C[g] ? `${C[g].flag} ${C[g].name}` : g); }
+function renderSources(filter){
+  const q = (filter || "").trim().toLowerCase();
+  const groups = [];
+  const order = ["GENERAL", ...Object.keys(C).sort((a,b) => C[a].name.localeCompare(C[b].name)), "MAPDATA"];
+  // Which countries cite each source (for "back" links)
+  const citedBy = new Map();
+  Object.keys(C).forEach(k => countrySourceIds(k).forEach(id => { if (!citedBy.has(id)) citedBy.set(id, new Set()); citedBy.get(id).add(k); }));
+  let total = 0;
+  order.forEach(g => {
+    let list = D.sources.filter(s => s.group === g);
+    const gname = groupName(g);
+    if (q) list = list.filter(s => [s.title, s.publisher, s.url, s.supports, gname, D.sourceTypes[s.type], "[" + s.id + "]"].join(" ").toLowerCase().includes(q) || (C[g] && C[g].name.toLowerCase().includes(q)));
+    if (!list.length) return;
+    total += list.length;
+    groups.push(`<section class="sgroup" id="grp-${g}"><h3>${esc(gname)} <span class="count">${list.length} source${list.length === 1 ? "" : "s"}</span></h3>` + list.map(s => {
+      const by = [...(citedBy.get(s.id) || [])].sort((a,b) => C[a].name.localeCompare(C[b].name));
+      const backs = by.length ? "↩ Back to: " + by.map(k => `<a href="#/c/${k}">${esc(C[k].name)}</a>`).join(", ") : "";
+      return `<div class="src" id="src-${s.id}"><div class="t"><span class="id">[${s.id}]</span>${esc(s.title)}<span class="type ${s.type}">${esc(D.sourceTypes[s.type])}</span></div>
+      <div class="meta">${esc(s.publisher)} · accessed / verified ${esc(s.accessed)}</div>
+      <div class="url"><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.url)}</a></div>
+      <div class="sup"><b>Supports:</b> ${esc(s.supports)}</div>
+      <div class="back">${backs}${state.lastContext ? `${backs ? " · " : ""}<a href="${state.lastContext}">↩ Back to where you were</a>` : ""}</div></div>`;
+    }).join("") + `</section>`);
+  });
+  $("#srcList").innerHTML = groups.join("") || `<div class="empty">No sources match “${esc(filter)}”.</div>`;
+  $("#srcCount").textContent = `${total} of ${D.sources.length} sources`;
+}
+function openSources(id, group){
+  srcEl.innerHTML = `<div class="sinner"><div class="shead"><h2>📚 Sources &amp; references</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="srcSearch" class="ctl" type="search" placeholder="Filter by country or keyword…" aria-label="Filter sources"><span class="sub" id="srcCount"></span><button class="btn" id="srcClose">✕ Close</button></div></div>
+    <p class="sub">${esc(D.meta.disclaimer)} Source types: ${Object.values(D.sourceTypes).map(esc).join(" · ")}. ${esc(D.meta.boundaryNote)}</p>
+    <div id="srcList"></div></div>`;
+  srcEl.classList.add("open");
+  hideTip();
+  renderSources("");
+  $("#srcSearch").addEventListener("input", e => renderSources(e.target.value));
+  $("#srcClose").onclick = () => { closeSourcesView(); go(state.lastContext || "#/"); };
+  setHash(id ? `#/sources/${id}` : (group ? `#/sources/g/${group}` : "#/sources"));
+  requestAnimationFrame(() => {
+    let el = id ? document.getElementById("src-" + id) : (group ? document.getElementById("grp-" + group) : null);
+    if (el) { el.scrollIntoView({block: "center", behavior: "smooth"}); if (id) { el.classList.add("hl"); setTimeout(() => el.classList.remove("hl"), 2600); } }
+    else srcEl.scrollTop = 0;
+  });
+}
+function closeSourcesView(){ srcEl.classList.remove("open"); }
+$("#btnSources").onclick = () => { state.lastContext = currentContext(); openSources(null, null); };
+
+/* ---------------- search ---------------- */
+const searchEl = $("#search"), sug = $("#suggest");
+const names = Object.entries(C).map(([k, c]) => ({k, n: c.name, f: c.flag})).sort((a,b) => a.n.localeCompare(b.n));
+let sugIdx = -1, sugList = [];
+const norm = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+searchEl.addEventListener("input", () => {
+  const q = norm(searchEl.value.trim());
+  sugList = q ? names.filter(x => norm(x.n).includes(q) || x.k.toLowerCase() === q) : [];
+  sugIdx = sugList.length ? 0 : -1;
+  drawSug();
+});
+function drawSug(){
+  if (!sugList.length) { sug.style.display = "none"; return; }
+  sug.innerHTML = sugList.map((x, i) => `<div role="option" data-k="${x.k}" class="${i === sugIdx ? "active" : ""}">${x.f} ${esc(x.n)}</div>`).join("");
+  sug.style.display = "block";
+}
+sug.addEventListener("mousedown", e => { const d = e.target.closest("div[data-k]"); if (d) pick(d.dataset.k); });
+searchEl.addEventListener("keydown", e => {
+  if (e.key === "ArrowDown") { sugIdx = Math.min(sugList.length - 1, sugIdx + 1); drawSug(); e.preventDefault(); }
+  else if (e.key === "ArrowUp") { sugIdx = Math.max(0, sugIdx - 1); drawSug(); e.preventDefault(); }
+  else if (e.key === "Enter") { if (sugList[sugIdx]) pick(sugList[sugIdx].k); }
+  else if (e.key === "Escape") { sugList = []; drawSug(); }
+});
+searchEl.addEventListener("blur", () => setTimeout(() => { sug.style.display = "none"; }, 150));
+function pick(k){ searchEl.value = ""; sugList = []; drawSug(); searchEl.blur(); closeSourcesView(); go(countryHash(k)); }
+
+/* ---------------- routing ---------------- */
+let suppress = false;
+function setHash(h){ if (location.hash !== h) { suppress = true; location.hash = h; } }
+function go(h){ if (location.hash === h) route(); else location.hash = h; }
+window.addEventListener("hashchange", () => { if (suppress) { suppress = false; return; } route(); });
+
+async function route(){
+  hideTip();
+  const h = location.hash || "#/";
+  const parts = h.replace(/^#\/?/, "").split("/").filter(Boolean);
+  if (parts[0] === "sources") {
+    if (!srcEl.classList.contains("open")) openSources(parts[1] && parts[1] !== "g" ? +parts[1] : null, parts[1] === "g" ? parts[2] : null);
+    return;
+  }
+  closeSourcesView();
+  if (parts[0] === "r" && C[parts[1]]) {
+    const code = parts[1];
+    if (state.view !== "country" || state.country !== code) await renderCountryMap(code);
+    if (state.view !== "country" || state.country !== code) return;
+    state.region = parts[2] || null;
+    markRegionSelected();
+    if (state.region) {
+      renderRegionPanel(code, state.region);
+      const f = currentRegionFeats.find(x => x.properties.id === state.region);
+      if (f) { const b = path.bounds(f); const area = (b[1][0]-b[0][0])*(b[1][1]-b[0][1]); if (area < width*height*0.02) zoomToBounds(b, 6); }
+    } else renderCountryPanel(code);
+    return;
+  }
+  if (state.view !== "europe") renderEurope();
+  if (parts[0] === "c" && C[parts[1]]) {
+    state.selected = parts[1];
+    markSelected();
+    renderCountryPanel(parts[1]);
+    focusCountry(parts[1]);
+  } else {
+    state.selected = null; markSelected(); panel.classList.remove("open"); syncPW();
+  }
+}
+function focusCountry(code){
+  const f = feats.find(x => x.properties.id === code);
+  let b;
+  if (D.microstates[code]) { const p = projection(D.microstates[code]); b = [[p[0]-25,p[1]-25],[p[0]+25,p[1]+25]]; }
+  else if (f) b = path.bounds(f);
+  if (!b) return;
+  // keep huge countries (Russia) inside the frame
+  b = [[Math.max(b[0][0], 0), Math.max(b[0][1], 0)], [Math.min(b[1][0], width), Math.min(b[1][1], height)]];
+  zoomToBounds(b, 6);
+}
+
+/* ---------------- resize ---------------- */
+function measure(){ const r = $("#mapwrap").getBoundingClientRect(); width = r.width; height = r.height; svg.attr("viewBox", `0 0 ${width} ${height}`); }
+let rt;
+window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => {
+  measure();
+  if (state.view === "europe") { renderEurope(); if (state.selected) markSelected(); }
+  else { const r = state.region; state.view = null; renderCountryMap(state.country).then(() => { state.region = r; markRegionSelected(); }); }
+}, 200); });
+
+/* ---------------- boot ---------------- */
+measure();
+if (isMobile()) legend.classList.add("collapsed");
+document.addEventListener("keydown", e => { if (e.key === "Escape") { if (srcEl.classList.contains("open")) $("#srcClose").click(); else if (panel.classList.contains("open")) closePanel(); } });
+renderEurope();
+route();
+window.__appReady = true;
+})();
+</script>
+</body>
+</html>
