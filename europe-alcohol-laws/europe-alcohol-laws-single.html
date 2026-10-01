@@ -52,6 +52,8 @@ main{position:relative;flex:1;min-height:0;display:flex}
 #map path.land:hover{filter:brightness(1.08) saturate(1.1)}
 #map path.ctx{fill:var(--ctx);stroke:var(--ctx-stroke);stroke-width:.5;vector-effect:non-scaling-stroke}
 #map path.sel{stroke:var(--hl);stroke-width:2.2}
+#map path:focus,#map circle:focus,#map:focus{outline:none}
+#map path.land:focus-visible{stroke:var(--accent);stroke-width:2.5}
 #map circle.micro{stroke:var(--hl);stroke-width:1.2;vector-effect:non-scaling-stroke;cursor:pointer;transition:fill .5s ease}
 #map circle.micro.sel{stroke-width:2.6}
 #map text.mlabel{font-size:10px;fill:var(--text);paint-order:stroke;stroke:var(--sea);stroke-width:3px;pointer-events:none}
@@ -6023,7 +6025,7 @@ function renderEurope(){
       else showTip(ev, `<b>${esc(d.properties.name)}</b><span style="color:var(--muted)">Not covered by this map</span>`);
     })
     .on("mouseleave", hideTip)
-    .on("click", (ev, d) => { if (C[d.properties.id]) go(`#/c/${d.properties.id}`); })
+    .on("click", (ev, d) => { if (C[d.properties.id]) { ev.currentTarget.blur(); go(countryHash(d.properties.id)); } })
     .on("keydown", (ev, d) => { if ((ev.key === "Enter" || ev.key === " ") && C[d.properties.id]) { ev.preventDefault(); go(`#/c/${d.properties.id}`); } });
   // microstate markers
   markerR = Math.max(4, Math.min(7, width / 160));
@@ -6041,10 +6043,13 @@ function renderEurope(){
   renderBreadcrumb();
   svg.call(zoom.transform, d3.zoomIdentity);
 }
+// Countries whose click opens their regional map straight away
+const DIRECT_REGIONAL = new Set(["CHE"]);
+function countryHash(code){ return DIRECT_REGIONAL.has(code) ? `#/r/${code}` : `#/c/${code}`; }
 function tipLine(code){
   const c = C[code];
-  let s = ": " + c.line;
-  if (state.mode !== "category") { const v = c.derived[state.mode]; s = ` — ${modeLabel()}: ${v == null ? "no verified data" : v}`; }
+  let s = c.line;
+  if (state.mode !== "category") { const v = c.derived[state.mode]; s = `${modeLabel()}: ${v == null ? "no verified data" : v}`; }
   if (c.confidence === "low") s += " · ⚠ unverified";
   return s;
 }
@@ -6317,7 +6322,7 @@ searchEl.addEventListener("keydown", e => {
   else if (e.key === "Escape") { sugList = []; drawSug(); }
 });
 searchEl.addEventListener("blur", () => setTimeout(() => { sug.style.display = "none"; }, 150));
-function pick(k){ searchEl.value = ""; sugList = []; drawSug(); searchEl.blur(); closeSourcesView(); go(`#/c/${k}`); }
+function pick(k){ searchEl.value = ""; sugList = []; drawSug(); searchEl.blur(); closeSourcesView(); go(countryHash(k)); }
 
 /* ---------------- routing ---------------- */
 let suppress = false;
@@ -6326,6 +6331,7 @@ function go(h){ if (location.hash === h) route(); else location.hash = h; }
 window.addEventListener("hashchange", () => { if (suppress) { suppress = false; return; } route(); });
 
 async function route(){
+  hideTip();
   const h = location.hash || "#/";
   const parts = h.replace(/^#\/?/, "").split("/").filter(Boolean);
   if (parts[0] === "sources") {
