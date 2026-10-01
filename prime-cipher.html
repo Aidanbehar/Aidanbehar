@@ -190,7 +190,7 @@ footer { font-size: 13px; color: var(--muted); max-width: 70ch; }
   <header class="top">
     <div class="intro">
       <h1>Prime Letter Cipher</h1>
-      <p class="formula">A=1 … Z=26 &nbsp;·&nbsp; <b>HI</b> → p<sub>1</sub><sup>8</sup> × p<sub>2</sub><sup>9</sup> for two random primes</p>
+      <p class="formula">A=1 … Z=26 &nbsp;·&nbsp; <b>HI</b> → p<sub>1</sub><sup>8</sup> × p<sub>2</sub><sup>9</sup> with random primes p<sub>1</sub> &gt; p<sub>2</sub></p>
     </div>
     <div class="actions">
       <div class="tabs" role="tablist" aria-label="Mode">
@@ -205,7 +205,7 @@ footer { font-size: 13px; color: var(--muted); max-width: 70ch; }
   <section class="panel" id="panel-encode" role="tabpanel" aria-labelledby="tab-encode">
     <div class="head">
       <h2>Encode a word</h2>
-      <p class="muted small">Each letter gets its own random prime, raised to the letter's number. The encoded number is the product of all of them.</p>
+      <p class="muted small">Each letter gets its own random prime, raised to the letter's number, and the encoded number is the product of all of them. The primes are sorted so the first letter gets the largest prime and the last letter the smallest, which fixes the order: every number decodes to exactly one word.</p>
     </div>
     <form id="enc-form" class="grid-2" autocomplete="off">
       <div class="field">
@@ -249,11 +249,11 @@ footer { font-size: 13px; color: var(--muted); max-width: 70ch; }
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Letter</th><th>Value</th><th>Random prime</th><th>Factor</th><th>Factor size</th></tr></thead>
+          <thead><tr><th>Position</th><th>Letter</th><th>Value</th><th>Random prime</th><th>Factor</th><th>Factor size</th></tr></thead>
           <tbody id="enc-rows"></tbody>
         </table>
       </div>
-      <p class="hint">The primes are random, so the number keeps which letters you used but not their order. The decoder recovers the letters and then searches for every word they can spell.</p>
+      <p class="hint">All the primes are different and they shrink from the first letter to the last, so the decoder rebuilds the word by reading the primes from largest to smallest.</p>
     </div>
   </section>
 
@@ -261,7 +261,7 @@ footer { font-size: 13px; color: var(--muted); max-width: 70ch; }
   <section class="panel" id="panel-decode" role="tabpanel" aria-labelledby="tab-decode" hidden>
     <div class="head">
       <h2>Decode a number</h2>
-      <p class="muted small">Factors the number on every CPU core, turns each exponent back into a letter, then checks the letters against 1.6 million words, names and places in seven languages, every arrangement of the letters, and the words hidden inside them.</p>
+      <p class="muted small">Factors the number on every CPU core, reads the primes from largest to smallest and turns each exponent back into a letter, which spells the one word that was encoded. It then looks that word up in 1.6 million words, names and places in seven languages.</p>
     </div>
     <div class="field">
       <label for="dec-input">Number to decode</label>
@@ -684,14 +684,16 @@ async function encode(ev) {
   const [lo, hi] = primeRange(min);
   $('#enc-go').disabled = true;
   try {
-    const used = new Set(), rows = [];
-    for (const ch of word.toLowerCase()) {
-      const v = ch.charCodeAt(0) - 96;
+    // Draw one distinct random prime per letter, then hand them out largest first so the order is recoverable.
+    const used = new Set(), primes = [];
+    for (let i = 0; i < word.length; i++) {
       const p = randomPrime(lo, hi, used);
       used.add(p);
-      rows.push({ ch, v, p });
+      primes.push(p);
       await sleep0();
     }
+    primes.sort((a, b) => (a > b ? -1 : a < b ? 1 : 0));
+    const rows = [...word.toLowerCase()].map((ch, i) => ({ ch, v: ch.charCodeAt(0) - 96, p: primes[i] }));
     let N = 1n;
     for (const r of rows) N *= r.p ** BigInt(r.v);
     const base = +$('#enc-base').value || 10;
@@ -701,11 +703,11 @@ async function encode(ev) {
     $('#enc-num').textContent = s;
     $('#enc-meta').innerHTML = base === 10 ? `${fmt(s.length)} digits · ${sci(dec)}`
       : `${fmt(s.length)} digits in base ${base} · ${fmt(dec.length)} in decimal · ${sci(dec)}`;
-    $('#enc-rows').innerHTML = rows.map(r => {
+    $('#enc-rows').innerHTML = rows.map((r, i) => {
       const ps = r.p.toString();
       const pShow = ps.length > 24 ? ps.slice(0, 10) + '…' + ps.slice(-6) : fmt(r.p);
       const digits = (r.p ** BigInt(r.v)).toString().length;
-      return `<tr><td class="letter">${r.ch.toUpperCase()}</td><td class="num">${r.v}</td><td class="num">${esc(pShow)}</td>` +
+      return `<tr><td class="num">${i + 1}</td><td class="letter">${r.ch.toUpperCase()}</td><td class="num">${r.v}</td><td class="num">${esc(pShow)}</td>` +
         `<td class="num pw">${esc(pShow)}<sup>${r.v}</sup></td><td class="num">${fmt(digits)} digits</td></tr>`;
     }).join('');
     $('#enc-copied').textContent = '';
@@ -823,27 +825,7 @@ async function buildLexicon() {
     if (!bl) { byLen[n] = { c: [], d: [], s: [] }; continue; }
     for (let i = 0; i < bl.s.length; i++) { const c = meta[bl.s[i]].cat; catCount[c] = (catCount[c] || 0) + 1; }
   }
-  // Letter trigram model, trained on English weighted by web frequency, plus first names.
-  const V = 27, cnt = new Float64Array(V * V * V), ctx = new Float64Array(V * V);
-  const train = (w, wt) => {
-    let a = 26, b = 26;
-    for (let i = 0; i <= w.length; i++) {
-      const c = i < w.length ? w.charCodeAt(i) - 97 : 26;
-      cnt[a * 729 + b * 27 + c] += wt; ctx[a * 27 + b] += wt;
-      a = b; b = c;
-    }
-  };
-  for (const bl of byLen) for (let i = 0; i < bl.c.length; i++) {
-    const m = meta[bl.s[i]];
-    if (m.cat === 'en') train(bl.c[i], 1 + m.b / 3);
-    else if (m.cat === 'fn' && m.b >= 4) train(bl.c[i], 1);
-  }
-  const LP = new Float32Array(V * V * V), kS = 0.05;
-  for (let a = 0; a < V; a++) for (let b = 0; b < V; b++) {
-    const tot = ctx[a * 27 + b];
-    for (let c = 0; c < V; c++) LP[a * 729 + b * 27 + c] = Math.log((cnt[a * 729 + b * 27 + c] + kS) / (tot + kS * V));
-  }
-  Object.assign(LEX, { ready: true, byLen, meta, catCount, total, LP });
+  Object.assign(LEX, { ready: true, byLen, meta, catCount, total });
 }
 setTimeout(async () => {
   const t0 = performance.now();
@@ -1003,10 +985,8 @@ const STEPS = [
   ['trial', 'Trial division by every prime below 65,536'],
   ['deep', 'Deep factorization: ρ, p−1 and elliptic curves in parallel'],
   ['verify', 'Certify each factor and rebuild the product'],
-  ['letters', 'Turn exponents into letters'],
-  ['exact', 'Exact match across every word list'],
-  ['scan', 'Scan arrangements of the letters'],
-  ['hidden', 'Find words hidden in the letters'],
+  ['letters', 'Read the letters, largest prime first'],
+  ['lookup', 'Look the word up in every word list'],
 ];
 function initSteps() {
   $('#dec-steps').innerHTML = STEPS.map(([id, t], i) =>
@@ -1027,120 +1007,6 @@ function step(id, state, detail) {
 function stepDetail(id, detail) { const li = $('#st-' + id); if (li) li.querySelector('.d').textContent = detail; }
 function skipRest() { for (const [id] of STEPS) if ($('#st-' + id).className === 'wait') step(id, 'skip', 'Skipped'); }
 
-/* ---------- Decoder: word search ---------- */
-function multinomial(counts) {
-  let n = 0, r = 1n;
-  for (const c of counts) for (let i = 1; i <= c; i++) { n++; r = r * BigInt(n) / BigInt(i); }
-  return r;
-}
-function nextPerm(a) {
-  let i = a.length - 2;
-  while (i >= 0 && a[i] >= a[i + 1]) i--;
-  if (i < 0) return false;
-  let j = a.length - 1;
-  while (a[j] <= a[i]) j--;
-  let t = a[i]; a[i] = a[j]; a[j] = t;
-  for (let l = i + 1, r = a.length - 1; l < r; l++, r--) { t = a[l]; a[l] = a[r]; a[r] = t; }
-  return true;
-}
-class Top {
-  constructor(k) { this.k = k; this.items = []; this.seen = new Set(); this.min = -Infinity; }
-  offer(str, s) {
-    if (this.items.length >= this.k && s <= this.min) return;
-    if (this.seen.has(str)) return;
-    this.seen.add(str);
-    this.items.push({ str, s });
-    if (this.items.length > this.k) {
-      this.items.sort((a, b) => b.s - a.s);
-      const out = this.items.pop();
-      this.seen.delete(out.str);
-      this.min = this.items[this.items.length - 1].s;
-    }
-  }
-  list() { return this.items.slice().sort((a, b) => b.s - a.s); }
-}
-const EXHAUSTIVE_LIMIT = 4000000;
-async function scanArrangements(counts, n, known) {
-  const total = multinomial(counts);
-  const LP = LEX.LP;
-  const top = new Top(40);
-  let hits = 0;
-  const buf = new Uint8Array(n);
-  let p = 0;
-  for (let c = 0; c < 26; c++) for (let k = 0; k < counts[c]; k++) buf[p++] = 97 + c;
-  let checked = 0;
-  const evalBuf = () => {
-    let a = 26, b = 26, s = 0;
-    for (let i = 0; i < n; i++) { const c = buf[i] - 97; s += LP[a * 729 + b * 27 + c]; a = b; b = c; }
-    s = (s + LP[a * 729 + b * 27 + 26]) / (n + 1);
-    const str = String.fromCharCode.apply(null, buf);
-    checked++;
-    if (known.has(str)) hits++;
-    else top.offer(str, s);
-  };
-  const totalStr = fmt(total);
-  if (total <= BigInt(EXHAUSTIVE_LIMIT)) {
-    do {
-      evalBuf();
-      if ((checked & 8191) === 0) { stepDetail('scan', `${fmt(checked)} of ${totalStr} arrangements checked`); await breathe(); }
-    } while (nextPerm(buf));
-    return { total, checked, exhaustive: true, beam: 0, hits, top: top.list() };
-  }
-  const SAMPLES = 1500000;
-  for (let t = 0; t < SAMPLES; t++) {
-    for (let i = n - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const x = buf[i]; buf[i] = buf[j]; buf[j] = x; }
-    evalBuf();
-    if ((checked & 8191) === 0) { stepDetail('scan', `${fmt(checked)} random arrangements sampled out of ${totalStr}`); await breathe(); }
-  }
-  const W = 4000;
-  let beam = [{ s: 0, a: 26, b: 26, str: '', c: counts.slice() }], expanded = 0;
-  for (let pos = 0; pos < n; pos++) {
-    const next = [];
-    for (const st of beam) {
-      for (let c = 0; c < 26; c++) {
-        if (!st.c[c]) continue;
-        const cc = st.c.slice(); cc[c]--;
-        next.push({ s: st.s + LP[st.a * 729 + st.b * 27 + c], a: st.b, b: c, str: st.str + L(c), c: cc });
-        expanded++;
-      }
-    }
-    next.sort((x, y) => y.s - x.s);
-    beam = next.slice(0, W);
-    stepDetail('scan', `Beam search: letter ${pos + 1} of ${n}, ${fmt(expanded)} partial arrangements scored`);
-    await breathe(true);
-  }
-  for (const st of beam) {
-    const s = (st.s + LP[st.a * 729 + st.b * 27 + 26]) / (n + 1);
-    if (known.has(st.str)) hits++;
-    else top.offer(st.str, s);
-  }
-  return { total, checked, exhaustive: false, beam: expanded, hits, top: top.list() };
-}
-/* English words that use some, but not all, of the letters. */
-async function hiddenWords(target, n) {
-  const res = [];
-  const w = new Int8Array(26), t = Int8Array.from(target);
-  let checked = 0;
-  for (let len = n - 1; len >= 3; len--) {
-    const bl = LEX.byLen[len];
-    if (!bl) continue;
-    const C = bl.c, S = bl.s;
-    for (let i = 0; i < C.length; i++) {
-      const m = LEX.meta[S[i]];
-      if (m.cat !== 'en' || m.tier > 60) continue;
-      checked++;
-      const c = C[i];
-      w.set(t);
-      let ok = true;
-      for (let k = 0; k < len; k++) if (--w[c.charCodeAt(k) - 97] < 0) { ok = false; break; }
-      if (ok) res.push({ c, b: m.b, len });
-    }
-    stepDetail('hidden', `${fmt(checked)} words of ${len}+ letters checked, ${fmt(res.length)} fit`);
-    await breathe();
-  }
-  res.sort((a, b) => b.len - a.len || b.b - a.b);
-  return { res, checked };
-}
 /* ---------- Decoder: main ---------- */
 const DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
 function parseInBase(s, base) {
@@ -1252,35 +1118,24 @@ async function runDecode() {
       renderInvalid(table);
       return;
     }
+    // The encoder gives the first letter the largest prime, so reading primes from largest to smallest spells the word.
+    table.sort((a, b) => (a.p > b.p ? -1 : a.p < b.p ? 1 : 0));
+    const word = table.map(r => L(r.e - 1)).join('');
+    const n = word.length;
+    step('letters', 'done', `${n} letter${n > 1 ? 's' : ''} in order: ${word.toUpperCase().split('').join(' ')}`);
+
+    current = 'lookup';
+    step('lookup', 'run');
     const counts = new Array(26).fill(0);
     for (const { e } of table) counts[e - 1]++;
-    const n = table.length;
-    const key = keyFromCounts(counts);
-    step('letters', 'done', `${n} letter${n > 1 ? 's' : ''}: ${key.toUpperCase().split('').join(' ')}`);
-
-    current = 'exact';
-    step('exact', 'run');
-    const exact = exactMatches(counts, n);
+    const same = exactMatches(counts, n);
+    const found = same.filter(e => e.c === word);
     const lenCount = LEX.byLen[n] ? LEX.byLen[n].c.length : 0;
-    step('exact', 'done', `${fmt(lenCount)} entries with ${n} letters compared (of ${fmt(LEX.total)}), ${exact.length} exact match${exact.length === 1 ? '' : 'es'}`);
-
-    current = 'scan';
-    step('scan', 'run');
-    const scan = await scanArrangements(counts, n, new Set(exact.map(e => e.c)));
-    step('scan', 'done', scan.exhaustive
-      ? `All ${fmt(scan.checked)} distinct arrangements checked`
-      : `${fmt(scan.checked)} sampled + ${fmt(scan.beam)} beam-scored, out of ${fmt(scan.total)} possible arrangements`);
-
-    current = 'hidden';
-    let hidden = { res: [], checked: 0 };
-    if (n >= 4) {
-      step('hidden', 'run');
-      hidden = await hiddenWords(counts, n);
-      step('hidden', 'done', `${fmt(hidden.checked)} shorter words checked, ${fmt(hidden.res.length)} fit inside these letters`);
-    } else step('hidden', 'skip', 'Needs at least 4 letters');
+    step('lookup', 'done', `${fmt(lenCount)} entries with ${n} letters checked (of ${fmt(LEX.total)}): ` +
+      (found.length ? `found in ${[...new Set(found.map(e => CATS[e.cat].label))].length} list${new Set(found.map(e => e.cat)).size === 1 ? '' : 's'}` : 'not in any list'));
 
     $('#dec-bar').style.width = '100%';
-    renderResults({ N, table, key, n, exact, scan, hidden, secs: (performance.now() - job.t0) / 1000 });
+    renderResults({ N, table, word, n, found, same, secs: (performance.now() - job.t0) / 1000 });
   } catch (e) {
     const running = $('#dec-steps li.run');
     if (running) step(running.id.slice(3), 'fail', e === CANCEL ? 'Stopped' : e.message);
@@ -1311,8 +1166,8 @@ function primeCell(p) {
   return s.length > 24 ? s.slice(0, 10) + '…' + s.slice(-6) : fmt(p);
 }
 function factorTable(table) {
-  return `<div class="table-wrap"><table><thead><tr><th>Prime</th><th>Exponent</th><th>Letter</th></tr></thead><tbody>` +
-    table.map(({ p, e }) => `<tr><td class="num">${esc(primeCell(p))}</td><td class="num">${e}</td><td class="letter">${e <= 26 ? L(e - 1).toUpperCase() : '<span class="muted">none</span>'}</td></tr>`).join('') +
+  return `<div class="table-wrap"><table><thead><tr><th>Position</th><th>Prime</th><th>Exponent</th><th>Letter</th></tr></thead><tbody>` +
+    table.map(({ p, e }, i) => `<tr><td class="num">${i + 1}</td><td class="num">${esc(primeCell(p))}</td><td class="num">${e}</td><td class="letter">${e <= 26 ? L(e - 1).toUpperCase() : '<span class="muted">none</span>'}</td></tr>`).join('') +
     `</tbody></table></div>`;
 }
 function renderInvalid(table) {
@@ -1323,126 +1178,56 @@ function renderInvalid(table) {
   out.hidden = false;
 }
 /* Relative likelihood of candidates from their web frequency bucket (each bucket is a doubling). */
-function withShares(list, boost) {
-  const ws = list.map(e => Math.pow(2, e.b + (boost ? boost(e) : 0)));
-  const tot = ws.reduce((a, b) => a + b, 0) || 1;
-  return list.map((e, i) => ({ ...e, share: ws[i] / tot }));
-}
-const pctText = x => (x >= 0.995 ? '>99%' : x < 0.01 ? '<1%' : Math.round(x * 100) + '%');
 function dedupeBy(list, f) { const seen = new Set(); return list.filter(e => { const k = f(e); if (seen.has(k)) return false; seen.add(k); return true; }); }
 function more(items, shown, what) {
   if (items.length <= shown) return `<div class="list">${items.join('')}</div>`;
   return `<div class="list">${items.slice(0, shown).join('')}</div><details><summary>Show all ${fmt(items.length)} ${what}</summary><div class="list">${items.slice(shown).join('')}</div></details>`;
 }
 function renderResults(r) {
-  const { table, n, exact, scan, hidden } = r;
-  const tiles = table.map(({ p, e }) => `<div class="tile" title="${esc(p.toString())}^${e}"><div class="l">${L(e - 1)}</div><div class="n">${e}</div></div>`).join('');
-  const sortB = (a, b) => b.b - a.b || a.c.localeCompare(b.c);
-  const en = dedupeBy(exact.filter(e => e.cat === 'en'), e => e.c).sort(sortB);
-  const extra = dedupeBy(exact.filter(e => e.cat === 'ex' || e.cat === 'web'), e => e.c).filter(e => !en.some(x => x.c === e.c)).sort(sortB);
-  const names = exact.filter(e => CATS[e.cat].kind === 'name');
-  const langs = exact.filter(e => CATS[e.cat].kind === 'lang');
+  const { table, word, n, found, same } = r;
+  const tiles = table.map(({ p, e }, i) => `<div class="tile" title="Position ${i + 1}: ${esc(p.toString())}^${e}"><div class="l">${L(e - 1)}</div><div class="n">${e}</div></div>`).join('');
+  const sortB = (a, b) => b.b - a.b;
+  const en = found.filter(e => e.cat === 'en').sort(sortB)[0];
+  const names = dedupeBy(found.filter(e => CATS[e.cat].kind === 'name').sort(sortB), e => e.cat + e.d);
+  const words = dedupeBy(found.filter(e => CATS[e.cat].kind !== 'name').sort(sortB), e => e.cat);
+  let meaning;
+  if (en) meaning = `An English word. <span class="tag">${freqLabel(en.b)}</span>`;
+  else if (found.length) {
+    const PREF = { country: 3, region: 2, city: 1 };
+    const top = names.slice().sort((x, y) => (PREF[y.cat] || 0) - (PREF[x.cat] || 0) || y.b - x.b)[0] || words[0];
+    const AS = { ex: 'a rare or technical English word', web: 'a word from web text', fn: 'a first name', sn: 'a surname', city: 'a city or town', region: 'a state, province or region', country: 'a country name', other: 'a proper noun' };
+    const what = AS[top.cat] || `a ${CATS[top.cat].label} word`;
+    meaning = `Not in the standard English dictionary, but found as ${what}${top.d !== word ? `: <b>${esc(top.d)}</b>` : ''}.`;
+  } else meaning = 'Not in any of the word lists. This is still the exact word that was encoded, because the prime order fixes every letter\'s position.';
+  const answer = `<div class="answer${found.length ? '' : ' none'}"><span class="label">Decoded word</span><div class="word-big">${esc(word)}</div><p class="small">${meaning}</p></div>`;
 
-  const chip = (e, lead, share, tag) => `<span class="wchip${lead ? ' lead' : ''}"><b>${esc(e.d)}</b><span class="tag">${lead ? 'Most likely · ' : ''}${share !== undefined ? pctText(share) + ' · ' : ''}${esc(tag)}</span></span>`;
-  /* One scale across all lists: web-frequency bucket plus a prior for how likely each kind of list is to be the source. */
-  const PRIOR = { en: 4, ex: -1, web: -1, fn: 1, sn: -1, city: -1, region: -2, country: 2, other: 2, es: -3, fr: -3, de: -3, it: -3, pt: -3, nl: -3 };
-  const unified = e => e.b + PRIOR[e.cat] + (e.cat === 'en' ? (70 - e.tier) / 20 : 0);
-  const best = exact.slice().sort((a, b) => unified(b) - unified(a))[0];
-  const enNote = en.length ? `<p class="small">Standard English word${en.length > 1 ? 's' : ''} with these letters: ${en.map(e => `<b>${esc(e.c)}</b> (${freqLabel(e.b).toLowerCase()})`).join(', ')}.</p>` : '';
-  let answer;
-  const big = (label, word, text, cls = '') => `<div class="answer ${cls}"><span class="label">${label}</span><div class="word-big">${esc(word)}</div><p class="small">${text}</p></div>`;
-  const bestOther = exact.filter(e => CATS[e.cat].kind !== 'word').sort((a, b) => unified(b) - unified(a))[0];
-  if (best && best.cat !== 'en' && en.length && en[0].b < 7 && unified(best) > unified(en[0]) + 3) {
-    const kind = CATS[best.cat].kind === 'lang' ? `${CATS[best.cat].label} word` : CATS[best.cat].label.toLowerCase();
-    answer = `<div class="answer"><span class="label">Most likely: ${esc(kind)}</span><div class="word-big">${esc(best.d)}</div>
-      <p class="small">This ${esc(kind)} is far more common than any English word with the same letters.</p>${enNote}</div>`;
-  } else if (en.length === 1) {
-    answer = big('Decoded word', en[0].c, `This is the only standard English word spelled with exactly these letters. <span class="tag">${freqLabel(en[0].b)}</span>`);
-  } else if (en.length > 1) {
-    const sh = withShares(en, e => (60 - Math.min(60, e.tier)) / 25);
-    answer = `<div class="answer"><span class="label">${en.length} valid words</span>
-      <p class="small">The primes carry no letter order, and ${en.length} English words use exactly these letters. The percentage is each word's share of how often all of them appear in English text.</p>
-      <div class="words">${sh.map((e, i) => chip(e, i === 0, e.share, freqLabel(e.b))).join('')}</div></div>`;
-  } else if (extra.length && !(bestOther && unified(bestOther) >= unified(extra[0]) - 1)) {
-    if (extra.length === 1) answer = big('Decoded word (extended dictionary)', extra[0].c, `No standard dictionary word fits, but this ${extra[0].cat === 'web' ? 'word from web text' : 'rare, technical or archaic word'} uses exactly these letters.`);
-    else {
-      const sh = withShares(extra);
-      answer = `<div class="answer"><span class="label">${extra.length} rare or specialist words</span><p class="small">No standard dictionary word fits. These come from the extended dictionary and web text.</p>
-        <div class="words">${sh.slice(0, 30).map((e, i) => chip(e, i === 0, e.share, CATS[e.cat].label)).join('')}</div></div>`;
-    }
-  } else if (names.length) {
-    const top1 = names.slice().sort((a, b) => unified(b) - unified(a))[0];
-    answer = big('Probably a name or place', top1.d, `No English word uses exactly these letters. The strongest match is a ${esc(CATS[top1.cat].label.toLowerCase())}; all name matches are listed below.`, 'none');
-  } else if (langs.length) {
-    const top1 = langs.slice().sort((a, b) => b.b - a.b)[0];
-    answer = big('Probably a foreign word', top1.d, `No English word or name fits. This is a ${CATS[top1.cat].label} word.`, 'none');
-  } else {
-    answer = big('No known word found', scan.top.length ? scan.top[0].str : '', 'Nothing in 1.6 million words, names and places uses exactly these letters. This is the most word-like arrangement.', 'none');
-  }
-
-  const extraHtml = en.length && extra.length
-    ? `<div class="section"><div class="sh"><h3>Also in the extended dictionary</h3><span class="hint">Rare, technical, archaic and web words</span></div>${more(extra.map(e => `<span class="item">${esc(e.c)}<small>${esc(CATS[e.cat].label)}</small></span>`), 30, 'words')}</div>`
+  const foundHtml = found.length
+    ? [...words.map(e => `<span class="item">${esc(CATS[e.cat].label)}<small>${freqLabel(e.b)}</small></span>`),
+       ...names.map(e => `<span class="item">${esc(e.d)}<small>${esc(CATS[e.cat].label)}</small></span>`)].join('')
     : '';
-
-  const namesHtml = names.length
-    ? NAME_ORDER.filter(c => names.some(e => e.cat === c)).map(cat => {
-        const list = dedupeBy(names.filter(e => e.cat === cat).sort((a, b) => b.b - a.b), e => e.d);
-        return `<div class="group"><span class="label">${esc(CATS[cat].label)} · ${list.length}</span>${more(list.map(e => `<span class="item">${esc(e.d)}</span>`), 24, 'matches')}</div>`;
-      }).join('')
-    : `<p class="empty">No first names, surnames, cities, regions or countries use exactly these letters.</p>`;
-
-  const langHtml = langs.length
-    ? LANG_ORDER.filter(c => langs.some(e => e.cat === c)).map(cat => `<div class="group"><span class="label">${CATS[cat].label}</span><div class="list">${langs.filter(e => e.cat === cat).sort((a, b) => b.b - a.b).map(e => `<span class="item">${esc(e.d)}<small>${freqLabel(e.b)}</small></span>`).join('')}</div></div>`).join('')
-    : `<p class="empty">No Spanish, French, German, Italian, Portuguese or Dutch word uses exactly these letters.</p>`;
-
-  let hiddenHtml = `<p class="empty">Needs at least 4 letters.</p>`;
-  if (n >= 4) {
-    if (!hidden.res.length) hiddenHtml = `<p class="empty">No shorter English words fit inside these letters.</p>`;
-    else {
-      const byLenMap = new Map();
-      for (const h of hidden.res) (byLenMap.get(h.len) || byLenMap.set(h.len, []).get(h.len)).push(h);
-      hiddenHtml = [...byLenMap].slice(0, 4).map(([len, list]) =>
-        `<div class="group"><span class="label">${len} letters${len === n - 1 ? ' · all but one' : ''} · ${list.length}</span>${more(list.map(h => `<span class="item">${esc(h.c)}</span>`), 24, 'words')}</div>`).join('');
-    }
-  }
-
-  const top = scan.top.slice(0, 15);
-  const bestS = top.length ? top[0].s : 0;
-  const rankHtml = top.length ? `<div class="rank">${top.map(t => `<div class="row"><span>${esc(t.str.toUpperCase())}</span><div class="meter"><i style="width:${Math.max(4, Math.round(100 * Math.exp((t.s - bestS) * 2.2)))}%"></i></div></div>`).join('')}</div>`
-    : `<p class="empty">Every arrangement is already a known word or name.</p>`;
+  const others = dedupeBy(same.filter(e => e.c !== word && (e.cat === 'en' || CATS[e.cat].kind === 'name')).sort(sortB), e => e.c);
+  const othersHtml = others.length
+    ? `<details class="section"><summary>Other words and names with the same letters (${fmt(others.length)})</summary>
+        <p class="hint">The old unordered cipher could not tell these apart. Prime order rules them out.</p>
+        ${more(others.map(e => `<span class="item">${esc(e.cat === 'en' ? e.c : e.d)}<small>${esc(CATS[e.cat].label)}</small></span>`), 40, 'matches')}</details>`
+    : '';
 
   const out = $('#dec-out');
   out.innerHTML = `
     ${answer}
     <div class="section">
-      <div class="sh"><h3>Recovered letters</h3><span class="hint">One tile per prime, smallest prime first</span></div>
+      <div class="sh"><h3>Letters in order</h3><span class="hint">Largest prime first; the number under each letter is its exponent</span></div>
       <div class="tiles">${tiles}</div>
     </div>
-    ${extraHtml}
-    <div class="section">
-      <div class="sh"><h3>Proper nouns</h3><span class="hint">First names, surnames, cities, regions and countries</span></div>
-      ${namesHtml}
-    </div>
-    <div class="section">
-      <div class="sh"><h3>Other languages</h3><span class="hint">Accents removed</span></div>
-      ${langHtml}
-    </div>
-    <div class="section">
-      <div class="sh"><h3>Hidden words</h3><span class="hint">English words using some of the letters, longest first</span></div>
-      ${hiddenHtml}
-    </div>
-    <div class="section">
-      <div class="sh"><h3>Other word-like arrangements</h3><span class="hint">Coined words or unlisted names, scored by English letter patterns</span></div>
-      ${rankHtml}
-    </div>
-    <details class="section">
-      <summary>Prime factorization (${table.length} primes)</summary>
+    ${found.length ? `<div class="section"><div class="sh"><h3>Found in</h3><span class="hint">Every list that contains this exact word</span></div><div class="list">${foundHtml}</div></div>` : ''}
+    <details class="section" open>
+      <summary>Prime factorization (${table.length} primes, largest first)</summary>
       ${factorTable(table)}
     </details>
+    ${othersHtml}
     <div class="stats">
       <span>Entries searched <b>${fmt(LEX.total)}</b></span>
-      <span>Arrangements checked <b>${fmt(scan.checked)}</b>${scan.exhaustive ? ' (all)' : ` of ${scan.total.toString().length > 15 ? sci(scan.total.toString()) : fmt(scan.total)}`}</span>
-      <span>Hidden-word checks <b>${fmt(hidden.checked)}</b></span>
+      <span>Primes <b>${table.length}</b></span>
       <span>Time <b>${r.secs.toFixed(1)} s</b></span>
     </div>`;
   out.hidden = false;
