@@ -6,6 +6,10 @@ Europe, with a regional map for every country and a fully cited Sources page.
 **Open `index.html` by double-clicking it.** No server, build step or internet
 connection is needed (D3 and TopoJSON are bundled in `lib/`).
 
+`europe-alcohol-laws-single.html` is the same app with every library, data file and
+regional map inlined into one file, for sharing. It is generated from this folder —
+edit `data/alcohol-data.js`, not the single file.
+
 > ⚠️ Informational only — not legal advice. Laws change often; check the linked
 > official sources before relying on anything here. Data last verified 2026-10-01.
 
