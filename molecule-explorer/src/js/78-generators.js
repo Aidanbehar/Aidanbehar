@@ -388,7 +388,9 @@
   gen('heat', {
     name: 'q = mcΔT',
     make(r) {
-      const names = Object.keys(ME.ref.SPECIFIC_HEAT.values);
+      /* Not every substance in the table is sensible to set a question about:
+       * the food values are sample-dependent averages, so they are excluded. */
+      const names = ME.ref.SPECIFIC_HEAT.drillable;
       const sub = r.pick(names);
       const c = ME.ref.SPECIFIC_HEAT.values[sub];
       const mass = r.int(20, 800);

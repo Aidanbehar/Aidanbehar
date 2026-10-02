@@ -331,6 +331,17 @@ heats, colligative constants and organic boiling points are literature values
 with no free machine-readable source — so they say so. Plus a 49-word glossary,
 searchable, and linkable to a single word from the search bar.
 
+The specific-heat table is the largest of these: 96 substances in eight groups
+— water in all its forms, metals and alloys, gases, liquids and solvents,
+non-metal elements and minerals, building materials, plastics, and food. It
+reads either grouped or ranked highest to lowest, which is the view that makes
+the point: the range runs from uranium at 0.116 to hydrogen at 14.30, a factor
+of more than a hundred for the same degree in the same gram. Values are printed
+at the precision they are known to rather than padded to a fixed width, the
+variable ones (wood, soil, food) are quoted to two figures and say why, and the
+food group is excluded from the practice generator because its values track
+water content rather than being properties of a substance.
+
 ## Notes on the chemistry
 
 - **Organic vs inorganic** follows the usual teaching convention: carbon bonded

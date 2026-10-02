@@ -1212,6 +1212,96 @@ describe('the quantitative calculators, case by case', () => {
     /* Water really does take about nine times as much as iron. */
     assert.ok(got.warming / got.metal > 9 && got.warming / got.metal < 10);
   });
+
+  /* The specific-heat table is the largest piece of literature data the app
+   * carries, and it feeds a calculator, a generator and a simulation. These
+   * check it is internally consistent rather than that any one number is
+   * right — which no test here can do, since there is nothing to check it
+   * against; that is exactly why it is marked as literature. */
+  test('the specific-heat table is consistent with itself', async () => {
+    const got = await run(() => {
+      const T = window.ME.ref.SPECIFIC_HEAT;
+      const seen = {}, dups = [], bad = [];
+      T.groups.forEach((g) => {
+        if (!g.name || !g.items.length) bad.push(['group', g.name, 'empty']);
+        g.items.forEach((it) => {
+          const [name, value, note] = it;
+          if (seen[name]) dups.push(name);
+          seen[name] = true;
+          if (typeof name !== 'string' || !name.length) bad.push([String(name), 'no name']);
+          if (typeof value !== 'number' || !(value > 0)) bad.push([name, 'value is ' + value]);
+          /* Nothing sensible is outside this range: uranium is the lowest
+           * real substance and hydrogen the highest. */
+          if (value < 0.05 || value > 15) bad.push([name, 'value out of range: ' + value]);
+          if (note !== undefined && (typeof note !== 'string' || note.length < 10)) {
+            bad.push([name, 'note too short to be useful']);
+          }
+          /* The flat map every calculator uses must agree with the group. */
+          if (T.values[name] !== value) bad.push([name, 'flat map says ' + T.values[name]]);
+        });
+      });
+      return {
+        bad: bad, dups: dups,
+        count: Object.keys(T.values).length,
+        groups: T.groups.length,
+        drillable: T.drillable.length,
+        /* Food is excluded from the practice questions. */
+        foodDrilled: T.drillable.filter((n) => ['milk', 'bread', 'blood', 'potato'].indexOf(n) >= 0),
+        noteForHydrogen: T.note('hydrogen'),
+        noteForNothing: T.note('a substance that is not in the table'),
+        highest: Object.keys(T.values).sort((a, b) => T.values[b] - T.values[a])[0],
+        lowest: Object.keys(T.values).sort((a, b) => T.values[a] - T.values[b])[0],
+      };
+    });
+    assert.deepEqual(got.bad, [], JSON.stringify(got.bad.slice(0, 8)));
+    assert.deepEqual(got.dups, [], 'the same substance listed twice: ' + got.dups.join(', '));
+    assert.ok(got.count >= 90, 'only ' + got.count + ' substances');
+    assert.ok(got.groups >= 6, 'only ' + got.groups + ' groups');
+    assert.deepEqual(got.foodDrilled, [], 'food should not be drilled: ' + got.foodDrilled.join(', '));
+    assert.ok(got.drillable < got.count, 'everything is drillable, so the exclusion does nothing');
+    assert.match(got.noteForHydrogen, /highest/i);
+    assert.equal(got.noteForNothing, null);
+    /* The two the lesson text names as the extremes. */
+    assert.equal(got.highest, 'hydrogen');
+    assert.equal(got.lowest, 'uranium');
+  });
+
+  test('the substances the lessons and simulations name are all still there', async () => {
+    const got = await run(() => {
+      const v = window.ME.ref.SPECIFIC_HEAT.values;
+      /* Every key referenced by name anywhere else in the app. Adding to the
+       * table must not quietly rename one of these out from under its user. */
+      const NEEDED = ['water (liquid)', 'water (ice)', 'water (steam)',
+        'aluminium', 'iron', 'copper', 'lead', 'gold', 'titanium', 'glass',
+        'granite', 'concrete', 'ethanol', 'olive oil', 'lithium', 'air (dry)'];
+      return NEEDED.filter((k) => typeof v[k] !== 'number');
+    });
+    assert.deepEqual(got, [], 'missing from the table: ' + got.join(', '));
+  });
+
+  test('the heating curve still finds all three water values', async () => {
+    /* It looks them up by name, and its numbers are drawn on a canvas — so a
+     * renamed key gives NaN stage lengths that the text-based render check
+     * cannot see. Renaming "water (ice)" did exactly that once. */
+    const got = await run(() => {
+      const v = window.ME.ref.SPECIFIC_HEAT.values;
+      const ice = v['water (ice)'], water = v['water (liquid)'], steam = v['water (steam)'];
+      const total = ice * 20 + window.ME.ref.LATENT.fusion + water * 100 +
+        window.ME.ref.LATENT.vaporisation + steam * 20;
+      return { ice: ice, water: water, steam: steam, total: total };
+    });
+    [['ice', got.ice], ['liquid', got.water], ['steam', got.steam]].forEach(([what, v]) => {
+      assert.equal(typeof v, 'number', 'water (' + what + ') is ' + v);
+      assert.ok(isFinite(v) && v > 0, 'water (' + what + ') is ' + v);
+    });
+    assert.ok(isFinite(got.total), 'the heating curve totals ' + got.total);
+    /* A gram of ice at -20 C taken to steam at 120 C:
+     *   41.8 warming the ice + 334 melting + 418.4 warming the water
+     *   + 2257 boiling + 40.2 warming the steam = 3091.4 J.
+     * Boiling alone is nearly three quarters of it, which is the whole point
+     * of the heating curve's long flat stretch. */
+    assert.ok(Math.abs(got.total - 3091.4) < 0.5, 'total energy: ' + got.total);
+  });
 });
 
 /* ------------------------------------------------------------ simulations */

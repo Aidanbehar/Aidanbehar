@@ -168,3 +168,11 @@
   text-transform: uppercase; color: var(--accent-text);
 }
 .res-site .sub { white-space: normal; }
+
+/* the specific-heat table: two views, and a third column of notes */
+.rf-toggle { display: flex; gap: 8px; margin: 14px 0 4px; }
+.rf-groupnote { margin: 2px 0 10px; max-width: 62ch; }
+.rf-heats { margin-bottom: 6px; }
+.rf-heats td:nth-child(3) { font-size: .82rem; line-height: 1.45; }
+.rf-heats td.num { white-space: nowrap; text-align: right; }
+.rf-heats th.rf-unit { text-transform: none; letter-spacing: 0; text-align: right; }

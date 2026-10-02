@@ -1445,7 +1445,10 @@
    * shown side by side so it is visible that they cancel. */
   function calorimeter(opts) {
     opts = opts || {};
-    const SUBSTANCES = ['aluminium', 'iron', 'copper', 'lead', 'glass', 'ethanol']
+    /* A spread rather than the whole table: one very high, one very low, and
+     * the everyday ones in between, so dragging between them shows the range. */
+    const SUBSTANCES = ['aluminium', 'iron', 'copper', 'lead', 'gold', 'titanium',
+      'glass', 'granite', 'concrete', 'ethanol', 'olive oil', 'lithium']
       .filter((k) => ME.ref.SPECIFIC_HEAT.values[k] !== undefined);
     let objName = opts.object || SUBSTANCES[0];
     let objMass = 100, objT = 95, waterMass = 200, waterT = 20;

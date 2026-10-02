@@ -213,15 +213,196 @@
 
   /* ------------------------------------- LITERATURE: specific heats */
   /* In J per gram per kelvin, at around room temperature. */
-  const SPECIFIC_HEAT = {
-    source: 'Standard tabulated values near 25 °C, in J g⁻¹ K⁻¹.',
-    values: {
-      'water (liquid)': 4.184, 'water (ice)': 2.09, 'water (steam)': 2.01,
-      ethanol: 2.44, aluminium: 0.897, iron: 0.449, copper: 0.385,
-      gold: 0.129, lead: 0.128, silver: 0.235, glass: 0.84,
-      'air (dry)': 1.005, granite: 0.79, wood: 1.7, 'olive oil': 1.97,
+  /* Specific heats, in J g⁻¹ K⁻¹, grouped so the table can be read rather
+   * than just looked up. Literature values at or near 25 °C — there is no
+   * free machine-readable source for these, so like the solubility rules and
+   * the activity series they are marked as learned rather than verified.
+   *
+   * Gases are quoted at constant pressure (c_p), which is the figure q = mcΔT
+   * wants for anything heated in the open. Heating a gas in a sealed rigid
+   * container takes noticeably less, because none of the energy goes into
+   * pushing the surroundings out of the way.
+   *
+   * Some of these are properties of a pure substance and some are averages
+   * over something variable — wood, soil, food — so the variable ones are
+   * quoted to two figures and say so. Four significant figures for "bread"
+   * would be a lie about how well it is known. */
+  const SPECIFIC_HEAT_GROUPS = [
+    {
+      name: 'Water, in all its forms',
+      drill: true,
+      note: 'Liquid water has a higher specific heat than almost anything else that is not a gas, because energy goes into stretching and breaking hydrogen bonds instead of into speeding the molecules up. Note that ice and steam are roughly half the liquid value — melting and boiling change the number, so a heating curve needs three of them.',
+      items: [
+        ['water (liquid)', 4.184],
+        ['heavy water, D₂O', 4.22],
+        ['seawater', 3.99, 'about 4 % less than pure water, because of the dissolved salt'],
+        ['water (ice)', 2.09, 'measured at −10 °C — ice is not quite the same below that'],
+        ['water (steam)', 2.01, 'at 100 °C and constant pressure'],
+      ],
     },
-    why: 'Water’s value is enormous compared with a metal’s, which is why the sea takes all summer to warm up and a saucepan handle burns you in seconds.',
+    {
+      name: 'Metals and alloys',
+      drill: true,
+      note: 'Every one is far below water, which is why a metal pan heats in seconds and the water in it does not. Down a group the value falls roughly as the atomic mass rises — the same energy is being shared among fewer, heavier atoms per gram.',
+      items: [
+        ['lithium', 3.58, 'by far the highest of any metal — it is the lightest, so a gram is a great many atoms'],
+        ['beryllium', 1.825],
+        ['magnesium', 1.023],
+        ['sodium', 1.228],
+        ['potassium', 0.757],
+        ['calcium', 0.647],
+        ['titanium', 0.523],
+        ['aluminium', 0.897],
+        ['manganese', 0.479],
+        ['chromium', 0.449],
+        ['iron', 0.449],
+        ['steel (mild)', 0.466],
+        ['stainless steel', 0.50],
+        ['cast iron', 0.46],
+        ['cobalt', 0.421],
+        ['nickel', 0.444],
+        ['zinc', 0.388],
+        ['copper', 0.385],
+        ['brass', 0.38],
+        ['bronze', 0.435],
+        ['silver', 0.235],
+        ['tin', 0.227],
+        ['mercury', 0.140, 'a liquid metal, and the lowest of any common liquid'],
+        ['platinum', 0.133],
+        ['tungsten', 0.132],
+        ['gold', 0.129],
+        ['lead', 0.128],
+        ['uranium', 0.116, 'the lowest of any common element — the heaviest atoms, so the fewest per gram'],
+      ],
+    },
+    {
+      name: 'Gases, at constant pressure',
+      drill: true,
+      note: 'Hydrogen and helium are startling: hydrogen takes more than three times as much energy per gram as liquid water. Both are light, so a gram is an enormous number of molecules, and each one has to be sped up. These are cₚ values — heating a gas in a sealed rigid box takes less, because none of the energy goes into pushing the surroundings aside.',
+      items: [
+        ['hydrogen', 14.30, 'the highest specific heat of any substance at ordinary temperatures'],
+        ['helium', 5.193],
+        ['methane', 2.22],
+        ['ammonia (gas)', 2.19],
+        ['neon', 1.030],
+        ['nitrogen', 1.040],
+        ['air (dry)', 1.005],
+        ['oxygen', 0.918],
+        ['carbon dioxide', 0.844],
+        ['argon', 0.520],
+        ['chlorine', 0.479],
+        ['krypton', 0.248],
+        ['xenon', 0.158],
+      ],
+    },
+    {
+      name: 'Liquids and solvents',
+      drill: true,
+      items: [
+        ['ammonia (liquid)', 4.70, 'higher than water — it hydrogen-bonds too, and its molecules are lighter'],
+        ['propan-2-ol', 2.68],
+        ['methanol', 2.53],
+        ['ethanol', 2.44],
+        ['glycerol', 2.43],
+        ['ethylene glycol (antifreeze)', 2.36],
+        ['hexane', 2.26],
+        ['petrol', 2.22],
+        ['acetone', 2.17],
+        ['olive oil', 1.97],
+        ['diesel', 1.75],
+        ['benzene', 1.74],
+        ['chloroform', 0.96],
+        ['carbon tetrachloride', 0.85],
+      ],
+    },
+    {
+      name: 'Non-metal elements and minerals',
+      drill: true,
+      items: [
+        ['phosphorus (white)', 0.769],
+        ['sulfur', 0.71],
+        ['carbon (graphite)', 0.709],
+        ['silicon', 0.705],
+        ['carbon (diamond)', 0.509, 'lower than graphite — same atoms, and a much stiffer lattice'],
+        ['sodium chloride', 0.864],
+        ['calcium carbonate', 0.82],
+        ['silica (quartz)', 0.74],
+        ['iodine', 0.214],
+      ],
+    },
+    {
+      name: 'Building and everyday materials',
+      drill: true,
+      note: 'Most of these are mixtures rather than pure substances, so they are quoted to two figures. The exact value depends on what is in the sample and how wet it is.',
+      items: [
+        ['cork', 2.0],
+        ['wood', 1.7, 'varies from about 1.2 to 2.9 with species and moisture'],
+        ['rubber', 1.9],
+        ['paper', 1.4],
+        ['asphalt', 0.92],
+        ['concrete', 0.88],
+        ['marble', 0.88],
+        ['glass', 0.84],
+        ['brick', 0.84],
+        ['sand (dry)', 0.83],
+        ['soil (dry)', 0.80, 'wet soil is much higher, which is why damp ground warms up slowly in spring'],
+        ['granite', 0.79],
+        ['Pyrex glass', 0.75],
+      ],
+    },
+    {
+      name: 'Plastics',
+      drill: true,
+      note: 'A polymer’s value depends on its chain length and how much it has crystallised, so these are typical rather than exact.',
+      items: [
+        ['polyethylene', 2.30],
+        ['polypropylene', 1.92],
+        ['nylon', 1.7],
+        ['polystyrene', 1.3],
+        ['PTFE (Teflon)', 1.0],
+        ['PVC', 0.90],
+      ],
+    },
+    {
+      name: 'Food and living tissue',
+      drill: false,
+      note: 'These track water content almost entirely — the wetter something is, the closer it sits to 4.18. They vary from sample to sample, so two figures is as far as they are worth quoting, and they are left out of the practice questions for that reason.',
+      items: [
+        ['milk', 3.9],
+        ['apple', 3.6],
+        ['blood', 3.6],
+        ['lean meat', 3.4],
+        ['potato', 3.4],
+        ['human body (average)', 3.5, 'why a fever of two degrees takes a surprising amount of energy to produce'],
+        ['bread', 2.8],
+        ['butter', 2.0],
+      ],
+    },
+  ];
+
+  /* The flat lookup every calculator and simulation uses. Derived from the
+   * groups, so there is one place a value is written down. */
+  const SPECIFIC_HEAT_VALUES = {};
+  SPECIFIC_HEAT_GROUPS.forEach((g) => {
+    g.items.forEach((row) => { SPECIFIC_HEAT_VALUES[row[0]] = row[1]; });
+  });
+
+  const SPECIFIC_HEAT = {
+    source: 'Standard tabulated values at or near 25 \u00b0C, in J g\u207b\u00b9 K\u207b\u00b9, with gases at constant pressure. Literature values \u2014 there is no free machine-readable source for these, so they are stated as learned rather than verified against anything.',
+    groups: SPECIFIC_HEAT_GROUPS,
+    values: SPECIFIC_HEAT_VALUES,
+    /* The substances sensible to set a q = mc\u0394T question about: everything
+     * except the food, whose values are too sample-dependent to drill on. */
+    drillable: SPECIFIC_HEAT_GROUPS.filter((g) => g.drill)
+      .reduce((out, g) => out.concat(g.items.map((row) => row[0])), []),
+    note(name) {
+      for (let i = 0; i < SPECIFIC_HEAT_GROUPS.length; i++) {
+        const hit = SPECIFIC_HEAT_GROUPS[i].items.filter((row) => row[0] === name)[0];
+        if (hit) return hit[2] || null;
+      }
+      return null;
+    },
+    why: 'Water\u2019s value is enormous compared with a metal\u2019s, which is why the sea takes all summer to warm up and a saucepan handle burns you in seconds. The full range here runs from uranium at 0.116 to hydrogen at 14.30 \u2014 a factor of more than a hundred, for the same one degree in the same one gram.',
   };
 
   /* Latent heats of water, which the heating-curve lesson needs, in J/g. */

@@ -304,7 +304,8 @@
         const r = ME.solution.heat(m, c, dT);
         return {
           headline: ME.fmt.fmt(r.q, 5) + ' J  (' + ME.fmt.fmt(r.q / 1000, 4) + ' kJ)',
-          sub: (v.sub && v.sub !== 'custom' ? v.sub + ', ' : '') + 'c = ' + ME.fmt.fmt(c, 4) + ' J/(g·K)',
+          sub: (v.sub && v.sub !== 'custom' ? v.sub + ', ' : '') + 'c = ' + ME.fmt.fmt(c, 4) + ' J/(g·K)' +
+            (v.sub && ME.ref.SPECIFIC_HEAT.note(v.sub) ? ' — ' + ME.ref.SPECIFIC_HEAT.note(v.sub) : ''),
           steps: r.steps,
           source: ME.ref.SPECIFIC_HEAT.source,
         };
@@ -475,7 +476,16 @@
       let node;
       if (f.type === 'select') {
         node = el('select', { class: 'tl-select' });
-        optionsFor(tool, f).forEach(([v, label]) => node.appendChild(el('option', { value: v, text: label })));
+        /* An entry is either a [value, label] pair or a named group of them. */
+        optionsFor(tool, f).forEach((entry) => {
+          if (entry && entry.group) {
+            const g = el('optgroup', { label: entry.group });
+            entry.items.forEach(([v, label]) => g.appendChild(el('option', { value: v, text: label })));
+            node.appendChild(g);
+          } else {
+            node.appendChild(el('option', { value: entry[0], text: entry[1] }));
+          }
+        });
         values[f.k] = node.value;
         node.addEventListener('change', () => { values[f.k] = node.value; go(); });
       } else if (f.type === 'area') {
@@ -536,7 +546,11 @@
   function optionsFor(tool, f) {
     if (f.options && f.options.length) return f.options;
     if (tool.key === 'heat' && f.k === 'sub') {
-      return Object.keys(ME.ref.SPECIFIC_HEAT.values).map((k) => [k, k]).concat([['custom', 'something else — type c']]);
+      /* 96 substances in one flat list is unreadable, so they come through
+       * grouped and the select builder turns each group into an optgroup. */
+      return ME.ref.SPECIFIC_HEAT.groups
+        .map((g) => ({ group: g.name, items: g.items.map((it) => [it[0], it[0]]) }))
+        .concat([{ group: 'Not listed', items: [['custom', 'something else — type c']] }]);
     }
     if (tool.key === 'units') {
       if (f.k === 'dim') return Object.keys(ME.fmt.UNITS).map((d) => [d, d]);

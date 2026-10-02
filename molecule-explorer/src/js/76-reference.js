@@ -350,27 +350,75 @@
   }
 
   function heats() {
-    const t = el('table', { class: 'rf-table' });
-    const head = el('tr');
-    ['Substance', 'Specific heat J/(g·K)'].forEach((h) => head.appendChild(el('th', { text: h })));
-    t.appendChild(head);
-    const vals = ME.ref.SPECIFIC_HEAT.values;
-    Object.keys(vals).sort((a, b) => vals[b] - vals[a]).forEach((k) => {
-      const tr = el('tr');
-      tr.appendChild(el('td', { text: k }));
-      tr.appendChild(el('td', { class: 'mono', text: String(vals[k]) }));
-      t.appendChild(tr);
-    });
+    const T = ME.ref.SPECIFIC_HEAT;
     const body = el('div');
-    body.appendChild(el('div', { class: 'callout' }, ME.ref.SPECIFIC_HEAT.why));
-    body.appendChild(t);
+    body.appendChild(el('div', { class: 'callout' }, T.why));
+
+    /* Two views of the same 96 numbers. Grouped is for looking something up;
+     * ranked is for seeing the range, which is the thing worth noticing. */
+    const buttons = el('div', { class: 'rf-toggle' });
+    const panel = el('div');
+    let mode = 'grouped';
+    [['grouped', 'By kind'], ['ranked', 'Highest to lowest']].forEach(([key, label]) => {
+      const btn = el('button', { class: 'btn btn-sm' + (key === mode ? ' on' : ''), text: label });
+      btn.addEventListener('click', () => {
+        mode = key;
+        ME.$$('.btn', buttons).forEach((b) => b.classList.toggle('on', b.textContent === label));
+        draw();
+      });
+      buttons.appendChild(btn);
+    });
+    body.appendChild(buttons);
+    body.appendChild(panel);
+
+    const row = (name, value, note) => {
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: name }));
+      /* Printed exactly as stored, rather than rounded to a fixed number of
+       * decimals: water is known to 4.184 and stainless steel to 0.50, and
+       * forcing both to the same width would misrepresent one of them. */
+      tr.appendChild(el('td', { class: 'mono num', text: String(value) }));
+      tr.appendChild(el('td', { class: 'note', text: note || '' }));
+      return tr;
+    };
+    const table = () => {
+      const t = el('table', { class: 'rf-table rf-heats' });
+      const head = el('tr');
+      ['Substance', 'J/(g\u00b7K)', ''].forEach((h, i) =>
+        /* The unit must not be upper-cased by the table style: "J/(G\u00b7K)"
+         * reads as gigakelvin. */
+        head.appendChild(el('th', { class: i === 1 ? 'rf-unit' : '', text: h })));
+      t.appendChild(head);
+      return t;
+    };
+
+    function draw() {
+      ME.clear(panel);
+      if (mode === 'grouped') {
+        T.groups.forEach((g) => {
+          panel.appendChild(el('h3', { class: 'section-head', text: g.name }));
+          if (g.note) panel.appendChild(el('p', { class: 'note rf-groupnote', text: g.note }));
+          const t = table();
+          g.items.forEach((it) => t.appendChild(row(it[0], it[1], it[2])));
+          panel.appendChild(t);
+        });
+      } else {
+        const t = table();
+        Object.keys(T.values)
+          .sort((a, b) => T.values[b] - T.values[a])
+          .forEach((k) => t.appendChild(row(k, T.values[k], T.note(k))));
+        panel.appendChild(t);
+      }
+    }
+    draw();
+
     body.appendChild(el('h3', { class: 'section-head', text: 'And for water changing state' }));
     body.appendChild(el('p', { class: 'note' }, [
       'Melting takes ', el('strong', { text: ME.ref.LATENT.fusion + ' J/g' }),
       ' and boiling takes ', el('strong', { text: ME.ref.LATENT.vaporisation + ' J/g' }),
       '. ' + ME.ref.LATENT.why,
     ]));
-    return card('Specific heats', ME.ref.SPECIFIC_HEAT.source, body);
+    return card('Specific heats', T.source, body);
   }
 
   function glossary(focus) {
