@@ -730,6 +730,14 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 }
 .map-swatch i{position:absolute; inset:0; display:block}
 .map-legend-row b,.map-legend-note b{color:var(--text); font-weight:650}
+/* library rows double as the selector, so the name itself is the control */
+.hl-pick{
+  appearance:none; border:0; background:none; font:inherit; font-weight:650; cursor:pointer;
+  color:var(--accent); padding:0; text-align:left; border-bottom:1px dotted currentColor;
+}
+.hl-pick:hover{color:var(--text)}
+.hl-pick.sel{color:var(--text); border-bottom-style:solid}
+.hl-pick.sel::after{content:' \2713'; color:var(--accent)}
 .sw-dot{
   display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:7px;
   vertical-align:-1px; border:1px solid var(--border-strong);
@@ -836,6 +844,7 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 [data-accent="smoked"] {--accent:#2dd4bf; --accent-2:#5eead4}
 [data-accent="caffeine"]{--accent:#e08a4b; --accent-2:#f2c48b}
 [data-accent="nic"]    {--accent:#ef6f8a; --accent-2:#f9b3c2}
+[data-accent="hl"]     {--accent:#22d3ee; --accent-2:#a5f3fc}
 [data-accent="learn"]  {--accent:#a78bfa; --accent-2:#f0abfc}
 [data-accent="laws"]   {--accent:#6366f1; --accent-2:#a5b4fc}
 [data-accent="home"]   {--accent:#7aa2ff; --accent-2:#a78bfa}
@@ -1007,8 +1016,9 @@ body.scrubbing .view.active{animation:none}
     <button class="tab" role="tab" id="tab-smoked"  aria-controls="view-smoked"  aria-selected="false" data-view="smoked"  style="--tab-accent:#2dd4bf;--tab-accent-2:#5eead4"><span class="ico" data-icon="joint"></span><span class="tl">Smoked / inhaled</span><span class="kbd">5</span></button>
     <button class="tab" role="tab" id="tab-caffeine" aria-controls="view-caffeine" aria-selected="false" data-view="caffeine" style="--tab-accent:#e08a4b;--tab-accent-2:#f2c48b"><span class="ico" data-icon="coffee"></span><span class="tl">Caffeine</span><span class="kbd">6</span></button>
     <button class="tab" role="tab" id="tab-nic"     aria-controls="view-nic"     aria-selected="false" data-view="nic"     style="--tab-accent:#ef6f8a;--tab-accent-2:#f9b3c2"><span class="ico" data-icon="cig"></span><span class="tl">Nicotine</span><span class="kbd">7</span></button>
-    <button class="tab" role="tab" id="tab-learn"   aria-controls="view-learn"   aria-selected="false" data-view="learn"   style="--tab-accent:#a78bfa;--tab-accent-2:#f0abfc"><span class="ico" data-icon="book"></span><span class="tl">Learn</span><span class="kbd">8</span></button>
-    <button class="tab" role="tab" id="tab-laws" aria-controls="view-laws" aria-selected="false" data-view="laws" style="--tab-accent:#6366f1;--tab-accent-2:#a5b4fc"><span class="ico" data-icon="scale"></span><span class="tl">Laws</span><span class="kbd">9</span></button>
+    <button class="tab" role="tab" id="tab-hl"      aria-controls="view-hl"      aria-selected="false" data-view="hl"      style="--tab-accent:#22d3ee;--tab-accent-2:#a5f3fc"><span class="ico" data-icon="decay"></span><span class="tl">Half-life lab</span><span class="kbd">8</span></button>
+    <button class="tab" role="tab" id="tab-learn"   aria-controls="view-learn"   aria-selected="false" data-view="learn"   style="--tab-accent:#a78bfa;--tab-accent-2:#f0abfc"><span class="ico" data-icon="book"></span><span class="tl">Learn</span><span class="kbd">9</span></button>
+    <button class="tab" role="tab" id="tab-laws" aria-controls="view-laws" aria-selected="false" data-view="laws" style="--tab-accent:#6366f1;--tab-accent-2:#a5b4fc"><span class="ico" data-icon="scale"></span><span class="tl">Laws</span><span class="kbd">0</span></button>
   </div>
   <p class="mini-warn"><span class="ico" data-icon="alert"></span>Illustrative estimates only — never use them to judge fitness to drive.</p>
 </nav>
@@ -1117,7 +1127,7 @@ body.scrubbing .view.active{animation:none}
       <div>
         <h4 style="margin-bottom:6px">Keyboard</h4>
         <p style="font-size:.85rem;color:var(--text-dim);margin:0">
-          <span class="badge neutral"><span class="bdot"></span>1–9</span> switch section ·
+          <span class="badge neutral"><span class="bdot"></span>1–9, 0</span> switch section ·
           <span class="badge neutral"><span class="bdot"></span>T</span> theme ·
           <span class="badge neutral"><span class="bdot"></span>P</span> print ·
           <span class="badge neutral"><span class="bdot"></span>E</span> export.
@@ -2040,6 +2050,142 @@ body.scrubbing .view.active{animation:none}
   </div>
 </section>
 
+
+<!-- ======================================================================
+     VIEW: HALF-LIFE LAB
+     A sandbox rather than an estimator — set a number and watch what
+     exponential decay does, with a library of published half-lives to
+     load into it.
+     ==================================================================== -->
+<section class="view" id="view-hl" role="tabpanel" aria-labelledby="tab-hl" data-accent="hl" tabindex="-1">
+  <div class="view-head">
+    <div class="art"><span class="ico" data-icon="decay"></span></div>
+    <div>
+      <h2>Half-life lab</h2>
+      <p class="sub">Set a half-life, or load one of <strong id="hl-lib-n">95</strong> published ones, and see exactly what it implies — the curve, the halvings table, how long to reach any amount, and where repeated doses settle. Nothing here is estimated: <span class="term" data-tip="N(t) = N₀ · 2^(−t/t½). Every number on this page follows from that one line and the half-life you set.">it is all one equation</span> and the number you give it.</p>
+    </div>
+  </div>
+
+  <div id="hl-banners"></div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="decay"></span><h3>What is loaded</h3></div>
+    <div id="hl-current"></div>
+  </div>
+
+  <div class="grid g-input" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="hourglass"></span><h3>The half-life</h3></div>
+      <p class="card-note">Type any number, or load a real one from the library below. Typing here detaches it from the library entry, so you can take a published value and push it around.</p>
+      <div class="field">
+        <label class="lab" for="hl-t">Half-life</label>
+        <input type="number" id="hl-t" min="0" step="any" value="5" inputmode="decimal">
+      </div>
+      <div class="field">
+        <span class="lab">Measured in</span>
+        <div class="pills" id="hl-u" role="group" aria-label="Half-life unit"></div>
+      </div>
+      <div class="field">
+        <span class="lab">Chart scale <span class="hint">log turns decay into a straight line</span></span>
+        <div class="pills" id="hl-scale" role="group" aria-label="Chart y-axis scale"></div>
+      </div>
+      <button class="btn" id="hl-clear" type="button" style="margin-top:4px"><span class="ico" data-icon="reset"></span>Detach from the library</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="dropper"></span><h3>How much, and how long</h3></div>
+      <p class="card-note">The starting amount can be anything that decays — milligrams, becquerels, a percentage, a count of atoms. The unit is just a label; the arithmetic does not care.</p>
+      <div class="inline-2">
+        <div class="field">
+          <label class="lab" for="hl-amount">Starting amount</label>
+          <input type="number" id="hl-amount" min="0" step="any" value="100" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label class="lab" for="hl-label">Called</label>
+          <input type="text" id="hl-label" maxlength="12" value="mg" autocomplete="off">
+        </div>
+      </div>
+      <div class="field">
+        <label class="lab" for="hl-elapsed">Time that has passed</label>
+        <input type="number" id="hl-elapsed" min="0" step="any" value="12" inputmode="decimal">
+        <input type="range" id="hl-elapsed-range" min="0" max="100" step="0.5" value="12" aria-label="Time elapsed slider">
+      </div>
+      <div class="field">
+        <span class="lab">Measured in</span>
+        <div class="pills" id="hl-eu" role="group" aria-label="Elapsed time unit"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-row" id="hl-stats" style="margin-bottom:18px"></div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="chart"></span><h3>The decay curve</h3></div>
+    <p class="card-note" id="hl-chart-note"></p>
+    <p class="card-note" style="margin-top:4px"><span class="scrub-hint"><span class="ico" data-icon="swipe"></span>Drag the dot along the curve — or focus the chart and use the arrow keys — to move through time. Everything on the page follows it.</span></p>
+    <div class="chart-host" id="hl-chart"></div>
+    <div class="chart-legend" id="hl-legend"></div>
+  </div>
+
+  <div class="grid g2" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="sigma"></span><h3>How long until it falls to…</h3></div>
+      <div class="inline-2">
+        <div class="field">
+          <label class="lab" for="hl-target">Target</label>
+          <input type="number" id="hl-target" min="0" step="any" value="10" inputmode="decimal">
+        </div>
+        <div class="field">
+          <span class="lab">Given as</span>
+          <div class="pills" id="hl-target-mode" role="group" aria-label="Target given as"></div>
+        </div>
+      </div>
+      <div id="hl-solve" style="margin-top:6px"></div>
+      <div class="spacer"></div>
+      <p class="card-note" style="margin:0 0 6px"><strong>The standard landmarks:</strong></p>
+      <div id="hl-quick"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="ico" data-icon="clock"></span><h3>If you keep taking it</h3></div>
+      <p class="card-note">Where a repeated dose settles, and how long it takes to get there.</p>
+      <div class="field">
+        <label class="lab" for="hl-every">One dose every</label>
+        <input type="number" id="hl-every" min="0" step="any" value="6" inputmode="decimal">
+      </div>
+      <div class="field">
+        <span class="lab">Measured in</span>
+        <div class="pills" id="hl-eu2" role="group" aria-label="Dosing interval unit"></div>
+      </div>
+      <div id="hl-dosing"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="table"></span><h3>Every halving</h3></div>
+    <div class="table-wrap"><table id="hl-table"></table></div>
+    <div class="scroll-hint"><span class="ico" data-icon="swipe"></span>Scroll sideways for every column.</div>
+    <p class="card-note" id="hl-table-note" style="margin-top:10px"></p>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="book"></span><h3>The library</h3></div>
+    <p class="card-note">Published half-lives, each with what kind of half-life it is — because a plasma half-life, a terminal half-life, a biological half-life and a radioactive one are four different things and mixing them up is the commonest mistake made with this number.</p>
+    <div class="map-toolbar">
+      <input type="search" id="hl-search" placeholder="Search by name or description…" aria-label="Search the half-life library" autocomplete="off">
+    </div>
+    <div class="pills" id="hl-cats" role="group" aria-label="Filter by group" style="margin-bottom:10px"></div>
+    <p class="card-note" id="hl-lib-count" style="margin:0 0 10px"></p>
+    <div class="table-wrap" style="max-height:460px;overflow:auto"><table id="hl-lib-table"></table></div>
+    <div class="scroll-hint"><span class="ico" data-icon="swipe"></span>Scroll sideways for every column, and down for every substance.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="ico" data-icon="molecule"></span><h3>About the one you picked</h3></div>
+    <div id="hl-detail"></div>
+  </div>
+</section>
+
 <!-- ======================================================================
      VIEW: LEARN
      ==================================================================== -->
@@ -2054,7 +2200,7 @@ body.scrubbing .view.active{animation:none}
 
   <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="ico" data-icon="compass"></span><h3>Start here</h3></div>
-    <p class="card-note" style="margin-bottom:12px">Twenty articles: four on alcohol, nine on cannabis, one on caffeine, two on nicotine, and four on this app's own honesty — what is standard science, what is my own estimate, and what the percentages do and do not mean.</p>
+    <p class="card-note" style="margin-bottom:12px">Twenty-one articles: four on alcohol, nine on cannabis, one on caffeine, two on nicotine, one on half-lives themselves, and four on this app's own honesty — what is standard science, what is my own estimate, and what the percentages do and do not mean.</p>
     <div class="pills" id="learn-index" role="group" aria-label="Article index"></div>
   </div>
 
@@ -2418,6 +2564,38 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
 
       <h4>What the number means if someone tests you</h4>
       <p>The usual cut-point separating users from non-users is around 10&nbsp;ng/mL, with passive exposure producing values in the low single digits and light or occasional use landing somewhere between. None of which makes this app a test. It does not know what you actually absorbed, your CYP2A6 activity, or the twenty per cent of nicotine that goes down other metabolic routes. It is a demonstration of why the metabolite is the thing worth measuring, not a substitute for measuring it.</p>
+    </div>
+  </div>
+
+  <!-- ---- HALF-LIVES ---- -->
+  <h3 style="margin:22px 0 10px;color:var(--text-faint);font-size:.78rem;letter-spacing:.1em;text-transform:uppercase">Half-lives</h3>
+
+  <div class="acc" id="art-halflife">
+    <button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="decay"></span></span>What a half-life is, and the four different things people mean by it<span class="chev ico" data-icon="chevron"></span></button>
+    <div class="acc-body article">
+      <p>A half-life is not a property of a substance. It is a property of a <em>process</em> — specifically, of a process where the rate of removal is proportional to how much is there. Get that one condition and everything else follows; lose it and the whole concept stops applying, which is why this app spends so much time on alcohol.</p>
+      <div class="formula">N(t) = N₀ · 2^(−t / t½)  =  N₀ · e^(−λt)
+
+<span class="cm">// λ = ln(2) / t½           the decay constant, a rate per unit time</span>
+<span class="cm">// τ = 1 / λ = t½ / ln2     the mean lifetime, always ~1.44 × the half-life</span>
+<span class="cm">// t = t½ · log₂(1/f)       how long to fall to a fraction f</span></div>
+      <p>Three consequences worth having in your head. <strong>The half-life does not depend on how much there is</strong> — a gram and a milligram both halve in the same time, which is the defining property and the reason the curve looks the same at every scale. <strong>The mean lifetime is longer than the half-life</strong>, by a factor of 1/ln2 ≈ 1.44, because the long tail drags the average out. And <strong>four to five half-lives is "effectively gone"</strong>: 6.25 % then 3.1 %, which is the convention behind both drug washout periods and the time to reach steady state on repeated dosing.</p>
+
+      <h4>The straight-line test</h4>
+      <p>Plot the amount on a logarithmic axis and exponential decay becomes a straight line whose slope is the half-life. That is not a presentation trick; it is the test. If a real measurement plots straight, the process is first-order and a half-life describes it. If it bends, something else is going on — saturation, a second compartment, a reservoir leaking back — and quoting a half-life will mislead whoever reads it. The <a href="#" data-goto="hl">half-life lab</a> has that axis as a toggle so you can watch the line straighten.</p>
+
+      <h4>Four half-lives, often for the same substance</h4>
+      <p>This is where most of the confusion in popular writing comes from, and the library in the lab labels every entry with which one it is reporting.</p>
+      <p><strong>Plasma elimination</strong> is the usual meaning for a drug: how fast the concentration in blood falls once absorption and distribution are finished. <strong>Terminal</strong> is the slowest phase of a multi-compartment drug, usually set by release back out of fat rather than by destruction — THC's famous "up to 13 days" is terminal, and the effect ended on day one. <strong>Biological</strong> is how fast the body clears something by every route at once, which for a radioisotope is entirely separate from whether its nucleus is decaying. <strong>Radioactive</strong> is the nucleus, and nothing changes it: not temperature, not chemistry, not what the atom is bound to.</p>
+      <p>For something radioactive inside a body, the two that matter combine, and the combination is always shorter than either one alone:</p>
+      <div class="formula">1/t_effective = 1/t_physical + 1/t_biological</div>
+      <p>Caesium-137 has a 30-year physical half-life and a biological one of about 70 days, so the effective half-life in a person is about 70 days. Strontium-90 goes into bone and stays, so its effective half-life is years, and that difference — not the physical half-life, which is similar — is why strontium is the more feared of the two.</p>
+
+      <h4>When the number is a lie</h4>
+      <p>Three failure modes, all represented in the library.</p>
+      <p><strong>Saturation.</strong> Alcohol, phenytoin and salicylate in overdose all saturate the enzyme that clears them, so removal becomes a fixed amount per hour rather than a fixed fraction. There is no half-life. The <a href="#" data-article="art-zero">zero-order article</a> works through what that does to the maths, and it is the reason the alcohol section in this app refuses to use the exponential model that every other section uses.</p>
+      <p><strong>The effect outlasting the molecule.</strong> Aspirin is gone in twenty minutes and works for a week, because it acetylates an enzyme permanently and platelets cannot make more. Omeprazole and the proton pump are the same story. A half-life is a statement about concentration, and concentration is not always what is doing the work.</p>
+      <p><strong>Redistribution being mistaken for elimination.</strong> A single dose of fentanyl or ketamine wears off in minutes because it moves out of the brain into fat and muscle, long before any of it has been destroyed. Give enough doses to fill those tissues and the effect suddenly tracks the real half-life instead — which is why the duration of an anaesthetic infusion grows with how long it has been running, and why a "short-acting" drug is only short-acting the first time.</p>
     </div>
   </div>
 
@@ -3022,6 +3200,7 @@ const ICONS = {
   patch:'<rect x="4.4" y="4.4" width="15.2" height="15.2" rx="4.4"/><path d="M8.4 8.4h7.2M8.4 12h7.2M8.4 15.6h4.6" opacity=".6"/>',
   spray:'<path d="M9 8.8h6v10.4a1.8 1.8 0 0 1-1.8 1.8h-2.4A1.8 1.8 0 0 1 9 19.2z"/><path d="M10.4 8.8V5.6h3.2v3.2"/><path d="M17.2 4.4h2M17.2 7h2M16.4 2.2l1.6 1M16.4 8.4l1.6-1" opacity=".7"/>',
   heart:'<path d="M12 20.4S3.6 15.2 3.6 9.6A4.6 4.6 0 0 1 12 6.8a4.6 4.6 0 0 1 8.4 2.8c0 5.6-8.4 10.8-8.4 10.8z"/>',
+  decay:'<path d="M4 4v16h16"/><path d="M4.8 6.2c4.4 0 4.2 5.4 5.6 8.1 1.1 2 3.2 3.5 8.6 3.9"/><circle cx="7.6" cy="8.4" r="1.5" fill="currentColor" stroke="none"/><circle cx="12.4" cy="15.6" r="1.1" fill="currentColor" stroke="none" opacity=".7"/><circle cx="17.4" cy="18" r=".85" fill="currentColor" stroke="none" opacity=".45"/>',
   lungs:'<path d="M12 3.4v9"/><path d="M9.6 8.4C8 8.4 4.4 11 4.4 15v3.6a2 2 0 0 0 2.6 1.9l2.6-.9a2 2 0 0 0 1.4-1.9V10.4a2 2 0 0 0-2-2z"/><path d="M14.4 8.4c1.6 0 5.2 2.6 5.2 6.6v3.6a2 2 0 0 1-2.6 1.9l-2.6-.9a2 2 0 0 1-1.4-1.9V10.4a2 2 0 0 1 2-2z"/>'
 };
 function icon(name){ return SVG_OPEN + (ICONS[name] || ICONS.molecule) + '</svg>'; }
@@ -3191,7 +3370,15 @@ function renderChart(host, cfg){
   const xMax = cfg.xMax || 1, yMax = cfg.yMax || 1;
   const fs = narrow ? 10 : 11.5;
   const X = v => P.l + clamp(v / xMax, 0, 1) * iw;
-  const Y = v => P.t + ih - clamp(v / yMax, 0, 1) * ih;
+  /* A logarithmic y axis is what turns exponential decay into a straight
+     line, which is the whole point of a half-life, so it is worth having.
+     yMin is the floor the axis bottoms out at; zero has no place on it. */
+  const yLog = !!cfg.yLog;
+  const yMin = cfg.yMin > 0 ? cfg.yMin : yMax / 1e5;
+  const lo = yLog ? Math.log10(yMin) : 0, hi = yLog ? Math.log10(yMax) : 1;
+  const Y = v => yLog
+    ? P.t + ih - clamp((Math.log10(Math.max(v, yMin * 1e-6)) - lo) / (hi - lo), 0, 1) * ih
+    : P.t + ih - clamp(v / yMax, 0, 1) * ih;
 
   let g = '';
   /* plot area */
@@ -3326,7 +3513,7 @@ function renderChart(host, cfg){
       ? ' tabindex="0" role="slider" aria-orientation="horizontal"' +
         ' aria-valuemin="0" aria-valuemax="' + Math.round(xMax) + '"' +
         ' aria-valuenow="' + Math.round(cfg.marker ? cfg.marker.x : 0) + '"' +
-        ' aria-valuetext="' + esc(fmtDuration(cfg.marker ? cfg.marker.x : 0) + (cfg.marker && cfg.marker.label ? ', ' + cfg.marker.label : '')) + '"'
+        ' aria-valuetext="' + esc((cfg.fmtX || fmtDuration)(cfg.marker ? cfg.marker.x : 0) + (cfg.marker && cfg.marker.label ? ', ' + cfg.marker.label : '')) + '"'
       : ' role="img"') +
     ' aria-label="' + esc(cfg.ariaLabel || cfg.yLabel + ' against ' + cfg.xLabel) + '">' + g + '</svg>';
   host.classList.toggle('scrubbable', dragging);
@@ -3362,6 +3549,14 @@ function scrubTo(key, minutes){
        changes is how long you have LEFT before it, which is the point. */
     st.bedAt = caffeineBedAt() - delta * 60000;
     saveState(); renderCaffeine();
+  } else if (key === 'hl'){
+    /* the half-life chart's x axis is in minutes, like every other chart, so
+       the shared drag machinery works on it unchanged */
+    state.hl.elapsed = Math.max(0, hlInUnit(m * 60, state.hl.eu));
+    const el = document.getElementById('hl-elapsed'), rng = document.getElementById('hl-elapsed-range');
+    if (el) el.value = round(state.hl.elapsed, 3);
+    if (rng) rng.value = clamp(state.hl.elapsed, +rng.min, +rng.max);
+    saveState(); renderHalfLife();
   } else if (key === 'nic'){
     const st = state.nic;
     if (!st.doses.length) return;
@@ -3576,6 +3771,8 @@ const DEFAULT_STATE = {
       weightKg:75, bf:'', sex:'male', tol:'none', first:false, takenAt:0},
   sm:{method:'joint', amount:0.15, potency:20, depth:'normal', elapsed:15,
       weightKg:75, bf:'', sex:'male', tol:'none', first:false, takenAt:0},
+  hl:{sel:'caffeine', t:5, u:'h', amount:100, unitLabel:'mg', elapsed:12, eu:'h',
+      target:10, targetMode:'amt', every:6, eu2:'h', logY:false, cat:'all', q:''},
   nic:{doses:[], nextId:1, weightKg:75, clearance:'typical', tol:'none',
        draft:{product:'cig', mg:1, when:10, name:'Cigarette', icon:'cig'}},
   caf:{doses:[], nextId:1, weightKg:75, clearance:'typical', tol:'moderate', bedHours:8, bedAt:null,
@@ -6490,6 +6687,816 @@ function initNicotine(){
   w.value = round(kgToDisplay(s.weightKg), 1);
 }
 
+
+/* ---------------------------------------------------------------------------
+   §10d  HALF-LIFE LAB  —  renderHalfLife()
+   A sandbox rather than an estimator. Set a half-life, or take one from the
+   library, and watch what exponential decay actually does — on a linear axis,
+   on a logarithmic one where it becomes a straight line, and in a table of
+   successive halvings.
+   ------------------------------------------------------------------------ */
+const HL_UNITS = [
+  {key:'s',   label:'seconds', short:'s',   secs:1},
+  {key:'min', label:'minutes', short:'min', secs:60},
+  {key:'h',   label:'hours',   short:'h',   secs:3600},
+  {key:'d',   label:'days',    short:'d',   secs:86400},
+  {key:'y',   label:'years',   short:'y',   secs:31557600}   // Julian year
+];
+function hlUnit(key){ return HL_UNITS.find(u => u.key === key) || HL_UNITS[2]; }
+
+/* What the number actually measures. Conflating these is the commonest error
+   people make with half-lives, so every entry in the library declares one. */
+const HL_KINDS = {
+  plasma: {label:'Plasma elimination', tip:'How fast the concentration in blood falls once absorption and distribution are done. The usual meaning of "half-life" for a drug.'},
+  term:   {label:'Terminal', tip:'The slowest phase, usually set by release back out of tissue rather than by how fast the body destroys it. Much longer than the drug is felt for.'},
+  bio:    {label:'Biological', tip:'How long the body takes to clear half of it by every route at once, including excretion. For a radioisotope this is separate from its physical decay.'},
+  radio:  {label:'Radioactive', tip:'A property of the nucleus. Nothing changes it — not temperature, not chemistry, not what the atom is bound to.'},
+  effect: {label:'Effect',  tip:'How long the EFFECT takes to halve, which can be wildly different from how long the molecule lasts.'},
+  none:   {label:'No true half-life', tip:'This one does not decay exponentially, so a half-life does not describe it. The entry explains what does.'}
+};
+const HL_CATS = [
+  {key:'all', label:'Everything'},
+  {key:'stim', label:'Stimulants'},
+  {key:'dep',  label:'Depressants'},
+  {key:'op',   label:'Opioids'},
+  {key:'can',  label:'Cannabinoids'},
+  {key:'psy',  label:'Psychedelics'},
+  {key:'med',  label:'Medicines'},
+  {key:'hor',  label:'Body signals'},
+  {key:'iso',  label:'Radioisotopes'},
+  {key:'env',  label:'Toxins'}
+];
+
+/* Every value is a published central estimate with its published spread. Where
+   a substance is famous for its spread rather than its average, the entry says
+   so — methadone and fluoxetine are in here as much for that as for the
+   number. Ranges are between-person ranges in healthy adults unless stated. */
+const HL_LIB = [
+  /* ------------------------------- stimulants --------------------------- */
+  {k:'caffeine', n:'Caffeine', c:'stim', t:5, u:'h', lo:3, hi:7, kind:'plasma', go:'caffeine',
+   w:'Adenosine antagonist; the most used drug on earth',
+   i:'Cleared almost entirely by liver CYP1A2, which is nowhere near saturated at ordinary doses, so elimination is genuinely first-order and the half-life is real. The healthy-adult spread is about 2 to 10 hours and the modifiers are common and invisible: smoking roughly halves it, oral contraceptives roughly double it, and late pregnancy stretches it to around 15 hours.'},
+  {k:'nicotine', n:'Nicotine', c:'stim', t:2, u:'h', lo:1, hi:4, kind:'plasma', go:'nic',
+   w:'Nicotinic acetylcholine agonist',
+   i:'Short enough to run a daily smoker’s whole day: the pharmacological floor arrives four or five times between waking and bed. Cleared by CYP2A6, whose reduced-activity variants are common and are associated with smoking fewer cigarettes and quitting more successfully.'},
+  {k:'cotinine', n:'Cotinine', c:'stim', t:16, u:'h', lo:10, hi:27, kind:'plasma', go:'nic',
+   w:'The main nicotine metabolite, and what a nicotine test measures',
+   i:'Eight times nicotine’s half-life and close to pharmacologically inert, which is exactly why it is the biomarker: nicotine is gone by morning and tells you about the last few hours, while cotinine integrates days of exposure into one number. Around 10 ng/mL is the usual cut-point between a user and a non-user; established daily smokers sit between roughly 200 and 400.'},
+  {k:'amphetamine', n:'Amphetamine', c:'stim', t:10, u:'h', lo:7, hi:34, kind:'plasma',
+   w:'Releases and blocks reuptake of dopamine and noradrenaline',
+   i:'The range here is not between-person noise so much as urine pH: amphetamine is a weak base, so acidic urine traps the ionised form and flushes it out in about seven hours, while alkaline urine lets it be reabsorbed and stretches it past thirty. Few drugs have a half-life you can change this much by changing your diet.'},
+  {k:'dexamph', n:'Dexamfetamine', c:'stim', t:10, u:'h', lo:9, hi:14, kind:'plasma',
+   w:'The more active enantiomer of amphetamine',
+   i:'About twice as potent as the l-isomer at dopamine release, with a similar half-life. Mixed-salt preparations contain both, which is part of why their effect outlasts their plasma curve.'},
+  {k:'lisdex', n:'Lisdexamfetamine', c:'stim', t:1, u:'h', lo:0.5, hi:1.5, kind:'plasma',
+   w:'An inactive prodrug of dexamfetamine',
+   i:'A beautiful illustration of why the parent molecule’s half-life can be irrelevant. Lisdexamfetamine itself is gone within an hour, but it is only a carrier: red blood cells cleave it slowly into dexamfetamine, and it is the dexamfetamine half-life of around ten hours that you feel. The slow conversion is also what makes it hard to abuse, because no route of administration speeds it up.'},
+  {k:'methylph', n:'Methylphenidate', c:'stim', t:3, u:'h', lo:2, hi:4, kind:'plasma',
+   w:'Dopamine and noradrenaline reuptake inhibitor',
+   i:'Short enough that immediate-release tablets are taken two or three times a day, which is the entire reason extended-release formulations exist. The formulation, not the molecule, sets how long it lasts.'},
+  {k:'modafinil', n:'Modafinil', c:'stim', t:13, u:'h', lo:10, hi:15, kind:'plasma',
+   w:'Wakefulness-promoting agent',
+   i:'Long enough that an afternoon dose will still be half present at bedtime, which is the commonest complaint about it. The R-enantiomer, sold separately, is the longer-lived half at around 15 hours against the S-enantiomer’s 4.'},
+  {k:'cocaine', n:'Cocaine', c:'stim', t:1, u:'h', lo:0.7, hi:1.5, kind:'plasma',
+   w:'Monoamine reuptake blocker and local anaesthetic',
+   i:'One of the shortest half-lives of any widely used drug, and the reason for its characteristic pattern of use: the effect is substantially gone within an hour. It is hydrolysed by plasma and liver esterases rather than being metabolised slowly, which is also why it is not detectable for long — the test looks for benzoylecgonine instead.'},
+  {k:'benzoyl', n:'Benzoylecgonine', c:'stim', t:6, u:'h', lo:5, hi:8, kind:'plasma',
+   w:'The inactive cocaine metabolite that drug tests look for',
+   i:'Six times cocaine’s own half-life and far more abundant, which is why urine screens target it and why a positive result says nothing about when the last dose was within a couple of days.'},
+  {k:'mdma', n:'MDMA', c:'stim', t:8, u:'h', lo:6, hi:10, kind:'plasma',
+   w:'Serotonin releaser with stimulant properties',
+   i:'Metabolised partly by CYP2D6, which it also inhibits — so it slows its own clearance, and doses do not stack linearly. Doubling the dose can more than double the exposure, which is the pharmacological basis for the advice against redosing.'},
+  {k:'meth', n:'Methamphetamine', c:'stim', t:10, u:'h', lo:9, hi:15, kind:'plasma',
+   w:'Potent monoamine releaser',
+   i:'Similar half-life to amphetamine, and similarly pH-dependent, but it crosses into the brain considerably faster. About a twentieth of a dose is converted to amphetamine, which is why both show up on a test.'},
+  {k:'theoph', n:'Theophylline', c:'stim', t:8, u:'h', lo:6, hi:12, kind:'plasma',
+   w:'Methylxanthine bronchodilator, a close relative of caffeine',
+   i:'A classic narrow-therapeutic-index drug: effective and toxic concentrations are close together, and the half-life varies several-fold with smoking, heart failure and liver disease. It is one of the few drugs where plasma monitoring is genuinely routine.'},
+  {k:'theobr', n:'Theobromine', c:'stim', t:7, u:'h', lo:6, hi:10, kind:'plasma',
+   w:'The main methylxanthine in chocolate',
+   i:'Much weaker than caffeine in humans but cleared at a similar rate. Dogs clear it roughly three times more slowly, which is the entire reason chocolate is dangerous to them and not to us.'},
+  {k:'pseudo', n:'Pseudoephedrine', c:'stim', t:6, u:'h', lo:5, hi:8, kind:'plasma',
+   w:'Decongestant, and a mild stimulant',
+   i:'Another weak base whose clearance depends on urine pH, ranging from about 3 hours when urine is acidic to 16 when it is alkaline.'},
+
+  /* ------------------------------ depressants --------------------------- */
+  {k:'ethanol', n:'Ethanol (alcohol)', c:'dep', t:0, u:'h', kind:'none', go:'alcohol',
+   w:'The textbook example of a drug with no half-life at all',
+   i:'Alcohol does not decay exponentially. The enzyme that clears it is saturated at almost any concentration a drinker reaches, so the body removes a fixed AMOUNT per hour rather than a fixed fraction — roughly 0.015 % BAC per hour. That is zero-order kinetics, and it means the familiar "halves every so often" picture is simply wrong: a straight line down, not a curve. Only in the last fraction of a percent, as the enzyme comes off saturation, does it start to behave exponentially at all.'},
+  {k:'diazepam', n:'Diazepam', c:'dep', t:43, u:'h', lo:20, hi:100, kind:'plasma',
+   w:'Long-acting benzodiazepine',
+   i:'Long on its own and far longer in practice, because its main metabolite nordiazepam is active and lasts two to four days by itself. The effect wears off long before the drug does — that is redistribution out of the brain into fat, not elimination — which is why a single dose feels short and a daily dose accumulates for a fortnight.'},
+  {k:'nordiaz', n:'Nordiazepam', c:'dep', t:70, u:'h', lo:36, hi:200, kind:'plasma',
+   w:'Active metabolite of diazepam and several other benzodiazepines',
+   i:'One of the longest-lived psychoactive molecules in common use. Because several benzodiazepines converge on it, it is what accumulates during regular use and what makes the elderly so sensitive to drugs that look short-acting on paper.'},
+  {k:'alprazolam', n:'Alprazolam', c:'dep', t:11, u:'h', lo:9, hi:16, kind:'plasma',
+   w:'Short-acting benzodiazepine',
+   i:'Short enough that inter-dose withdrawal is a recognised problem with regular use: the concentration falls far enough between doses for rebound anxiety to appear, which reads as the original anxiety returning and drives escalation.'},
+  {k:'clonaz', n:'Clonazepam', c:'dep', t:35, u:'h', lo:18, hi:50, kind:'plasma',
+   w:'Long-acting benzodiazepine',
+   i:'Long and flat enough that it is used where steady cover matters more than onset. The same property makes tapering slower and, for most people, easier.'},
+  {k:'lorazepam', n:'Lorazepam', c:'dep', t:14, u:'h', lo:10, hi:20, kind:'plasma',
+   w:'Intermediate benzodiazepine, cleared without the liver’s CYP system',
+   i:'Conjugated directly rather than oxidised, so liver disease and interacting drugs barely change its clearance. That reliability, not the half-life, is why it is preferred in hospital.'},
+  {k:'midazolam', n:'Midazolam', c:'dep', t:2, u:'h', lo:1.5, hi:3, kind:'plasma',
+   w:'Very short-acting benzodiazepine used for procedures',
+   i:'Short enough to titrate minute by minute, which is the point. Prolonged infusion is a different matter: the context-sensitive half-time grows with the length of the infusion as tissue fills up, and a patient sedated for days can take far longer to wake than the two-hour figure suggests.'},
+  {k:'temazepam', n:'Temazepam', c:'dep', t:10, u:'h', lo:8, hi:20, kind:'plasma',
+   w:'Benzodiazepine hypnotic',
+   i:'Chosen for sleep because it is long enough to last the night and short enough that most of it is gone by morning — though "most" is doing some work at the long end of the range.'},
+  {k:'zolpidem', n:'Zolpidem', c:'dep', t:2.5, u:'h', lo:1.5, hi:4.5, kind:'plasma',
+   w:'Non-benzodiazepine hypnotic',
+   i:'Deliberately short, to get people to sleep without a hangover. Women clear it more slowly than men, which is why the recommended dose was formally lowered for women after the drug had been on the market for twenty years.'},
+  {k:'ghb', n:'GHB', c:'dep', t:0.5, u:'h', lo:0.3, hi:1, kind:'plasma',
+   w:'GABA-B agonist; saturable clearance',
+   i:'Very short, and worse than short: clearance is saturable, so the half-life stretches as the dose rises. That non-linearity is the mechanism behind its reputation — the gap between a recreational dose and an unrousable one is narrow, and doubling the dose more than doubles the exposure. The brevity also means it leaves detectable traces for only a few hours.'},
+  {k:'phenobarb', n:'Phenobarbital', c:'dep', t:79, u:'h', lo:53, hi:118, kind:'plasma',
+   w:'Barbiturate anticonvulsant',
+   i:'Among the longest half-lives of any sedative, so it takes two to three weeks to reach steady state and just as long to leave. It is also a powerful enzyme inducer, which shortens the half-life of many other drugs taken with it.'},
+  {k:'phenytoin', n:'Phenytoin', c:'dep', t:22, u:'h', lo:7, hi:42, kind:'none',
+   w:'Anticonvulsant with saturable, dose-dependent clearance',
+   i:'Like alcohol, phenytoin saturates its own metabolism within the therapeutic range, so it has no fixed half-life. A small increase in dose can produce a large and disproportionate rise in concentration, which is why it is dosed by blood level rather than by milligrams and why the "22 hours" quoted here is only an apparent figure at low concentrations.'},
+
+  /* -------------------------------- opioids ----------------------------- */
+  {k:'morphine', n:'Morphine', c:'op', t:2.5, u:'h', lo:2, hi:3, kind:'plasma',
+   w:'The reference opioid agonist',
+   i:'Short enough that immediate-release morphine is dosed every four hours. Its metabolite morphine-6-glucuronide is itself a potent agonist and is cleared by the kidneys, so it accumulates dangerously in renal failure — a case where the parent drug’s half-life tells you very little about the risk.'},
+  {k:'codeine', n:'Codeine', c:'op', t:3, u:'h', lo:2.5, hi:3.5, kind:'plasma',
+   w:'Prodrug converted to morphine by CYP2D6',
+   i:'Codeine is close to inactive by itself; CYP2D6 converts a few per cent of it into morphine, and that enzyme varies enormously. Poor metabolisers get almost no pain relief, while ultra-rapid metabolisers can generate dangerous morphine concentrations from a normal dose — which is why it is no longer given to children after tonsillectomy.'},
+  {k:'oxycodone', n:'Oxycodone', c:'op', t:3.5, u:'h', lo:3, hi:4, kind:'plasma',
+   w:'Semi-synthetic opioid agonist',
+   i:'Active in its own right rather than needing conversion, so its effect is more predictable than codeine’s. Controlled-release formulations stretch the dosing interval without changing the molecule’s half-life at all.'},
+  {k:'hydroco', n:'Hydrocodone', c:'op', t:4, u:'h', lo:3.3, hi:4.4, kind:'plasma',
+   w:'Semi-synthetic opioid, usually combined with paracetamol',
+   i:'The opioid half is unremarkable. The paracetamol it is combined with is the part that sets the ceiling on how much can safely be taken, which is a common and dangerous misunderstanding.'},
+  {k:'fentanyl', n:'Fentanyl (intravenous)', c:'op', t:4, u:'h', lo:3, hi:7, kind:'term',
+   w:'High-potency synthetic opioid',
+   i:'The terminal half-life of several hours badly misdescribes a single dose, which wears off in thirty to sixty minutes because the drug redistributes out of the brain into fat and muscle. Fill those tissues with repeated doses or an infusion and redistribution stops helping: the effect then tracks the real half-life, and the duration grows with how long the infusion ran. A transdermal patch behaves differently again, with an apparent half-life of about a day set by the skin depot rather than by the liver.'},
+  {k:'bupre', n:'Buprenorphine', c:'op', t:37, u:'h', lo:24, hi:42, kind:'plasma',
+   w:'Partial opioid agonist with very high receptor affinity',
+   i:'The long half-life matters less than the binding: it holds onto the receptor so tightly and comes off so slowly that it blocks other opioids for days. That is why it works for maintenance treatment, and why starting it too soon after a full agonist precipitates immediate withdrawal.'},
+  {k:'methadone', n:'Methadone', c:'op', t:24, u:'h', lo:8, hi:59, kind:'plasma',
+   w:'Long-acting full opioid agonist',
+   i:'In this library as much for its range as its value. An eight-hour and a fifty-nine-hour metaboliser take the same dose; one is at steady state in two days and the other in twelve. Because the pain relief is shorter than the elimination, people in pain redose while the drug is still accumulating, and deaths during methadone initiation cluster in exactly that window. It is the clearest case anywhere of why an average half-life can be actively dangerous.'},
+  {k:'naloxone', n:'Naloxone', c:'op', t:1.1, u:'h', lo:0.5, hi:1.5, kind:'plasma',
+   w:'Opioid antagonist used to reverse overdose',
+   i:'Shorter than almost every opioid it is used against, and that single fact is the most important thing about it. Someone revived from a heroin or fentanyl overdose can go back into respiratory depression as the naloxone wears off while the opioid is still there. Reversal is not a cure; it buys time to get to hospital.'},
+  {k:'naltrexone', n:'Naltrexone', c:'op', t:4, u:'h', lo:3, hi:5, kind:'plasma',
+   w:'Long-acting opioid antagonist used in dependence treatment',
+   i:'Its active metabolite 6-beta-naltrexol lasts around 13 hours, and receptor blockade outlasts both — a daily tablet holds the receptors blocked for roughly 24 hours. The monthly injection works by depot release, not by any change in the molecule.'},
+  {k:'tramadol', n:'Tramadol', c:'op', t:6, u:'h', lo:5, hi:7, kind:'plasma',
+   w:'Weak opioid plus serotonin and noradrenaline reuptake inhibition',
+   i:'Depends on CYP2D6 to make its active metabolite, like codeine, so the same genetic lottery applies. The reuptake effects are independent of that and carry a real seizure and serotonin-syndrome risk that the opioid framing obscures.'},
+  {k:'heroin', n:'Heroin (diamorphine)', c:'op', t:3, u:'min', lo:2, hi:6, kind:'plasma',
+   w:'A prodrug: two acetyl groups bolted onto morphine',
+   i:'Essentially gone from blood within minutes, which is not a statement about how long it works. Heroin is a delivery system: the acetyl groups let it cross into the brain far faster than morphine, where it is deacetylated to 6-monoacetylmorphine and then to morphine. The speed of that entry, not the dose, is what makes it so reinforcing.'},
+  {k:'sixmam', n:'6-Monoacetylmorphine', c:'op', t:30, u:'min', lo:20, hi:40, kind:'plasma',
+   w:'The intermediate between heroin and morphine',
+   i:'The only metabolite unique to heroin, which makes it the one test result that distinguishes heroin use from morphine or codeine use. Its short life is why that window is a matter of hours.'},
+
+  /* ----------------------------- cannabinoids --------------------------- */
+  {k:'thc', n:'THC (delta-9)', c:'can', t:1.6, u:'d', lo:1, hi:13, kind:'term', go:'d9',
+   w:'The main psychoactive cannabinoid',
+   i:'The terminal half-life is one of the most misquoted numbers in pharmacology. It is long because THC is extremely fat-soluble and leaks slowly back out of adipose tissue, not because it is still doing anything — the effect is over in hours while the molecule takes days. In frequent users the terminal phase stretches towards two weeks. Quoting it as "how long you are high" is wrong by about two orders of magnitude.'},
+  {k:'thccooh', n:'THC-COOH', c:'can', t:5.5, u:'d', lo:2, hi:10, kind:'term',
+   w:'The inactive THC metabolite urine tests look for',
+   i:'Completely inactive and very long-lived, which is the whole problem with cannabis drug testing: a positive result can reflect use weeks earlier in a frequent user and says nothing whatever about impairment at the time of the test.'},
+  {k:'ohthc', n:'11-Hydroxy-THC', c:'can', t:12, u:'h', lo:8, hi:36, kind:'plasma', go:'d9',
+   w:'An active THC metabolite, formed mostly after swallowing',
+   i:'Produced in quantity when THC passes through the liver, which is why an edible feels different from the same milligrams smoked rather than merely slower. It crosses into the brain readily and is generally reported as more potent at CB1 than THC itself.'},
+  {k:'cbd', n:'CBD', c:'can', t:1, u:'d', lo:0.06, hi:5, kind:'term',
+   w:'Non-intoxicating cannabinoid',
+   i:'The published figures are all over the place because they measure different things: around 1.4 to 11 hours after smoking, but two to five days after repeated oral dosing, because like THC it accumulates in fat. Worth knowing for a different reason too — CBD inhibits several CYP enzymes, so at the doses used medically it lengthens the half-life of other drugs taken with it.'},
+
+  /* ---------------------- psychedelics & dissociatives ------------------ */
+  {k:'lsd', n:'LSD', c:'psy', t:3.6, u:'h', lo:2.6, hi:5.1, kind:'plasma',
+   w:'Serotonin 5-HT2A agonist, active at microgram doses',
+   i:'The experience lasts eight to twelve hours — far longer than three and a half hours of elimination would suggest. The explanation is receptor kinetics rather than pharmacokinetics: LSD binds into a pocket that closes over it, and it comes off the receptor extremely slowly. The molecule leaves long before the receptor lets go.'},
+  {k:'psilocin', n:'Psilocin', c:'psy', t:2.5, u:'h', lo:1.5, hi:3, kind:'plasma',
+   w:'The active form of psilocybin',
+   i:'Psilocybin is a prodrug and is dephosphorylated to psilocin within minutes of being swallowed, so the psilocin curve is what matters. A four-to-six-hour experience from a two-and-a-half-hour half-life is an ordinary dose-response relationship, unlike LSD.'},
+  {k:'ketamine', n:'Ketamine', c:'psy', t:2.5, u:'h', lo:2, hi:4, kind:'plasma',
+   w:'NMDA receptor antagonist and dissociative anaesthetic',
+   i:'The anaesthetic effect of a single dose ends in ten to fifteen minutes by redistribution, not elimination — the same trick fentanyl plays. The antidepressant effect, by contrast, outlasts the drug by days, which means it cannot be a direct receptor effect at all and is one of the more interesting open questions in psychiatry.'},
+  {k:'norket', n:'Norketamine', c:'psy', t:12, u:'h', lo:5, hi:16, kind:'plasma',
+   w:'Active ketamine metabolite',
+   i:'Roughly a third as potent as ketamine at NMDA receptors and much longer-lived, so it accounts for much of the lingering quality after a session and for tolerance during repeated use.'},
+  {k:'dmt', n:'DMT (smoked)', c:'psy', t:15, u:'min', lo:9, hi:20, kind:'plasma',
+   w:'Short-acting tryptamine psychedelic',
+   i:'Destroyed so fast by monoamine oxidase that it is inactive by mouth at ordinary doses and lasts only minutes when smoked. Ayahuasca works around this by combining it with an MAO inhibitor, which turns the same molecule into a four-hour experience — a half-life changed by pharmacology rather than by dose.'},
+  {k:'mescaline', n:'Mescaline', c:'psy', t:6, u:'h', lo:4.5, hi:8, kind:'plasma',
+   w:'Phenethylamine psychedelic from peyote and San Pedro',
+   i:'Mostly excreted unchanged by the kidneys rather than metabolised, which is unusual, and gives it one of the longest experiences of the classical psychedelics at ten to twelve hours.'},
+  {k:'n2o', n:'Nitrous oxide', c:'psy', t:5, u:'min', lo:3, hi:8, kind:'bio',
+   w:'Inhaled dissociative anaesthetic',
+   i:'Barely metabolised at all — it is breathed back out, so its clearance is set by ventilation rather than by any enzyme. That makes it the fastest-on and fastest-off drug in this library. Its danger is not pharmacokinetic: it inactivates vitamin B12 irreversibly, and heavy use causes nerve damage that has nothing to do with how fast the gas leaves.'},
+
+  /* ------------------------------- medicines ---------------------------- */
+  {k:'paracet', n:'Paracetamol (acetaminophen)', c:'med', t:2.5, u:'h', lo:1.5, hi:3, kind:'plasma',
+   w:'Analgesic and antipyretic',
+   i:'Short and well behaved at normal doses. In overdose the main conjugation pathways saturate, the half-life lengthens, and a toxic minor metabolite builds up — so the kinetics stop being first-order exactly when it matters most. That is why the treatment nomogram is plotted against time since ingestion rather than against dose.'},
+  {k:'ibuprofen', n:'Ibuprofen', c:'med', t:2, u:'h', lo:1.8, hi:2.5, kind:'plasma',
+   w:'Non-steroidal anti-inflammatory',
+   i:'One of the shortest half-lives among common NSAIDs, which is why it is dosed every six to eight hours and why it is generally gentler on the stomach than the long-acting ones.'},
+  {k:'aspirin', n:'Aspirin', c:'med', t:20, u:'min', lo:15, hi:30, kind:'plasma',
+   w:'Irreversible COX inhibitor',
+   i:'The molecule is gone within the hour, and the effect lasts for days. Aspirin acetylates platelet COX-1 permanently, and platelets cannot make new enzyme, so the antiplatelet effect persists for the eight-to-ten-day life of the platelet pool. The best example in this library of a half-life that tells you nothing about duration of action.'},
+  {k:'salicylate', n:'Salicylate', c:'med', t:3, u:'h', lo:2, hi:30, kind:'none',
+   w:'The aspirin metabolite that actually causes toxicity',
+   i:'Saturable, and dramatically so: around 2 to 3 hours at analgesic doses, 6 to 12 at anti-inflammatory doses, and more than 20 in overdose. This is why salicylate poisoning gets worse for hours after presentation, and why a half-life is the wrong tool for describing it.'},
+  {k:'naproxen', n:'Naproxen', c:'med', t:14, u:'h', lo:12, hi:17, kind:'plasma',
+   w:'Long-acting NSAID',
+   i:'Seven times ibuprofen’s half-life, which buys twice-daily dosing at the cost of a longer exposure for the stomach and the kidneys to deal with.'},
+  {k:'diphen', n:'Diphenhydramine', c:'med', t:9, u:'h', lo:4, hi:15, kind:'plasma',
+   w:'First-generation antihistamine, widely sold as a sleep aid',
+   i:'Long enough that a bedtime dose is still half present on waking, which is the mechanism behind the next-day grogginess. Clearance falls markedly with age, roughly doubling the half-life in the elderly, in whom it is also strongly anticholinergic.'},
+  {k:'cetirizine', n:'Cetirizine', c:'med', t:8, u:'h', lo:7, hi:10, kind:'plasma',
+   w:'Second-generation antihistamine',
+   i:'Similar half-life to diphenhydramine but it barely crosses into the brain, which is the actual difference between generations — not duration, but distribution.'},
+  {k:'dxm', n:'Dextromethorphan', c:'med', t:4, u:'h', lo:2, hi:30, kind:'plasma',
+   w:'Cough suppressant and, at high doses, a dissociative',
+   i:'The range is the story. CYP2D6 clears it, and the five to ten per cent of people who are poor metabolisers have half-lives approaching a day and reach far higher concentrations from the same dose. Many combination products pair it with paracetamol, which puts a hard ceiling on recreational doses that has nothing to do with dextromethorphan.'},
+  {k:'omeprazole', n:'Omeprazole', c:'med', t:1, u:'h', lo:0.5, hi:1.5, kind:'plasma',
+   w:'Proton pump inhibitor',
+   i:'An hour in the blood and two to three days of effect. It binds the acid pump irreversibly, so recovery waits for new pumps to be made rather than for the drug to leave — the same trick aspirin plays on platelets. It is also why these drugs take days to reach full effect and days to wear off after stopping.'},
+  {k:'metformin', n:'Metformin', c:'med', t:6, u:'h', lo:4, hi:9, kind:'plasma',
+   w:'First-line type 2 diabetes drug',
+   i:'Excreted unchanged by the kidneys without being metabolised at all, so its half-life is a direct readout of kidney function. That is the whole basis for the dose limits in renal impairment and for the rare but serious lactic acidosis risk.'},
+  {k:'atorva', n:'Atorvastatin', c:'med', t:14, u:'h', lo:11, hi:30, kind:'plasma',
+   w:'Cholesterol-lowering statin',
+   i:'Its active metabolites run to 20 to 30 hours, and inhibition of the target enzyme outlasts both, so the once-daily dose works regardless of timing. Short-half-life statins like simvastatin are traditionally taken at night because cholesterol synthesis peaks then; atorvastatin is long enough not to care.'},
+  {k:'levothy', n:'Levothyroxine', c:'med', t:7, u:'d', lo:6, hi:8, kind:'plasma',
+   w:'Thyroid hormone replacement',
+   i:'A week, which has two useful consequences: missing one tablet barely moves the level, and a dose change takes about six weeks to show its full effect, so re-testing sooner than that measures nothing.'},
+  {k:'sertraline', n:'Sertraline', c:'med', t:26, u:'h', lo:22, hi:36, kind:'plasma',
+   w:'SSRI antidepressant',
+   i:'About a day, so steady state arrives in a week. Short enough that missed doses produce the dizziness and electric-shock sensations of discontinuation syndrome, and long enough that a slow taper works.'},
+  {k:'fluoxetine', n:'Fluoxetine', c:'med', t:4, u:'d', lo:1, hi:6, kind:'plasma',
+   w:'SSRI antidepressant with an exceptionally long metabolite',
+   i:'The parent drug lasts days and its active metabolite norfluoxetine lasts one to two weeks, so it takes about a month to reach steady state and a month to clear. That makes it nearly immune to discontinuation syndrome — it tapers itself — and it is also why a four-to-five-week gap is required before starting an MAO inhibitor.'},
+  {k:'bupropion', n:'Bupropion', c:'med', t:21, u:'h', lo:12, hi:30, kind:'plasma',
+   w:'Noradrenaline and dopamine reuptake inhibitor; also sold for smoking cessation',
+   i:'Its hydroxybupropion metabolite is active, present at much higher concentrations than the parent, and lasts around 20 hours itself. Seizure risk is dose-related, which is why the extended-release formulations exist — same daily milligrams, lower peak.'},
+  {k:'quetiapine', n:'Quetiapine', c:'med', t:7, u:'h', lo:6, hi:7, kind:'plasma',
+   w:'Atypical antipsychotic, often used off-label for sleep',
+   i:'Short for its class. The sedation at low doses is antihistamine action and fades with tolerance; the antipsychotic action needs much higher doses. Two different drugs in one tablet, in effect, and the half-life describes neither.'},
+  {k:'lithium', n:'Lithium', c:'med', t:24, u:'h', lo:18, hi:36, kind:'plasma',
+   w:'Mood stabiliser; an element, not a molecule',
+   i:'Handled by the kidney almost exactly like sodium, so dehydration, low-salt diets, NSAIDs and diuretics all raise the level. The therapeutic and toxic ranges nearly touch, which combined with that sensitivity is why it is one of the few drugs with mandatory blood monitoring.'},
+  {k:'lamotrigine', n:'Lamotrigine', c:'med', t:25, u:'h', lo:14, hi:100, kind:'plasma',
+   w:'Anticonvulsant and mood stabiliser',
+   i:'The range is almost entirely about what else is being taken: valproate roughly doubles it to about 70 hours, enzyme-inducing anticonvulsants roughly halve it to 14. The slow titration it requires is not about the half-life but about a rash that can become life-threatening if the dose is raised quickly.'},
+  {k:'gabapentin', n:'Gabapentin', c:'med', t:6, u:'h', lo:5, hi:7, kind:'plasma',
+   w:'Anticonvulsant and neuropathic pain drug',
+   i:'Absorbed by a saturable transporter, so bioavailability FALLS as the dose rises — about 60 per cent at 900 mg a day and 30 per cent at 3600. The half-life is ordinary; the non-linearity is all on the way in rather than the way out.'},
+  {k:'prednisolone', n:'Prednisolone', c:'med', t:3, u:'h', lo:2, hi:4, kind:'plasma',
+   w:'Corticosteroid',
+   i:'Three hours in plasma, 18 to 36 hours of biological effect. Steroids work by changing gene transcription, so the effect persists long after the molecule has gone — which is why once-daily dosing works and why the plasma half-life is almost irrelevant to how it is prescribed.'},
+  {k:'amoxicillin', n:'Amoxicillin', c:'med', t:1, u:'h', lo:0.7, hi:1.4, kind:'plasma',
+   w:'Beta-lactam antibiotic',
+   i:'Very short, which is why it is taken three times a day. For this class what matters is the fraction of the dosing interval the concentration stays above the bacterium’s minimum inhibitory concentration — time above threshold, not peak height.'},
+  {k:'azithro', n:'Azithromycin', c:'med', t:68, u:'h', lo:40, hi:96, kind:'term',
+   w:'Macrolide antibiotic with an enormous tissue reservoir',
+   i:'Concentrates inside cells at fifty to a hundred times the plasma concentration and leaks back out for days. That is why a three-day or five-day course treats a week-long infection, and why the familiar "Z-pack" works at all.'},
+  {k:'doxycycline', n:'Doxycycline', c:'med', t:18, u:'h', lo:16, hi:22, kind:'plasma',
+   w:'Tetracycline antibiotic',
+   i:'Long enough for once- or twice-daily dosing, and cleared largely by the gut rather than the kidney, which makes it usable in renal impairment where other tetracyclines are not.'},
+  {k:'warfarin', n:'Warfarin', c:'med', t:40, u:'h', lo:20, hi:60, kind:'plasma',
+   w:'Vitamin K antagonist anticoagulant',
+   i:'The drug’s half-life is not the one that matters. Warfarin stops new clotting factors being made; the existing ones have to decay on their own, and factor II takes about 60 hours, so the full anticoagulant effect arrives days after the first dose and persists days after the last. Dosing by effect rather than by milligrams is the only workable approach.'},
+  {k:'apixaban', n:'Apixaban', c:'med', t:12, u:'h', lo:8, hi:15, kind:'plasma',
+   w:'Direct factor Xa inhibitor',
+   i:'Inhibits the clotting factor directly rather than its production, so the effect tracks the concentration and arrives and leaves with it. That predictability is the entire clinical advantage over warfarin, and it is a half-life story rather than a potency one.'},
+  {k:'metoprolol', n:'Metoprolol', c:'med', t:3.5, u:'h', lo:3, hi:7, kind:'plasma',
+   w:'Beta blocker',
+   i:'Cleared by CYP2D6, so poor metabolisers reach several times the concentration from the same dose. Short enough that the immediate-release form is taken twice daily, which is why the succinate extended-release version is the one used in heart failure.'},
+  {k:'amlodipine', n:'Amlodipine', c:'med', t:40, u:'h', lo:30, hi:50, kind:'plasma',
+   w:'Calcium channel blocker for blood pressure',
+   i:'Unusually long for its class, which makes the blood-pressure effect smooth and forgiving of a missed dose — but also means a dose change takes a week or more to show its full effect.'},
+  {k:'semaglutide', n:'Semaglutide', c:'med', t:7, u:'d', lo:6, hi:8, kind:'plasma',
+   w:'GLP-1 receptor agonist',
+   i:'Engineered to be long: a fatty acid chain makes it bind albumin, which hides it from the kidney and from the enzyme that destroys natural GLP-1 in about two minutes. A week-long half-life from a two-minute hormone is a deliberate piece of design, and it is the whole reason a weekly injection is possible.'},
+  {k:'melatonin', n:'Melatonin', c:'med', t:45, u:'min', lo:30, hi:60, kind:'plasma',
+   w:'Hormone that signals biological night',
+   i:'Short, and that is the point: it is a timing signal rather than a sedative, so what matters is when it is taken rather than how much. The common milligram doses are many times higher than the body ever produces, and the extra does not help — it mostly lengthens the signal past where it was wanted.'},
+
+  /* ----------------------------- body signals --------------------------- */
+  {k:'adrenaline', n:'Adrenaline (epinephrine)', c:'hor', t:2, u:'min', lo:1, hi:3, kind:'plasma',
+   w:'The fight-or-flight hormone',
+   i:'Among the shortest half-lives in the body, destroyed within a couple of minutes. The pounding heart that outlasts a fright by twenty minutes is not circulating adrenaline — it is the downstream effects running on after the signal has gone.'},
+  {k:'insulin', n:'Insulin (endogenous)', c:'hor', t:5, u:'min', lo:4, hi:6, kind:'plasma',
+   w:'The hormone that moves glucose into cells',
+   i:'Minutes, which is what makes minute-by-minute glucose control possible. Every injected insulin is an engineering attempt to beat that: rapid analogues get closer to it, and long-acting ones use crystallisation or albumin binding to stretch the same molecule to a day.'},
+  {k:'cortisol', n:'Cortisol', c:'hor', t:70, u:'min', lo:60, hi:90, kind:'plasma',
+   w:'The main glucocorticoid stress hormone',
+   i:'Long enough to be a daily rhythm rather than a moment-to-moment signal: it peaks around waking and falls through the day. Like other steroids its biological effect, mediated through gene transcription, lasts several times longer than the molecule.'},
+  {k:'oxytocin', n:'Oxytocin', c:'hor', t:3, u:'min', lo:1, hi:6, kind:'plasma',
+   w:'Peptide hormone of labour, lactation and bonding',
+   i:'A few minutes, which is a serious problem for the popular claims made about it. Peptides this short-lived and this poor at crossing into the brain are unlikely to do much when sprayed up the nose, and the replication record for those studies reflects that.'},
+  {k:'albumin', n:'Albumin', c:'hor', t:20, u:'d', lo:19, hi:21, kind:'bio',
+   w:'The most abundant protein in blood plasma',
+   i:'Three weeks, which is why albumin is a marker of long-term nutrition rather than of what someone ate this week, and why correcting a low level by infusion is temporary unless the cause is fixed.'},
+  {k:'igg', n:'IgG antibodies', c:'hor', t:21, u:'d', lo:18, hi:24, kind:'bio',
+   w:'The main long-term antibody class',
+   i:'Three weeks for the molecules — but immunity is not stored in circulating antibody. It is held in memory B cells and long-lived plasma cells that keep making more, which is why protection outlasts any individual antibody by decades. Monoclonal antibody drugs borrow this half-life, which is why they are dosed monthly.'},
+  {k:'vitd', n:'Vitamin D (25-OH)', c:'hor', t:15, u:'d', lo:12, hi:25, kind:'bio',
+   w:'The storage form measured in a vitamin D blood test',
+   i:'Two to three weeks, which is why a single large dose can cover a month and why a blood level takes about three months to stabilise after a change in supplementation. The active hormone form, calcitriol, has a half-life of only a few hours.'},
+  {k:'rbc', n:'Red blood cells', c:'hor', t:120, u:'d', kind:'none',
+   w:'In here as a warning, not as a half-life',
+   i:'Red cells do not decay exponentially. They are removed when they reach about 120 days old, so the population empties like a queue rather than like a decay curve — a fixed lifespan, not a fixed fraction per day. That is exactly why HbA1c reports an average over the preceding two to three months, and it is a useful reminder that "half gone by now" is a claim about mechanism, not a default.'},
+
+  /* ---------------------------- radioisotopes --------------------------- */
+  {k:'c11', n:'Carbon-11', c:'iso', t:20.4, u:'min', kind:'radio',
+   w:'PET imaging isotope',
+   i:'So short that it has to be made in a cyclotron in the same building as the scanner, and the chemistry to attach it to a tracer molecule has to be finished in minutes. The upside is a very low radiation dose, since almost all of it has decayed before the patient goes home.'},
+  {k:'f18', n:'Fluorine-18', c:'iso', t:110, u:'min', kind:'radio',
+   w:'The workhorse PET isotope',
+   i:'Just long enough to be made centrally and shipped to hospitals within a couple of hours, which is why FDG-PET is available everywhere and carbon-11 imaging is not. Two hours is the difference between a research technique and a routine one.'},
+  {k:'tc99m', n:'Technetium-99m', c:'iso', t:6, u:'h', kind:'radio',
+   w:'The most used medical radioisotope in the world',
+   i:'Six hours is close to ideal: long enough to image, short enough to be gone within a couple of days. It is milked on demand from a molybdenum-99 generator with a 66-hour half-life, so hospitals can keep a supply without a reactor — the half-life pair is the whole technology.'},
+  {k:'i123', n:'Iodine-123', c:'iso', t:13.2, u:'h', kind:'radio',
+   w:'Thyroid imaging isotope',
+   i:'Emits only gamma rays, so it images the thyroid without irradiating it much. Its longer sibling iodine-131 emits beta particles too, which is useless for imaging and ideal for treatment.'},
+  {k:'i131', n:'Iodine-131', c:'iso', t:8.02, u:'d', kind:'radio',
+   w:'Used to treat thyroid disease, and released by reactor accidents',
+   i:'The thyroid takes up iodine indiscriminately, which is what makes this isotope both a treatment and a hazard. Eight days means fallout iodine is a problem for weeks rather than years — and it is why stable iodine tablets are given after an accident, to fill the thyroid so the radioactive kind cannot get in.'},
+  {k:'i125', n:'Iodine-125', c:'iso', t:59.4, u:'d', kind:'radio',
+   w:'Used in brachytherapy seeds and laboratory assays',
+   i:'Two months of low-energy emission makes it suitable for permanent implanted seeds that irradiate a tumour locally and then fade, with no second procedure to remove them.'},
+  {k:'p32', n:'Phosphorus-32', c:'iso', t:14.3, u:'d', kind:'radio',
+   w:'A beta emitter used to label DNA in the laboratory',
+   i:'Two weeks is convenient for an experiment and inconvenient for a stockroom, so it is ordered rather than kept. Its energetic beta radiation needs shielding by plastic rather than lead, because lead produces secondary X-rays.'},
+  {k:'po210', n:'Polonium-210', c:'iso', t:138.4, u:'d', kind:'radio',
+   w:'An intensely radioactive alpha emitter',
+   i:'Harmless outside the body — its alpha particles cannot get through skin — and extraordinarily dangerous inside it, which is the combination that made it an assassination tool. A few months is long enough to deliver an enormous internal dose and short enough that the specific activity is immense.'},
+  {k:'co60', n:'Cobalt-60', c:'iso', t:5.27, u:'y', kind:'radio',
+   w:'Industrial and medical gamma source',
+   i:'Five years is the practical sweet spot for a sealed source: strong enough to be useful, and the machine needs reloading rather than replacing every few years. Used for sterilising equipment, irradiating food and, historically, for radiotherapy.'},
+  {k:'h3', n:'Tritium', c:'iso', t:12.32, u:'y', kind:'radio',
+   w:'Radioactive hydrogen',
+   i:'A very weak beta emitter — the radiation cannot penetrate skin, and a sheet of paper stops it — so it is safe enough to be sealed in watch dials and exit signs. Its danger is only as water, if swallowed, where its biological half-life of about 10 days matters far more than its 12-year physical one.'},
+  {k:'sr90', n:'Strontium-90', c:'iso', t:28.8, u:'y', kind:'radio',
+   w:'A fission product that behaves chemically like calcium',
+   i:'That chemistry is the whole problem: the body files it into bone, where it sits next to the marrow for decades. Its biological half-life in bone runs to years on top of its 29-year physical one, and this is why atmospheric nuclear testing was tracked through children’s teeth.'},
+  {k:'cs137', n:'Caesium-137', c:'iso', t:30.08, u:'y', kind:'radio',
+   w:'The main long-term contaminant after a reactor accident',
+   i:'Chemically like potassium, so it spreads through soft tissue rather than concentrating in one organ, and the body clears it with a biological half-life of around 70 days. Thirty years is why exclusion zones around Chernobyl and Fukushima are measured in decades rather than in months.'},
+  {k:'am241', n:'Americium-241', c:'iso', t:432.6, u:'y', kind:'radio',
+   w:'The isotope in household smoke detectors',
+   i:'A tiny sealed source ionises the air in the chamber; smoke disrupts the current and sets off the alarm. Four centuries means the detector never needs a new source, and the alpha particles cannot get out of the casing.'},
+  {k:'ra226', n:'Radium-226', c:'iso', t:1600, u:'y', kind:'radio',
+   w:'The isotope behind radium dial painting and early radiotherapy',
+   i:'Calcium-like, so it goes to bone and stays, with a biological half-life of decades on top of its physical sixteen centuries. The Radium Girls, who pointed their brushes with their lips, are the reason industrial radiation protection exists at all.'},
+  {k:'rn222', n:'Radon-222', c:'iso', t:3.82, u:'d', kind:'radio',
+   w:'A radioactive gas seeping out of the ground',
+   i:'Short-lived, but continuously replenished by the uranium and radium in rock and soil beneath buildings, so the concentration in a basement is set by ventilation rather than by decay. It is the second leading cause of lung cancer after smoking, and its own decay products — not the gas — do the damage, because they are solids that lodge in the lung.'},
+  {k:'c14', n:'Carbon-14', c:'iso', t:5700, u:'y', kind:'radio',
+   w:'The isotope behind radiocarbon dating',
+   i:'Made continuously in the upper atmosphere by cosmic rays and taken up by everything alive. The clock starts at death, when uptake stops, and 5,700 years makes it useful out to roughly ten half-lives — about 50,000 years — before too little is left to measure.'},
+  {k:'pu239', n:'Plutonium-239', c:'iso', t:24110, u:'y', kind:'radio',
+   w:'The principal fissile isotope in nuclear weapons',
+   i:'Twenty-four thousand years is why plutonium-bearing waste dominates the long-term disposal problem. Chemically it concentrates in bone and liver, and its alpha emission is harmless outside the body and serious inside it.'},
+  {k:'u235', n:'Uranium-235', c:'iso', t:7.04e8, u:'y', kind:'radio',
+   w:'The fissile isotope that has to be enriched out of natural uranium',
+   i:'It decays about six times faster than uranium-238, which is why it is now only 0.72 per cent of natural uranium — there was far more of it when the earth formed, and natural reactors ran in Gabon two billion years ago when the concentration was still high enough.'},
+  {k:'k40', n:'Potassium-40', c:'iso', t:1.248e9, u:'y', kind:'radio',
+   w:'The radioactive potassium in every living thing',
+   i:'Makes up 0.012 per cent of all potassium, which means every human body contains about 4,000 decaying potassium atoms per second and bananas are mildly radioactive. It is also the single largest source of natural internal radiation dose, and it is completely unavoidable.'},
+  {k:'u238', n:'Uranium-238', c:'iso', t:4.468e9, u:'y', kind:'radio',
+   w:'Natural uranium, almost all of it',
+   i:'Its half-life is roughly the age of the earth, which is why about half the uranium that was here at the start is still here. Its chemical toxicity as a heavy metal is a greater hazard than its radioactivity, which is slow almost beyond meaning.'},
+
+  /* -------------------------------- toxins ------------------------------ */
+  {k:'cohb', n:'Carbon monoxide (as COHb)', c:'env', t:4.5, u:'h', lo:3, hi:6, kind:'bio',
+   w:'Carboxyhaemoglobin, breathing ordinary air',
+   i:'The one half-life in this library you can change on purpose. Four to five hours on room air, about an hour on 100 per cent oxygen, around twenty minutes in a hyperbaric chamber — because oxygen competes carbon monoxide off haemoglobin. Treatment of CO poisoning is literally the business of shortening a half-life.'},
+  {k:'leadblood', n:'Lead (in blood)', c:'env', t:30, u:'d', lo:28, hi:36, kind:'bio',
+   w:'Blood lead, the number a test reports',
+   i:'A month in blood, which makes a blood lead level a measure of recent exposure and a poor measure of body burden. Most of the lead is in bone with a half-life of decades, and it leaches back out during pregnancy, lactation and osteoporosis — so an exposure in childhood can return thirty years later.'},
+  {k:'leadbone', n:'Lead (in bone)', c:'env', t:25, u:'y', lo:10, hi:30, kind:'bio',
+   w:'The reservoir that the blood test cannot see',
+   i:'Lead substitutes for calcium in the skeleton and stays for most of a lifetime. This is why removing the source stops further accumulation but does not clear what is already stored, and why the public-health case against leaded petrol was about a burden lasting generations.'},
+  {k:'mehg', n:'Methylmercury', c:'env', t:70, u:'d', lo:50, hi:90, kind:'bio',
+   w:'The organic mercury that accumulates in fish',
+   i:'Around seventy days, so it takes most of a year to clear after exposure stops — which is the reason dietary advice for pregnancy is framed in terms of habitual intake over months rather than of any single meal. It crosses the placenta readily and concentrates in the fetal brain.'},
+  {k:'cadmium', n:'Cadmium (in kidney)', c:'env', t:15, u:'y', lo:10, hi:30, kind:'bio',
+   w:'A heavy metal from smoking and from food grown on contaminated soil',
+   i:'Among the longest biological half-lives of any contaminant, which means that for practical purposes the body does not clear it at all: exposure integrates over a lifetime. Smokers carry roughly twice the body burden of non-smokers.'},
+  {k:'tcdd', n:'TCDD (dioxin)', c:'env', t:8, u:'y', lo:7, hi:11, kind:'bio',
+   w:'The most studied and most toxic of the dioxins',
+   i:'Seven to eleven years in humans, stored in fat. That is why a single poisoning event, such as the one that disfigured Viktor Yushchenko in 2004, produces effects traceable for a decade, and why dioxin exposure from an industrial accident is a multi-generation epidemiological question.'},
+  {k:'pfoa', n:'PFOA', c:'env', t:3.2, u:'y', lo:2.7, hi:3.8, kind:'bio',
+   w:'A perfluorinated "forever chemical"',
+   i:'Years, because the carbon-fluorine bond is one of the strongest in organic chemistry and the body has no enzyme that touches it. Clearance is by slow renal excretion with active reabsorption working against it. It is detectable in the blood of almost everyone tested, worldwide.'},
+  {k:'pfos', n:'PFOS', c:'env', t:4.8, u:'y', lo:3.4, hi:5.4, kind:'bio',
+   w:'The other long-standing perfluorinated contaminant',
+   i:'Even longer than PFOA, and like it, found in nearly universal background concentrations. Serum levels in the general population have fallen steadily since manufacture was phased out, and the rate of that fall is itself the best estimate of the half-life.'},
+  {k:'ddt', n:'DDE (from DDT)', c:'env', t:8, u:'y', lo:5, hi:12, kind:'bio',
+   w:'The persistent breakdown product of the pesticide DDT',
+   i:'DDT itself clears in months; DDE, which it becomes, lasts years in fat. Decades after most countries banned it, it is still measurable in human tissue and in wildlife — the clearest everyday demonstration of what a long biological half-life in a food chain actually means.'}
+];
+
+/* --- maths. Nothing here is fitted or estimated; it is the definition. ----
+   N(t) = N0 * 2^(-t / t_half)  =  N0 * e^(-lambda t),   lambda = ln2 / t_half
+   Mean lifetime tau = 1 / lambda = t_half / ln2
+   Time to fall to a fraction f:  t = t_half * log2(1/f)                     */
+function hlSecsOf(value, unitKey){ return Math.max(0, value) * hlUnit(unitKey).secs; }
+function hlInUnit(secs, unitKey){ return secs / hlUnit(unitKey).secs; }
+function hlFractionAt(tSecs, halfSecs){
+  if (!(halfSecs > 0)) return 1;
+  return Math.pow(2, -tSecs / halfSecs);
+}
+function hlTimeToFraction(f, halfSecs){
+  if (!(halfSecs > 0) || !(f > 0) || f >= 1) return 0;
+  return halfSecs * Math.log2(1 / f);
+}
+function hlLambda(halfSecs){ return halfSecs > 0 ? Math.LN2 / halfSecs : 0; }
+
+/* Readable durations across fourteen orders of magnitude, from the twenty
+   minutes of carbon-11 to the four and a half billion years of uranium-238. */
+const HL_BIG = [[1e15,'quadrillion'], [1e12,'trillion'], [1e9,'billion'], [1e6,'million']];
+function hlSig(v, digits){
+  const d = digits || 3;
+  if (!isFinite(v)) return '∞';
+  if (v === 0) return '0';
+  const a = Math.abs(v);
+  if (a >= 1000) return Math.round(v).toLocaleString();
+  if (a >= 100) return v.toFixed(Math.max(0, d - 3));
+  if (a >= 10)  return v.toFixed(Math.max(0, d - 2));
+  if (a >= 1)   return v.toFixed(d - 1);
+  if (a >= 0.001) return v.toPrecision(d).replace(/0+$/, '').replace(/\.$/, '');
+  return v.toExponential(2);
+}
+function hlFmtSecs(secs){
+  if (!isFinite(secs)) return '∞';
+  if (secs <= 0) return '0';
+  const y = secs / 31557600;
+  if (y >= 1e18) return y.toExponential(2) + ' years';
+  for (let i = 0; i < HL_BIG.length; i++){
+    if (y >= HL_BIG[i][0]) return hlSig(y / HL_BIG[i][0]) + ' ' + HL_BIG[i][1] + ' years';
+  }
+  if (y >= 1) return hlSig(y) + (y >= 1000 ? ' years' : ' y');
+  const d = secs / 86400;   if (d >= 1) return hlSig(d) + ' d';
+  const h = secs / 3600;    if (h >= 1) return hlSig(h) + ' h';
+  const m = secs / 60;      if (m >= 1) return hlSig(m) + ' min';
+  return hlSig(secs) + ' s';
+}
+/* The library's own value, written the way the source writes it. */
+function hlEntryText(e){
+  if (e.kind === 'none') return '—';
+  const u = hlUnit(e.u);
+  const main = hlSig(e.t) + ' ' + (u.key === 'min' ? 'min' : u.key === 's' ? 's' : u.short);
+  return main;
+}
+function hlRangeText(e){
+  if (e.lo == null || e.hi == null) return '';
+  const u = hlUnit(e.u);
+  return hlSig(e.lo) + '–' + hlSig(e.hi) + ' ' + (u.key === 'min' ? 'min' : u.short);
+}
+/* An axis has to be in ONE unit. Picking per tick gave "20.0 h" sitting next
+   to "1.04 d" on the same row, which is unreadable; the unit is chosen once
+   from the span and named in the axis title instead. */
+function hlPickUnit(secs){
+  for (let i = HL_UNITS.length - 1; i >= 0; i--) if (secs >= HL_UNITS[i].secs) return HL_UNITS[i];
+  return HL_UNITS[0];
+}
+function hlTickText(secs, u){
+  const v = secs / u.secs;
+  if (v === 0) return '0';
+  if (v >= 1e5 || v < 0.01) return v.toExponential(1).replace('e+', 'e');
+  return hlSig(v, 3);
+}
+function hlEntry(key){ return HL_LIB.find(e => e.k === key) || null; }
+function hlCatLabel(key){ const c = HL_CATS.find(x => x.key === key); return c ? c.label : key; }
+
+/* --- rendering ----------------------------------------------------------- */
+function hlHalfSecs(){ return hlSecsOf(state.hl.t, state.hl.u); }
+function hlElapsedSecs(){ return hlSecsOf(state.hl.elapsed, state.hl.eu); }
+
+function renderHalfLife(){
+  const s = state.hl;
+  const half = hlHalfSecs();
+  const elapsed = hlElapsedSecs();
+  const amount0 = Math.max(0, s.amount || 0);
+  const label = (s.unitLabel || 'mg').slice(0, 12);
+  const entry = s.sel ? hlEntry(s.sel) : null;
+  const zeroOrder = !!(entry && entry.kind === 'none');
+
+  /* ---- the heading for what is currently loaded ---- */
+  document.getElementById('hl-current').innerHTML =
+    '<div class="map-detail-head" style="padding-right:0">' +
+      '<h4>' + (entry ? esc(entry.n) : 'Custom half-life') + '</h4>' +
+      (entry ? '<span class="law-chip ' + (zeroOrder ? 'illegal' : 'legal') + '"><span class="cdot"></span>' +
+               esc(HL_KINDS[entry.kind].label) + '</span>' : '') +
+      (entry && entry.lo != null ? '<span class="badge neutral"><span class="bdot"></span>range ' + hlRangeText(entry) + '</span>' : '') +
+    '</div>' +
+    '<p class="card-note" style="margin:0">' +
+      (entry ? esc(entry.w) + '. ' + HL_KINDS[entry.kind].tip
+             : 'Nothing from the library is loaded — the half-life below is whatever you set it to. Pick a substance from the list further down to load a published one.') +
+    '</p>';
+
+  /* ---- derived constants ---- */
+  const lam = hlLambda(half);
+  const frac = hlFractionAt(elapsed, half);
+  const nHalves = half > 0 ? elapsed / half : 0;
+  const remaining = amount0 * frac;
+
+  document.getElementById('hl-stats').innerHTML =
+    stat('Half-life', hlFmtSecs(half), 'What you set above') +
+    stat('Decay constant', hlSig(lam * 3600, 4) + ' <small>/h</small>', 'λ = ln2 / t½') +
+    stat('Mean lifetime', hlFmtSecs(half / Math.LN2), 'τ = 1/λ — longer than the half-life, always') +
+    stat('Half-lives elapsed', hlSig(nHalves, 3), hlFmtSecs(elapsed) + ' at this half-life') +
+    stat('Remaining', hlSig(remaining, 4) + ' <small>' + esc(label) + '</small>', hlSig(frac * 100, 3) + ' % of the starting amount') +
+    stat('Gone', hlSig(amount0 - remaining, 4) + ' <small>' + esc(label) + '</small>', hlSig((1 - frac) * 100, 3) + ' % eliminated');
+
+  /* ---- the honest caveat, when the library entry has one ---- */
+  const banners = [];
+  if (zeroOrder) banners.push({level:'warn', icon:'alert', title:esc(entry.n) + ' has no half-life',
+    body:entry.i + ' <strong>Everything below is still computed, because you may want to see what it would look like — but it does not describe this substance.</strong>'});
+  if (entry && entry.kind === 'term') banners.push({level:'info', icon:'hourglass', title:'This is a terminal half-life',
+    body:'It describes the slowest phase, which for a fat-soluble drug is release back out of tissue rather than destruction. The effect is over long before the curve below is. Do not read this as "how long it works".'});
+  if (entry && entry.kind === 'radio') banners.push({level:'info', icon:'molecule', title:'Physical decay only',
+    body:'This is the nucleus decaying, and nothing changes it. If the isotope is inside a body, what matters is the <em>effective</em> half-life, which combines this with biological excretion: 1/t_eff = 1/t_phys + 1/t_bio, and the effective one is always the shorter of the two.'});
+  renderBanners(document.getElementById('hl-banners'), banners);
+
+  /* ---- chart: 8 half-lives, or far enough to include where you are ---- */
+  const spanSecs = Math.max(half * 8, elapsed * 1.12, half * 0.5);
+  const toMin = x => x / 60;
+  const xMaxMin = toMin(spanSecs);
+  const pts = sampleCurve(m => amount0 * hlFractionAt(m * 60, half), xMaxMin, [], {baseSteps:40});
+  const logY = !!s.logY;
+  /* the floor sits just under where the curve actually ends, so the log axis
+     is not mostly empty space below the data */
+  const endVal = (amount0 || 1) * hlFractionAt(spanSecs, half);
+  const yFloor = Math.max(endVal * 0.5, (amount0 || 1) * 1e-7, 1e-12);
+  const axisUnit = hlPickUnit(spanSecs / 4);
+  const ticks = [];
+  for (let n = 0; n <= 12; n++){
+    const tSec = n * half;
+    if (tSec > spanSecs * 1.001) break;
+    ticks.push({v:toMin(tSec), label:hlTickText(tSec, axisUnit)});
+  }
+  const yTicks = logY
+    ? (() => {
+        const out = [];
+        for (let e = Math.ceil(Math.log10(amount0 || 1)); e >= Math.floor(Math.log10(yFloor)); e--){
+          const v = Math.pow(10, e);
+          if (v <= (amount0 || 1) * 1.0001 && v >= yFloor) out.push({v:v, label:hlSig(v, 3)});
+        }
+        return out;
+      })()
+    : niceTicks(amount0 || 1, 5).map(v => ({v:v, label:hlSig(v, 3)}));
+
+  renderChart(document.getElementById('hl-chart'), {
+    xMax:xMaxMin, yMax:amount0 || 1, yLog:logY, yMin:yFloor,
+    xLabel:'Time in ' + axisUnit.label + ' — every gridline is one more half-life',
+    yLabel:'Amount remaining (' + label + ')' + (logY ? ', log scale' : ''),
+    yLabelShort:label + (logY ? ' (log)' : ''),
+    xTicks:ticks, yTicks:yTicks,
+    thresholds:logY ? [] : [{y:(amount0 || 1) * 0.5, label:'half', color:'var(--accent-2)'},
+                            {y:(amount0 || 1) * 0.1, label:'a tenth', color:'var(--info)'}],
+    series:[{points:pts, color:'var(--accent)', fill:!logY, width:2.8}],
+    marker:{x:toMin(elapsed), y:remaining,
+            label:hlSig(remaining, 3) + ' ' + label,
+            sub:hlFmtSecs(elapsed) + ' · ' + hlSig(nHalves, 2) + ' half-lives'},
+    accent:'var(--accent)', drag:{key:'hl', maxMin:xMaxMin},
+    fmtX:m => hlFmtSecs(m * 60),
+    ariaLabel:'Amount remaining against time, currently ' + hlSig(remaining, 3) + ' ' + label
+  });
+  renderLegend(document.getElementById('hl-legend'),
+    [{label:'Amount remaining', color:'var(--accent)'}].concat(
+      logY ? [] : [{label:'Half of the start', color:'var(--accent-2)', dash:true},
+                   {label:'A tenth of the start', color:'var(--info)', dash:true}]));
+  document.getElementById('hl-chart-note').innerHTML = logY
+    ? 'On a logarithmic axis exponential decay is a <strong>straight line</strong>, and its slope is the half-life. That is the whole test: if a real measurement plots straight on this axis it is first-order and a half-life describes it; if it bends, it does not. <a href="#" data-goto="learn" data-article="art-halflife">Why that works</a>.'
+    : 'Each gridline is one more half-life, so the curve crosses them at a half, a quarter, an eighth, and so on — the same shape whatever the substance. Switch to the logarithmic axis to see it become a straight line.';
+
+  /* the slider has to mean something whether the half-life is 20 minutes or
+     4.5 billion years, so its range follows it */
+  const rng = document.getElementById('hl-elapsed-range');
+  if (rng && rng !== document.activeElement){
+    const maxU = Math.max(hlInUnit(half * 8, s.eu), hlInUnit(60, s.eu));
+    rng.max = maxU;
+    rng.step = maxU / 400;
+    rng.value = clamp(s.elapsed, 0, maxU);
+  }
+
+  renderHalfLifeTable(half, amount0, label);
+  renderHalfLifeSolver(half, amount0, label);
+  renderHalfLifeDosing(half);
+  renderHalfLifeLibrary();
+}
+
+/* ---- the halvings table ---- */
+function renderHalfLifeTable(half, amount0, label){
+  const rows = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20].map(n => {
+    const f = Math.pow(2, -n);
+    return [n === 0 ? '<strong>start</strong>' : '<strong>' + n + '</strong>',
+            hlFmtSecs(n * half),
+            n === 0 ? '1' : '1/' + Math.pow(2, n).toLocaleString(),
+            hlSig(f * 100, 3) + ' %',
+            hlSig(amount0 * f, 4) + ' ' + esc(label),
+            hlSig(amount0 * (1 - f), 4) + ' ' + esc(label)];
+  });
+  renderTable(document.getElementById('hl-table'),
+    [{label:'Half-lives'}, {label:'Time', num:true}, {label:'Fraction left', num:true},
+     {label:'% left', num:true}, {label:'Amount left', num:true}, {label:'Gone', num:true}],
+    rows);
+  document.getElementById('hl-table-note').innerHTML =
+    'Four half-lives leaves 6.25 %, five leaves 3.1 %, seven leaves under 1 %. ' +
+    'Clinically, "effectively gone" is usually taken as four to five half-lives, and "at steady state" on repeated dosing is the same number — ' +
+    'because accumulation and elimination are the same exponential running in opposite directions.';
+}
+
+/* ---- amount after a time, and time to an amount ---- */
+function renderHalfLifeSolver(half, amount0, label){
+  const s = state.hl;
+  const tgt = Math.max(0, s.target || 0);
+  const targetAmount = s.targetMode === 'pct' ? amount0 * (tgt / 100) : tgt;
+  const f = amount0 > 0 ? targetAmount / amount0 : 0;
+  const host = document.getElementById('hl-solve');
+  if (!(amount0 > 0)){
+    host.innerHTML = '<div class="empty-note">Set a starting amount above.</div>';
+  } else if (!(f > 0)){
+    host.innerHTML = '<div class="empty-note">Exponential decay never reaches exactly zero. Ask for a small fraction instead — a thousandth, say — and it will tell you when.</div>';
+  } else if (f >= 1){
+    host.innerHTML = '<div class="empty-note">That target is at or above the starting amount, so it is already there.</div>';
+  } else {
+    const t = hlTimeToFraction(f, half);
+    host.innerHTML =
+      '<p style="margin:0 0 10px;font-size:1.02rem">Falling from <strong>' + hlSig(amount0, 4) + ' ' + esc(label) +
+      '</strong> to <strong>' + hlSig(targetAmount, 4) + ' ' + esc(label) + '</strong> takes</p>' +
+      '<p style="margin:0 0 12px;font:700 1.9rem/1 var(--font);letter-spacing:-.02em;color:var(--accent)">' + hlFmtSecs(t) + '</p>' +
+      '<dl class="map-stat">' +
+      '<dt>That is</dt><dd>' + hlSig(t / half, 3) + ' half-lives</dd>' +
+      '<dt>Remaining fraction</dt><dd>' + hlSig(f * 100, 3) + ' % of the start</dd>' +
+      '</dl>';
+  }
+  const quick = [[0.5, 'half'], [0.25, 'a quarter'], [0.1, 'a tenth'], [0.01, 'a hundredth'], [0.001, 'a thousandth']];
+  document.getElementById('hl-quick').innerHTML =
+    '<dl class="map-stat">' + quick.map(q =>
+      '<dt>Down to ' + q[1] + '</dt><dd>' + hlFmtSecs(hlTimeToFraction(q[0], half)) +
+      ' <span style="color:var(--text-faint)">(' + hlSig(Math.log2(1 / q[0]), 3) + ' half-lives)</span></dd>').join('') +
+    '</dl>';
+}
+
+/* ---- repeated dosing: where accumulation settles ---- */
+function renderHalfLifeDosing(half){
+  const s = state.hl;
+  const tau = hlSecsOf(s.every, s.eu2);
+  const host = document.getElementById('hl-dosing');
+  if (!(tau > 0) || !(half > 0)){
+    host.innerHTML = '<div class="empty-note">Set a dosing interval.</div>';
+    return;
+  }
+  const keep = Math.pow(2, -tau / half);          // fraction left when the next dose lands
+  const R = 1 / (1 - keep);                       // accumulation factor
+  const toSteady = hlTimeToFraction(0.05, half);  // within 5 % of steady state
+  host.innerHTML =
+    '<dl class="map-stat">' +
+    '<dt>Interval</dt><dd>' + hlFmtSecs(tau) + ' — ' + hlSig(tau / half, 3) + ' half-lives</dd>' +
+    '<dt>Left when the next one lands</dt><dd>' + hlSig(keep * 100, 3) + ' %</dd>' +
+    '<dt>Accumulation factor</dt><dd><strong>×' + hlSig(R, 3) + '</strong> above a single dose</dd>' +
+    '<dt>Steady-state peak</dt><dd>' + hlSig(R, 3) + ' × one dose</dd>' +
+    '<dt>Steady-state trough</dt><dd>' + hlSig(R * keep, 3) + ' × one dose</dd>' +
+    '<dt>Time to within 5 %</dt><dd>' + hlFmtSecs(toSteady) + ' (' + hlSig(toSteady / half, 2) + ' half-lives)</dd>' +
+    '</dl>' +
+    '<p class="card-note" style="margin-top:10px">Dose more often than the half-life and it piles up; dose much less often and each one is gone before the next. ' +
+    'The time to steady state depends only on the half-life — <strong>not on the dose, and not on the interval</strong>. ' +
+    'Doubling the dose doubles where it settles and changes how long it takes to get there not at all.</p>';
+}
+
+/* ---- the library ---- */
+function renderHalfLifeLibrary(){
+  const s = state.hl;
+  const q = (s.q || '').trim().toLowerCase();
+  const list = HL_LIB.filter(e =>
+    (s.cat === 'all' || e.c === s.cat) &&
+    (!q || (e.n + ' ' + e.w + ' ' + hlCatLabel(e.c)).toLowerCase().indexOf(q) >= 0));
+
+  const rows = list.map(e =>
+    ['<button type="button" class="hl-pick' + (e.k === s.sel ? ' sel' : '') + '" data-k="' + esc(e.k) + '">' +
+       esc(e.n) + '</button>',
+     '<span style="color:var(--text-faint)">' + esc(hlCatLabel(e.c)) + '</span>',
+     e.kind === 'none' ? '<span style="color:var(--warn)">none</span>' : hlEntryText(e),
+     e.lo != null ? hlRangeText(e) : '—',
+     esc(HL_KINDS[e.kind].label),
+     esc(e.w)]);
+  renderTable(document.getElementById('hl-lib-table'),
+    [{label:'Substance'}, {label:'Group'}, {label:'Half-life', num:true}, {label:'Usual range', num:true},
+     {label:'What kind'}, {label:'What it is'}],
+    rows);
+  document.getElementById('hl-lib-count').textContent =
+    list.length + ' of ' + HL_LIB.length + ' shown. Click a name to load it and read about it.';
+
+  const e = s.sel ? hlEntry(s.sel) : null;
+  const host = document.getElementById('hl-detail');
+  if (!e){
+    host.innerHTML = '<p class="card-note" style="margin:0">Click any substance in the table to load its half-life into everything above and read what the number actually means for it.</p>';
+    return;
+  }
+  const half = hlSecsOf(e.t, e.u);
+  host.innerHTML =
+    '<div class="map-detail-head" style="padding-right:0"><h4>' + esc(e.n) + '</h4>' +
+      '<span class="law-chip ' + (e.kind === 'none' ? 'illegal' : 'legal') + '"><span class="cdot"></span>' +
+      esc(HL_KINDS[e.kind].label) + '</span>' +
+      '<span class="badge neutral"><span class="bdot"></span>' + esc(hlCatLabel(e.c)) + '</span></div>' +
+    '<p style="margin:0 0 10px;font-size:.92rem;color:var(--text-dim)"><strong>' + esc(e.w) + '.</strong></p>' +
+    '<dl class="map-stat" style="margin-bottom:12px">' +
+      '<dt>Half-life</dt><dd>' + (e.kind === 'none' ? 'none — see below' : '<strong>' + hlEntryText(e) + '</strong>') + '</dd>' +
+      (e.lo != null ? '<dt>Usual range</dt><dd>' + hlRangeText(e) + '</dd>' : '') +
+      '<dt>What that measures</dt><dd>' + HL_KINDS[e.kind].tip + '</dd>' +
+      (e.kind === 'none' ? '' :
+        '<dt>Decay constant</dt><dd>' + hlSig(hlLambda(half) * 3600, 4) + ' /h</dd>' +
+        '<dt>Mean lifetime</dt><dd>' + hlFmtSecs(half / Math.LN2) + '</dd>' +
+        '<dt>Down to 1 %</dt><dd>' + hlFmtSecs(hlTimeToFraction(0.01, half)) + ' (6.6 half-lives)</dd>') +
+    '</dl>' +
+    '<div class="article" style="font-size:.9rem"><p style="margin:0">' + e.i + '</p></div>' +
+    (e.go ? '<p style="margin:12px 0 0"><a href="#" data-goto="' + esc(e.go) + '">Open the ' +
+      esc((HOME_CARDS.find(c => c.view === e.go) || {title:e.go}).title) + ' section</a></p>' : '');
+}
+
+function initHalfLife(){
+  const s = state.hl;
+  document.getElementById('hl-lib-n').textContent = HL_LIB.length;
+
+  const unitPills = (hostId, current, onPick) =>
+    buildPills(document.getElementById(hostId), HL_UNITS.map(u => ({key:u.key, label:u.label})), current, onPick);
+
+  /* half-life value + its unit */
+  bindNumber('hl-t', v => { s.t = Math.max(0, parseFloat(v) || 0); s.sel = null; saveState(); renderHalfLife(); });
+  document.getElementById('hl-t').value = s.t;
+  unitPills('hl-u', s.u, k => { s.u = k; s.sel = null; saveState(); renderHalfLife(); });
+
+  /* the amount, and what it is measured in */
+  bindNumber('hl-amount', v => { s.amount = Math.max(0, parseFloat(v) || 0); saveState(); renderHalfLife(); });
+  document.getElementById('hl-amount').value = s.amount;
+  bindNumber('hl-label', v => { s.unitLabel = (v || 'mg').slice(0, 12); saveState(); renderHalfLife(); });
+  document.getElementById('hl-label').value = s.unitLabel;
+
+  /* how long has passed */
+  bindPair('hl-elapsed', 'hl-elapsed-range', v => { s.elapsed = Math.max(0, v || 0); saveState(); renderHalfLife(); });
+  document.getElementById('hl-elapsed').value = s.elapsed;
+  unitPills('hl-eu', s.eu, k => { s.eu = k; saveState(); renderHalfLife(); });
+
+  /* solve the other way round */
+  bindNumber('hl-target', v => { s.target = Math.max(0, parseFloat(v) || 0); saveState(); renderHalfLife(); });
+  document.getElementById('hl-target').value = s.target;
+  buildPills(document.getElementById('hl-target-mode'),
+    [{key:'amt', label:'an amount'}, {key:'pct', label:'a percentage'}], s.targetMode,
+    k => { s.targetMode = k; saveState(); renderHalfLife(); });
+
+  /* repeated dosing */
+  bindNumber('hl-every', v => { s.every = Math.max(0, parseFloat(v) || 0); saveState(); renderHalfLife(); });
+  document.getElementById('hl-every').value = s.every;
+  unitPills('hl-eu2', s.eu2, k => { s.eu2 = k; saveState(); renderHalfLife(); });
+
+  /* linear or logarithmic */
+  buildPills(document.getElementById('hl-scale'),
+    [{key:'lin', label:'Linear'}, {key:'log', label:'Logarithmic'}], s.logY ? 'log' : 'lin',
+    k => { s.logY = (k === 'log'); saveState(); renderHalfLife(); });
+
+  /* the library's own controls */
+  const search = document.getElementById('hl-search');
+  search.value = s.q || '';
+  onTypedInput(search, v => { s.q = v; saveState(); renderHalfLifeLibrary(); });
+  buildPills(document.getElementById('hl-cats'), HL_CATS, s.cat,
+    k => { s.cat = k; saveState(); renderHalfLifeLibrary(); });
+
+  /* one listener for the whole table, since it is rebuilt on every filter */
+  document.getElementById('hl-lib-table').addEventListener('click', ev => {
+    const btn = ev.target.closest('.hl-pick');
+    if (!btn) return;
+    hlLoad(btn.dataset.k);
+  });
+  document.getElementById('hl-clear').addEventListener('click', () => {
+    s.sel = null; saveState(); renderHalfLife();
+  });
+}
+
+/* Load a library entry: it sets the half-life AND opens its write-up. */
+function hlLoad(key){
+  const e = hlEntry(key);
+  if (!e) return;
+  const s = state.hl;
+  s.sel = key;
+  if (e.kind !== 'none'){ s.t = e.t; s.u = e.u; }
+  saveState();
+  renderHalfLife();
+  const t = document.getElementById('hl-t'), uHost = document.getElementById('hl-u');
+  if (t) t.value = s.t;
+  if (uHost) buildPills(uHost, HL_UNITS.map(u => ({key:u.key, label:u.label})), s.u,
+    k => { s.u = k; s.sel = null; saveState(); renderHalfLife(); });
+  const panel = document.getElementById('hl-detail');
+  if (panel){
+    const r = panel.getBoundingClientRect();
+    if (r.top < 0 || r.top > window.innerHeight - 80) panel.scrollIntoView({block:'nearest', behavior:'smooth'});
+  }
+}
+
 /* ---------------------------------------------------------------------------
    §11  LEARN + DASHBOARD
    The Learn formula article is verified against the live code on every load:
@@ -6775,11 +7782,14 @@ const HOME_CARDS = [
   {view:'nic', accent:'nic', icon:'cig', title:'Nicotine',
    body:'Eighteen products from cigarettes to patches, each with its own absorption rate fitted to a published time-to-peak, plus a cotinine curve integrated forward from the nicotine one on unfitted published constants — and a dependence panel that shows why a two-hour half-life is the whole problem.',
    go:'Open the nicotine estimator'},
+  {view:'hl', accent:'hl', icon:'decay', title:'Half-life lab',
+   body:'Set any half-life, from the twenty minutes of carbon-11 to the four and a half billion years of uranium-238, and see what it implies: the curve on a linear and a logarithmic axis, every halving in a table, how long to fall to any amount, and where repeated doses settle. Plus a library of published half-lives with what kind of half-life each one actually is.',
+   go:'Open the half-life lab'},
   {view:'laws', accent:'laws', icon:'scale', title:'Laws by state',
    body:'Where each substance stands in all 50 states and DC — legal age, possession, home cultivation, public use, and the impaired-driving standards this app estimates against. Delta-8 is flagged throughout as the least settled area, with a federal change landing in weeks.',
    go:'Open the state laws'},
   {view:'learn', accent:'learn', icon:'book', title:'Learn',
-   body:'Twenty articles: zero-order ethanol kinetics, first-pass metabolism and 11-hydroxy-THC, the Hill equation, receptor downregulation, why nicotine\u2019s derivative matters more than its dose, a metabolite curve that checks its own arithmetic, the exact implemented formulas, an itemised list of every constant I invented, and verified sources.',
+   body:'Twenty-one articles: zero-order ethanol kinetics, first-pass metabolism and 11-hydroxy-THC, the Hill equation, receptor downregulation, why nicotine\u2019s derivative matters more than its dose, a metabolite curve that checks its own arithmetic, the exact implemented formulas, an itemised list of every constant I invented, and verified sources.',
    go:'Read the articles'}
 ];
 function renderDashboard(){
@@ -8213,6 +9223,7 @@ const RENDERERS = {
   smoked: renderSmoked,
   caffeine: renderCaffeine,
   nic:    renderNicotine,
+  hl:     renderHalfLife,
   learn:  renderLearn,
   laws:   renderLaws
 };
@@ -8397,6 +9408,29 @@ function buildExport(){
       L.push('At bedtime (' + fmtClock(caffeineBedAt()) + ', ' + fmtWhen(bedMin - origin) + '): ' + round(bedConc, 2) + ' mg/L');
       L.push('Modelled sleep disruption: ' + Math.round(hill(bedConc, CAFFEINE.SLEEP_EC50_MG_PER_L, CAFFEINE.SLEEP_HILL_N) * 100) + ' %');
     }
+  } else if (currentView === 'hl'){
+    const st = state.hl, half = hlSecsOf(st.t, st.u), el = hlSecsOf(st.elapsed, st.eu);
+    const e = st.sel ? hlEntry(st.sel) : null;
+    const f = hlFractionAt(el, half);
+    L.push('SECTION: Half-life lab');
+    L.push('Loaded: ' + (e ? e.n + '  (' + HL_KINDS[e.kind].label.toLowerCase() + ')' : 'custom half-life'));
+    L.push('');
+    L.push('Half-life:        ' + hlFmtSecs(half));
+    L.push('Decay constant:   ' + hlSig(hlLambda(half) * 3600, 4) + ' /h');
+    L.push('Mean lifetime:    ' + hlFmtSecs(half / Math.LN2));
+    L.push('');
+    L.push('Start:            ' + hlSig(st.amount, 4) + ' ' + st.unitLabel);
+    L.push('After:            ' + hlFmtSecs(el) + '  (' + hlSig(el / half, 3) + ' half-lives)');
+    L.push('Remaining:        ' + hlSig(st.amount * f, 4) + ' ' + st.unitLabel + '  (' + hlSig(f * 100, 3) + ' %)');
+    L.push('');
+    L.push('Down to half:     ' + hlFmtSecs(hlTimeToFraction(0.5, half)));
+    L.push('Down to a tenth:  ' + hlFmtSecs(hlTimeToFraction(0.1, half)));
+    L.push('Down to 1 %:      ' + hlFmtSecs(hlTimeToFraction(0.01, half)));
+    if (e && e.kind === 'none'){
+      L.push('');
+      L.push('NOTE: ' + e.n + ' does not decay exponentially, so none of the above');
+      L.push('describes it. It is computed only to show what it would look like.');
+    }
   } else if (currentView === 'nic'){
     const st = state.nic;
     const kg = clamp(st.weightKg, 30, 250);
@@ -8499,6 +9533,7 @@ function boot(){
   initSmoked();
   initCaffeine();
   initNicotine();
+  initHalfLife();
   initLaws();
   initMaps();
   initConverter();
@@ -8593,12 +9628,13 @@ function boot(){
   });
 
   /* keyboard shortcuts — ignored while typing */
-  const VIEW_KEYS = ['home', 'alcohol', 'd9', 'd8', 'smoked', 'caffeine', 'nic', 'learn', 'laws'];
+  const VIEW_KEYS = ['home', 'alcohol', 'd9', 'd8', 'smoked', 'caffeine', 'nic', 'hl', 'learn', 'laws'];
   document.addEventListener('keydown', ev => {
     const t = ev.target;
     if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     if (ev.key >= '1' && ev.key <= '9'){ switchView(VIEW_KEYS[parseInt(ev.key, 10) - 1]); return; }
+    if (ev.key === '0'){ switchView(VIEW_KEYS[9]); return; }      // the tenth tab
     const k = ev.key.toLowerCase();
     if (k === 't') document.getElementById('btn-theme').click();
     else if (k === 'p'){ ev.preventDefault(); window.print(); }
