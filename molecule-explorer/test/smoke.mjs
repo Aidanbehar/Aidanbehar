@@ -284,6 +284,27 @@ await page.screenshot({ path: path.join(SHOTS, '07-salt.png'), fullPage: true })
    2H2O, which is arithmetically perfect and chemically nonsense. */
 await page.locator('.tab[data-view=balancer]').click();
 await page.waitForTimeout(350);
+
+/* The live preview, which read "nullH2 + nullO2 -> nullH2O" once. A freshly
+   parsed species carries a null coefficient when no number was typed, which
+   is the ordinary case, and null passes both an !== undefined and an !== 1
+   test. Checked here against several equations, because the bug only showed
+   on the species the reader had left bare. */
+for (const typed of ['H2 + O2 -> H2O', 'CH4 + 2 O2 -> CO2 + 2 H2O',
+                     'Fe + O2 -> Fe2O3', 'NaOH + HCl -> NaCl + H2O']) {
+  await page.locator('.bal-input').fill(typed);
+  await page.waitForTimeout(320);
+  const preview = await page.locator('.bal-preview').innerText();
+  check('balancer preview has no null or undefined in it: ' + typed,
+    !/\b(null|undefined|NaN)\b/.test(preview), preview.replace(/\n/g, ' '));
+}
+/* And a coefficient the reader did type is still shown. */
+await page.locator('.bal-input').fill('2 H2 + O2 -> 2 H2O');
+await page.waitForTimeout(320);
+const typedPreview = (await page.locator('.bal-preview').innerText()).replace(/\s+/g, '');
+check('balancer preview keeps a coefficient that was typed',
+  typedPreview === '2H2+O2\u21922H2O', typedPreview);
+
 await page.locator('.bal-input').fill('methane + oxygen -> carbon dioxide + water');
 await page.waitForTimeout(300);
 await page.locator('.bal-actions .btn-primary').click();

@@ -10754,7 +10754,12 @@ window.ME = window.ME || {};
       const sp = x.species || x;
       const coefficient = x.coefficient;
       const piece = el('span', { class: 'bal-sp' });
-      if (coefficient !== undefined && coefficient !== 1) {
+      /* A coefficient is worth printing only when it is a number above one.
+       * A freshly parsed species carries null when the reader typed no
+       * leading number, which is the ordinary case — and null passes both an
+       * `!== undefined` and an `!== 1` test, which is how the live preview
+       * came to read "nullH2 + nullO2". */
+      if (typeof coefficient === 'number' && isFinite(coefficient) && coefficient !== 1) {
         piece.appendChild(el('span', { class: 'bal-coef', text: String(coefficient) }));
       }
       piece.appendChild(el('span', { class: 'bal-f', html: sp.formula.html }));
