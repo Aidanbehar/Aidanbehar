@@ -878,6 +878,8 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 .chart-host.scrubbable svg{cursor:ew-resize; touch-action:none}
 .chart-host.scrubbable svg:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:10px}
 body.scrubbing{user-select:none}
+body.scrubbing .drink-row,
+body.scrubbing .banner,
 body.scrubbing .effect .fill,
 body.scrubbing .gauge-arc,
 body.scrubbing .gauge-dot-g,
@@ -3103,6 +3105,73 @@ function renderGaugeWithLabel(gaugeEl, readoutEl, cfg){
    Labelled axes with units, gridlines, tick labels, optional threshold and
    phase reference lines, and a marker for the user's current position. */
 let chartUid = 0;
+/* Sample f(t) across [0, endMin] so that no drawn segment strays from the
+   real curve by more than a fraction of its own height.
+
+   A uniform grid cannot do this. One step coarse enough for a sixty-hour tail
+   draws a cigarette's eight-minute rise as a triangle whose apex is wherever
+   a sample happened to land, and a dose that starts between two samples gets
+   its onset drawn as a straight ramp from the wrong place. Worse, the step
+   used to be chosen from the axis length, so adding one dose could push the
+   axis past a threshold, change the step, and redraw the same curve with a
+   different set of false bumps on it.
+
+   `seeds` are times the curve is known to turn — each dose's start and each
+   dose's own peak. Everything between them is bisected until it is straight
+   enough to draw, so the result is the same shape whatever the axis does. */
+function sampleCurve(f, endMin, seeds, opts){
+  const o = opts || {};
+  const maxPts = o.maxPoints || 900;      // a 940 px chart cannot show more
+  const minGap = o.minGap || 0.2;         // minutes
+  const base = o.baseSteps || 36;
+  if (!(endMin > 0)) return [[0, f(0)]];
+
+  const want = [0, endMin];
+  for (let i = 1; i < base; i++) want.push(endMin * i / base);
+  (seeds || []).forEach(t => {
+    if (!(t > 0) || t >= endMin) return;
+    want.push(t);
+    want.push(Math.min(endMin, t + minGap));   // the corner has two sides
+  });
+  want.sort((a, b) => a - b);
+
+  let xs = [], ys = [];
+  want.forEach(t => {
+    if (xs.length && t - xs[xs.length - 1] < minGap * 0.5) return;
+    xs.push(t); ys.push(f(t));
+  });
+
+  let peak = 0;
+  for (let i = 0; i < ys.length; i++) if (ys[i] > peak) peak = ys[i];
+  const tol = o.tol != null ? o.tol : Math.max(peak / 450, 1e-12);
+
+  for (let pass = 0; pass < 16; pass++){
+    if (xs.length >= maxPts) break;
+    const nx = [xs[0]], ny = [ys[0]];
+    let split = false;
+    for (let i = 0; i + 1 < xs.length; i++){
+      const t0 = xs[i], t1 = xs[i + 1];
+      if (t1 - t0 > minGap && nx.length + (xs.length - i) < maxPts){
+        const tm = (t0 + t1) / 2, ym = f(tm);
+        if (Math.abs(ym - (ys[i] + ys[i + 1]) / 2) > tol){ nx.push(tm); ny.push(ym); split = true; }
+      }
+      nx.push(t1); ny.push(ys[i + 1]);
+    }
+    xs = nx; ys = ny;
+    if (!split) break;
+  }
+  const out = [];
+  for (let i = 0; i < xs.length; i++) out.push([xs[i], ys[i]]);
+  return out;
+}
+/* Evaluate another function on an existing grid, so series drawn on the same
+   chart line up exactly — the per-product nicotine curves have to add up to
+   the total at every drawn vertex, not just approximately. */
+function resampleOn(pts, f){
+  const out = [];
+  for (let i = 0; i < pts.length; i++) out.push([pts[i][0], f(pts[i][0])]);
+  return out;
+}
 function niceTicks(max, target){
   const raw = max / Math.max(target, 2);
   const mag = Math.pow(10, Math.floor(Math.log10(raw)));
@@ -3405,6 +3474,25 @@ function renderTimeline(host, cfg){
 
 /* --- 5d. Effect breakdown bars (width animates on update) ------------------ */
 function renderEffectBars(host, effects){
+  /* Replacing the rows made every bar restart from zero width on each redraw,
+     so a keystroke collapsed the whole panel and grew it back. When the rows
+     are the same rows, they are updated in place instead and the CSS
+     transition carries each bar from where it already was. */
+  const sig = effects.map(e => e.name).join('\u0001');
+  if (host.dataset.sig === sig && host.children.length === effects.length){
+    effects.forEach((e, i) => {
+      const row = host.children[i], v = clamp(e.value, 0, 100);
+      const ev = row.querySelector('.ev'), fill = row.querySelector('.fill');
+      if (ev){ ev.textContent = Math.round(v) + ' % \u00b7 ' + intensityLabel(v); ev.style.color = severityColor(v); }
+      if (fill){
+        fill.dataset.w = v;
+        fill.style.width = v + '%';
+        fill.style.background = 'linear-gradient(90deg,' + severityColor(v * 0.55) + ',' + severityColor(v) + ')';
+      }
+    });
+    return;
+  }
+  host.dataset.sig = sig;
   host.innerHTML = effects.map(e => {
     const v = clamp(e.value, 0, 100);
     return '<div class="effect">' +
@@ -3444,12 +3532,23 @@ function buildPills(host, options, selectedKey, onSelect){
 }
 
 /* --- 5f. Warning banners --------------------------------------------------- */
+/* Rewriting a panel that has not changed restarts its entrance animation, so
+   every banner and every row of a dose list re-slid on every recompute — on
+   each keystroke, on each frame of a drag, and once every thirty seconds when
+   the clock ticks. These are rebuilt only when their contents actually
+   differ, and icons are repainted only when something was rebuilt. */
+function setHTML(host, html){
+  if (host.__lastHTML === html) return false;
+  host.__lastHTML = html;
+  host.innerHTML = html;
+  return true;
+}
 function renderBanners(host, items){
-  host.innerHTML = items.map(b =>
+  const html = items.map(b =>
     '<div class="banner ' + b.level + '"><span class="ico" data-icon="' + (b.icon || 'alert') + '"></span>' +
     '<div class="b-body"><strong>' + b.title + '</strong><p>' + b.body + '</p></div></div>'
   ).join('');
-  paintIcons(host);
+  if (setHTML(host, html)) paintIcons(host);
 }
 
 /* --- 5g. Table helper ------------------------------------------------------ */
@@ -4167,11 +4266,11 @@ function renderDrinkList(){
   const host = document.getElementById('alc-list');
   const s = state.alc;
   if (!s.drinks.length){
-    host.innerHTML = '<div class="empty-note">No drinks yet. Tap a preset above, then <strong>Add drink</strong>.</div>';
+    setHTML(host, '<div class="empty-note">No drinks yet. Tap a preset above, then <strong>Add drink</strong>.</div>');
     return;
   }
   const sorted = s.drinks.slice().sort((a, b) => b.when - a.when);
-  host.innerHTML = sorted.map(d => {
+  const html = sorted.map(d => {
     const g = gramsEthanol(d.vol, d.abv);
     return '<div class="drink-row" data-id="' + d.id + '">' +
       '<span class="dico ico" data-icon="' + (d.icon || 'beer') + '"></span>' +
@@ -4184,7 +4283,7 @@ function renderDrinkList(){
         '<button class="btn tiny danger" type="button" data-act="del" title="Delete this drink"><span class="ico" data-icon="trash"></span></button>' +
       '</div></div>';
   }).join('');
-  paintIcons(host);
+  if (setHTML(host, html)) paintIcons(host);
 }
 
 function alcSetDraftFromPreset(key){
@@ -4364,11 +4463,13 @@ const BAND_DESCRIPTIONS = {
   'Extremely Strong': 'Disorienting and frequently unpleasant; nausea and panic are common.'
 };
 
-/* Sample an asymmetric curve into chart points. */
-function curvePoints(peakPct, timing, stepMin){
-  const pts = [];
+/* Sample an asymmetric curve into chart points. It has corners at onset,
+   peak and end, so those are seeded and everything else is bisected — a fixed
+   step either rounded the corners off or spent hundreds of points on flat. */
+function curvePoints(peakPct, timing){
   const end = timing.end * 1.02;
-  for (let t = 0; t <= end; t += stepMin) pts.push([t, peakPct * asymmetricCurve(t, timing.onset, timing.peak, timing.end)]);
+  const pts = sampleCurve(t => peakPct * asymmetricCurve(t, timing.onset, timing.peak, timing.end),
+                          end, [timing.onset, timing.peak, timing.end]);
   pts.push([end, 0]);
   return pts;
 }
@@ -4460,7 +4561,7 @@ function renderTHC(){
     ],
     bands:[{x0:0, x1:impairEnd, label:'driving-relevant impairment likely', color:'var(--danger)'}],
     vlines:[{x:timing.onset, label:'onset', color:'var(--text-faint)'}, {x:timing.peak, label:'peak', color:'var(--accent-2)'}],
-    series:[{points:curvePoints(peakPct, timing, 2), color:'var(--accent)', fill:true, width:2.8}],
+    series:[{points:curvePoints(peakPct, timing), color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:now, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
     accent:'var(--accent)', drag:{key:'d9'},
     ariaLabel:'Delta-9 edible intensity over time, currently ' + Math.round(nowPct) + ' percent'
@@ -4531,15 +4632,44 @@ function readWeightKg(raw){
   const v = parseFloat(raw);
   return isFinite(v) ? clamp(displayToKg(v), 30, 250) : 75;
 }
+/* Typing "250" fires three input events, and redrawing on all three repaints
+   the chart at three different scales inside a tenth of a second — which is
+   what "the graphs glitch around" looks like. A typed number is therefore
+   given a moment to settle before anything is recomputed. Sliders, pills and
+   the arrow keys stay immediate, because there the value IS the gesture and
+   the feedback has to be continuous. Any blur or commit flushes it at once,
+   so a value can never be left unapplied. */
+const TYPE_SETTLE_MS = 130;
+function onTypedInput(el, apply){
+  let timer = null, pending = null;
+  const flush = () => {
+    if (timer){ clearTimeout(timer); timer = null; }
+    if (pending === null) return;
+    const v = pending; pending = null;
+    apply(v);
+  };
+  el.addEventListener('input', () => {
+    pending = el.value;
+    clearTimeout(timer);
+    timer = setTimeout(flush, TYPE_SETTLE_MS);
+  });
+  el.addEventListener('change', flush);
+  el.addEventListener('blur', flush);
+  /* committing with Enter should not wait either */
+  el.addEventListener('keydown', ev => { if (ev.key === 'Enter') flush(); });
+  return flush;
+}
 function bindNumber(id, apply){
   const el = document.getElementById(id);
   if (!el) return null;
-  el.addEventListener('input', () => apply(el.value, el));
+  onTypedInput(el, v => apply(v, el));
   return el;
 }
 function bindPair(numId, rangeId, apply){
   const n = document.getElementById(numId), r = document.getElementById(rangeId);
-  n.addEventListener('input', () => { if (r) r.value = n.value; apply(parseFloat(n.value)); });
+  /* the slider mirrors the box immediately; only the recompute waits */
+  n.addEventListener('input', () => { if (r) r.value = n.value; });
+  onTypedInput(n, v => apply(parseFloat(v)));
   if (r) r.addEventListener('input', () => { n.value = r.value; apply(parseFloat(r.value)); });
   return {n:n, r:r};
 }
@@ -4700,7 +4830,7 @@ function renderD8(){
     thresholds:[{y:70, label:'Very Strong', color:severityColor(72)}, {y:30, label:'Moderate', color:severityColor(32)}],
     bands:[{x0:0, x1:impairEnd, label:'driving-relevant impairment likely', color:'var(--danger)'}],
     vlines:[{x:timing.onset, label:'onset', color:'var(--text-faint)'}, {x:timing.peak, label:'peak', color:'var(--accent-2)'}],
-    series:[{points:curvePoints(peakPct, timing, 2), color:'var(--accent)', fill:true, width:2.8}],
+    series:[{points:curvePoints(peakPct, timing), color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:now, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
     accent:'var(--accent)', drag:{key:'d8'},
     ariaLabel:'Delta-8 edible intensity over time, currently ' + Math.round(nowPct) + ' percent'
@@ -4943,7 +5073,7 @@ function renderSmoked(){
     thresholds:[{y:70, label:'Very Strong', color:severityColor(72)}, {y:30, label:'Moderate', color:severityColor(32)}],
     bands:[{x0:0, x1:impairEnd, label:'driving-relevant impairment likely', color:'var(--danger)'}],
     vlines:[{x:timing.peak, label:'peak', color:'var(--accent-2)'}],
-    series:[{points:curvePoints(peakPct, timing, 0.5), color:'var(--accent)', fill:true, width:2.8}],
+    series:[{points:curvePoints(peakPct, timing), color:'var(--accent)', fill:true, width:2.8}],
     marker:{x:now, y:nowPct, label:'now · ' + Math.round(nowPct) + ' %'},
     accent:'var(--accent)', drag:{key:'sm'},
     ariaLabel:'Inhaled cannabis intensity over time in minutes, currently ' + Math.round(nowPct) + ' percent'
@@ -5237,10 +5367,17 @@ function caffeineConcAt(items, tMin, vdL, ke){
   }
   return c;
 }
-function caffeineSeries(items, vdL, ke, endMin, stepMin){
-  const pts = [];
-  for (let t = 0; t <= endMin; t += stepMin) pts.push([t, caffeineConcAt(items, t, vdL, ke)]);
-  return pts;
+/* Each component turns twice: where it starts arriving and where it peaks. */
+function caffeineSeeds(items, ke){
+  const out = [];
+  items.forEach(i => {
+    out.push(i.t);
+    out.push(i.t + (Math.log(i.ka / ke) / (i.ka - ke)) * 60);
+  });
+  return out;
+}
+function caffeineSeries(items, vdL, ke, endMin){
+  return sampleCurve(t => caffeineConcAt(items, t, vdL, ke), endMin, caffeineSeeds(items, ke));
 }
 /* Analytical time-to-peak. Single dose has the closed form
    tmax = ln(ka/ke)/(ka − ke); staggered doses use the same derivative,
@@ -5298,10 +5435,10 @@ function renderCaffeineList(){
   const host = document.getElementById('caf-list');
   const s = state.caf;
   if (!s.doses.length){
-    host.innerHTML = '<div class="empty-note">Nothing added yet. Tap a preset, set how long ago, then <strong>Add</strong>.</div>';
+    setHTML(host, '<div class="empty-note">Nothing added yet. Tap a preset, set how long ago, then <strong>Add</strong>.</div>');
     return;
   }
-  host.innerHTML = s.doses.slice().sort((a, b) => b.when - a.when).map(d =>
+  const html = s.doses.slice().sort((a, b) => b.when - a.when).map(d =>
     '<div class="drink-row" data-id="' + d.id + '">' +
     '<span class="dico ico" data-icon="' + (d.icon || 'coffee') + '"></span>' +
     '<div><div class="dname">' + esc(d.name) + '</div>' +
@@ -5314,7 +5451,7 @@ function renderCaffeineList(){
       '<button class="btn tiny" type="button" data-act="edit" title="Edit"><span class="ico" data-icon="edit"></span></button>' +
       '<button class="btn tiny danger" type="button" data-act="del" title="Delete"><span class="ico" data-icon="trash"></span></button>' +
     '</div></div>').join('');
-  paintIcons(host);
+  if (setHTML(host, html)) paintIcons(host);
 }
 
 function renderCaffeine(){
@@ -5363,8 +5500,7 @@ function renderCaffeine(){
   while (endMin < 2160 && caffeineConcAt(items, endMin, vdL, ke) > 0.12) endMin += 30;
   endMin = Math.max(endMin, nowMin + 120, nowMin + caffeineBedInMin() + 30);
 
-  const step = endMin > 900 ? 5 : 2;
-  const concPts = caffeineSeries(items, vdL, ke, endMin, step);
+  const concPts = caffeineSeries(items, vdL, ke, endMin);
   const nowConc = caffeineConcAt(items, nowMin, vdL, ke);
   const tmax = caffeineTmaxMin(items, ke, vdL);
   let peakConc = 0, peakAt = 0;
@@ -5809,10 +5945,16 @@ function nicotineAmountAt(items, tMin, ke){
   return a;
 }
 function nicotineNgMl(amountMg, vdL){ return (amountMg / vdL) * 1000; }   // mg/L -> ng/mL
-function nicotineSeries(items, ke, vdL, endMin, stepMin){
-  const pts = [];
-  for (let t = 0; t <= endMin; t += stepMin) pts.push([t, nicotineNgMl(nicotineAmountAt(items, t, ke), vdL)]);
-  return pts;
+function nicotineSeeds(items, ke){
+  const out = [];
+  items.forEach(i => {
+    out.push(i.t);
+    out.push(i.t + (Math.abs(i.ka - ke) < 1e-6 ? 60 / ke : (Math.log(i.ka / ke) / (i.ka - ke)) * 60));
+  });
+  return out;
+}
+function nicotineSeries(items, ke, vdL, endMin){
+  return sampleCurve(t => nicotineNgMl(nicotineAmountAt(items, t, ke), vdL), endMin, nicotineSeeds(items, ke));
 }
 /* Same analytic derivative + bisection the caffeine and alcohol modules use. */
 function nicotineTmaxMin(items, ke){
@@ -5895,10 +6037,10 @@ function nicSetDraftFromProduct(key){
 function renderNicotineList(){
   const host = document.getElementById('nic-list'), s = state.nic;
   if (!s.doses.length){
-    host.innerHTML = '<div class="empty-note">Nothing added yet. Pick a product, set how long ago, then <strong>Add</strong> — or use <strong>Fill a smoking day</strong> to see what accumulation looks like.</div>';
+    setHTML(host, '<div class="empty-note">Nothing added yet. Pick a product, set how long ago, then <strong>Add</strong> — or use <strong>Fill a smoking day</strong> to see what accumulation looks like.</div>');
     return;
   }
-  host.innerHTML = s.doses.slice().sort((a, b) => a.when - b.when).map(d => {
+  const html = s.doses.slice().sort((a, b) => a.when - b.when).map(d => {
     const p = nicProduct(d.product);
     return '<div class="drink-row" data-id="' + d.id + '">' +
       '<span class="dico ico" data-icon="' + (d.icon || 'cig') + '"></span>' +
@@ -5909,7 +6051,7 @@ function renderNicotineList(){
         '<button class="btn tiny danger" type="button" data-act="del" title="Delete"><span class="ico" data-icon="trash"></span></button>' +
       '</div></div>';
   }).join('');
-  paintIcons(host);
+  if (setHTML(host, html)) paintIcons(host);
 }
 
 function renderNicotine(){
@@ -5960,8 +6102,7 @@ function renderNicotine(){
   while (endMin < 4320 && nicotineNgMl(nicotineAmountAt(items, endMin, ke), vdL) > floorNg) endMin += 30;
   endMin = Math.max(endMin, nowMin + 60);
 
-  const step = endMin > 1200 ? 10 : endMin > 600 ? 5 : 2;
-  const ngPts = nicotineSeries(items, ke, vdL, endMin, step);
+  const ngPts = nicotineSeries(items, ke, vdL, endMin);
   const nowNg = nicotineNgMl(nicotineAmountAt(items, nowMin, ke), vdL);
   const tmax = nicotineTmaxMin(items, ke);
   let peakNg = 0, peakAt = 0;
@@ -6027,7 +6168,7 @@ function renderNicotine(){
     const mine = s.doses.filter(d => d.product === pr.key);
     if (!mine.length) return;
     const its = nicotineDoseItems(mine, originAgo);
-    const pts = nicotineSeries(its, ke, vdL, endMin, step);
+    const pts = resampleOn(ngPts, t => nicotineNgMl(nicotineAmountAt(its, t, ke), vdL));
     let pk = 0, pkAt = 0;
     pts.forEach(pt => { if (pt[1] > pk){ pk = pt[1]; pkAt = pt[0]; } });
     groups.push({key:pr.key, label:pr.label, short:pr.short || pr.label, n:mine.length,
