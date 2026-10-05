@@ -121,8 +121,21 @@ select{cursor:pointer}
 /* ---------- layout ---------- */
 .layout{display:grid; grid-template-columns:minmax(300px,390px) minmax(0,1fr); gap:16px; align-items:start; padding-bottom:40px}
 .panel{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow)}
-.setup{display:flex; flex-direction:column; gap:14px}
-.setup h2{font-size:1.1rem; display:flex; align-items:center; gap:8px; margin-bottom:10px}
+.setup{display:flex; flex-direction:column; padding:0; overflow:hidden}
+.setup h2{font-size:1.05rem; display:flex; align-items:center; gap:8px; margin-bottom:8px}
+.side-tabs{display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid var(--border); background:var(--panel2)}
+.side-tabs button{border:0; background:transparent; padding:12px 4px; font-weight:700; cursor:pointer; color:var(--muted); border-bottom:3px solid transparent; font-size:.9rem}
+.side-tabs button[aria-selected="true"]{color:var(--text); border-bottom-color:var(--accent); background:var(--panel)}
+.side-body{padding:14px 16px; overflow:auto; flex:1 1 auto; min-height:0}
+.side-foot{padding:10px 16px 14px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:8px; background:var(--panel)}
+@media (min-width: 981px){ .setup{position:sticky; top:12px; max-height:calc(100vh - 24px)} }
+.eval-out{margin-top:12px; border:2px solid var(--accent); border-radius:14px; padding:12px 14px; background:var(--accent-soft)}
+.eval-out .big{font-size:1.6rem; font-weight:800; line-height:1.2}
+.eval-out ul{margin:8px 0 0; padding-left:1.1em}
+.eval-out li{margin:.3em 0}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.grid2 .field{margin-bottom:6px}
+.grid2 input[type=text]{width:100%}
 .step{display:inline-grid; place-items:center; width:26px; height:26px; border-radius:50%; background:var(--accent); color:var(--accent-ink); font-size:.85rem}
 .viz{display:flex; flex-direction:column; gap:16px; min-width:0}
 .templates{display:grid; grid-template-columns:1fr 1fr; gap:8px}
@@ -247,7 +260,7 @@ table.bts td:first-child{color:var(--muted)}
   <header class="topbar">
     <div class="brand">
       <div class="logo" aria-hidden="true">🌡️</div>
-      <div><h1>Heat Explorer</h1><p>Watch heat spread through rods, plates and blocks.</p></div>
+      <div><h1>Heat Explorer</h1><p>Watch heat move.</p></div>
     </div>
     <div class="top-actions">
       <div class="seg" role="group" aria-label="How much explanation">
@@ -261,15 +274,15 @@ table.bts td:first-child{color:var(--muted)}
   <nav class="modes" role="tablist" aria-label="Choose a shape">
     <button type="button" class="mode-card" role="tab" data-mode="1" aria-selected="true">
       <svg viewBox="0 0 54 44" aria-hidden="true"><defs><linearGradient id="g1" x1="0" x2="1"><stop offset="0" stop-color="#d73027"/><stop offset=".5" stop-color="#fee090"/><stop offset="1" stop-color="#4575b4"/></linearGradient></defs><rect x="3" y="17" width="48" height="10" rx="5" fill="url(#g1)"/></svg>
-      <div><strong>1D Rod</strong><span>Heat flowing along a metal stick</span></div>
+      <div><strong>1D Rod</strong><span>Heat moving along a stick</span></div>
     </button>
     <button type="button" class="mode-card" role="tab" data-mode="2" aria-selected="false">
       <svg viewBox="0 0 54 44" aria-hidden="true"><defs><radialGradient id="g2"><stop offset="0" stop-color="#d73027"/><stop offset=".45" stop-color="#fee090"/><stop offset="1" stop-color="#4575b4"/></radialGradient></defs><rect x="6" y="3" width="42" height="38" rx="5" fill="url(#g2)"/></svg>
-      <div><strong>2D Plate</strong><span>Heat spreading across a flat sheet</span></div>
+      <div><strong>2D Plate</strong><span>Heat spreading over a flat sheet</span></div>
     </button>
     <button type="button" class="mode-card" role="tab" data-mode="3" aria-selected="false">
       <svg viewBox="0 0 54 44" aria-hidden="true"><polygon points="27,3 47,12 27,21 7,12" fill="#d73027"/><polygon points="7,12 27,21 27,42 7,33" fill="#4575b4"/><polygon points="27,21 47,12 47,33 27,42" fill="#fdae61"/></svg>
-      <div><strong>3D Block</strong><span>Heat soaking into a solid cube</span></div>
+      <div><strong>3D Block</strong><span>Heat soaking into a cube</span></div>
     </button>
   </nav>
 
@@ -283,32 +296,42 @@ table.bts td:first-child{color:var(--muted)}
   </div>
 
   <main class="layout">
-    <aside class="setup">
-      <section class="panel">
-        <h2><span class="step">1</span>Pick a scenario <span data-info="template"></span></h2>
-        <div id="templates" class="templates"></div>
-      </section>
-      <section class="panel">
-        <h2><span class="step">2</span>Choose a material <span data-info="alpha"></span></h2>
-        <select id="material" aria-label="Material" style="width:100%"></select>
-        <div class="field" id="customAlphaField" hidden style="margin-top:8px">
-          <label for="customAlpha">Your α (thermal diffusivity) <span data-info="alpha"></span></label>
-          <div class="row"><input type="text" id="customAlpha" inputmode="decimal" data-q="alpha" data-path="customAlpha"><span class="ulabel" data-u="alpha"></span></div>
-          <span class="ferr" data-err="customAlpha"></span>
-        </div>
-        <div id="matCard" class="mat-card"></div>
-        <label class="check" style="margin-top:12px"><input type="checkbox" id="compare"> <span>Compare two materials side by side <span data-info="compare"></span></span></label>
-        <div id="compareBox" hidden>
-          <select id="material2" aria-label="Second material" style="width:100%; margin-top:8px"></select>
-          <div id="matCard2" class="mat-card"></div>
-        </div>
-      </section>
-      <section class="panel">
-        <h2><span class="step">3</span>Make it your own</h2>
-        <div id="customForm"></div>
-      </section>
-      <div id="errors" class="msgs" aria-live="polite"></div>
-      <button type="button" id="runBtn" class="btn primary big">▶ Run simulation</button>
+    <aside class="setup panel">
+      <div class="side-tabs" role="tablist" aria-label="Setup">
+        <button type="button" role="tab" data-tab="scen" aria-selected="true">🎬 Scenarios</button>
+        <button type="button" role="tab" data-tab="set" aria-selected="false">⚙️ Settings</button>
+        <button type="button" role="tab" data-tab="eval" aria-selected="false">🎯 Solve</button>
+      </div>
+      <div class="side-body">
+        <section data-pane="scen">
+          <p class="hint" style="margin:0 0 10px">Pick one and it starts right away. <span data-info="template"></span></p>
+          <div id="templates" class="templates"></div>
+        </section>
+        <section data-pane="set" hidden>
+          <h2>Material <span data-info="alpha"></span></h2>
+          <select id="material" aria-label="Material" style="width:100%"></select>
+          <div class="field" id="customAlphaField" hidden style="margin-top:8px">
+            <label for="customAlpha">Your α <span data-info="alpha"></span></label>
+            <div class="row"><input type="text" id="customAlpha" inputmode="decimal" data-q="alpha" data-path="customAlpha"><span class="ulabel" data-u="alpha"></span></div>
+            <span class="ferr" data-err="customAlpha"></span>
+          </div>
+          <div id="matCard" class="mat-card"></div>
+          <label class="check" style="margin-top:12px"><input type="checkbox" id="compare"> <span>Race two materials <span data-info="compare"></span></span></label>
+          <div id="compareBox" hidden>
+            <select id="material2" aria-label="Second material" style="width:100%; margin-top:8px"></select>
+            <div id="matCard2" class="mat-card"></div>
+          </div>
+          <h2 style="margin-top:16px">Setup</h2>
+          <div id="customForm"></div>
+        </section>
+        <section data-pane="eval" hidden>
+          <div id="evalBox"></div>
+        </section>
+      </div>
+      <div class="side-foot" id="runFoot">
+        <div id="errors" class="msgs" aria-live="polite"></div>
+        <button type="button" id="runBtn" class="btn primary big">▶ Run</button>
+      </div>
     </aside>
 
     <section class="viz">
@@ -323,7 +346,7 @@ table.bts td:first-child{color:var(--muted)}
           <div class="clock"><span id="clock" aria-live="off">Time: 0 seconds</span><small id="rateNote"></small></div>
           <button type="button" class="btn primary" id="playBtn" aria-label="Play">▶ Play</button>
           <button type="button" class="btn" id="restartBtn" aria-label="Restart">⟲ Restart</button>
-          <div class="scrub"><label for="scrub">Time scrubber — drag to any moment</label><input type="range" id="scrub" min="0" max="1000" value="0"></div>
+          <div class="scrub"><label for="scrub">Drag to any moment</label><input type="range" id="scrub" min="0" max="1000" value="0"></div>
           <div class="speed"><label for="speed"><b>Speed</b></label><input type="range" id="speed" min="0" max="4" step="1" value="2"><b id="speedLbl">1×</b><span class="muted" id="speedNote"></span></div>
         </div>
         <div class="tools">
@@ -341,22 +364,22 @@ table.bts td:first-child{color:var(--muted)}
       <div class="panel graph" id="profilePanel">
         <h3>📈 Temperature along the rod <span data-info="graph"></span></h3>
         <canvas id="profileGraph" aria-label="Graph of temperature versus position"></canvas>
-        <p class="hint">The dashed line shows how things started. Hover over the graph to read values.</p>
+        <p class="hint">Dashed line = the start. Hover to read values.</p>
       </div>
 
       <div class="panel graph">
         <h3>⏱️ <span id="timeGraphTitle">Temperature over time at the probe ⊕</span> <span data-info="probe"></span></h3>
         <canvas id="timeGraph" aria-label="Graph of temperature versus time at the probe"></canvas>
-        <p class="hint">Click or tap anywhere on the object to move the probe ⊕.</p>
+        <p class="hint">Click the object to move the probe ⊕.</p>
       </div>
 
       <div class="panel card" id="summaryPanel">
         <h3>💡 What just happened?</h3>
-        <div id="summary"><p>Run a simulation to see a summary here.</p></div>
+        <div id="summary"><p>Run something to see a summary here.</p></div>
       </div>
 
       <div class="panel card explain" id="explainPanel">
-        <h3>📘 Explain this <span class="hint" style="margin:0">(switch to “More detail” at the top for the math)</span></h3>
+        <h3>📘 Explain this <span class="hint" style="margin:0">(tap “More detail” at the top for the math)</span></h3>
         <div id="explain"></div>
       </div>
     </section>
@@ -445,25 +468,25 @@ function fTimeAuto(s) {
    3. MATERIALS — thermal diffusivity α in m²/s (room-temperature handbook values)
    ===================================================================================== */
 const MATERIALS = [
-  { id: 'copper', name: 'Copper', alpha: 1.11e-4, color: '#c8703c', metal: true, fact: 'Copper is used in cooking pans because it spreads heat fast, so there are no cold spots and no burnt middle.' },
-  { id: 'silver', name: 'Silver', alpha: 1.65e-4, color: '#cfd3da', metal: true, fact: 'Silver is the champion: it spreads heat faster than any other metal. A real silver spoon in hot tea gets hot all the way up. Ouch!' },
-  { id: 'gold', name: 'Gold', alpha: 1.27e-4, color: '#dcb33c', metal: true, fact: 'Gold spreads heat well and never rusts, so thin gold layers are used in electronics and on spacecraft.' },
-  { id: 'aluminum', name: 'Aluminum', alpha: 9.7e-5, color: '#aab5c0', metal: true, fact: 'Aluminum is light and spreads heat quickly, which is why it’s used for heat sinks, baking sheets and soda cans.' },
-  { id: 'brass', name: 'Brass', alpha: 3.4e-5, color: '#c7a447', metal: true, fact: 'Brass is copper mixed with zinc. Mixing metals jumbles up the paths heat travels along, so brass is slower than pure copper.' },
-  { id: 'iron', name: 'Iron', alpha: 2.3e-5, color: '#6f6b67', metal: true, fact: 'Cast-iron pans heat slowly and unevenly, but once they’re hot they stay hot. Great for searing!' },
-  { id: 'lead', name: 'Lead', alpha: 2.4e-5, color: '#6c7783', metal: true, fact: 'Lead is very heavy but spreads heat about as fast as iron. (It’s also poisonous, so it’s best kept in simulations!)' },
-  { id: 'titanium', name: 'Titanium', alpha: 9e-6, color: '#8f96a4', metal: true, fact: 'Titanium is strong and light but spreads heat slowly, which is why titanium camping pots can get hot spots.' },
-  { id: 'steel', name: 'Stainless steel', alpha: 4.2e-6, color: '#a2abb5', metal: true, fact: 'Stainless steel spreads heat about 26 times slower than copper. That’s why good steel pans often hide a copper or aluminum layer in the bottom.' },
-  { id: 'ice', name: 'Ice', alpha: 1.2e-6, color: '#bfe6f5', metal: false, fact: 'Ice spreads heat slowly, which is part of why an ice cube melts from the outside in.' },
-  { id: 'water', name: 'Water (still)', alpha: 1.43e-7, color: '#3f8fd2', metal: false, fact: 'Still water spreads heat about 800 times slower than copper. In a real pot, water heats mostly by swirling around (convection), not by conduction.' },
-  { id: 'glass', name: 'Glass', alpha: 3.4e-7, color: '#9fd4da', metal: false, fact: 'Glass spreads heat so slowly that a glass rod can be glowing at one end and cool enough to hold at the other.' },
-  { id: 'wood', name: 'Wood (pine)', alpha: 8.2e-8, color: '#b27e49', metal: false, fact: 'Wood is one of the slowest heat spreaders here. That’s why pan handles and stirring spoons are often wooden.' },
-  { id: 'air', name: 'Air (still)', alpha: 1.9e-5, color: '#d6e2ea', metal: false, fact: 'Surprise: still air has a big α, about like iron! Air is so light that a tiny bit of heat warms it. But it carries very little heat overall, so trapped air (in a puffy jacket) is a great insulator. α tells you how fast temperature spreads, not how much heat moves.' },
+  { id: 'copper', name: 'Copper', alpha: 1.11e-4, color: '#c8703c', metal: true, fact: 'Copper spreads heat fast, so copper pans cook evenly with no cold spots.' },
+  { id: 'silver', name: 'Silver', alpha: 1.65e-4, color: '#cfd3da', metal: true, fact: 'The fastest metal of all. A silver spoon in hot tea gets hot all the way up. Ouch!' },
+  { id: 'gold', name: 'Gold', alpha: 1.27e-4, color: '#dcb33c', metal: true, fact: 'Spreads heat well and never rusts, so it’s used in electronics and on spacecraft.' },
+  { id: 'aluminum', name: 'Aluminum', alpha: 9.7e-5, color: '#aab5c0', metal: true, fact: 'Light and fast, so it’s used for heat sinks, baking sheets and soda cans.' },
+  { id: 'brass', name: 'Brass', alpha: 3.4e-5, color: '#c7a447', metal: true, fact: 'Copper mixed with zinc. Mixing metals gets in heat’s way, so it’s slower than copper.' },
+  { id: 'iron', name: 'Iron', alpha: 2.3e-5, color: '#6f6b67', metal: true, fact: 'Heats slowly, but stays hot a long time. That’s why cast-iron pans are great for searing.' },
+  { id: 'lead', name: 'Lead', alpha: 2.4e-5, color: '#6c7783', metal: true, fact: 'Very heavy and about as fast as iron. It’s poisonous, so keep it in the simulator!' },
+  { id: 'titanium', name: 'Titanium', alpha: 9e-6, color: '#8f96a4', metal: true, fact: 'Strong and light, but slow with heat, so titanium camping pots get hot spots.' },
+  { id: 'steel', name: 'Stainless steel', alpha: 4.2e-6, color: '#a2abb5', metal: true, fact: 'About 26× slower than copper. Good steel pans often hide a copper or aluminum layer underneath.' },
+  { id: 'ice', name: 'Ice', alpha: 1.2e-6, color: '#bfe6f5', metal: false, fact: 'Slow with heat. That’s part of why ice melts from the outside in.' },
+  { id: 'water', name: 'Water (still)', alpha: 1.43e-7, color: '#3f8fd2', metal: false, fact: 'Still water is about 800× slower than copper. Real pots heat up mostly because the water swirls.' },
+  { id: 'glass', name: 'Glass', alpha: 3.4e-7, color: '#9fd4da', metal: false, fact: 'So slow that a glass rod can glow at one end and be cool at the other.' },
+  { id: 'wood', name: 'Wood (pine)', alpha: 8.2e-8, color: '#b27e49', metal: false, fact: 'One of the slowest here. That’s why spoons and pan handles are often wooden.' },
+  { id: 'air', name: 'Air (still)', alpha: 1.9e-5, color: '#d6e2ea', metal: false, fact: 'Surprise: still air has a big α, like iron! It warms up easily, but it holds so little heat it can’t warm you much. That’s why puffy jackets (full of trapped air) keep you warm.' },
 ];
 const matById = id => MATERIALS.find(m => m.id === id);
 function materialOf(st, which) {
   const id = which === 2 ? st.material2 : st.material;
-  if (id === 'custom') return { id: 'custom', name: 'Custom material', alpha: st.customAlpha, color: '#8a7fd8', metal: false, fact: 'Your own material. Try a tiny α to see heat crawl, or a big one to watch it race.' };
+  if (id === 'custom') return { id: 'custom', name: 'Custom material', alpha: st.customAlpha, color: '#8a7fd8', metal: false, fact: 'Your own material. Tiny α: heat crawls. Big α: heat races.' };
   return matById(id);
 }
 
@@ -488,64 +511,63 @@ const lutIndex = (v, lo, hi) => clamp(Math.round((v - lo) / (hi - lo) * 255), 0,
    ===================================================================================== */
 const TEXT = {
   temperature: { title: 'Temperature (T)',
-    simple: '<p>Everything is made of tiny particles (atoms and molecules) that never sit still. <b>Temperature is how fast they’re jiggling.</b> Hot = fast jiggling. Cold = slow jiggling.</p>',
-    detail: '<p>More exactly, temperature measures the average energy of that jiggling motion. The Kelvin scale starts at <b>absolute zero</b> (0 K = −273.15 °C = −459.67 °F), where the jiggling is as small as nature allows. A change of 1 K is the same size as a change of 1 °C; a change of 1 °F is only 5/9 as big.</p>' },
+    simple: '<p>Everything is made of tiny particles that never stop jiggling. <b>Temperature is how fast they jiggle.</b> Hot means fast. Cold means slow.</p>',
+    detail: '<p>Kelvin starts at <b>absolute zero</b> (0 K = −273.15 °C), where the jiggling is as slow as it can get. A step of 1 K is the same size as 1 °C. A step of 1 °F is a bit smaller (5/9 of that).</p>' },
   heat: { title: 'Heat flow',
-    simple: '<p>Fast-jiggling particles bump into slower neighbors and speed them up. That’s all heat flow is: jiggles passed along, bump by bump. It’s why heat always moves from hot to cold, never the other way.</p>',
-    detail: '<p>This kind of heat flow, through a material that isn’t moving, is called <b>conduction</b>. Fourier’s law says the heat flow is proportional to how steeply temperature changes with distance (the <i>temperature gradient</i>): q = −k ∇T. A steeper slope pushes heat faster.</p>' },
+    simple: '<p>Fast particles bump into slow neighbors and speed them up. That’s heat flow: jiggles passed along, bump by bump. So heat always goes from hot to cold, never backwards.</p>',
+    detail: '<p>This is called <b>conduction</b>. The steeper the temperature drops from one spot to the next, the faster heat flows (Fourier’s law: q = −k ∇T).</p>' },
   alpha: { title: 'Thermal diffusivity (α)',
-    simple: '<p>α (the Greek letter “alpha”) is <b>how quickly a material spreads heat through itself.</b> Big α means heat races across (copper). Small α means heat crawls (wood). That’s why pan handles are often wood or plastic.</p>',
-    detail: '<p>α = k / (ρ·c): conductivity k (how well it passes heat along) divided by density ρ times specific heat c (how much heat it takes to warm up a chunk of it). Its unit is m²/s, an area per time, because a heated region spreads over an area that grows steadily with time. Handy rule: in time t, heat travels roughly √(α·t).</p>' },
+    simple: '<p>α (“alpha”) is <b>how fast a material spreads heat through itself.</b> Big α: heat races across, like in copper. Small α: heat crawls, like in wood. That’s why pan handles are often wood.</p>',
+    detail: '<p>α = k / (ρ·c). That’s how well it passes heat (k) divided by how much heat it takes to warm it up (density ρ × specific heat c). Rule of thumb: in time t, heat spreads about √(α·t).</p>' },
   time: { title: 'Time (t)',
-    simple: '<p>Time is how long we let things happen. The computer moves forward in tiny steps, like the pages of a flip-book. Each picture you see bundles many of those tiny steps.</p>',
-    detail: '<p>The tiny step is called Δt (“delta t”). Heat Explorer picks it for you using the stability rule, so the math can never blow up.</p>' },
-  simtime: { title: 'Simulation time',
-    simple: '<p>How much real-world time to simulate. A spoon in soup changes over minutes; a giant iron bar might take hours. The animation always squeezes that time into a few seconds so you can watch it.</p>',
-    detail: '<p>Rule of thumb: heat needs about <b>L²/α</b> to cross something of size L. Doubling the size makes it take <i>four</i> times as long.</p>' },
+    simple: '<p>How long we let things happen. The computer moves forward in tiny steps, like pages in a flip-book.</p>',
+    detail: '<p>Each tiny step is called Δt. Heat Explorer picks it for you so the math stays safe (see “The stability rule”).</p>' },
+  simtime: { title: 'How long to run',
+    simple: '<p>How much real time to simulate. A spoon in soup changes over minutes. A big iron bar takes hours. The animation always squeezes it into a few seconds.</p>',
+    detail: '<p>Heat takes about <b>L²/α</b> to cross something of size L. Twice as big takes <i>four</i> times as long.</p>' },
   position: { title: 'Position (x, y, z)',
-    simple: '<p>Position tells you <i>where</i> on the object you are. x goes left to right. On the plate, y goes bottom to top. On the block, y goes front to back and z goes bottom to top.</p>',
-    detail: '<p>Temperature depends on both position and time: T(x, y, z, t). That’s why the equation uses “∂” (partial derivatives): we ask how T changes in one direction while holding the others still.</p>' },
+    simple: '<p>Where you are on the object. x goes left to right. On the plate, y goes bottom to top. On the block, y goes front to back and z goes bottom to top.</p>', detail: '' },
   size: { title: 'Size',
-    simple: '<p>How big the object is. Bigger things take much longer to heat through, because heat has farther to travel.</p>',
-    detail: '<p>Time to heat through grows with size <i>squared</i>: a rod twice as long takes about four times as long.</p>' },
+    simple: '<p>How big the object is. Bigger things take much longer to heat through, because heat has farther to go.</p>',
+    detail: '<p>Time grows with size <i>squared</i>: twice as long takes about four times as long.</p>' },
   initial: { title: 'Starting temperature',
-    simple: '<p>The temperature of the whole object at the very beginning, before anything starts warming or cooling it, like a spoon that’s been sitting on the counter.</p>',
-    detail: '<p>Mathematicians call this the <i>initial condition</i>, T(x, 0). The equation needs it, plus the edge rules, to know exactly what happens next.</p>' },
-  grid: { title: 'Grid spacing (Δx) and detail',
-    simple: '<p>The computer can’t keep track of every single point, so it chops the object into little pieces and tracks one temperature for each. The distance between pieces is the <b>grid spacing</b>, Δx. Smaller pieces give a sharper picture, but take more work.</p>',
-    detail: '<p>This is a <b>finite-difference grid</b>. Halving Δx sharpens the picture but means 4× as many time steps (Δt shrinks with Δx²), and in 3D it also means 8× as many points, so 32× more work! That’s why the 3D block uses fewer points.</p>' },
-  boundary: { title: 'Boundary conditions (the edges)',
-    simple: '<p>What’s happening at the edges: is that end touching ice, a flame, or wrapped in a blanket? Edges matter a lot, because that’s where heat gets in or out.</p>',
-    detail: '<p>There are two kinds here. <b>Fixed temperature</b> (a <i>Dirichlet</i> condition): T at the edge = a set value. <b>Insulated</b> (a <i>Neumann</i> condition): ∂T/∂n = 0, meaning the temperature slope across the edge is zero, so no heat flows through it.</p>' },
-  fixed: { title: 'Held at a temperature',
-    simple: '<p>The edge stays at one temperature no matter what, like a spoon end sitting in boiling soup, or a block sitting in ice water. Whatever heat arrives gets carried away (or supplied) right away.</p>', detail: '' },
-  insulated: { title: 'Insulated (wrapped in a blanket)',
-    simple: '<p>A perfect blanket covers the edge, so no heat gets in or out. Heat that reaches it piles up and spreads back inside. If <i>every</i> edge is insulated, the total heat stays exactly the same; it just evens out.</p>', detail: '' },
+    simple: '<p>How warm the whole object is at the start, like a spoon that’s been sitting on the counter.</p>', detail: '' },
+  grid: { title: 'Grid spacing (Δx)',
+    simple: '<p>The computer can’t track every point, so it chops the object into little pieces and tracks one temperature per piece. Δx is the size of a piece. Smaller pieces look sharper but take more work.</p>',
+    detail: '<p>Halve Δx and you need 4× as many time steps. In 3D you also get 8× as many pieces, so 32× the work! That’s why the block uses fewer pieces.</p>' },
+  boundary: { title: 'Edges',
+    simple: '<p>What is each edge touching? Ice, a flame, or a blanket? Edges matter a lot, because that’s where heat gets in or out.</p>',
+    detail: '<p>“Kept at a temperature” is a <i>Dirichlet</i> condition (T = a set value). “Wrapped up” is a <i>Neumann</i> condition (∂T/∂n = 0: no slope across the edge, so no heat crosses it).</p>' },
+  fixed: { title: 'Kept at a temperature',
+    simple: '<p>The edge stays at one temperature, like a spoon end in hot soup. Whatever heat shows up gets taken away (or added) right away.</p>', detail: '' },
+  insulated: { title: 'Wrapped up',
+    simple: '<p>A perfect blanket covers the edge, so no heat gets in or out. If every edge is wrapped, the heat can’t leave. It just evens out.</p>', detail: '' },
   spot: { title: 'Hot (or cold) spot',
-    simple: '<p>A patch that starts at a different temperature, like a coin straight out of hot water, or a burner under a pan. Tick “keep it at this temperature” if something keeps feeding it (a flame, a working computer chip). Otherwise it just starts hot and is allowed to cool. It can be cold, too: try an ice cube!</p>',
-    detail: '<p>A held spot acts like an extra fixed-temperature edge inside the object. The spot is made of the same material as the rest (a simplification).</p>' },
+    simple: '<p>A patch that starts at a different temperature, like a hot coin. Tick “keep it there” if something keeps feeding it, like a burner. It can be cold too, like an ice cube.</p>', detail: '' },
   equation: { title: 'The heat equation',
-    simple: '<div class="eq">∂T/∂t = α ∇²T</div><p>Read it like a sentence: <b>how fast the temperature at a spot changes</b> (∂T/∂t) equals <b>α times how different that spot is from its neighbors</b> (∇²T).</p><p>So a spot heats up if it’s colder than the average of its neighbors, and cools down if it’s hotter. α controls how fast.</p>',
-    detail: '<p>∇² (“del squared”, the <b>Laplacian</b>) means ∂²T/∂x² + ∂²T/∂y² + ∂²T/∂z²: how much the temperature curve bends in each direction. A dip (colder than neighbors) has positive bend, so T goes up. A peak has negative bend, so T goes down.</p>' },
+    simple: '<div class="eq">∂T/∂t = α ∇²T</div><p>In words: <b>a spot warms up if it’s colder than its neighbors, and cools down if it’s hotter.</b> α sets how fast.</p>',
+    detail: '<p>∂T/∂t is how fast the temperature at a spot changes. ∇²T (the <b>Laplacian</b>) measures how different a spot is from the average of its neighbors. A cold dip gets filled in. A hot bump gets flattened.</p>' },
   stability: { title: 'The stability rule',
-    simple: '<p>If the computer takes time steps that are too big, it overshoots: a spot gets “corrected” so hard it ends up hotter than its hot neighbors, and the numbers explode. So Heat Explorer always picks a step small enough to stay safe.</p>',
-    detail: '<div class="eq small">Δt ≤ Δx² / (2·d·α)</div><p>where d is the number of dimensions (1, 2 or 3). Heat Explorer uses 90 % of this limit. In 3D the limit is tighter because each point has 6 neighbors pulling on it instead of 2.</p>' },
+    simple: '<p>If the computer takes steps that are too big, it overshoots: a spot gets “fixed” so hard it ends up hotter than its hot neighbors, and the numbers blow up. So Heat Explorer always picks a small enough step.</p>',
+    detail: '<div class="eq small">Δt ≤ Δx² / (2·d·α)</div><p>d is the number of dimensions (1, 2 or 3). We use 90 % of this limit. 3D is stricter because each point has 6 neighbors pulling on it, not 2.</p>' },
   steady: { title: 'Steady state',
-    simple: '<p>When temperatures stop changing. Heat may still be flowing (in at the hot end, out at the cold end), but every spot gets exactly as much as it gives away, like a bathtub with the tap and the drain perfectly matched.</p>', detail: '<p>Mathematically ∂T/∂t = 0, so ∇²T = 0. In 1D that means the second derivative is zero: a straight line!</p>' },
-  material: { title: 'Material', simple: '<p>What the object is made of. Different materials spread heat at very different speeds. That speed is measured by α.</p>', detail: '' },
-  compare: { title: 'Compare two materials',
-    simple: '<p>Runs the exact same setup twice, once for each material, side by side, so you can <i>see</i> which one spreads heat faster. Copper versus stainless steel is a great race!</p>',
-    detail: '<p>With the same shape and edges, the only difference is α, and the heat equation says time just stretches by the ratio of the α values: half the α, twice the time.</p>' },
+    simple: '<p>When temperatures stop changing. Heat can still flow through, but every spot gets as much as it gives away, like a bathtub with the tap and drain matched.</p>',
+    detail: '<p>Then ∂T/∂t = 0, so ∇²T = 0. In 1D that means a straight line.</p>' },
+  material: { title: 'Material', simple: '<p>What it’s made of. Some materials spread heat much faster than others.</p>', detail: '' },
+  compare: { title: 'Race two materials',
+    simple: '<p>Runs the same setup twice, side by side, so you can <i>see</i> which material spreads heat faster. Try copper against stainless steel!</p>',
+    detail: '<p>Same shape, same edges: only α differs, so time just stretches. Half the α means twice the time.</p>' },
   particles: { title: 'Jiggling particles',
-    simple: '<p>These dots stand for the tiny particles inside the material. Faster jiggling = hotter. Watch the jiggling spread from hot places to cold ones; that’s heat flow!</p>',
-    detail: '<p>We exaggerated the effect so you can see it. Real particle speed grows with √T in kelvin, so going from 20 °C to 100 °C only speeds particles up by about 13 %.</p>' },
+    simple: '<p>The dots stand for the tiny particles in the material. Faster jiggling = hotter. Watch the jiggling spread from hot to cold. That’s heat flow!</p>',
+    detail: '<p>We exaggerated it so you can see it. From 20 °C to 100 °C, real particles only speed up about 13 %.</p>' },
   units: { title: 'Units',
-    simple: '<p>Pick whichever units you like. Changing units only changes how numbers are <i>shown</i>; the simulation itself doesn’t change at all. 100 °C, 212 °F and 373.15 K are the same temperature.</p>',
-    detail: '<p>Inside, Heat Explorer always works in SI units: meters, seconds, °C, and m²/s, and converts only for display. °F = °C × 9/5 + 32, K = °C + 273.15, 1 in = 2.54 cm, 1 cm²/s = 100 mm²/s = 0.0001 m²/s.</p>' },
-  template: { title: 'Scenarios', simple: '<p>Each scenario sets up a real-life situation with one click: size, material, temperatures and edges. Then you can change anything you like in step 3.</p>', detail: '' },
-  probe: { title: 'The probe ⊕', simple: '<p>Like sticking a thermometer into one spot. The graph shows how that spot’s temperature changed over the whole run. Click anywhere on the object to move it.</p>', detail: '' },
-  graph: { title: 'Temperature along the rod', simple: '<p>Each point on this line is the temperature at that spot on the rod. Left to right on the graph matches left to right on the rod. Higher on the graph = hotter.</p>', detail: '<p>The slope of this line tells you which way heat is flowing (downhill, from high to low) and how fast (steeper = faster). The curviness tells you which spots are heating or cooling.</p>' },
-  detailLvl: { title: 'Detail (number of grid points)', simple: '<p>How many little pieces the computer chops the object into. More detail looks smoother but takes longer to calculate.</p>', detail: '' },
+    simple: '<p>Pick any units you like. It only changes how numbers are shown, not the simulation. 100 °C, 212 °F and 373.15 K are the same temperature.</p>',
+    detail: '<p>Inside, everything is meters, seconds, °C and m²/s. °F = °C × 9/5 + 32. K = °C + 273.15.</p>' },
+  template: { title: 'Scenarios', simple: '<p>Each one sets up a real-life situation in one click. Then change anything you like under Settings.</p>', detail: '' },
+  probe: { title: 'The probe ⊕', simple: '<p>Like a thermometer stuck in one spot. The graph shows that spot’s temperature over time. Click the object to move it.</p>', detail: '' },
+  graph: { title: 'Temperature along the rod', simple: '<p>Left to right on the graph matches left to right on the rod. Higher means hotter.</p>', detail: '<p>Heat flows downhill on this graph. The steeper the line, the faster it flows.</p>' },
+  detailLvl: { title: 'Detail', simple: '<p>How many little pieces the object is chopped into. More looks smoother but takes longer.</p>', detail: '' },
+  evaluator: { title: 'Solve a point', simple: '<p>Type in the numbers, pick a spot and a time, and get the temperature there. The animation runs too, so you can see how it got there.</p>', detail: '<p>The answer comes from the same solver. Between grid points, we blend the nearest ones (linear interpolation).</p>' },
 };
 function infoBtn(term) {
   const t = TEXT[term]; if (!t) return '';
@@ -560,28 +582,28 @@ const I_ = (T = 20) => ({ type: 'insulated', T });
 const NOSPOT = { on: false, T: 100, r: 0.01, pos: [0.5, 0.5, 0.5], held: false };
 const TEMPLATES = {
   1: [
-    { id: 'spoon', icon: '🥄', name: 'Spoon in hot soup', desc: 'A steel spoon with one end dipped in 90 °C soup.', material: 'steel', material2: 'silver', L: [0.2, 0, 0], T0: 22, bc: { xmin: F_(90), xmax: I_(22) }, spot: NOSPOT, time: 600 },
-    { id: 'iceRod', icon: '🧊', name: 'Rod with one end in ice', desc: 'A copper rod: one end in ice water, the other in a 25 °C room.', material: 'copper', material2: 'steel', L: [0.3, 0, 0], T0: 25, bc: { xmin: F_(0), xmax: F_(25) }, spot: NOSPOT, time: 400 },
-    { id: 'wire', icon: '🕯️', name: 'Heating the middle of a wire', desc: 'A flame holds the middle of an aluminum wire at 200 °C.', material: 'aluminum', material2: 'iron', L: [0.1, 0, 0], T0: 20, bc: { xmin: F_(20), xmax: F_(20) }, spot: { on: true, T: 200, r: 0.004, pos: [0.5, 0.5, 0.5], held: true }, time: 15 },
-    { id: 'fireSnow', icon: '🔥', name: 'Between a fire and snow', desc: 'An iron bar with one end in a fire, the other in snow. It ends up a straight line!', material: 'iron', material2: 'copper', L: [0.5, 0, 0], T0: 20, bc: { xmin: F_(300), xmax: F_(0) }, spot: NOSPOT, time: 3600 },
-    { id: 'blanket', icon: '🧣', name: 'Half-hot rod in a blanket', desc: 'Left half starts at 100 °C, right half at 20 °C. No heat can escape.', material: 'copper', material2: 'steel', L: [0.2, 0, 0], T0: 20, bc: { xmin: I_(), xmax: I_() }, spot: { on: true, T: 100, r: 0.05, pos: [0.25, 0.5, 0.5], held: false }, time: 120 },
-    { id: 'glassRod', icon: '🧪', name: 'Glass rod in a flame', desc: 'Glassblowers hold glass rods in flames with bare hands. Here’s why!', material: 'glass', material2: 'copper', L: [0.15, 0, 0], T0: 20, bc: { xmin: F_(400), xmax: I_() }, spot: NOSPOT, time: 120 },
+    { id: 'spoon', icon: '🥄', name: 'Spoon in hot soup', desc: 'A steel spoon, one end in 90 °C soup.', material: 'steel', material2: 'silver', L: [0.2, 0, 0], T0: 22, bc: { xmin: F_(90), xmax: I_(22) }, spot: NOSPOT, time: 600 },
+    { id: 'iceRod', icon: '🧊', name: 'Rod with one end in ice', desc: 'Copper rod. One end in ice, one end in a 25 °C room.', material: 'copper', material2: 'steel', L: [0.3, 0, 0], T0: 25, bc: { xmin: F_(0), xmax: F_(25) }, spot: NOSPOT, time: 400 },
+    { id: 'wire', icon: '🕯️', name: 'Heating the middle of a wire', desc: 'A 200 °C flame heats the middle of a wire.', material: 'aluminum', material2: 'iron', L: [0.1, 0, 0], T0: 20, bc: { xmin: F_(20), xmax: F_(20) }, spot: { on: true, T: 200, r: 0.004, pos: [0.5, 0.5, 0.5], held: true }, time: 15 },
+    { id: 'fireSnow', icon: '🔥', name: 'Between a fire and snow', desc: 'One end in a fire, one in snow. Watch for a straight line!', material: 'iron', material2: 'copper', L: [0.5, 0, 0], T0: 20, bc: { xmin: F_(300), xmax: F_(0) }, spot: NOSPOT, time: 3600 },
+    { id: 'blanket', icon: '🧣', name: 'Half-hot rod in a blanket', desc: 'Half hot, half cool, wrapped up. Heat can’t escape.', material: 'copper', material2: 'steel', L: [0.2, 0, 0], T0: 20, bc: { xmin: I_(), xmax: I_() }, spot: { on: true, T: 100, r: 0.05, pos: [0.25, 0.5, 0.5], held: false }, time: 120 },
+    { id: 'glassRod', icon: '🧪', name: 'Glass rod in a flame', desc: 'Why glassblowers can hold the cool end.', material: 'glass', material2: 'copper', L: [0.15, 0, 0], T0: 20, bc: { xmin: F_(400), xmax: I_() }, spot: NOSPOT, time: 120 },
   ],
   2: [
-    { id: 'pan', icon: '🍳', name: 'Frying pan on a burner', desc: 'A 200 °C burner under the middle of an aluminum pan.', material: 'aluminum', material2: 'steel', L: [0.26, 0.26, 0], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_() }, spot: { on: true, T: 200, r: 0.05, pos: [0.5, 0.5, 0.5], held: true }, time: 60 },
-    { id: 'coin', icon: '🪙', name: 'Hot coin on a cold plate', desc: 'A coin from hot water (80 °C) lands on a 5 °C plate from the fridge.', material: 'aluminum', material2: 'steel', L: [0.1, 0.1, 0], T0: 5, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_() }, spot: { on: true, T: 80, r: 0.012, pos: [0.5, 0.5, 0.5], held: false }, time: 15 },
-    { id: 'chip', icon: '💻', name: 'Heat sink cooling a chip', desc: 'An 85 °C computer chip on an aluminum heat sink with fan-cooled 25 °C edges.', material: 'aluminum', material2: 'copper', L: [0.06, 0.06, 0], T0: 25, bc: { xmin: F_(25), xmax: F_(25), ymin: F_(25), ymax: F_(25) }, spot: { on: true, T: 85, r: 0.008, pos: [0.5, 0.5, 0.5], held: true }, time: 4 },
-    { id: 'window', icon: '🪟', name: 'Window on a winter day', desc: 'A slice through window glass: warm room (20 °C) left, freezing air (−10 °C) right.', material: 'glass', material2: 'wood', L: [0.008, 0.02, 0], T0: 20, bc: { xmin: F_(20), xmax: F_(-10), ymin: I_(), ymax: I_() }, spot: NOSPOT, time: 120 },
-    { id: 'tray', icon: '🧊', name: 'Ice cube on a metal tray', desc: 'An ice cube keeps one patch of a 22 °C aluminum tray at 0 °C.', material: 'aluminum', material2: 'steel', L: [0.2, 0.2, 0], T0: 22, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_() }, spot: { on: true, T: 0, r: 0.02, pos: [0.3, 0.6, 0.5], held: true }, time: 120 },
-    { id: 'hotEdge', icon: '♨️', name: 'Plate with one hot edge', desc: 'A brass plate: bottom edge on a 150 °C stove, other edges in 20 °C water.', material: 'brass', material2: 'copper', L: [0.1, 0.1, 0], T0: 20, bc: { xmin: F_(20), xmax: F_(20), ymin: F_(150), ymax: F_(20) }, spot: NOSPOT, time: 60 },
+    { id: 'pan', icon: '🍳', name: 'Frying pan on a burner', desc: 'A 200 °C burner under an aluminum pan.', material: 'aluminum', material2: 'steel', L: [0.26, 0.26, 0], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_() }, spot: { on: true, T: 200, r: 0.05, pos: [0.5, 0.5, 0.5], held: true }, time: 60 },
+    { id: 'coin', icon: '🪙', name: 'Hot coin on a cold plate', desc: 'An 80 °C coin on a cold 5 °C plate.', material: 'aluminum', material2: 'steel', L: [0.1, 0.1, 0], T0: 5, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_() }, spot: { on: true, T: 80, r: 0.012, pos: [0.5, 0.5, 0.5], held: false }, time: 15 },
+    { id: 'chip', icon: '💻', name: 'Heat sink cooling a chip', desc: 'An 85 °C chip; a fan keeps the edges at 25 °C.', material: 'aluminum', material2: 'copper', L: [0.06, 0.06, 0], T0: 25, bc: { xmin: F_(25), xmax: F_(25), ymin: F_(25), ymax: F_(25) }, spot: { on: true, T: 85, r: 0.008, pos: [0.5, 0.5, 0.5], held: true }, time: 4 },
+    { id: 'window', icon: '🪟', name: 'Window on a winter day', desc: 'Slice of glass: 20 °C room left, −10 °C outside right.', material: 'glass', material2: 'wood', L: [0.008, 0.02, 0], T0: 20, bc: { xmin: F_(20), xmax: F_(-10), ymin: I_(), ymax: I_() }, spot: NOSPOT, time: 120 },
+    { id: 'tray', icon: '🧊', name: 'Ice cube on a metal tray', desc: 'An ice cube chills one spot of a warm tray.', material: 'aluminum', material2: 'steel', L: [0.2, 0.2, 0], T0: 22, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_() }, spot: { on: true, T: 0, r: 0.02, pos: [0.3, 0.6, 0.5], held: true }, time: 120 },
+    { id: 'hotEdge', icon: '♨️', name: 'Plate with one hot edge', desc: 'Bottom edge on a 150 °C stove, other edges 20 °C.', material: 'brass', material2: 'copper', L: [0.1, 0.1, 0], T0: 20, bc: { xmin: F_(20), xmax: F_(20), ymin: F_(150), ymax: F_(20) }, spot: NOSPOT, time: 60 },
   ],
   3: [
-    { id: 'ice', icon: '🧊', name: 'Ice cube warming up', desc: 'A −18 °C cube from the freezer. Its melting surface stays at 0 °C.', material: 'ice', material2: 'steel', L: [0.03, 0.03, 0.03], T0: -18, bc: { xmin: F_(0), xmax: F_(0), ymin: F_(0), ymax: F_(0), zmin: F_(0), zmax: F_(0) }, spot: NOSPOT, time: 120 },
-    { id: 'quench', icon: '🔨', name: 'Hot metal block cooling', desc: 'A blacksmith drops a 300 °C iron block into 20 °C water.', material: 'iron', material2: 'aluminum', L: [0.08, 0.08, 0.08], T0: 300, bc: { xmin: F_(20), xmax: F_(20), ymin: F_(20), ymax: F_(20), zmin: F_(20), zmax: F_(20) }, spot: NOSPOT, time: 80 },
-    { id: 'oneFace', icon: '🔥', name: 'Cube heated from one face', desc: 'An aluminum cube on a 150 °C hot plate. Other faces insulated.', material: 'aluminum', material2: 'steel', L: [0.05, 0.05, 0.05], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: F_(150), zmax: I_() }, spot: NOSPOT, time: 60 },
-    { id: 'core', icon: '🟠', name: 'Hot core evens out', desc: 'A titanium block with a 400 °C core, wrapped in perfect insulation.', material: 'titanium', material2: 'copper', L: [0.06, 0.06, 0.06], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() }, spot: { on: true, T: 400, r: 0.015, pos: [0.5, 0.5, 0.5], held: false }, time: 45 },
-    { id: 'solder', icon: '🔧', name: 'Soldering iron on a corner', desc: 'A 350 °C soldering iron touches one top corner of a copper block.', material: 'copper', material2: 'steel', L: [0.04, 0.04, 0.04], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() }, spot: { on: true, T: 350, r: 0.008, pos: [1, 0, 1], held: true }, time: 20 },
-    { id: 'between', icon: '🧱', name: 'Hot face, cold face', desc: 'A brass block between a 100 °C wall and a 0 °C wall.', material: 'brass', material2: 'copper', L: [0.05, 0.05, 0.05], T0: 20, bc: { xmin: F_(100), xmax: F_(0), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() }, spot: NOSPOT, time: 40 },
+    { id: 'ice', icon: '🧊', name: 'Ice cube warming up', desc: 'A −18 °C cube. Its melting surface stays at 0 °C.', material: 'ice', material2: 'steel', L: [0.03, 0.03, 0.03], T0: -18, bc: { xmin: F_(0), xmax: F_(0), ymin: F_(0), ymax: F_(0), zmin: F_(0), zmax: F_(0) }, spot: NOSPOT, time: 120 },
+    { id: 'quench', icon: '🔨', name: 'Hot metal block cooling', desc: 'A 300 °C iron block dunked in 20 °C water.', material: 'iron', material2: 'aluminum', L: [0.08, 0.08, 0.08], T0: 300, bc: { xmin: F_(20), xmax: F_(20), ymin: F_(20), ymax: F_(20), zmin: F_(20), zmax: F_(20) }, spot: NOSPOT, time: 80 },
+    { id: 'oneFace', icon: '🔥', name: 'Cube heated from one face', desc: 'Sitting on a 150 °C hot plate. Other faces wrapped.', material: 'aluminum', material2: 'steel', L: [0.05, 0.05, 0.05], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: F_(150), zmax: I_() }, spot: NOSPOT, time: 60 },
+    { id: 'core', icon: '🟠', name: 'Hot core evens out', desc: 'A 400 °C core inside a wrapped-up block.', material: 'titanium', material2: 'copper', L: [0.06, 0.06, 0.06], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() }, spot: { on: true, T: 400, r: 0.015, pos: [0.5, 0.5, 0.5], held: false }, time: 45 },
+    { id: 'solder', icon: '🔧', name: 'Soldering iron on a corner', desc: 'A 350 °C tip touches one corner.', material: 'copper', material2: 'steel', L: [0.04, 0.04, 0.04], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() }, spot: { on: true, T: 350, r: 0.008, pos: [1, 0, 1], held: true }, time: 20 },
+    { id: 'between', icon: '🧱', name: 'Hot face, cold face', desc: 'Between a 100 °C wall and a 0 °C wall.', material: 'brass', material2: 'copper', L: [0.05, 0.05, 0.05], T0: 20, bc: { xmin: F_(100), xmax: F_(0), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() }, spot: NOSPOT, time: 40 },
   ],
 };
 const SIDES = {
@@ -794,24 +816,24 @@ function cfgFromState(s, which) {
    9. VALIDATION — friendly messages instead of crashes or NaN
    ===================================================================================== */
 function validateValue(kind, si, path) {
-  if (!Number.isFinite(si)) return 'Please type a number here (like 25).';
+  if (!Number.isFinite(si)) return 'Type a number here, like 25.';
   if (kind === 'temp') {
-    if (si < -273.15 - 1e-9) return `Nothing can be colder than absolute zero (−273.15 °C = −459.67 °F = 0 K). Try a warmer temperature.`;
-    if (si > 6000) return 'That’s hotter than the surface of the Sun! Please keep it under 6,000 °C (10,832 °F).';
+    if (si < -273.15 - 1e-9) return `Nothing is colder than absolute zero (−273.15 °C = −459.67 °F = 0 K).`;
+    if (si > 6000) return 'That’s hotter than the Sun’s surface! Keep it under 6,000 °C.';
   }
   if (kind === 'len') {
-    if (si <= 0) return path === 'spot.r' ? 'The spot needs a size bigger than zero.' : 'Sizes need to be bigger than zero.';
-    if (path !== 'spot.r' && si < 1e-4) return 'That’s smaller than 0.1 mm, too tiny to see! Try something bigger.';
-    if (si > 100) return 'Let’s keep things under 100 m (about the length of a football field).';
+    if (si <= 0) return path === 'spot.r' ? 'The spot needs a size above zero.' : 'Sizes must be above zero.';
+    if (path !== 'spot.r' && si < 1e-4) return 'Too tiny! Use at least 0.1 mm.';
+    if (si > 100) return 'Keep it under 100 m.';
   }
   if (kind === 'time') {
-    if (si <= 0) return 'The time needs to be more than zero.';
-    if (si > 3.156e7) return 'That’s more than a year! Please pick a shorter time.';
+    if (si <= 0) return 'Time must be above zero.';
+    if (si > 3.156e7) return 'That’s over a year! Pick a shorter time.';
   }
   if (kind === 'alpha') {
-    if (si <= 0) return 'α has to be bigger than zero (every material spreads heat at least a little).';
-    if (si < 1e-9) return 'That α is smaller than any real material’s. Try at least 1 × 10⁻⁹ m²/s (0.001 mm²/s).';
-    if (si > 1e-2) return 'That α is bigger than any real material’s (even diamond is about 1.2 × 10⁻³ m²/s). Try something smaller.';
+    if (si <= 0) return 'α must be above zero.';
+    if (si < 1e-9) return 'Too small for a real material. Use at least 0.001 mm²/s.';
+    if (si > 1e-2) return 'Too big for a real material. Even diamond is only about 1,200 mm²/s.';
   }
   return null;
 }
@@ -820,9 +842,9 @@ function crossChecks(s) {
   const L = s.L.slice(0, s.dim);
   if (s.dim > 1 && L.every(v => v > 0)) {
     const ratio = Math.max(...L) / Math.min(...L);
-    if (ratio > 20) errs.push(`That ${OBJ[s.dim]} is super skinny: the longest side is ${nice(ratio)} times the shortest. Please keep it under 20 times.`);
+    if (ratio > 20) errs.push(`Too skinny: the longest side is ${nice(ratio)}× the shortest. Keep it under 20×.`);
   }
-  if (s.spot.on && s.spot.r > Math.max(...L)) errs.push('The hot spot is bigger than the whole object! Make the spot smaller (or turn it off).');
+  if (s.spot.on && s.spot.r > Math.max(...L)) errs.push('The spot is bigger than the whole object! Make it smaller.');
   return errs;
 }
 
@@ -875,13 +897,13 @@ function renderForm() {
     const b = s.bc[key];
     h += `<div class="edge"><span class="flabel">${label}</span><div><div class="row">
       <select data-path="bc.${key}.type" aria-label="${label} type">
-        <option value="fixed" ${b.type === 'fixed' ? 'selected' : ''}>Held at a temperature</option>
-        <option value="insulated" ${b.type === 'insulated' ? 'selected' : ''}>Insulated (blanket)</option></select>
+        <option value="fixed" ${b.type === 'fixed' ? 'selected' : ''}>Kept at</option>
+        <option value="insulated" ${b.type === 'insulated' ? 'selected' : ''}>Wrapped up</option></select>
       ${b.type === 'fixed' ? `<input type="text" inputmode="decimal" style="width:84px" aria-label="${label} temperature" data-path="bc.${key}.T" data-q="temp" value="${fieldErrors['bc.' + key + '.T'] ? '' : inputStr(conv.toDisp('temp', b.T))}"><span class="ulabel" data-u="temp">${conv.label('temp')}</span>` : ''}
       </div><span class="ferr" data-err="bc.${key}.T"></span></div></div>`;
   }
-  h += `<p class="hint" style="margin:2px 0 0">${infoBtn('fixed')} Held = touching ice, a flame, water… &nbsp; ${infoBtn('insulated')} Insulated = no heat in or out.</p></fieldset>`;
-  h += `<fieldset class="sub"><legend>Hot (or cold) spot ${infoBtn('spot')}</legend>
+  h += `<p class="hint" style="margin:2px 0 0"><b>Kept at</b>: stays that temperature. ${infoBtn('fixed')}<br><b>Wrapped up</b>: no heat in or out. ${infoBtn('insulated')}</p></fieldset>`;
+  h += `<fieldset class="sub"><legend>Hot or cold spot ${infoBtn('spot')}</legend>
     <label class="check"><input type="checkbox" data-path="spot.on" ${s.spot.on ? 'checked' : ''}> Add a spot</label>`;
   if (s.spot.on) {
     h += `<div class="field" style="margin-top:8px"><label>Spot temperature</label>${numInput('spot.T', 'temp', s.spot.T)}</div>`;
@@ -891,10 +913,10 @@ function renderForm() {
       h += `<div class="field"><label>${axLabel[a]}: <span data-poslbl="${a}">${fL(s.spot.pos[a] * s.L[a])}</span></label>
         <input type="range" min="0" max="100" step="1" data-path="spot.pos.${a}" value="${Math.round(s.spot.pos[a] * 100)}" aria-label="${axLabel[a]}"></div>`;
     }
-    h += `<label class="check"><input type="checkbox" data-path="spot.held" ${s.spot.held ? 'checked' : ''}> Keep it at this temperature the whole time (like a burner)</label>`;
+    h += `<label class="check"><input type="checkbox" data-path="spot.held" ${s.spot.held ? 'checked' : ''}> Keep it there (like a burner)</label>`;
   }
   h += `</fieldset>`;
-  h += `<div class="field"><label>How long to simulate ${infoBtn('simtime')}</label>${numInput('time', 'time', s.time)}</div>`;
+  h += `<div class="field"><label>How long to run ${infoBtn('simtime')}</label>${numInput('time', 'time', s.time)}</div>`;
   h += `<div class="field"><label>Detail ${infoBtn('detailLvl')}</label><select data-path="detail">
       ${['low', 'medium', 'high'].map(v => `<option value="${v}" ${s.detail === v ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)} (${DETAIL[d][v]}${d > 1 ? ' points per side' : ' points'})</option>`).join('')}</select></div>`;
   $('#customForm').innerHTML = h;
@@ -905,7 +927,7 @@ function showFieldError(path) {
   if (el) el.textContent = fieldErrors[path] || '';
   if (inp) inp.classList.toggle('bad', !!fieldErrors[path]);
 }
-function markDirty() { $('#runBtn').classList.add('pulse'); $('#runBtn').textContent = '▶ Run with new settings'; }
+function markDirty() { $('#runBtn').classList.add('pulse'); $('#runBtn').textContent = '▶ Run with changes'; }
 function onFormInput(e) {
   const el = e.target, path = el.dataset.path; if (!path) return;
   const s = st();
@@ -925,13 +947,13 @@ function onFormInput(e) {
 function renderErrors() {
   const s = st();
   const msgs = Object.values(fieldErrors).concat(crossChecks(s));
-  $('#errors').innerHTML = msgs.length ? `<div class="msg err"><b>Almost! Fix ${msgs.length === 1 ? 'this' : 'these'} first:</b><ul>${[...new Set(msgs)].map(m => `<li>${esc(m)}</li>`).join('')}</ul></div>` : '';
+  $('#errors').innerHTML = msgs.length ? `<div class="msg err"><b>Fix ${msgs.length === 1 ? 'this' : 'these'} first:</b><ul>${[...new Set(msgs)].map(m => `<li>${esc(m)}</li>`).join('')}</ul></div>` : '';
   $('#runBtn').disabled = msgs.length > 0;
   return msgs.length === 0;
 }
 function refreshUnitsEverywhere() {
   for (const k of Object.keys(fieldErrors)) delete fieldErrors[k];
-  renderForm(); renderMaterial(); renderErrors();
+  renderForm(); renderMaterial(); renderErrors(); evalErrors = {}; renderEval(); if (R && R.evalPoint) showEvalResult();
   $$('[data-u]').forEach(e => e.textContent = conv.label(e.dataset.u));
   if (R) { buildSummary(); renderExplain(); }
   dirty = true; layoutAll();
@@ -947,12 +969,12 @@ const play = { t: 0, playing: false, speedIdx: 2, last: 0 };
 const SPEEDS = [0.25, 0.5, 1, 2, 4];
 const BASE_SECONDS = 12; // whole run plays in 12 s at 1×
 
-async function startRun() {
+async function startRun(opts = {}) {
   if (!renderErrors()) return;
   const s = st();
   if (runToken) runToken.cancelled = true;
   const token = runToken = { cancelled: false };
-  $('#runBtn').classList.remove('pulse'); $('#runBtn').textContent = '▶ Run simulation';
+  $('#runBtn').classList.remove('pulse'); $('#runBtn').textContent = '▶ Run';
   const cfgs = [cfgFromState(s, 1)]; if (s.compare) cfgs.push(cfgFromState(s, 2));
   const plans = cfgs.map(planGrid);
   const sims = cfgs.map((c, i) => createSim(c, plans[i]));
@@ -972,10 +994,13 @@ async function startRun() {
   if (!(hi - lo > 1e-6)) { lo -= 1; hi += 1; }
   R = { dim: s.dim, sims, lo, hi, T: sims[0].T, computeMs: ms, state: deepCopy(s), probe: null, probeAuto: true };
   chooseDefaultProbe();
+  if (opts.probe) { R.probe = opts.probe; R.probeCenter = false; R.probeAuto = false; }
+  R.evalPoint = opts.evalPoint || null;
   buildViews();
   renderNotices();
   play.t = 0; play.playing = true; updatePlayBtn(); updateCutLabel();
   buildSummary(); renderExplain();
+  if (R.evalPoint) showEvalResult();
   dirty = true;
 }
 function chooseDefaultProbe() {
@@ -987,6 +1012,13 @@ function chooseDefaultProbe() {
     if (!sim.fixed[idx]) { R.probe = p; R.probeCenter = c.every(v => v === 0.5); return; }
   }
   R.probe = [0.5, 0.5, 0.5]; R.probeCenter = true;
+}
+function probeValue(sim, field) { return R && R.evalPoint ? interpAt(sim, field, R.evalPoint) : field[probeIdx(sim, R.probe)]; }
+function probeAtTime(sim, t) {
+  if (!(R && R.evalPoint)) return sampleAt(sim, t, probeIdx(sim, R.probe));
+  const f = clamp(t / sim.frameDt, 0, sim.F - 1), i = Math.min(sim.F - 2, Math.floor(f)), w = f - i;
+  const a = interpAt(sim, sim.frames[i], R.evalPoint), b = interpAt(sim, sim.frames[i + 1], R.evalPoint);
+  return a + (b - a) * w;
 }
 function probeIdx(sim, p) {
   const ijk = [0, 1, 2].map(a => Math.round(clamp(p[a], 0, 1) * (sim.n[a] - 1)));
@@ -1007,8 +1039,8 @@ function renderNotices() {
   R.sims.forEach(sim => {
     const p = sim.plan, name = sim.cfg.material.name;
     const pre = R.sims.length > 1 ? `${name}: ` : '';
-    if (p.coarsened) msgs.push(`${pre}That would take forever to compute, so I used fewer points (${p.Nmax} instead of ${p.requested} across). The picture is a little blockier, but the physics is the same.`);
-    if (p.shortened) msgs.push(`${pre}This shape needs a LOT of tiny steps, so I only simulated the first ${fTime(p.T)} instead of ${fTime(sim.cfg.time)}.`);
+    if (p.coarsened) msgs.push(`${pre}That would take forever, so I used fewer pieces (${p.Nmax} across instead of ${p.requested}). It looks a bit blockier, but the physics is the same.`);
+    if (p.shortened) msgs.push(`${pre}This shape needs a LOT of tiny steps, so I only ran the first ${fTime(p.T)}.`);
   });
   // Data-driven: when did every point get within 2 % of its final value (only if it truly settled)?
   const settle = R.sims.map(sim => {
@@ -1019,7 +1051,7 @@ function renderNotices() {
     return Infinity;
   });
   const tSettle = Math.max(...settle);
-  if (Number.isFinite(tSettle) && tSettle < 0.3 * R.T) msgs.push(`Things pretty much stop changing after about ${fTime(tSettle)}, so most of this animation stays still. Try a shorter time, like ${fTime(Number((tSettle * 1.3).toPrecision(2)))}, to see more of the action.`);
+  if (Number.isFinite(tSettle) && tSettle < 0.3 * R.T) msgs.push(`It stops changing after about ${fTime(tSettle)}, so most of the animation sits still. Try about ${fTime(Number((tSettle * 1.3).toPrecision(2)))} instead.`);
   $('#notices').innerHTML = msgs.map(m => `<div class="msg warn">ℹ️ ${esc(m)}</div>`).join('');
 }
 
@@ -1056,9 +1088,9 @@ function buildViews() {
   $('#profilePanel').hidden = R.dim !== 1;
   $('#particlesToggle').hidden = R.dim === 3;
   $('#cutTools').hidden = R.dim !== 3;
-  $('#viewHint').textContent = R.dim === 1 ? 'Hover over the rod to read the temperature anywhere. Click to move the probe ⊕.'
-    : R.dim === 2 ? 'Hover over the plate to read the temperature at any point. Click to move the probe ⊕.'
-    : 'Drag to spin the block. Use “Cut open” to slice it and peek inside. Click a face to move the probe ⊕.';
+  $('#viewHint').textContent = R.dim === 1 ? 'Hover to read a temperature. Click to move the probe ⊕.'
+    : R.dim === 2 ? 'Hover to read a temperature. Click to move the probe ⊕.'
+    : 'Drag to spin. Use “Cut open” to peek inside. Click a face to move the probe ⊕.';
   const s = R.state, tpl = TEMPLATES[R.dim].find(t => t.id === s.template);
   $('#vizTitle').textContent = tpl ? `${tpl.icon} ${tpl.name}` : `🛠️ Your own ${OBJ[R.dim]}`;
   $('#vizSub').textContent = tpl ? tpl.desc : 'Custom setup';
@@ -1098,7 +1130,7 @@ function roundRectPath(ctx, x, y, w, h, r) {
   ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 function edgeTag(b) {
-  if (!b || b.type !== 'fixed') return '🧣 insulated';
+  if (!b || b.type !== 'fixed') return '🧣 wrapped';
   const icon = b.T >= 45 ? '🔥' : b.T <= 5 ? '🧊' : '🌡️';
   return `${icon} ${fT(b.T)}`;
 }
@@ -1360,7 +1392,7 @@ function setProbeFromView(view, x, y) {
   if (R.dim === 1) { const { x0, x1 } = rodGeom(view); const u = (x - x0) / (x1 - x0); if (u < -0.02 || u > 1.02) return; R.probe = [clamp(u, 0, 1), 0, 0]; }
   else if (R.dim === 2) { const g = plateGeom(view); const u = (x - g.x) / g.w, v = 1 - (y - g.y) / g.h; if (u < 0 || u > 1 || v < 0 || v > 1) return; R.probe = [u, v, 0]; }
   else { const idx = pick3D(view, x, y); if (idx == null) return; const p = nodePos(sim, idx); R.probe = [0, 1, 2].map(a => sim.n[a] > 1 ? p[a] / sim.cfg.L[a] : 0); }
-  R.probeCenter = false; R.probeAuto = false;
+  R.probeCenter = false; R.probeAuto = false; R.evalPoint = null;
   buildSummary(); dirty = true;
 }
 
@@ -1437,7 +1469,7 @@ function drawTimeGraph() {
   const c = $('#timeGraph'); if (!R) return;
   const ctx = c.getContext('2d'), W = c.clientWidth, H = c.clientHeight;
   const Td = conv.toDisp('time', R.T);
-  const series = R.sims.map(sim => { const idx = probeIdx(sim, R.probe); return sim.frames.map(fr => conv.toDisp('temp', fr[idx])); });
+  const series = R.sims.map(sim => sim.frames.map(fr => conv.toDisp('temp', probeValue(sim, fr))));
   let lo = Math.min(...series.flat()), hi = Math.max(...series.flat()); if (hi - lo < 1e-6) { lo -= 1; hi += 1; } const pad = (hi - lo) * 0.08;
   const g = graphFrame(ctx, W, H, [0, Td], [lo - pad, hi + pad], `Time (${UNITS.time[U.time].long})`, `Temperature (${conv.label('temp')})`);
   const tNow = conv.toDisp('time', play.t);
@@ -1447,11 +1479,11 @@ function drawTimeGraph() {
     ctx.strokeStyle = s_.color; ctx.setLineDash(s_.dash);
     for (const pass of [0, 1]) {
       ctx.globalAlpha = pass ? 1 : 0.25; ctx.lineWidth = pass ? 3 : 2; ctx.beginPath(); let started = false;
-      for (let k = 0; k < ser.length; k++) { const t = conv.toDisp('time', k * sim.frameDt); if (pass && t > tNow + 1e-12) { const y = conv.toDisp('temp', sampleAt(sim, play.t, probeIdx(sim, R.probe))); ctx.lineTo(g.X(tNow), g.Y(y)); break; } const x = g.X(t), y = g.Y(ser[k]); started ? ctx.lineTo(x, y) : ctx.moveTo(x, y); started = true; }
+      for (let k = 0; k < ser.length; k++) { const t = conv.toDisp('time', k * sim.frameDt); if (pass && t > tNow + 1e-12) { const y = conv.toDisp('temp', probeAtTime(sim, play.t)); ctx.lineTo(g.X(tNow), g.Y(y)); break; } const x = g.X(t), y = g.Y(ser[k]); started ? ctx.lineTo(x, y) : ctx.moveTo(x, y); started = true; }
       ctx.stroke();
     }
     ctx.setLineDash([]); ctx.globalAlpha = 1;
-    const yv = conv.toDisp('temp', sampleAt(sim, play.t, probeIdx(sim, R.probe)));
+    const yv = conv.toDisp('temp', probeAtTime(sim, play.t));
     ctx.fillStyle = s_.color; ctx.beginPath(); ctx.arc(g.X(tNow), g.Y(yv), 5, 0, 7); ctx.fill();
   });
   ctx.strokeStyle = cssVars.text; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(g.X(tNow), g.T); ctx.lineTo(g.X(tNow), g.T + g.ph); ctx.stroke();
@@ -1460,10 +1492,11 @@ function drawTimeGraph() {
   if (timeHover && timeHover.x >= g.L && timeHover.x <= g.L + g.pw) {
     const tt = (timeHover.x - g.L) / g.pw * R.T;
     ctx.strokeStyle = cssVars.muted; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(timeHover.x, g.T); ctx.lineTo(timeHover.x, g.T + g.ph); ctx.stroke(); ctx.setLineDash([]);
-    tooltip(ctx, timeHover.x, timeHover.y, [`t = ${fTime(tt)}`].concat(R.sims.map(sim => `${R.sims.length > 1 ? sim.cfg.material.name + ': ' : ''}${fT(sampleAt(sim, tt, probeIdx(sim, R.probe)))}`)), W, H);
+    tooltip(ctx, timeHover.x, timeHover.y, [`t = ${fTime(tt)}`].concat(R.sims.map(sim => `${R.sims.length > 1 ? sim.cfg.material.name + ': ' : ''}${fT(probeAtTime(sim, tt))}`)), W, H);
   }
   const sim0 = R.sims[0], idx = probeIdx(sim0, R.probe);
-  $('#timeGraphTitle').textContent = `Temperature over time at the probe ⊕ (${R.probeCenter ? 'the middle, ' : ''}${posStr(sim0, idx)})`;
+  const pd = R.evalPoint ? (R.dim === 1 ? `${fL(R.evalPoint[0])} from the left end` : `(${R.evalPoint.slice(0, R.dim).map(v => nice(conv.toDisp('len', v))).join(', ')}) ${conv.label('len')}`) : posStr(sim0, idx);
+  $('#timeGraphTitle').textContent = `Temperature over time at the probe ⊕ (${R.probeCenter ? 'the middle, ' : ''}${pd})`;
 }
 
 /* ---------- readouts & frame loop ---------- */
@@ -1472,7 +1505,7 @@ function updateReadouts() {
     const f = v.field; let mi = 0, ma = 0;
     for (let i = 1; i < f.length; i++) { if (f[i] < f[mi]) mi = i; if (f[i] > f[ma]) ma = i; }
     const pidx = probeIdx(v.sim, R.probe);
-    v.readout.innerHTML = `<span>🔥 Hottest: <b>${fT(f[ma])}</b> at ${posStr(v.sim, ma)}</span><span>❄️ Coldest: <b>${fT(f[mi])}</b> at ${posStr(v.sim, mi)}</span><span>⊕ Probe: <b>${fT(f[pidx])}</b></span>`;
+    v.readout.innerHTML = `<span>🔥 Hottest: <b>${fT(f[ma])}</b> at ${posStr(v.sim, ma)}</span><span>❄️ Coldest: <b>${fT(f[mi])}</b> at ${posStr(v.sim, mi)}</span><span>⊕ Probe: <b>${fT(probeValue(v.sim, f))}</b></span>`;
   }
   const total = R.T, dec = conv.toDisp('time', total) >= 100 ? 0 : conv.toDisp('time', total) >= 10 ? 1 : 2;
   const tv = conv.toDisp('time', play.t);
@@ -1516,7 +1549,7 @@ function updatePlayBtn() { const b = $('#playBtn'); b.textContent = play.playing
 function crossTime(sim, idx, target, rising) {
   const fr = sim.frames;
   for (let k = 1; k < fr.length; k++) {
-    const a = fr[k - 1][idx], b = fr[k][idx];
+    const a = probeValue(sim, fr[k - 1]), b = probeValue(sim, fr[k]);
     if (rising ? (a < target && b >= target) : (a > target && b <= target)) return (k - 1 + (target - a) / (b - a)) * sim.frameDt;
   }
   return null;
@@ -1526,34 +1559,34 @@ function buildSummary() {
   const out = [], A = R.sims[0], d = R.dim, obj = OBJ[d], s = R.state;
   const mA = A.cfg.material;
   const where = R.probeCenter ? `the middle of the ${obj}` : `the probe point ⊕`;
-  const idx = probeIdx(A, R.probe), ser = A.frames.map(f => f[idx]);
+  const idx = probeIdx(A, R.probe), ser = A.frames.map(f => probeValue(A, f));
   const start = ser[0], end = ser[ser.length - 1];
   if (R.hi - R.lo <= 2.0001 && Math.abs(A.hi - A.lo) < 1e-6) {
-    $('#summary').innerHTML = '<p>Everything was already the same temperature as its edges, so <b>no heat flowed at all</b>. Heat only moves when there’s a temperature difference. Try making one edge hotter!</p>';
+    $('#summary').innerHTML = '<p>Everything was the same temperature, so <b>no heat moved at all</b>. Heat only moves when something is hotter than something else. Try making one edge hotter!</p>';
     return;
   }
-  const spotTxt = s.spot.on ? ` with a ${s.spot.T > s.T0 ? 'hot' : 'cold'} spot at ${fT(s.spot.T)}${s.spot.held ? ' (kept there the whole time)' : ''}` : '';
-  out.push(`<p>The ${esc(mA.name.toLowerCase())} ${obj} started at <b>${fT(s.T0)}</b>${spotTxt}. We watched it for <b>${fTime(R.T)}</b>.</p>`);
+  const spotTxt = s.spot.on ? ` with a ${s.spot.T > s.T0 ? 'hot' : 'cold'} spot at ${fT(s.spot.T)}${s.spot.held ? ' (kept there)' : ''}` : '';
+  out.push(`<p>The ${esc(mA.name.toLowerCase())} ${obj} started at <b>${fT(s.T0)}</b>${spotTxt}. We watched for <b>${fTime(R.T)}</b>.</p>`);
   const li = [];
   const change = end - start;
   if (Math.abs(change) < 0.5) {
-    li.push(`At ${where}, the temperature barely changed (${fT(start)} → ${fT(end)}). Heat didn’t have time to get there! In ${fTime(R.T)}, heat in ${esc(mA.name.toLowerCase())} only spreads about ${fL(Math.sqrt(mA.alpha * R.T))}. Try a longer time, or a faster material like copper.`);
+    li.push(`At ${where}, almost nothing changed (${fT(start)} → ${fT(end)}). Heat didn’t have time to get there! In ${fTime(R.T)} it only spreads about ${fL(Math.sqrt(mA.alpha * R.T))} in ${esc(mA.name.toLowerCase())}. Try a longer time or a faster material.`);
   } else {
-    li.push(`${where[0].toUpperCase() + where.slice(1)} went from <b>${fT(start)}</b> to <b>${fT(end)}</b> (it ${change > 0 ? 'warmed up' : 'cooled down'} by ${nice(Math.abs(conv.toDisp('temp', end) - conv.toDisp('temp', start)))} ${conv.label('temp') === 'K' ? 'K' : 'degrees'}).`);
+    li.push(`${where[0].toUpperCase() + where.slice(1)} went from <b>${fT(start)}</b> to <b>${fT(end)}</b> (${change > 0 ? 'up' : 'down'} ${nice(Math.abs(conv.toDisp('temp', end) - conv.toDisp('temp', start)))} ${conv.label('temp') === 'K' ? 'K' : 'degrees'}).`);
     const target = start + change / 2, tHalf = crossTime(A, idx, target, change > 0);
     if (tHalf != null) {
-      li.push(`It got halfway there (to ${fT(target)}) after <b>${fTime(tHalf)}</b>.`);
+      li.push(`It was halfway there (${fT(target)}) after <b>${fTime(tHalf)}</b>.`);
       if (R.sims.length > 1) {
         const B = R.sims[1], mB = B.cfg.material, ratio = mA.alpha / mB.alpha, tB = tHalf * ratio;
         const shown = crossTime(B, probeIdx(B, R.probe), target, change > 0);
-        if (ratio > 1.05) li.push(`🏁 <b>${esc(mA.name)} wins!</b> ${esc(mB.name)} needs about <b>${nice(ratio, 2)} times longer</b> to get to the same temperature (about ${fTimeAuto(tB)}). ${shown != null ? 'You can see that on the graph.' : 'That’s longer than this simulation ran!'}`);
-        else if (ratio < 0.95) li.push(`🏁 <b>${esc(mB.name)} wins!</b> It gets there about <b>${nice(1 / ratio, 2)} times faster</b> (after about ${fTimeAuto(tB)}).`);
-        else li.push(`🏁 It’s a tie: both materials spread heat at about the same speed.`);
+        if (ratio > 1.05) li.push(`🏁 <b>${esc(mA.name)} wins!</b> ${esc(mB.name)} takes about <b>${nice(ratio, 2)} times longer</b> to get there (about ${fTimeAuto(tB)}). ${shown != null ? 'See it on the graph.' : 'That’s longer than this run!'}`);
+        else if (ratio < 0.95) li.push(`🏁 <b>${esc(mB.name)} wins!</b> It gets there about <b>${nice(1 / ratio, 2)} times faster</b> (about ${fTimeAuto(tB)}).`);
+        else li.push(`🏁 It’s a tie!`);
       } else {
         const other = mA.alpha >= 5e-5 ? matById('steel') : matById('copper');
         if (other.id !== mA.id) {
           const ratio = mA.alpha / other.alpha;
-          li.push(ratio > 1 ? `A ${other.name.toLowerCase()} ${obj} would take about <b>${nice(ratio, 2)} times longer</b> (about ${fTimeAuto(tHalf * ratio)}). Tick “Compare” to see the race!` : `A copper ${obj} would get there about <b>${nice(1 / ratio, 2)} times faster</b> (in about ${fTimeAuto(tHalf * ratio)}). Tick “Compare” to see the race!`);
+          li.push(ratio > 1 ? `A ${other.name.toLowerCase()} ${obj} would take about <b>${nice(ratio, 2)} times longer</b> (about ${fTimeAuto(tHalf * ratio)}). Tick “Race two materials” to see it!` : `A copper ${obj} would get there about <b>${nice(1 / ratio, 2)} times faster</b> (about ${fTimeAuto(tHalf * ratio)}). Tick “Race two materials” to see it!`);
         }
       }
     }
@@ -1565,16 +1598,16 @@ function buildSummary() {
   const fixedKeys = keys.filter(k => s.bc[k].type === 'fixed');
   if (allIns) {
     const mean = weightedMean(A, A.frames[0]);
-    li.push(`Every edge was insulated, so <b>no heat could escape</b>. The total amount of heat stayed exactly the same; it just ${steady ? 'evened out' : 'kept evening out'} toward <b>${fT(mean)}</b> everywhere (the average of where it started).`);
+    li.push(`Every edge was wrapped, so <b>no heat could escape</b>. It just ${steady ? 'evened out' : 'kept evening out'} toward <b>${fT(mean)}</b>, the average of where it started.`);
   } else if (steady) {
-    li.push(`By the end, temperatures had <b>stopped changing</b>. That’s called <i>steady state</i>: every spot gets exactly as much heat as it passes on.`);
-    if (d === 1 && fixedKeys.length === 2 && !s.spot.on && s.bc.xmin.T !== s.bc.xmax.T) li.push(`Look at the graph: the line is <b>perfectly straight</b>! With both ends held steady, heat flows through at a constant rate, and that makes a straight line.`);
-  } else li.push(`It was still changing when we stopped. Run it longer to see where it ends up.`);
+    li.push(`By the end, it had <b>stopped changing</b>. That’s called <i>steady state</i>: each spot gets as much heat as it passes on.`);
+    if (d === 1 && fixedKeys.length === 2 && !s.spot.on && s.bc.xmin.T !== s.bc.xmax.T) li.push(`Look at the graph: it’s a <b>straight line</b>! Heat flows through at a steady rate, and a steady rate makes a straight line.`);
+  } else li.push(`It was still changing at the end. Run it longer to see where it ends up.`);
   let mi = 0, ma = 0; for (let i = 1; i < last.length; i++) { if (last[i] < last[mi]) mi = i; if (last[i] > last[ma]) ma = i; }
-  li.push(`At the end, the hottest point was <b>${fT(last[ma])}</b> and the coldest was <b>${fT(last[mi])}</b>.`);
+  li.push(`At the end: hottest <b>${fT(last[ma])}</b>, coldest <b>${fT(last[mi])}</b>.`);
   const Lmax = Math.max(...s.L.slice(0, d));
   out.push(`<ul>${li.map(x => `<li>${x}</li>`).join('')}</ul>`);
-  out.push(`<p class="detail-only more">Rule of thumb: heat needs roughly L²/α to cross something of size L. For this ${obj} (L = ${fL(Lmax)}, α = ${fA(mA.alpha)}), that’s about <b>${fTimeAuto(Lmax * Lmax / mA.alpha)}</b>. The solver took ${A.plan.framesToCompute * A.plan.spf} tiny steps of Δt = ${fTime(A.plan.dt)}${A.steadyAt != null ? `, then held the final picture once nothing could change any more (after ${fTime(A.steadyAt)})` : ''}.</p>`);
+  out.push(`<p class="detail-only more">Heat takes about L²/α to cross something of size L. Here (L = ${fL(Lmax)}, α = ${fA(mA.alpha)}) that’s about <b>${fTimeAuto(Lmax * Lmax / mA.alpha)}</b>. The solver took ${A.plan.framesToCompute * A.plan.spf} steps of Δt = ${fTime(A.plan.dt)}${A.steadyAt != null ? `, then stopped once nothing could change (after ${fTime(A.steadyAt)})` : ''}.</p>`);
   $('#summary').innerHTML = out.join('');
 }
 
@@ -1589,13 +1622,13 @@ function renderExplain() {
   let h = '';
   h += sec('temp', '🌡️ What is temperature?', tblock('temperature'));
   h += sec('heat', '🔁 How does heat move?', tblock('heat'));
-  h += sec('eq', '🧮 The heat equation, in plain words', tblock('equation') + `<p>Here’s what each letter means:</p><ul>
-     <li><b>T</b>: temperature ${infoBtn('temperature')}</li><li><b>t</b>: time ${infoBtn('time')}</li><li><b>x, y, z</b>: position ${infoBtn('position')}</li><li><b>α</b>: thermal diffusivity ${infoBtn('alpha')}</li></ul>
-     <div class="detail-only more"><p>The computer can’t do calculus directly, so it uses <b>finite differences</b>: it replaces the smooth curve with temperatures at grid points Δx apart, and steps forward by Δt. In 1D:</p>
+  h += sec('eq', '🧮 The heat equation, in plain words', tblock('equation') + `<p>What the letters mean:</p><ul>
+     <li><b>T</b>: temperature ${infoBtn('temperature')}</li><li><b>t</b>: time ${infoBtn('time')}</li><li><b>x, y, z</b>: position ${infoBtn('position')}</li><li><b>α</b>: how fast heat spreads ${infoBtn('alpha')}</li></ul>
+     <div class="detail-only more"><p>The computer can’t do calculus, so it uses <b>finite differences</b>: temperatures at points Δx apart, stepped forward by Δt. In 1D:</p>
      <div class="eq small">T<sub>i</sub><sup>new</sup> = T<sub>i</sub> + (α·Δt / Δx²) · (T<sub>i−1</sub> − 2T<sub>i</sub> + T<sub>i+1</sub>)</div>
-     <p>Look closely: (T<sub>i−1</sub> + T<sub>i+1</sub>)/2 − T<sub>i</sub> is exactly “average of my neighbors minus me”. That’s the plain-words rule, written as arithmetic! In 2D and 3D the same term is added for each direction. This method is called <b>FTCS</b>: Forward in Time, Centered in Space.</p></div>`);
+     <p>The part in brackets is just “my neighbors minus me”, the plain-words rule as arithmetic! 2D and 3D add the same thing for each direction. This method is called <b>FTCS</b> (Forward Time, Centered Space).</p></div>`);
   const sorted = MATERIALS.slice().sort((a, b) => b.alpha - a.alpha), amax = Math.log10(sorted[0].alpha), amin = Math.log10(sorted[sorted.length - 1].alpha) - 0.3;
-  h += sec('alpha', '⚡ Why do some materials spread heat faster?', tblock('alpha') + `<p>Here’s every material, fastest at the top. (The bars use a <i>log scale</i>, because the numbers are so different: copper is about 1,350 times faster than wood!)</p>
+  h += sec('alpha', '⚡ Why do some materials spread heat faster?', tblock('alpha') + `<p>Fastest at the top. (The bars are squished on a <i>log scale</i>: copper is about 1,350× faster than wood!)</p>
      <div class="abars">${sorted.map(m => `<div class="abar"><span>${m.name}</span><i style="width:${((Math.log10(m.alpha) - amin) / (amax - amin) * 100).toFixed(1)}%; background:${m.color}"></i><span>${nice(conv.toDisp('alpha', m.alpha))} ${conv.label('alpha')}</span></div>`).join('')}</div>`);
   h += sec('edges', '🧱 What happens at the edges?', tblock('boundary') + `<p><b>${TEXT.fixed.title}:</b> ${TEXT.fixed.simple.replace(/<\/?p>/g, '')}</p><p><b>${TEXT.insulated.title}:</b> ${TEXT.insulated.simple.replace(/<\/?p>/g, '')}</p>`);
   let bts = '';
@@ -1611,13 +1644,13 @@ function renderExplain() {
   }
   h += sec('comp', '💻 How does the computer do it?', tblock('grid') + tblock('stability') + (bts ? `<div class="detail-only more"><p><b>Behind the scenes for this run:</b></p>${bts}</div>` : ''));
   h += sec('steady', '⚖️ Steady state', tblock('steady'));
-  h += sec('limits', '⚠️ What this simulator leaves out', `<p>Every model simplifies the real world. Here’s what Heat Explorer leaves out:</p><ul>
-     <li><b>No melting or boiling.</b> The ice cube never turns to water. (Melting soaks up lots of extra heat.)</li>
-     <li><b>Only conduction.</b> No moving air or water (convection) and no glowing heat (radiation).</li>
-     <li><b>Perfect edges.</b> Real edges are never perfectly held or perfectly insulated.</li>
-     <li><b>One material.</b> A coin or burner is treated as a patch of the same material, just at a different temperature.</li>
-     <li><b>α never changes.</b> In real life it changes a little with temperature.</li></ul>
-     <div class="detail-only more"><p><b>Check the solver yourself:</b> these tests compare the computer’s answers with things we know must be true.</p>
+  h += sec('limits', '⚠️ What this simulator leaves out', `<p>Every model simplifies. Here’s what we leave out:</p><ul>
+     <li><b>No melting.</b> The ice cube never turns to water.</li>
+     <li><b>No moving air or water,</b> and no glowing heat.</li>
+     <li><b>Perfect edges.</b> Real ones are never perfectly kept or perfectly wrapped.</li>
+     <li><b>One material.</b> A coin or burner is just a hotter patch of the same stuff.</li>
+     <li><b>α never changes.</b> In real life it shifts a little.</li></ul>
+     <div class="detail-only more"><p><b>Check the solver:</b> these tests compare its answers to things we know must be true.</p>
      <button type="button" class="btn" id="selfTestBtn">Run self-checks</button><ul class="tests" id="testOut"></ul></div>`);
   $('#explain').innerHTML = h;
   hydrateInfo();
@@ -1636,6 +1669,142 @@ function showPop(btn) {
   pop._btn = btn;
 }
 function hidePop() { const p = $('#pop'); if (!p.hidden) { p.hidden = true; if (p._btn) p._btn.focus({ preventScroll: true }); } }
+
+/* =====================================================================================
+   14b. "SOLVE A POINT" EVALUATORS — one per mode: type numbers, get T at a point & time
+   ===================================================================================== */
+const EV = { 1: null, 2: null, 3: null };
+let evalErrors = {};
+const EV_AX = { 1: ['from the left end'], 2: ['from the left', 'from the bottom'], 3: ['from the left', 'from the front', 'from the bottom'] };
+function setTab(t) {
+  $$('.side-tabs [data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+  $$('.side-body [data-pane]').forEach(p => p.hidden = p.dataset.pane !== t);
+  $('#runFoot').hidden = t === 'eval';
+  store('tab', t);
+}
+function evalFromState(d) {
+  const s = S.states[d];
+  const edges = {}; for (const [k] of SIDES[d]) edges[k] = s.bc[k].type === 'fixed' ? s.bc[k].T : null;
+  return { material: s.material === 'custom' ? 'copper' : s.material, L: s.L.slice(), T0: s.T0, edges, time: s.time, point: [0, 1, 2].map(a => a < d ? s.L[a] / 2 : 0) };
+}
+function evIn(path, kind, val, label, placeholder = '') {
+  const bad = evalErrors[path];
+  const v = val == null ? '' : inputStr(conv.toDisp(kind, val));
+  return `<div class="field"><label>${label}</label><div class="row"><input type="text" inputmode="decimal" data-epath="${path}" data-q="${kind}" value="${bad ? esc(bad.raw) : v}" placeholder="${placeholder}" class="${bad ? 'bad' : ''}" style="width:100%; max-width:120px"><span class="ulabel">${conv.label(kind)}</span></div>${bad ? `<span class="ferr">${esc(bad.msg)}</span>` : ''}</div>`;
+}
+function renderEval() {
+  const d = S.mode; if (!EV[d]) EV[d] = evalFromState(d);
+  const e = EV[d];
+  const sizeNames = { 1: ['Length'], 2: ['Width', 'Height'], 3: ['Width', 'Depth', 'Height'] }[d];
+  const mats = MATERIALS.map(m => `<option value="${m.id}" ${m.id === e.material ? 'selected' : ''}>${m.name}</option>`).join('');
+  let h = `<h2>🎯 ${['', 'Rod', 'Plate', 'Block'][d]} solver ${infoBtn('evaluator')}</h2>
+    <p class="hint" style="margin:0 0 10px">Type in numbers, pick a spot and a time, and press Solve.</p>
+    <div class="field"><label for="evMat">Material</label><select id="evMat">${mats}</select></div>
+    <div class="grid2">${sizeNames.map((n, a) => evIn('L.' + a, 'len', e.L[a], n)).join('')}</div>
+    ${evIn('T0', 'temp', e.T0, 'Starting temperature')}
+    <fieldset class="sub"><legend>Edge temperatures ${infoBtn('boundary')}</legend>
+      <p class="hint" style="margin:0 0 6px">Leave a box empty if that edge is wrapped up (no heat in or out).</p>
+      <div class="grid2">${SIDES[d].map(([k, lab]) => evIn('edges.' + k, 'temp', e.edges[k], lab.replace(/ (end|edge|face)$/, ''), 'wrapped')).join('')}</div>
+    </fieldset>
+    <fieldset class="sub"><legend>Where and when?</legend>
+      <div class="grid2">${EV_AX[d].map((n, a) => evIn('point.' + a, 'len', e.point[a], `${AXN[a]} (${n})`)).join('')}</div>
+      ${evIn('time', 'time', e.time, 'After this much time')}
+    </fieldset>
+    <button type="button" class="btn primary big" id="evSolve">🎯 Solve</button>
+    <p class="hint" style="text-align:center"><a href="#" id="evCopy" onclick="return false">Copy numbers from the current simulation</a></p>
+    <div id="evalOut"></div>`;
+  $('#evalBox').innerHTML = h;
+}
+function onEvalInput(e) {
+  const el = e.target, path = el.dataset.epath; if (!path) return;
+  const d = S.mode, ev = EV[d], kind = el.dataset.q;
+  const raw = el.value, v = parseNum(raw);
+  if (path.startsWith('edges.') && raw.trim() === '') { setPath(ev, path, null); delete evalErrors[path]; }
+  else {
+    const si = Number.isFinite(v) ? conv.fromDisp(kind, v) : NaN;
+    let msg = validateValue(kind, si, path.startsWith('point.') ? 'spot.r' : path);
+    if (path.startsWith('point.') && Number.isFinite(si) && si === 0) msg = null;
+    if (msg) evalErrors[path] = { msg, raw }; else { delete evalErrors[path]; setPath(ev, path, si); }
+  }
+  el.classList.toggle('bad', !!evalErrors[path]);
+  const box = el.closest('.field'); let fe = box.querySelector('.ferr');
+  if (evalErrors[path]) { if (!fe) { fe = document.createElement('span'); fe.className = 'ferr'; box.appendChild(fe); } fe.textContent = evalErrors[path].msg; } else if (fe) fe.remove();
+}
+function solveEval() {
+  const d = S.mode, ev = EV[d], out = $('#evalOut');
+  const errs = Object.values(evalErrors).map(x => x.msg);
+  for (let a = 0; a < d; a++) {
+    if (ev.point[a] < 0 || ev.point[a] > ev.L[a] + 1e-12) errs.push(`Your spot is off the ${OBJ[d]}: ${AXN[a]} must be between 0 and ${fL(ev.L[a])}.`);
+  }
+  const s = deepCopy(S.states[d]);
+  s.material = ev.material; s.compare = false; s.template = null; s.L = ev.L.slice(); s.T0 = ev.T0; s.time = ev.time;
+  s.spot.on = false;
+  for (const [k] of SIDES[d]) s.bc[k] = ev.edges[k] == null ? { type: 'insulated', T: ev.T0 } : { type: 'fixed', T: ev.edges[k] };
+  errs.push(...crossChecks(s));
+  if (errs.length) { out.innerHTML = `<div class="msg err" style="margin-top:12px"><b>Fix ${errs.length === 1 ? 'this' : 'these'} first:</b><ul>${[...new Set(errs)].map(m => `<li>${esc(m)}</li>`).join('')}</ul></div>`; return; }
+  S.states[d] = s;
+  for (const k of Object.keys(fieldErrors)) delete fieldErrors[k];
+  renderTemplates(); renderMaterial(); renderForm(); renderErrors();
+  out.innerHTML = '<p class="hint">Solving…</p>';
+  const probe = [0, 1, 2].map(a => a < d ? ev.point[a] / ev.L[a] : 0);
+  startRun({ probe, evalPoint: ev.point.slice() });
+}
+/** Temperature at any point (not just grid points), blending the nearest grid points. */
+function interpAt(sim, field, p) {
+  const n = sim.n, base = [0, 0, 0], w = [0, 0, 0];
+  for (let a = 0; a < 3; a++) {
+    if (n[a] === 1) continue;
+    const x = clamp(p[a] / sim.dx[a], 0, n[a] - 1); base[a] = Math.min(n[a] - 2, Math.floor(x)); w[a] = x - base[a];
+  }
+  let sum = 0;
+  for (let c = 0; c < 8; c++) {
+    let wt = 1; const ijk = [0, 0, 0];
+    for (let a = 0; a < 3; a++) { const bit = (c >> a) & 1; if (n[a] === 1) { if (bit) { wt = 0; break; } continue; } ijk[a] = base[a] + bit; wt *= bit ? w[a] : 1 - w[a]; }
+    if (wt) sum += wt * field[nodeIndex(sim, ijk[0], ijk[1], ijk[2])];
+  }
+  return sum;
+}
+function showEvalResult() {
+  if (!R || !R.evalPoint || R.dim !== S.mode) return;
+  const out = $('#evalOut'); if (!out) return;
+  const sim = R.sims[0], d = R.dim, p = R.evalPoint, F = sim.F, fin = sim.frames[F - 1];
+  const Tend = interpAt(sim, fin, p), Tstart = interpAt(sim, sim.frames[0], p);
+  const tScale = U.temp === 'F' ? 9 / 5 : 1, tLab = conv.label('temp') === 'K' ? 'K' : conv.label('temp');
+  const where = d === 1 ? `x = ${fL(p[0])}` : `(${p.slice(0, d).map(v => nice(conv.toDisp('len', v))).join(', ')}) ${conv.label('len')}`;
+  const li = [];
+  const dT = Tend - Tstart;
+  li.push(Math.abs(dT) < 0.05 ? `It started at ${fT(Tstart)} and <b>barely changed</b>. Heat only spreads about ${fL(Math.sqrt(sim.alpha * R.T))} in this time.` : `It started at ${fT(Tstart)}, so it went <b>${dT > 0 ? 'up' : 'down'} ${nice(Math.abs(dT) * tScale)} ${tLab}</b>.`);
+  // how fast it is still changing
+  const rate = (Tend - interpAt(sim, sim.frames[F - 2], p)) / sim.frameDt; // °C per second
+  const rangeNow = sim.hi - sim.lo || 1;
+  if (Math.abs(rate) * R.T < 0.005 * rangeNow) li.push('It has <b>stopped changing</b> (steady state).');
+  else li.push(`Right now it’s ${rate > 0 ? 'warming' : 'cooling'} by about <b>${nice(Math.abs(rate) * tScale * UNITS.time[U.time].f)} ${tLab} per ${UNITS.time[U.time].one}</b>.`);
+  // halfway time
+  if (Math.abs(dT) >= 0.05) {
+    const target = Tstart + dT / 2; let tHalf = null;
+    for (let k = 1; k < F; k++) { const a = interpAt(sim, sim.frames[k - 1], p), b = interpAt(sim, sim.frames[k], p); if ((dT > 0 ? a < target && b >= target : a > target && b <= target)) { tHalf = (k - 1 + (target - a) / (b - a)) * sim.frameDt; break; } }
+    if (tHalf != null) li.push(`It was halfway there (${fT(target)}) after ${fTime(tHalf)}.`);
+  }
+  // which way heat flows here (heat runs downhill, from hot to cold)
+  const g = [0, 0, 0];
+  for (let a = 0; a < d; a++) {
+    const h = sim.dx[a], pa = p.slice(), pb = p.slice();
+    pa[a] = Math.max(0, p[a] - h); pb[a] = Math.min(sim.cfg.L[a], p[a] + h);
+    if (pb[a] - pa[a] > 0) g[a] = (interpAt(sim, fin, pb) - interpAt(sim, fin, pa)) / (pb[a] - pa[a]);
+  }
+  const gmax = Math.max(...g.map(Math.abs)), Lmax = Math.max(...sim.cfg.L.slice(0, d));
+  if (gmax * Lmax < 0.01 * rangeNow) li.push('It’s about the same temperature all around this spot, so <b>almost no heat is flowing</b> through it.');
+  else {
+    const words = [['right', 'left'], d === 2 ? ['up', 'down'] : ['toward the back', 'toward the front'], ['up', 'down']];
+    const dirs = []; for (let a = 0; a < d; a++) if (Math.abs(g[a]) >= 0.35 * gmax) dirs.push(g[a] < 0 ? words[a][0] : words[a][1]);
+    const steep = Math.hypot(...g) * tScale * UNITS.len[U.len].f;
+    li.push(`Heat is flowing <b>${dirs.join(' and ')}</b> through this spot (from hot toward cold). The temperature changes about ${nice(steep)} ${tLab} per ${conv.label('len')} here.`);
+  }
+  let mi = 0, ma = 0; for (let i = 1; i < fin.length; i++) { if (fin[i] < fin[mi]) mi = i; if (fin[i] > fin[ma]) ma = i; }
+  li.push(`Whole ${OBJ[d]} at that time: hottest ${fT(fin[ma])}, coldest ${fT(fin[mi])}.`);
+  out.innerHTML = `<div class="eval-out" aria-live="polite"><div>At ${where}, after ${fTime(R.T)}:</div><div class="big">${fT(Tend)}</div><ul>${li.map(x => `<li>${x}</li>`).join('')}</ul><p class="hint" style="margin:6px 0 0">The animation shows how it got there. The probe ⊕ marks your spot.</p></div>`;
+  const box = $('.eval-out', out); if (box && box.scrollIntoView) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
 
 /* =====================================================================================
    15. SELF-TESTS (also exposed as HeatExplorer.selfTest())
@@ -1686,7 +1855,7 @@ function setMode(m, run = true) {
   $$('.mode-card').forEach(b => b.setAttribute('aria-selected', String(Number(b.dataset.mode) === m)));
   for (const k of Object.keys(fieldErrors)) delete fieldErrors[k];
   $('#profilePanel').hidden = m !== 1;
-  renderTemplates(); renderMaterial(); renderForm(); renderErrors();
+  renderTemplates(); renderMaterial(); renderForm(); renderErrors(); renderEval();
   store('mode', String(m));
   if (run) startRun();
 }
@@ -1728,7 +1897,11 @@ function init() {
   $('#customAlpha').addEventListener('input', onFormInput);
   $('#customForm').addEventListener('input', onFormInput);
   $('#customForm').addEventListener('change', e => { if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') return; });
-  $('#runBtn').addEventListener('click', startRun);
+  $('#runBtn').addEventListener('click', () => startRun());
+  $$('.side-tabs [data-tab]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  $('#evalBox').addEventListener('input', onEvalInput);
+  $('#evalBox').addEventListener('change', e => { if (e.target.id === 'evMat') { EV[S.mode].material = e.target.value; } });
+  $('#evalBox').addEventListener('click', e => { if (e.target.id === 'evSolve') solveEval(); if (e.target.id === 'evCopy') { EV[S.mode] = null; evalErrors = {}; renderEval(); } });
   // playback
   $('#playBtn').addEventListener('click', () => { if (!R) return; if (!play.playing && play.t >= R.T) play.t = 0; play.playing = !play.playing; updatePlayBtn(); dirty = true; });
   $('#restartBtn').addEventListener('click', () => { if (!R) return; play.t = 0; play.playing = true; updatePlayBtn(); dirty = true; });
@@ -1761,6 +1934,7 @@ function init() {
   if ('ResizeObserver' in window) new ResizeObserver(() => layoutAll()).observe($('.viz'));
   setInterval(() => { const o = $('#fpsOut'); if (o) o.textContent = play.playing || particlesOn ? Math.round(fps()) : 'paused'; }, 1000);
   hydrateInfo(); renderExplain();
+  const tb = store('tab'); setTab(['scen', 'set', 'eval'].includes(tb) ? tb : 'scen');
   const m = Number(store('mode')); setMode([1, 2, 3].includes(m) ? m : 1);
   requestAnimationFrame(frame);
 }
