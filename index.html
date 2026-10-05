@@ -1685,7 +1685,7 @@ function setTab(t) {
 function evalFromState(d) {
   const s = S.states[d];
   const edges = {}; for (const [k] of SIDES[d]) edges[k] = s.bc[k].type === 'fixed' ? s.bc[k].T : null;
-  return { material: s.material === 'custom' ? 'copper' : s.material, L: s.L.slice(), T0: s.T0, edges, time: s.time, point: [0, 1, 2].map(a => a < d ? s.L[a] / 2 : 0) };
+  return { material: s.material, customAlpha: s.customAlpha, L: s.L.slice(), T0: s.T0, edges, time: s.time, point: [0, 1, 2].map(a => a < d ? s.L[a] / 2 : 0) };
 }
 function evIn(path, kind, val, label, placeholder = '') {
   const bad = evalErrors[path];
@@ -1696,10 +1696,13 @@ function renderEval() {
   const d = S.mode; if (!EV[d]) EV[d] = evalFromState(d);
   const e = EV[d];
   const sizeNames = { 1: ['Length'], 2: ['Width', 'Height'], 3: ['Width', 'Depth', 'Height'] }[d];
-  const mats = MATERIALS.map(m => `<option value="${m.id}" ${m.id === e.material ? 'selected' : ''}>${m.name}</option>`).join('');
+  const mats = MATERIALS.map(m => `<option value="${m.id}" ${m.id === e.material ? 'selected' : ''}>${m.name}</option>`).join('')
+    + `<option value="custom" ${e.material === 'custom' ? 'selected' : ''}>Custom α…</option>`;
   let h = `<h2>🎯 ${['', 'Rod', 'Plate', 'Block'][d]} solver ${infoBtn('evaluator')}</h2>
     <p class="hint" style="margin:0 0 10px">Type in numbers, pick a spot and a time, and press Solve.</p>
     <div class="field"><label for="evMat">Material</label><select id="evMat">${mats}</select></div>
+    <div id="evAlphaWrap" ${e.material === 'custom' ? '' : 'hidden'}>${evIn('customAlpha', 'alpha', e.customAlpha, `Your α (how fast it spreads heat) ${infoBtn('alpha')}`)}
+      <p class="hint" style="margin:-4px 0 10px">For scale: copper is ${fA(matById('copper').alpha)}, wood is ${fA(matById('wood').alpha)}.</p></div>
     <div class="grid2">${sizeNames.map((n, a) => evIn('L.' + a, 'len', e.L[a], n)).join('')}</div>
     ${evIn('T0', 'temp', e.T0, 'Starting temperature')}
     <fieldset class="sub"><legend>Edge temperatures ${infoBtn('boundary')}</legend>
@@ -1732,12 +1735,12 @@ function onEvalInput(e) {
 }
 function solveEval() {
   const d = S.mode, ev = EV[d], out = $('#evalOut');
-  const errs = Object.values(evalErrors).map(x => x.msg);
+  const errs = Object.entries(evalErrors).filter(([k]) => k !== 'customAlpha' || ev.material === 'custom').map(([, x]) => x.msg);
   for (let a = 0; a < d; a++) {
     if (ev.point[a] < 0 || ev.point[a] > ev.L[a] + 1e-12) errs.push(`Your spot is off the ${OBJ[d]}: ${AXN[a]} must be between 0 and ${fL(ev.L[a])}.`);
   }
   const s = deepCopy(S.states[d]);
-  s.material = ev.material; s.compare = false; s.template = null; s.L = ev.L.slice(); s.T0 = ev.T0; s.time = ev.time;
+  s.material = ev.material; if (ev.material === 'custom') s.customAlpha = ev.customAlpha; s.compare = false; s.template = null; s.L = ev.L.slice(); s.T0 = ev.T0; s.time = ev.time;
   s.spot.on = false;
   for (const [k] of SIDES[d]) s.bc[k] = ev.edges[k] == null ? { type: 'insulated', T: ev.T0 } : { type: 'fixed', T: ev.edges[k] };
   errs.push(...crossChecks(s));
@@ -1900,7 +1903,7 @@ function init() {
   $('#runBtn').addEventListener('click', () => startRun());
   $$('.side-tabs [data-tab]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
   $('#evalBox').addEventListener('input', onEvalInput);
-  $('#evalBox').addEventListener('change', e => { if (e.target.id === 'evMat') { EV[S.mode].material = e.target.value; } });
+  $('#evalBox').addEventListener('change', e => { if (e.target.id === 'evMat') { EV[S.mode].material = e.target.value; $('#evAlphaWrap').hidden = e.target.value !== 'custom'; } });
   $('#evalBox').addEventListener('click', e => { if (e.target.id === 'evSolve') solveEval(); if (e.target.id === 'evCopy') { EV[S.mode] = null; evalErrors = {}; renderEval(); } });
   // playback
   $('#playBtn').addEventListener('click', () => { if (!R) return; if (!play.playing && play.t >= R.T) play.t = 0; play.playing = !play.playing; updatePlayBtn(); dirty = true; });
