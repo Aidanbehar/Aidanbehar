@@ -184,7 +184,7 @@
     const nav = el('nav', { class: 'rf-nav' });
     SECTIONS.forEach((s) => {
       const b = el('button', { class: 'rf-navbtn', 'data-sec': s.key, text: s.name });
-      b.addEventListener('click', () => show(s.key));
+      b.addEventListener('click', () => { show(s.key); ME.revealTop(St.panel); });
       nav.appendChild(b);
     });
     layout.appendChild(nav);

@@ -247,6 +247,33 @@ window.ME = window.ME || {};
     },
   };
 
+  /* --------------------------------------------------------------- scroll */
+  /* Swapping what is inside a panel while the reader is scrolled down leaves
+   * them looking at the middle of something they did not ask for, or at
+   * nothing at all when the new panel is shorter than the old one. This pulls
+   * the top of the panel back under the nav bar.
+   *
+   * If the top of the panel is already on screen it stays put: the reader can
+   * see what changed, and moving the page under them would be a jolt that
+   * buys nothing. The one case worth scrolling down for is a panel that has
+   * fallen off the bottom entirely, which is what the narrow layout does when
+   * it stacks the panel under a long list of buttons. */
+  function revealTop(node, extra) {
+    if (!node || !node.getBoundingClientRect) return;
+    const top = node.getBoundingClientRect().top;
+    const navH = parseFloat(getComputedStyle(document.documentElement)
+      .getPropertyValue('--nav-h')) || 58;
+    const want = navH + (extra === undefined ? 14 : extra);
+    const offBelow = top > (window.innerHeight || 800) - 80;
+    if (top >= want - 1 && !offBelow) return;
+    const reduce = window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({
+      top: Math.max(0, window.scrollY + top - want),
+      behavior: reduce ? 'auto' : 'smooth',
+    });
+  }
+
   /* ------------------------------------------------------------------- bus */
   const listeners = {};
   const bus = {
@@ -255,5 +282,5 @@ window.ME = window.ME || {};
     emit(evt, data) { (listeners[evt] || []).forEach((f) => { try { f(data); } catch (e) { console.error(e); } }); },
   };
 
-  Object.assign(ME, { el, $, $$, clear, esc, formulaHTML, chemHTML, debounce, store, toast, showTip, hideTip, bindTips, copy, download, icon, theme, bus });
+  Object.assign(ME, { el, $, $$, clear, esc, formulaHTML, chemHTML, debounce, store, toast, showTip, hideTip, bindTips, copy, download, icon, theme, bus, revealTop });
 })();

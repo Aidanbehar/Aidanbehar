@@ -632,7 +632,7 @@
       const b = el('button', { class: 'tl-navbtn', 'data-tool': t.key });
       b.appendChild(el('span', { class: 'tl-navname', text: t.name }));
       b.appendChild(el('span', { class: 'note', text: t.blurb }));
-      b.addEventListener('click', () => show(t.key));
+      b.addEventListener('click', () => { show(t.key); ME.revealTop(St.panel); });
       nav.appendChild(b);
     });
     layout.appendChild(nav);

@@ -495,6 +495,57 @@ await page.screenshot({ path: path.join(SHOTS, '11b-reaction-energy.png'), fullP
 
 
 
+/* Clicking a tool in the side list swaps the panel out from under the reader.
+ * The list is long enough to scroll past, so a reader picking something from
+ * the bottom of it was left looking at the middle of a tool they had not
+ * asked for, or at nothing at all.
+ *
+ * The clicks here go through the page rather than through Playwright, which
+ * scrolls a button into view before clicking it — that would be the test
+ * harness doing the very thing under test. */
+const clickTool = (name) => page.evaluate((n) => {
+  const b = Array.from(document.querySelectorAll('.tl-navbtn'))
+    .filter((x) => x.innerText.indexOf(n) === 0)[0];
+  b.click();
+}, name);
+
+await clickTool('Molar mass');
+await page.waitForTimeout(400);
+await page.evaluate(() => window.scrollTo(0, 600));
+await page.waitForTimeout(300);
+const strandedAt = await page.evaluate(() => ({
+  y: window.scrollY,
+  top: document.querySelector('.tl-panel').getBoundingClientRect().top,
+}));
+check('a reader can scroll past the top of the tool panel',
+  strandedAt.y > 400 && strandedAt.top < 0,
+  'scrollY ' + strandedAt.y + ', panel top ' + strandedAt.top);
+
+await clickTool('Reaction energy');
+await page.waitForTimeout(1200);
+const landed = await page.evaluate(() => ({
+  y: window.scrollY,
+  top: document.querySelector('.tl-panel').getBoundingClientRect().top,
+  navH: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')),
+  heading: document.querySelector('.tl-tool h2').innerText,
+}));
+check('picking another tool brings its top back into view',
+  landed.y < strandedAt.y && landed.top >= landed.navH - 1 && landed.top < landed.navH + 40,
+  'scrollY ' + strandedAt.y + ' -> ' + landed.y + ', panel top ' + landed.top);
+check('and it is the tool that was picked', landed.heading === 'Reaction energy', landed.heading);
+
+/* Already looking at the top of the panel: moving the page would be a jolt
+ * with nothing gained. */
+await page.evaluate(() => window.scrollTo(0, 0));
+await page.waitForTimeout(400);
+await clickTool('Dilution');
+await page.waitForTimeout(1000);
+check('picking a tool while already at the top does not move the page',
+  (await page.evaluate(() => window.scrollY)) === 0,
+  'scrollY ' + (await page.evaluate(() => window.scrollY)));
+await page.locator('.tl-navbtn', { hasText: 'Reaction energy' }).click();
+await page.waitForTimeout(400);
+
 /* Reference */
 await page.locator('.tab[data-view=reference]').click();
 await page.waitForTimeout(400);
@@ -502,6 +553,24 @@ check('reference sections are listed', await page.locator('.rf-navbtn').count() 
 check('the ion table says where it came from',
   /PubChem/.test(await page.locator('.rf-prov').innerText()),
   await page.locator('.rf-prov').innerText());
+const clickSection = (name) => page.evaluate((n) => {
+  Array.from(document.querySelectorAll('.rf-navbtn'))
+    .filter((x) => x.innerText.indexOf(n) === 0)[0].click();
+}, name);
+await clickSection('Specific heats');
+await page.waitForTimeout(400);
+await page.evaluate(() => window.scrollTo(0, 700));
+await page.waitForTimeout(300);
+const refDown = await page.evaluate(() => window.scrollY);
+await clickSection('Formation enthalpies');
+await page.waitForTimeout(1200);
+const refAfter = await page.evaluate(() => ({
+  y: window.scrollY, top: document.querySelector('.rf-panel').getBoundingClientRect().top,
+}));
+check('picking a reference table brings its top back into view too',
+  refDown > 400 && refAfter.y < refDown && refAfter.top > 0 && refAfter.top < 110,
+  'scrollY ' + refDown + ' -> ' + refAfter.y + ', panel top ' + refAfter.top);
+
 await page.locator('.rf-navbtn', { hasText: 'Glossary' }).click();
 await page.waitForTimeout(250);
 check('the glossary has entries', await page.locator('.rf-gloss-item').count() >= 40);

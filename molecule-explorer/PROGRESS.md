@@ -375,6 +375,13 @@ calculators, 11 reference tables and a 49-word glossary.
   Hill order, which is what the parser produces and what no student would
   recognise. Stored formulas are now written the conventional way; the index
   still keys on the parse, so either spelling finds the row.
+- Picking a tool from the side list while scrolled down left the reader
+  looking at the middle of a tool they had not asked for, or at nothing at
+  all when the new panel was shorter than the old one (reported). Both the
+  Tools and Reference lists now pull the top of the panel back under the nav
+  bar. It only moves the page when the panel top is actually off screen, so
+  picking a tool while already at the top is still a no-op, and it follows
+  the reader's reduced-motion setting.
 - The working said "runs the reaction 1 times over", which is the kind of
   phrase that makes a reader stop and reread. Both counters now say it in
   English.
