@@ -1813,6 +1813,25 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
 .rf-heats td.num { white-space: nowrap; text-align: right; }
 .rf-heats th.rf-unit { text-transform: none; letter-spacing: 0; text-align: right; }
 
+/* Worked starting points above a tool's form. A group label is full width, so
+ * it forces its chips onto a new row underneath it. */
+.tl-templates {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: 2px 0 18px;
+}
+.tl-templates-label,
+.tl-templates-group {
+  flex: 0 0 100%;
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-faint); font-weight: 700;
+}
+.tl-templates-label { margin-bottom: 2px; }
+.tl-templates-group { margin: 8px 0 1px; }
+.tl-template { font-weight: 500; }
+.tl-template.on {
+  background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text);
+}
+
 </style>
 </head>
 <body>
@@ -2968,6 +2987,203 @@ window.ME = window.ME || {};
   /* Lower case, for use inside a compound name. */
   function elementNameLower(sym) { return elementName(sym).toLowerCase(); }
 
+  /* Standard enthalpies of formation, \u0394H\u00b0f at 298 K in kJ/mol.
+   *
+   * This is what makes a general reaction-energy tool possible: rather than
+   * storing the enthalpy of each reaction, which would be a list that only
+   * ever covers what somebody thought to add, store the formation enthalpy of
+   * each substance and compute any reaction from
+   *
+   *   \u0394H\u00b0rxn = \u03a3 \u0394H\u00b0f(products) \u2212 \u03a3 \u0394H\u00b0f(reactants)
+   *
+   * which is Hess\u2019s law in its most useful form.
+   *
+   * The state matters enormously and is part of the key: water as a liquid is
+   * \u2212285.8 and as a gas \u2212241.8, a difference of 44 kJ/mol, which is exactly
+   * the energy it takes to boil it. A reaction written without states gets the
+   * substance\u2019s standard state, and the tool says which one it used.
+   *
+   * An element in its standard state is zero by definition \u2014 that is what
+   * "formation" is measured from. Those zeroes are listed explicitly rather
+   * than applied as a rule, because the rule has exceptions: ozone is +142.7
+   * and diamond is +1.9, and both are single elements.
+   *
+   * Literature values, like the solubility rules and the activity series.
+   * There is no free machine-readable source for them, so they are marked as
+   * learned rather than verified, and they are taken from one consistent set
+   * so that a calculation combining several of them stays self-consistent. */
+  const FORMATION_GROUPS = [
+    {
+      name: 'Elements in their standard state',
+      note: 'Zero by definition \u2014 formation enthalpy is measured from here. The two entries that are not zero are the ones that are not the standard state.',
+      items: [
+        ['H2', 'g', 0, 'hydrogen'], ['O2', 'g', 0, 'oxygen'], ['N2', 'g', 0, 'nitrogen'],
+        ['F2', 'g', 0, 'fluorine'], ['Cl2', 'g', 0, 'chlorine'], ['Br2', 'l', 0, 'bromine'],
+        ['I2', 's', 0, 'iodine'], ['C', 's', 0, 'carbon, as graphite'],
+        ['S', 's', 0, 'sulfur, rhombic'], ['S8', 's', 0, 'sulfur, as the S8 ring'],
+        ['P4', 's', 0, 'phosphorus, white'],
+        ['Na', 's', 0, 'sodium'], ['K', 's', 0, 'potassium'], ['Li', 's', 0, 'lithium'],
+        ['Mg', 's', 0, 'magnesium'], ['Ca', 's', 0, 'calcium'], ['Ba', 's', 0, 'barium'],
+        ['Al', 's', 0, 'aluminium'], ['Fe', 's', 0, 'iron'], ['Cu', 's', 0, 'copper'],
+        ['Zn', 's', 0, 'zinc'], ['Pb', 's', 0, 'lead'], ['Ag', 's', 0, 'silver'],
+        ['Sn', 's', 0, 'tin'], ['Ti', 's', 0, 'titanium'], ['Si', 's', 0, 'silicon'],
+        ['Hg', 'l', 0, 'mercury'], ['He', 'g', 0, 'helium'], ['Ne', 'g', 0, 'neon'],
+        ['Ar', 'g', 0, 'argon'],
+        ['O3', 'g', 142.7, 'ozone \u2014 oxygen, and not the standard state'],
+        ['C', 's-diamond', 1.895, 'diamond \u2014 carbon, and not the standard state'],
+      ],
+    },
+    {
+      name: 'Water and simple oxides',
+      items: [
+        ['H2O', 'l', -285.83, 'water'],
+        ['H2O', 'g', -241.82, 'steam \u2014 44 kJ/mol above the liquid, which is what boiling costs'],
+        ['H2O2', 'l', -187.78, 'hydrogen peroxide'],
+        ['CO2', 'g', -393.51, 'carbon dioxide'],
+        ['CO', 'g', -110.53, 'carbon monoxide'],
+        ['SO2', 'g', -296.83, 'sulfur dioxide'],
+        ['SO3', 'g', -395.72, 'sulfur trioxide'],
+        ['NO', 'g', 90.25, 'nitrogen monoxide \u2014 positive, so making it costs energy'],
+        ['NO2', 'g', 33.18, 'nitrogen dioxide'],
+        ['N2O', 'g', 82.05, 'dinitrogen monoxide'],
+        ['N2O4', 'g', 9.16, 'dinitrogen tetroxide'],
+        ['CaO', 's', -635.09, 'quicklime'],
+        ['MgO', 's', -601.70, 'magnesium oxide'],
+        ['Al2O3', 's', -1675.7, 'aluminium oxide \u2014 one of the most negative there is'],
+        ['Fe2O3', 's', -824.2, 'iron(III) oxide, rust'],
+        ['Fe3O4', 's', -1118.4, 'magnetite'],
+        ['FeO', 's', -272.0, 'iron(II) oxide'],
+        ['CuO', 's', -157.3, 'copper(II) oxide'],
+        ['Cu2O', 's', -168.6, 'copper(I) oxide'],
+        ['ZnO', 's', -348.28, 'zinc oxide'],
+        ['PbO', 's', -219.0, 'lead(II) oxide'],
+        ['TiO2', 's', -944.0, 'titanium dioxide'],
+        ['SiO2', 's', -910.94, 'silica, as quartz'],
+        ['P4O10', 's', -2984.0, 'phosphorus(V) oxide'],
+      ],
+    },
+    {
+      name: 'Hydrocarbons and fuels',
+      note: 'The fuels are all mildly negative. Almost all the energy of burning them comes from how deeply negative CO\u2082 and water are, not from the fuel itself.',
+      items: [
+        ['CH4', 'g', -74.81, 'methane \u2014 natural gas'],
+        ['C2H6', 'g', -84.68, 'ethane'],
+        ['C3H8', 'g', -103.85, 'propane'],
+        ['C4H10', 'g', -126.15, 'butane'],
+        ['C8H18', 'l', -249.9, 'octane \u2014 the reference for petrol'],
+        ['C2H4', 'g', 52.26, 'ethene \u2014 positive, which is part of why it polymerises so readily'],
+        ['C2H2', 'g', 226.73, 'ethyne \u2014 strongly positive, which is why it burns so hot'],
+        ['C6H6', 'l', 49.0, 'benzene'],
+      ],
+    },
+    {
+      name: 'Alcohols, acids and sugars',
+      items: [
+        ['CH3OH', 'l', -238.66, 'methanol'],
+        ['C2H5OH', 'l', -277.69, 'ethanol'],
+        ['CH3COOH', 'l', -484.5, 'ethanoic acid \u2014 vinegar'],
+        ['C6H12O6', 's', -1273.3, 'glucose'],
+        ['C12H22O11', 's', -2226.1, 'sucrose \u2014 table sugar'],
+        ['CH2O2', 'l', -424.72, 'methanoic acid'],
+      ],
+    },
+    {
+      name: 'Acids, bases and salts',
+      note: 'The (aq) values use the usual convention for dissolved species, so a neutralisation worked out from them comes to about \u221256 kJ per mole of water made \u2014 the figure a school experiment measures is near \u221257.',
+      items: [
+        ['NH3', 'g', -46.11, 'ammonia'],
+        ['HCl', 'g', -92.31, 'hydrogen chloride gas'],
+        ['HCl', 'aq', -167.16, 'hydrochloric acid'],
+        ['HBr', 'g', -36.40, 'hydrogen bromide'],
+        ['HI', 'g', 26.48, 'hydrogen iodide'],
+        ['H2S', 'g', -20.63, 'hydrogen sulfide'],
+        ['H2SO4', 'l', -813.99, 'sulfuric acid'],
+        ['HNO3', 'l', -174.10, 'nitric acid'],
+        ['NaOH', 's', -425.61, 'sodium hydroxide'],
+        ['NaOH', 'aq', -470.11, 'sodium hydroxide solution'],
+        ['NaCl', 's', -411.15, 'table salt'],
+        ['NaCl', 'aq', -407.27, 'salt in solution'],
+        ['KCl', 's', -436.75, 'potassium chloride'],
+        ['NaBr', 's', -361.06, 'sodium bromide'],
+        ['LiCl', 's', -408.61, 'lithium chloride'],
+        ['AgCl', 's', -127.07, 'silver chloride'],
+        ['CaCl2', 's', -795.8, 'calcium chloride'],
+        ['CaCO3', 's', -1206.9, 'limestone, as calcite'],
+        ['MgCO3', 's', -1095.8, 'magnesium carbonate'],
+        ['Na2CO3', 's', -1130.68, 'washing soda'],
+        ['NaHCO3', 's', -950.81, 'sodium hydrogen carbonate \u2014 baking soda'],
+        ['Ca(OH)2', 's', -986.09, 'slaked lime'],
+        ['Mg(OH)2', 's', -924.54, 'magnesium hydroxide'],
+        ['CaSO4', 's', -1434.11, 'calcium sulfate'],
+        ['BaSO4', 's', -1473.2, 'barium sulfate'],
+        ['NH4Cl', 's', -314.43, 'ammonium chloride'],
+        ['NH4NO3', 's', -365.56, 'ammonium nitrate'],
+        ['KNO3', 's', -494.63, 'potassium nitrate'],
+      ],
+    },
+    {
+      name: 'Other compounds',
+      items: [
+        ['CCl4', 'l', -135.44, 'carbon tetrachloride'],
+        ['CHCl3', 'l', -134.47, 'chloroform'],
+        ['CS2', 'l', 89.70, 'carbon disulfide'],
+        ['PCl3', 'l', -319.7, 'phosphorus trichloride'],
+        ['PCl5', 's', -443.5, 'phosphorus pentachloride'],
+        ['SF6', 'g', -1209.0, 'sulfur hexafluoride'],
+      ],
+    },
+  ];
+
+  /* Keyed by the formula in Hill order and the state, so HOH and H2O land on
+   * the same entry and liquid water and steam do not.
+   *
+   * Built on first use rather than at load, because the key is produced by
+   * ME.formula.parse and this file is concatenated before the formula parser.
+   * Doing it eagerly left ME.formula undefined and stopped the app booting. */
+  let FORMATION_INDEX = null;
+  let FORMATION_DEFAULT = null;
+  function buildFormationIndex() {
+    FORMATION_INDEX = {};
+    FORMATION_DEFAULT = {};
+    FORMATION_GROUPS.forEach((g) => {
+      g.items.forEach((row) => {
+        const parsed = ME.formula.parse(row[0]);
+        const key = parsed.ok ? parsed.text : row[0];
+        FORMATION_INDEX[key + '|' + row[1]] = { f: row[0], hill: key, state: row[1], dh: row[2], name: row[3] };
+        /* The first state listed for a substance is its standard one, which is
+         * what a reaction written without state labels gets. */
+        if (FORMATION_DEFAULT[key] === undefined) FORMATION_DEFAULT[key] = row[1];
+      });
+    });
+  }
+
+  const FORMATION = {
+    source: 'Standard enthalpies of formation at 298 K, in kJ/mol, from one consistent set of tabulated values. Literature data \u2014 there is no free machine-readable source for these, so they are stated as learned rather than verified against anything.',
+    groups: FORMATION_GROUPS,
+    why: 'Store one number per substance and you can work out any reaction between them, because \u0394H\u00b0rxn is the products\u2019 formation enthalpies minus the reactants\u2019. That is Hess\u2019s law doing real work: a reaction nobody has ever run can be costed from substances that have each been measured once.',
+    /* Look a species up. `state` may be null, in which case the standard
+     * state is used and the caller is told which that was. */
+    lookup(formulaText, state) {
+      if (!FORMATION_INDEX) buildFormationIndex();
+      const parsed = ME.formula.parse(formulaText);
+      if (!parsed.ok) return null;
+      const want = state || FORMATION_DEFAULT[parsed.text];
+      if (want === undefined) return null;
+      const hit = FORMATION_INDEX[parsed.text + '|' + want];
+      if (!hit) return null;
+      return {
+        dh: hit.dh, state: hit.state, name: hit.name,
+        display: parsed.display,
+        assumedState: !state,
+      };
+    },
+    has(formulaText, state) { return FORMATION.lookup(formulaText, state) !== null; },
+    get count() {
+      if (!FORMATION_INDEX) buildFormationIndex();
+      return Object.keys(FORMATION_INDEX).length;
+    },
+  };
+
   /* SI prefixes, which are definitions rather than measurements. */
   const PREFIXES = [
     ['tera', 'T', 12], ['giga', 'G', 9], ['mega', 'M', 6], ['kilo', 'k', 3],
@@ -2980,7 +3196,7 @@ window.ME = window.ME || {};
     setIons, get ions() { return IONS; }, ionByName, ionByFormula,
     typicalCharge, ideName, IDE_STEM, LATIN, FIXED_D_BLOCK,
     SOLUBILITY, ACTIVITY, moreReactive, STRONG_ACIDS, STRONG_BASES,
-    SPECIFIC_HEAT, LATENT, COLLIGATIVE, ORGANIC_BP, boilingPoint, PREFIXES,
+    SPECIFIC_HEAT, LATENT, COLLIGATIVE, ORGANIC_BP, boilingPoint, FORMATION, PREFIXES,
     elementName, elementNameLower, SPELLING,
   };
 })();
@@ -6093,6 +6309,198 @@ window.ME = window.ME || {};
     valenceOf: valenceOf, needsOf: needsOf, chooseCentral: chooseCentral,
     SHAPES: SHAPES,
   };
+})();
+
+
+/* ================= 22-calc-thermo.js ================= */
+/* Reaction energy, from formation enthalpies.
+ *
+ * The useful move here is not to store the enthalpy of each reaction. That
+ * would be a list, and a list only ever covers what somebody thought to add.
+ * Instead store one number per substance — its enthalpy of formation — and
+ * compute any reaction between them:
+ *
+ *   ΔH°rxn = Σ ΔH°f(products) − Σ ΔH°f(reactants)
+ *
+ * which is Hess's law from Unit 13. Roughly a hundred substances then cover
+ * an unbounded number of reactions, including ones nobody has run.
+ *
+ * Every number comes out of ME.ref.FORMATION, and the equation is balanced by
+ * ME.balance first, so the coefficients used here are the same ones the
+ * Balancer tab would show. A substance that is not in the table is said so by
+ * name rather than quietly left out of the sum — a missing reactant would
+ * otherwise produce a confident, wrong answer.
+ */
+(function () {
+  'use strict';
+  const ME = window.ME;
+  const f = (x, s) => ME.fmt.fmt(x, s || 4);
+  const signed = (x, s) => (x > 0 ? '+' : '') + ME.fmt.fmtSigned(x, s || 4);
+
+  /* How many times the recipe runs, said the way a person would say it.
+   * "1 times through" is the sort of phrase that makes a reader stop and
+   * reread, which is exactly the attention the chemistry needs instead. */
+  function times(n) {
+    if (Math.abs(n - 1) < 1e-9) return 'once through';
+    if (Math.abs(n - 2) < 1e-9) return 'twice through';
+    return f(n, 4) + ' times through';
+  }
+  function over(n) {
+    if (Math.abs(n - 1) < 1e-9) return 'once';
+    if (Math.abs(n - 2) < 1e-9) return 'twice';
+    return f(n, 4) + ' times over';
+  }
+
+  /* ---------------------------------------------------------- the reaction */
+  function reactionEnthalpy(equationText) {
+    const bal = ME.balance.balance(equationText);
+    if (!bal.ok) return { ok: false, error: bal.error, stage: 'balance' };
+
+    const sides = [
+      { key: 'reactants', list: bal.left, sign: -1 },
+      { key: 'products', list: bal.right, sign: 1 },
+    ];
+    const rows = [];
+    const missing = [];
+
+    sides.forEach((side) => {
+      side.list.forEach((x) => {
+        const sp = x.species;
+        const hit = ME.ref.FORMATION.lookup(sp.formula.text, sp.state);
+        if (!hit) {
+          missing.push(sp.formula.display + (sp.state ? '(' + sp.state + ')' : ''));
+          return;
+        }
+        rows.push({
+          side: side.key, sign: side.sign,
+          display: sp.formula.display, name: hit.name,
+          coefficient: x.coefficient, state: hit.state, assumedState: hit.assumedState,
+          dh: hit.dh, contribution: side.sign * x.coefficient * hit.dh,
+        });
+      });
+    });
+
+    if (missing.length) {
+      return {
+        ok: false, stage: 'lookup', missing: missing,
+        error: 'No formation enthalpy stored for ' + missing.join(' or ') +
+          '. The table covers about a hundred common substances; this is not one of them, ' +
+          'and leaving it out of the sum would give a confident wrong answer rather than no answer.',
+      };
+    }
+
+    const deltaH = rows.reduce((sum, r) => sum + r.contribution, 0);
+    const exothermic = deltaH < 0;
+    const assumed = rows.filter((r) => r.assumedState);
+
+    /* "Per mole of what" is ambiguous unless you say, so every reactant and
+     * product gets its own per-mole figure. */
+    const perMole = rows.map((r) => ({
+      display: r.display, side: r.side, coefficient: r.coefficient,
+      kJ: deltaH / r.coefficient,
+    }));
+
+    const sumText = (key) => rows.filter((r) => r.side === key)
+      .map((r) => (r.coefficient === 1 ? '' : r.coefficient + ' × ') + f(r.dh, 5))
+      .join(' + ');
+    const sideTotal = (key) => rows.filter((r) => r.side === key)
+      .reduce((n, r) => n + r.coefficient * r.dh, 0);
+
+    const steps = [
+      { text: 'Balance it first. Without the right coefficients every number below is multiplied by the wrong amount.',
+        maths: bal.text },
+      { text: 'Look up each substance’s enthalpy of formation — the energy change when one mole of it is made from its elements in their standard states. An element in its own standard state is zero by definition, which is where the whole scale is measured from.' },
+      { text: 'Add up the products, each multiplied by its coefficient.',
+        maths: sumText('products') + ' = ' + f(sideTotal('products'), 5) + ' kJ' },
+      { text: 'Add up the reactants the same way.',
+        maths: sumText('reactants') + ' = ' + f(sideTotal('reactants'), 5) + ' kJ' },
+      { text: 'Subtract: products minus reactants. This is Hess’s law — enthalpy depends only on where you start and where you finish, so going down to the elements and back up again gives the same answer as the direct route.',
+        maths: f(sideTotal('products'), 5) + ' − (' + f(sideTotal('reactants'), 5) + ') = ' + signed(deltaH, 5) + ' kJ' },
+      { text: exothermic
+        ? 'Negative, so the reaction releases ' + f(-deltaH, 5) + ' kJ as written. The bonds made are stronger than the bonds broken, and the difference comes out as heat.'
+        : 'Positive, so the reaction absorbs ' + f(deltaH, 5) + ' kJ as written. The bonds made are weaker than the ones broken, so energy has to be put in and stays in.' },
+    ];
+
+    if (assumed.length) {
+      steps.splice(2, 0, {
+        /* Formulas in running prose, so chemHTML rather than formulaHTML:
+         * the "298" in this sentence is a temperature, not a subscript. */
+        html: 'No state was given for ' + assumed.map((r) => ME.chemHTML(r.display)).join(', ') +
+          ', so each was taken in its standard state at 298 K: ' +
+          assumed.map((r) => ME.chemHTML(r.display) + ' as ' +
+            (ME.balance.STATES[r.state] || r.state)).join(', ') +
+          '. This matters: water as a liquid and water as a gas differ by 44 kJ/mol, which is exactly the energy of boiling it.',
+        text: 'No state was given for ' + assumed.map((r) => r.display).join(', ') +
+          ', so each was taken in its standard state at 298 K: ' +
+          assumed.map((r) => r.display + ' as ' + (ME.balance.STATES[r.state] || r.state)).join(', ') +
+          '. This matters: water as a liquid and water as a gas differ by 44 kJ/mol, which is exactly the energy of boiling it.',
+      });
+    }
+
+    return {
+      ok: true, equation: bal, deltaH: deltaH, exothermic: exothermic,
+      rows: rows, perMole: perMole, assumed: assumed, steps: steps,
+    };
+  }
+
+  /* --------------------------------------------------- scaled to an amount */
+  /* How much energy a particular quantity of reactant actually releases.
+   * The amount of reaction that runs is set by whichever reactant runs out
+   * first, so this goes through the same limiting-reactant code the
+   * stoichiometry tool uses rather than assuming the one you named is it. */
+  function energyFor(equationText, amounts) {
+    const rxn = reactionEnthalpy(equationText);
+    if (!rxn.ok) return rxn;
+
+    const given = (amounts || []).filter((a) => a && a.name &&
+      (a.grams !== null && a.grams !== undefined && isFinite(a.grams)));
+    if (!given.length) return { ok: false, error: 'Give me a mass of at least one reactant.' };
+
+    const lim = ME.stoich.limiting(equationText, given);
+    if (!lim.ok) return { ok: false, error: lim.error };
+
+    const batches = lim.limiting.batches;
+    const energy = rxn.deltaH * batches;
+
+    const steps = rxn.steps.concat([
+      { text: 'That ΔH is for the equation exactly as written — the coefficients are the recipe. To scale it, work out how many times over the reaction can run with what you have.' },
+      { text: given.length > 1
+        ? 'With more than one reactant given, the one that runs out first decides, so this goes through the limiting-reactant calculation: ' +
+          lim.limiting.name + ' runs out after ' + times(batches) + '.'
+        : 'One reactant given, so it sets the scale directly: ' + f(given[0].grams, 4) + ' g of ' +
+          lim.limiting.name + ' is ' + f(lim.limiting.moles, 4) + ' mol, which at a coefficient of ' +
+          lim.limiting.coefficient + ' runs the reaction ' + over(batches) + '.',
+        maths: f(batches, 5) + ' × ' + signed(rxn.deltaH, 5) + ' kJ = ' + signed(energy, 5) + ' kJ' },
+      { text: rxn.exothermic
+        ? 'So this much releases ' + f(-energy, 4) + ' kJ.'
+        : 'So this much absorbs ' + f(energy, 4) + ' kJ.' },
+    ]);
+
+    return {
+      ok: true, deltaH: rxn.deltaH, exothermic: rxn.exothermic,
+      batches: batches, energy: energy, limiting: lim.limiting,
+      leftovers: lim.leftovers, products: lim.products,
+      equation: rxn.equation, rows: rxn.rows, steps: steps,
+    };
+  }
+
+  /* A couple of comparisons that make a bare number mean something. */
+  function compare(energyKJ) {
+    const kJ = Math.abs(energyKJ);
+    if (!(kJ > 0)) return null;
+    const cWater = ME.ref.SPECIFIC_HEAT.values['water (liquid)'];
+    /* How much water this would take from room temperature to boiling. */
+    const litres = (kJ * 1000) / (cWater * 80) / 1000;
+    /* A 2 kW kettle, in seconds. */
+    const seconds = (kJ * 1000) / 2000;
+    return {
+      litres: litres, seconds: seconds,
+      text: 'That is enough to take about ' + f(litres, 3) + ' litres of water from 20 °C to boiling, ' +
+        'or the same as a 2 kW kettle running for ' + f(seconds, 3) + ' seconds.',
+    };
+  }
+
+  ME.thermo = { reactionEnthalpy, energyFor, compare, times, over };
 })();
 
 
@@ -11891,6 +12299,54 @@ window.ME = window.ME || {};
     },
     {
       key: 'stoichiometry', name: 'Stoichiometry', blurb: 'From a mass of one substance to a mass of another, through a balanced equation.',
+      templates: [
+        { group: 'Combustion', label: 'Methane \u2192 CO\u2082',
+          values: { eq: 'CH4 + O2 -> CO2 + H2O', from: 'CH4', grams: '16', to: 'CO2' } },
+        { group: 'Combustion', label: 'Propane \u2192 water',
+          values: { eq: 'C3H8 + O2 -> CO2 + H2O', from: 'C3H8', grams: '44', to: 'H2O' } },
+        { group: 'Combustion', label: 'Octane \u2192 CO\u2082',
+          values: { eq: 'C8H18 + O2 -> CO2 + H2O', from: 'C8H18', grams: '114', to: 'CO2' },
+          note: 'How much carbon dioxide a tank of petrol makes' },
+        { group: 'Combustion', label: 'Ethanol \u2192 CO\u2082',
+          values: { eq: 'C2H6O + O2 -> CO2 + H2O', from: 'C2H6O', grams: '46', to: 'CO2' } },
+        { group: 'Combustion', label: 'Oxygen needed to burn methane',
+          values: { eq: 'CH4 + O2 -> CO2 + H2O', from: 'CH4', grams: '16', to: 'O2' } },
+
+        { group: 'Industry', label: 'Haber: N\u2082 \u2192 ammonia',
+          values: { eq: 'N2 + H2 -> NH3', from: 'N2', grams: '28', to: 'NH3' } },
+        { group: 'Industry', label: 'Haber: hydrogen needed',
+          values: { eq: 'N2 + H2 -> NH3', from: 'NH3', grams: '17', to: 'H2' } },
+        { group: 'Industry', label: 'Smelting: ore \u2192 iron',
+          values: { eq: 'Fe2O3 + CO -> Fe + CO2', from: 'Fe2O3', grams: '160', to: 'Fe' },
+          note: 'How much iron you get from a mass of ore' },
+        { group: 'Industry', label: 'Limestone \u2192 quicklime',
+          values: { eq: 'CaCO3 -> CaO + CO2', from: 'CaCO3', grams: '100', to: 'CaO' } },
+        { group: 'Industry', label: 'Thermite: aluminium \u2192 iron',
+          values: { eq: 'Fe2O3 + Al -> Al2O3 + Fe', from: 'Al', grams: '54', to: 'Fe' } },
+
+        { group: 'In the lab', label: 'Zinc and acid \u2192 hydrogen',
+          values: { eq: 'Zn + HCl -> ZnCl2 + H2', from: 'Zn', grams: '65.4', to: 'H2' } },
+        { group: 'In the lab', label: 'Marble and acid \u2192 CO\u2082',
+          values: { eq: 'CaCO3 + HCl -> CaCl2 + H2O + CO2', from: 'CaCO3', grams: '100', to: 'CO2' } },
+        { group: 'In the lab', label: 'Precipitating silver chloride',
+          values: { eq: 'AgNO3 + NaCl -> AgCl + NaNO3', from: 'NaCl', grams: '58.44', to: 'AgCl' } },
+        { group: 'In the lab', label: 'Neutralisation \u2192 salt',
+          values: { eq: 'HCl + NaOH -> NaCl + H2O', from: 'HCl', grams: '36.46', to: 'NaCl' } },
+        { group: 'In the lab', label: 'Decomposing hydrogen peroxide',
+          values: { eq: 'H2O2 -> H2O + O2', from: 'H2O2', grams: '68', to: 'O2' } },
+
+        { group: 'Everyday', label: 'Respiration: glucose \u2192 CO\u2082',
+          values: { eq: 'C6H12O6 + O2 -> CO2 + H2O', from: 'C6H12O6', grams: '180', to: 'CO2' } },
+        { group: 'Everyday', label: 'Photosynthesis: CO\u2082 \u2192 glucose',
+          values: { eq: 'CO2 + H2O -> C6H12O6 + O2', from: 'CO2', grams: '264', to: 'C6H12O6' } },
+        { group: 'Everyday', label: 'Rusting iron',
+          values: { eq: 'Fe + O2 -> Fe2O3', from: 'Fe', grams: '55.85', to: 'Fe2O3' } },
+        { group: 'Everyday', label: 'Airbag: sodium azide \u2192 N\u2082',
+          values: { eq: 'NaN3 -> Na + N2', from: 'NaN3', grams: '130', to: 'N2' },
+          note: 'The reaction that inflates a car airbag in 30 milliseconds' },
+        { group: 'Everyday', label: 'Baking soda decomposing',
+          values: { eq: 'CHNaO3 -> Na2CO3 + H2O + CO2', from: 'CHNaO3', grams: '168', to: 'CO2' } },
+      ],
       fields: [
         { k: 'eq', label: 'Equation', placeholder: 'CH4 + O2 -> CO2 + H2O', wide: true },
         { k: 'from', label: 'I have', placeholder: 'CH4' },
@@ -12123,6 +12579,146 @@ window.ME = window.ME || {};
       },
     },
     {
+      key: 'reaction-energy', name: 'Reaction energy',
+      blurb: 'How much energy a reaction releases \u2014 for the equation as written, or for the amounts you actually have.',
+      templates: [
+        { group: 'Burning a fuel', label: 'Methane (natural gas)',
+          values: { eq: 'CH4 + O2 -> CO2 + H2O', have: 'CH4', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Propane (camping gas)',
+          values: { eq: 'C3H8 + O2 -> CO2 + H2O', have: 'C3H8', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Butane (lighter)',
+          values: { eq: 'C4H10 + O2 -> CO2 + H2O', have: 'C4H10', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Octane (petrol)',
+          values: { eq: 'C8H18 + O2 -> CO2 + H2O', have: 'C8H18', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Ethanol',
+          values: { eq: 'C2H6O + O2 -> CO2 + H2O', have: 'C2H6O', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Hydrogen',
+          values: { eq: 'H2 + O2 -> H2O', have: 'H2', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Ethyne (welding torch)',
+          values: { eq: 'C2H2 + O2 -> CO2 + H2O', have: 'C2H2', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Carbon (coal)',
+          values: { eq: 'C + O2 -> CO2', have: 'C', amount: '1' } },
+
+        { group: 'In a living thing', label: 'Respiration of glucose',
+          values: { eq: 'C6H12O6 + O2 -> CO2 + H2O', have: 'C6H12O6', amount: '1' },
+          note: 'The reaction every cell in your body runs' },
+        { group: 'In a living thing', label: 'Photosynthesis',
+          values: { eq: 'CO2 + H2O -> C6H12O6 + O2', have: 'CO2', amount: '6' },
+          note: 'Respiration backwards \u2014 so it absorbs energy, which is what the sunlight is for' },
+        { group: 'In a living thing', label: 'Burning sugar',
+          values: { eq: 'C12H22O11 + O2 -> CO2 + H2O', have: 'C12H22O11', amount: '1' } },
+
+        { group: 'Industry', label: 'Haber process',
+          values: { eq: 'N2 + H2 -> NH3', have: 'N2', amount: '1' },
+          note: 'Exothermic, which is why it is run cooler than the rate would like' },
+        { group: 'Industry', label: 'Thermite',
+          values: { eq: 'Fe2O3 + Al -> Al2O3 + Fe', have: 'Al', amount: '2' },
+          note: 'Hot enough to weld railway track' },
+        { group: 'Industry', label: 'Smelting iron',
+          values: { eq: 'Fe2O3 + CO -> Fe + CO2', have: 'Fe2O3', amount: '1' } },
+        { group: 'Industry', label: 'Making quicklime',
+          values: { eq: 'CaCO3 -> CaO + CO2', have: 'CaCO3', amount: '1' },
+          note: 'Endothermic \u2014 a lime kiln has to be heated the whole time' },
+        { group: 'Industry', label: 'Slaking lime',
+          values: { eq: 'CaO + H2O -> CaH2O2', have: 'CaO', amount: '1' } },
+        { group: 'Industry', label: 'Burning sulfur to SO\u2082',
+          values: { eq: 'S + O2 -> SO2', have: 'S', amount: '1' } },
+
+        { group: 'In the lab', label: 'Neutralisation',
+          values: { eq: 'HCl(aq) + NaOH(aq) -> NaCl(aq) + H2O', have: 'HCl', amount: '1' },
+          note: 'Acid plus alkali, per mole of water made' },
+        { group: 'In the lab', label: 'Magnesium burning',
+          values: { eq: 'Mg + O2 -> MgO', have: 'Mg', amount: '2' } },
+        { group: 'In the lab', label: 'Decomposing hydrogen peroxide',
+          values: { eq: 'H2O2 -> H2O + O2', have: 'H2O2', amount: '2' } },
+        { group: 'In the lab', label: 'Baking soda decomposing',
+          values: { eq: 'CHNaO3 -> Na2CO3 + H2O + CO2', have: 'CHNaO3', amount: '2' } },
+
+        { group: 'Endothermic ones', label: 'Nitrogen and oxygen \u2192 NO',
+          values: { eq: 'N2 + O2 -> NO', have: 'N2', amount: '1' },
+          note: 'Only happens in a lightning strike or an engine, because it costs energy' },
+        { group: 'Endothermic ones', label: 'Cracking ethane',
+          values: { eq: 'C2H6 -> C2H4 + H2', have: 'C2H6', amount: '1' } },
+        { group: 'Endothermic ones', label: 'Splitting water',
+          values: { eq: 'H2O -> H2 + O2', have: 'H2O', amount: '2' },
+          note: 'Combustion run backwards, and it costs exactly what burning released' },
+      ],
+      fields: [
+        { k: 'eq', label: 'Reaction', placeholder: 'CH4 + O2 -> CO2 + H2O', wide: true },
+        { k: 'have', label: 'I have (leave blank for per-equation only)', placeholder: 'CH4' },
+        { k: 'amount', label: 'how much of it', placeholder: '1' },
+        { k: 'kind', label: 'which is', type: 'select', options: [['mol', 'moles'], ['g', 'grams']] },
+        { k: 'have2', label: 'and (optional second reactant)', placeholder: '' },
+        { k: 'amount2', label: 'how much of that', placeholder: '' },
+        { k: 'kind2', label: 'which is', type: 'select', options: [['mol', 'moles'], ['g', 'grams']] },
+      ],
+      run(v) {
+        if (!String(v.eq || '').trim()) return { error: 'Type a reaction, or pick one of the templates above.' };
+        const rxn = ME.thermo.reactionEnthalpy(v.eq);
+        if (!rxn.ok) return { error: rxn.error };
+
+        const word = rxn.exothermic ? 'releases' : 'absorbs';
+        const perEquation = Math.abs(rxn.deltaH);
+
+        /* The limiting-reactant code works in grams, so an amount given in
+         * moles is converted here rather than there. Moles is the default,
+         * because an equation's coefficients are already a mole ratio and a
+         * reader working from one usually has moles in hand. */
+        const asGrams = (name, amount, kind) => {
+          if (amount === null) return null;
+          if (kind !== 'mol') return amount;
+          const parsed = ME.formula.parse(name);
+          return parsed.ok ? amount * parsed.mass : null;
+        };
+
+        const amounts = [];
+        const a1 = asGrams(v.have, num(v.amount), v.kind);
+        const a2 = asGrams(v.have2, num(v.amount2), v.kind2);
+        if (v.have && a1 !== null) amounts.push({ name: v.have, grams: a1 });
+        if (v.have2 && a2 !== null) amounts.push({ name: v.have2, grams: a2 });
+
+        const dhRow = ['\u0394H for the equation as written',
+          (rxn.deltaH > 0 ? '+' : '') + ME.fmt.fmtSigned(rxn.deltaH, 5) + ' kJ',
+          rxn.exothermic ? 'exothermic' : 'endothermic'];
+        const perMoleRows = rxn.perMole
+          .filter((r) => r.side === 'reactants')
+          .map((r) => ['per mole of ' + r.display,
+            (r.kJ > 0 ? '+' : '') + ME.fmt.fmtSigned(r.kJ, 5) + ' kJ/mol', '']);
+
+        if (!amounts.length) {
+          return {
+            headline: (rxn.exothermic ? 'Releases ' : 'Absorbs ') +
+              ME.fmt.fmt(perEquation, 5) + ' kJ per equation as written',
+            sub: rxn.equation.text,
+            table: { head: ['', 'Energy', ''], rows: [dhRow].concat(perMoleRows) },
+            steps: rxn.steps,
+            source: ME.ref.FORMATION.source,
+          };
+        }
+
+        const scaled = ME.thermo.energyFor(v.eq, amounts);
+        if (!scaled.ok) return { error: scaled.error };
+        const cmp = ME.thermo.compare(scaled.energy);
+        return {
+          headline: (scaled.exothermic ? 'Releases ' : 'Absorbs ') +
+            ME.fmt.fmt(Math.abs(scaled.energy), 5) + ' kJ',
+          sub: rxn.equation.text + '  \u00b7  ' + scaled.limiting.name + ' runs out first, after ' +
+            ME.thermo.times(scaled.batches) +
+            (cmp ? '  \u00b7  ' + cmp.text : ''),
+          table: {
+            head: ['', 'Energy', ''],
+            rows: [dhRow].concat(perMoleRows).concat([
+              ['for the amounts given',
+                (scaled.energy > 0 ? '+' : '') + ME.fmt.fmtSigned(scaled.energy, 5) + ' kJ',
+                word + ' ' + ME.fmt.fmt(Math.abs(scaled.energy) / 1000, 4) + ' MJ'],
+            ]),
+          },
+          steps: scaled.steps,
+          source: ME.ref.FORMATION.source,
+        };
+      },
+    },
+    {
       key: 'gibbs', name: 'Gibbs free energy', blurb: 'ΔG = ΔH − TΔS, and whether a reaction goes by itself.',
       fields: [
         { k: 'H', label: 'ΔH (kJ/mol)', placeholder: '-92' },
@@ -12281,6 +12877,34 @@ window.ME = window.ME || {};
     const values = {};
     const inputs = {};
 
+    /* Templates, where a tool has them: a row of worked starting points, so
+     * the reader can see the tool doing something real before having to
+     * invent an equation. Clicking one fills every field and runs it. */
+    if (tool.templates && tool.templates.length) {
+      const picker = el('div', { class: 'tl-templates' });
+      picker.appendChild(el('div', { class: 'tl-templates-label', text: 'Start from one of these' }));
+      let lastGroup = null;
+      tool.templates.forEach((t) => {
+        if (t.group && t.group !== lastGroup) {
+          lastGroup = t.group;
+          picker.appendChild(el('div', { class: 'tl-templates-group', text: t.group }));
+        }
+        const chip = el('button', { class: 'btn btn-sm tl-template', title: t.note || '' });
+        chip.appendChild(el('span', { html: ME.chemHTML(t.label) }));
+        chip.addEventListener('click', () => {
+          Object.keys(t.values).forEach((k) => {
+            values[k] = t.values[k];
+            if (inputs[k]) inputs[k].value = t.values[k];
+          });
+          ME.$$('.tl-template', picker).forEach((b) => b.classList.remove('on'));
+          chip.classList.add('on');
+          go();
+        });
+        picker.appendChild(chip);
+      });
+      card.appendChild(picker);
+    }
+
     tool.fields.forEach((f) => {
       const holder = el('div', { class: 'tl-field' + (f.wide ? ' wide' : '') });
       holder.appendChild(el('label', { text: f.label }));
@@ -12414,7 +13038,12 @@ window.ME = window.ME || {};
     const list = el('ol');
     steps.forEach((s) => {
       const li = el('li');
-      li.appendChild(el('div', { text: typeof s === 'string' ? s : s.text }));
+      /* A step may carry marked-up prose as well as plain text; the plain
+       * text stays so that anything reading steps without a DOM still gets
+       * the sentence. */
+      li.appendChild(s && s.html
+        ? el('div', { html: s.html })
+        : el('div', { text: typeof s === 'string' ? s : s.text }));
       if (s && s.maths) li.appendChild(el('div', { class: 'tl-maths', text: s.maths }));
       list.appendChild(li);
     });
@@ -12530,6 +13159,7 @@ window.ME = window.ME || {};
     { key: 'constants', name: 'Constants', render: constants },
     { key: 'prefixes', name: 'SI prefixes', render: prefixes },
     { key: 'heats', name: 'Specific heats', render: heats },
+    { key: 'formation', name: 'Formation enthalpies', render: formation },
     { key: 'colligative', name: 'Freezing and boiling constants', render: colligative },
     { key: 'organic-bp', name: 'Boiling points of small isomers', render: organicBP },
     { key: 'glossary', name: 'Glossary', render: glossary },
@@ -12586,6 +13216,44 @@ window.ME = window.ME || {};
     box.appendChild(table);
     box.appendChild(el('p', { class: 'note rf-src', text: t.source }));
     return box;
+  }
+
+  /* Standard enthalpies of formation, which the reaction-energy tool computes
+   * every reaction from. Grouped the way the table is written. */
+  function formation() {
+    const T = ME.ref.FORMATION;
+    const body = el('div');
+    body.appendChild(el('div', { class: 'callout' }, T.why));
+    body.appendChild(el('p', { class: 'note rf-groupnote' },
+      'A state is part of the entry, not decoration: liquid water is \u2212285.83 and steam is \u2212241.82, '
+      + 'and the 44 kJ/mol between them is exactly what boiling costs. A reaction written without state '
+      + 'labels gets each substance in its standard state, and the tool says which it used.'));
+
+    T.groups.forEach((g) => {
+      body.appendChild(el('h3', { class: 'section-head', text: g.name }));
+      if (g.note) body.appendChild(el('p', { class: 'note rf-groupnote', text: g.note }));
+      const t = el('table', { class: 'rf-table rf-heats' });
+      const head = el('tr');
+      ['Substance', 'State', '\u0394H\u00b0f kJ/mol', ''].forEach((h, i) =>
+        head.appendChild(el('th', { class: i === 2 ? 'rf-unit' : '', text: h })));
+      t.appendChild(head);
+      g.items.forEach(([formula, state, dh, name]) => {
+        const tr = el('tr');
+        tr.appendChild(el('td', { html: ME.chemHTML(formula) }));
+        tr.appendChild(el('td', { class: 'note', text: ME.balance.STATES[state] || state }));
+        tr.appendChild(el('td', { class: 'mono num',
+          text: (dh > 0 ? '+' : '') + ME.fmt.fmtSigned(dh, 6) }));
+        tr.appendChild(el('td', { class: 'note', text: name || '' }));
+        t.appendChild(tr);
+      });
+      body.appendChild(t);
+    });
+
+    body.appendChild(el('p', { class: 'note rf-src', text: T.source }));
+    const go = el('button', { class: 'btn btn-sm', style: { marginTop: '10px' }, text: 'Open the reaction-energy tool' });
+    go.addEventListener('click', () => ME.router.go('#/tools/reaction-energy'));
+    body.appendChild(go);
+    return card('Formation enthalpies', T.source, body);
   }
 
   const St = { built: false, host: null, panel: null };

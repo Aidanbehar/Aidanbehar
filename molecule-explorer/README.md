@@ -20,8 +20,8 @@ What is in it:
 | **Elements** | All 118 elements with shells, orbital diagrams, 3D orbital shapes and properties. |
 | **Balancer** | Balances any equation in exact arithmetic, with the working, an atom tally, a by-hand walkthrough and a try-it-yourself mode. |
 | **Gas Simulator** | Particles with a draggable piston, PV = nRT computed live in whatever units you pick, four graphs and a real-gas comparison. |
-| **Tools** | 18 calculators, every one showing its working. |
-| **Reference** | 11 tables, each stating where its data came from, and a 49-word glossary. |
+| **Tools** | 19 calculators, every one showing its working, several with worked templates to start from. |
+| **Reference** | 12 tables, each stating where its data came from, and a 49-word glossary. |
 | **Gallery** | 688 molecules grouped by what they are for. |
 | **Search** | Molecules by name, nickname, formula or SMILES — and lessons, calculators, tables and glossary words. |
 
@@ -319,16 +319,38 @@ A gas has three degrees of freedom, not four, so one variable is always
 recomputed from the other three — including at startup, which is how the first
 version came to violate PV = nRT by 1.4% on its opening frame.
 
-**Tools.** 18 calculators, all sharing the engine the lessons and the graders
+**Tools.** 19 calculators, all sharing the engine the lessons and the graders
 use, so an answer here and an answer there can never disagree. Each one shows
 its working in the same voice as the lessons.
 
-**Reference.** 11 tables, and each one states its provenance, because that
+The **Reaction energy** tool takes any equation the Balancer can balance and
+says how much energy it gives out, either for the equation as written or for
+the amounts you actually have. It does not store reaction enthalpies: it stores
+one enthalpy of formation per *substance* and applies Hess's law,
+ΔH°rxn = ΣΔH°f(products) − ΣΔH°f(reactants). The difference matters — a
+list of reactions only ever covers what somebody thought to add, while 104
+substances cover an unbounded number of reactions between them, including ones
+nobody has run. A substance missing from the table is named and refused rather
+than quietly dropped from the sum, because a dropped term gives a confident
+wrong answer instead of no answer. Amounts are read as moles or grams, and the
+scale is set by whichever reactant runs out first, through the same
+limiting-reactant code the stoichiometry tool uses — not by whichever one you
+happened to name. The answer comes with something to picture it against: how
+long a 2 kW kettle would have to run, and how much water that would bring to
+the boil.
+
+Both Reaction energy and Stoichiometry open with a row of templates — 24 and
+20 of them, grouped by what the reaction is for — so the first thing a reader
+sees is the tool doing something real, rather than an empty box and a question
+mark. A test clicks every one of them and fails if any produces an error, a
+blank or a NaN.
+
+**Reference.** 12 tables, and each one states its provenance, because that
 genuinely differs: the polyatomic ions are re-verified against PubChem on every
 build, the monatomic ion charges are *derived* from the periodic table so they
 cannot contradict it, and the solubility rules, activity series, specific
-heats, colligative constants and organic boiling points are literature values
-with no free machine-readable source — so they say so. Plus a 49-word glossary,
+heats, colligative constants, formation enthalpies and organic boiling points
+are literature values with no free machine-readable source — so they say so. Plus a 49-word glossary,
 searchable, and linkable to a single word from the search bar.
 
 The specific-heat table is the largest of these: 96 substances in eight groups
@@ -341,6 +363,12 @@ at the precision they are known to rather than padded to a fixed width, the
 variable ones (wood, soil, food) are quoted to two figures and say why, and the
 food group is excluded from the practice generator because its values track
 water content rather than being properties of a substance.
+
+The formation-enthalpy table is the one that does the most work for its size:
+104 substances in six groups, from which the Reaction energy tool computes any
+reaction between them. It is also where the point of the whole scale shows up
+most plainly — every element in its standard state is zero by definition, which
+is why ozone and diamond, single elements both, are not.
 
 ## Notes on the chemistry
 

@@ -74,6 +74,7 @@
     { key: 'constants', name: 'Constants', render: constants },
     { key: 'prefixes', name: 'SI prefixes', render: prefixes },
     { key: 'heats', name: 'Specific heats', render: heats },
+    { key: 'formation', name: 'Formation enthalpies', render: formation },
     { key: 'colligative', name: 'Freezing and boiling constants', render: colligative },
     { key: 'organic-bp', name: 'Boiling points of small isomers', render: organicBP },
     { key: 'glossary', name: 'Glossary', render: glossary },
@@ -130,6 +131,44 @@
     box.appendChild(table);
     box.appendChild(el('p', { class: 'note rf-src', text: t.source }));
     return box;
+  }
+
+  /* Standard enthalpies of formation, which the reaction-energy tool computes
+   * every reaction from. Grouped the way the table is written. */
+  function formation() {
+    const T = ME.ref.FORMATION;
+    const body = el('div');
+    body.appendChild(el('div', { class: 'callout' }, T.why));
+    body.appendChild(el('p', { class: 'note rf-groupnote' },
+      'A state is part of the entry, not decoration: liquid water is \u2212285.83 and steam is \u2212241.82, '
+      + 'and the 44 kJ/mol between them is exactly what boiling costs. A reaction written without state '
+      + 'labels gets each substance in its standard state, and the tool says which it used.'));
+
+    T.groups.forEach((g) => {
+      body.appendChild(el('h3', { class: 'section-head', text: g.name }));
+      if (g.note) body.appendChild(el('p', { class: 'note rf-groupnote', text: g.note }));
+      const t = el('table', { class: 'rf-table rf-heats' });
+      const head = el('tr');
+      ['Substance', 'State', '\u0394H\u00b0f kJ/mol', ''].forEach((h, i) =>
+        head.appendChild(el('th', { class: i === 2 ? 'rf-unit' : '', text: h })));
+      t.appendChild(head);
+      g.items.forEach(([formula, state, dh, name]) => {
+        const tr = el('tr');
+        tr.appendChild(el('td', { html: ME.chemHTML(formula) }));
+        tr.appendChild(el('td', { class: 'note', text: ME.balance.STATES[state] || state }));
+        tr.appendChild(el('td', { class: 'mono num',
+          text: (dh > 0 ? '+' : '') + ME.fmt.fmtSigned(dh, 6) }));
+        tr.appendChild(el('td', { class: 'note', text: name || '' }));
+        t.appendChild(tr);
+      });
+      body.appendChild(t);
+    });
+
+    body.appendChild(el('p', { class: 'note rf-src', text: T.source }));
+    const go = el('button', { class: 'btn btn-sm', style: { marginTop: '10px' }, text: 'Open the reaction-energy tool' });
+    go.addEventListener('click', () => ME.router.go('#/tools/reaction-energy'));
+    body.appendChild(go);
+    return card('Formation enthalpies', T.source, body);
   }
 
   const St = { built: false, host: null, panel: null };

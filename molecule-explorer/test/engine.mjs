@@ -1304,6 +1304,235 @@ describe('the quantitative calculators, case by case', () => {
   });
 });
 
+/* ------------------------------------------------------- reaction energy */
+describe('reaction energy from formation enthalpies', () => {
+  /* Every one of these has a settled textbook value, so the table is an
+   * independent check rather than a restatement of what the code does. The
+   * point of computing from formation enthalpies rather than storing reaction
+   * enthalpies is that none of these numbers is in the data — each is a sum. */
+  const KNOWN = [
+    ['CH4 + O2 -> CO2 + H2O', -890.4, 'methane, water condensed'],
+    ['CH4 + O2 -> CO2 + H2O(g)', -802.3, 'methane, water as vapour'],
+    ['C3H8 + O2 -> CO2 + H2O', -2220.0, 'propane'],
+    ['C4H10 + O2 -> CO2 + H2O', -5754.2, 'butane, for two molecules'],
+    ['C2H6O + O2 -> CO2 + H2O', -1366.8, 'ethanol'],
+    ['C2H2 + O2 -> CO2 + H2O', -2599.2, 'ethyne, for two molecules'],
+    ['C6H12O6 + O2 -> CO2 + H2O', -2802.7, 'respiration of glucose'],
+    ['C12H22O11 + O2 -> CO2 + H2O', -5640.2, 'sucrose'],
+    ['H2 + O2 -> H2O', -571.7, 'hydrogen, for two molecules'],
+    ['C + O2 -> CO2', -393.5, 'carbon'],
+    ['N2 + H2 -> NH3', -92.2, 'the Haber process'],
+    ['Fe2O3 + Al -> Al2O3 + Fe', -851.5, 'thermite'],
+    ['Fe2O3 + CO -> Fe + CO2', -24.7, 'smelting iron'],
+    ['CaCO3 -> CaO + CO2', 178.3, 'limestone, endothermic'],
+    ['N2 + O2 -> NO', 180.5, 'nitrogen and oxygen, endothermic'],
+    ['Mg + O2 -> MgO', -1203.4, 'magnesium burning, for two atoms'],
+    ['CaO + H2O -> CaH2O2', -65.2, 'slaking lime'],
+    ['S + O2 -> SO2', -296.8, 'burning sulfur'],
+  ];
+
+  test('matches the settled value for each reaction', async () => {
+    const got = await run((cs) => cs.map((c) => {
+      const r = window.ME.thermo.reactionEnthalpy(c[0]);
+      return r.ok ? r.deltaH : 'refused: ' + r.error;
+    }), KNOWN);
+    got.forEach((v, i) => {
+      const [eq, want, label] = KNOWN[i];
+      assert.equal(typeof v, 'number', label + ' (' + eq + '): ' + v);
+      assert.ok(Math.abs(v - want) < 0.6,
+        label + ': engine says ' + v + ', the settled value is ' + want);
+    });
+  });
+
+  test('the state of the water changes the answer by the heat of vaporisation', async () => {
+    const got = await run(() => {
+      const liquid = window.ME.thermo.reactionEnthalpy('CH4 + O2 -> CO2 + H2O').deltaH;
+      const gas = window.ME.thermo.reactionEnthalpy('CH4 + O2 -> CO2 + H2O(g)').deltaH;
+      return { liquid: liquid, gas: gas, perWater: (gas - liquid) / 2 };
+    });
+    /* Two waters are made, and each one not condensing costs 44 kJ — which is
+     * the latent heat of vaporisation per mole, 2257 J/g times 18.015 g/mol. */
+    assert.ok(Math.abs(got.perWater - 44.01) < 0.1, 'per mole of water: ' + got.perWater);
+    assert.ok(got.gas > got.liquid, 'the vapour case must release less');
+  });
+
+  test('a reaction and its reverse are equal and opposite', async () => {
+    const got = await run(() => ({
+      respiration: window.ME.thermo.reactionEnthalpy('C6H12O6 + O2 -> CO2 + H2O').deltaH,
+      photosynthesis: window.ME.thermo.reactionEnthalpy('CO2 + H2O -> C6H12O6 + O2').deltaH,
+      burn: window.ME.thermo.reactionEnthalpy('H2 + O2 -> H2O').deltaH,
+      split: window.ME.thermo.reactionEnthalpy('H2O -> H2 + O2').deltaH,
+    }));
+    assert.ok(Math.abs(got.respiration + got.photosynthesis) < 0.01,
+      'respiration and photosynthesis: ' + got.respiration + ' and ' + got.photosynthesis);
+    assert.ok(Math.abs(got.burn + got.split) < 0.01,
+      'burning and splitting water: ' + got.burn + ' and ' + got.split);
+  });
+
+  test('says what it cannot do rather than guessing', async () => {
+    const got = await run(() => {
+      const missing = window.ME.thermo.reactionEnthalpy('C20H42 + O2 -> CO2 + H2O');
+      const unbalanceable = window.ME.thermo.reactionEnthalpy('CH4 -> CO2');
+      const nonsense = window.ME.thermo.reactionEnthalpy('not an equation');
+      return {
+        missingOk: missing.ok, missingWhy: missing.error, missingNames: missing.missing,
+        unbalanceableOk: unbalanceable.ok, unbalanceableStage: unbalanceable.stage,
+        nonsenseOk: nonsense.ok,
+      };
+    });
+    assert.equal(got.missingOk, false);
+    /* It must name the substance it has no data for. Dropping it from the sum
+     * would give a confident wrong number instead of no number. */
+    assert.deepEqual(got.missingNames, ['C20H42']);
+    assert.match(got.missingWhy, /C20H42/);
+    assert.equal(got.unbalanceableOk, false);
+    assert.equal(got.unbalanceableStage, 'balance');
+    assert.equal(got.nonsenseOk, false);
+  });
+
+  test('scales to the amount you actually have, through the limiting reactant', async () => {
+    const got = await run(() => {
+      const M = (f) => window.ME.formula.parse(f).mass;
+      return {
+        /* One mole of methane: the full per-equation figure. */
+        oneMole: window.ME.thermo.energyFor('CH4 + O2 -> CO2 + H2O',
+          [{ name: 'CH4', grams: M('CH4') }]),
+        /* Half a mole: half the energy. */
+        halfMole: window.ME.thermo.energyFor('CH4 + O2 -> CO2 + H2O',
+          [{ name: 'CH4', grams: M('CH4') / 2 }]).energy,
+        /* Plenty of methane but only two moles of oxygen — the oxygen is
+         * what runs out, so it sets the energy, not the methane. */
+        oxygenLimited: window.ME.thermo.energyFor('CH4 + O2 -> CO2 + H2O',
+          [{ name: 'CH4', grams: M('CH4') * 10 }, { name: 'O2', grams: M('O2') * 2 }]),
+      };
+    });
+    assert.ok(Math.abs(got.oneMole.energy + 890.4) < 0.6, 'one mole: ' + got.oneMole.energy);
+    assert.equal(got.oneMole.limiting.name, 'CH4');
+    assert.ok(Math.abs(got.halfMole + 445.2) < 0.3, 'half a mole: ' + got.halfMole);
+    /* Two moles of O2 runs the reaction once, because the equation needs two. */
+    assert.equal(got.oxygenLimited.limiting.name, 'O2');
+    assert.ok(Math.abs(got.oxygenLimited.batches - 1) < 1e-9, 'batches: ' + got.oxygenLimited.batches);
+    assert.ok(Math.abs(got.oxygenLimited.energy + 890.4) < 0.6,
+      'oxygen-limited: ' + got.oxygenLimited.energy);
+  });
+
+  test('an element in its standard state is zero, and the exceptions are not', async () => {
+    const got = await run(() => {
+      const L = (f, st) => { const h = window.ME.ref.FORMATION.lookup(f, st); return h ? h.dh : 'missing'; };
+      return {
+        o2: L('O2'), n2: L('N2'), h2: L('H2'), fe: L('Fe'), c: L('C'),
+        ozone: L('O3'), diamond: L('C', 's-diamond'),
+        waterLiquid: L('H2O'), waterGas: L('H2O', 'g'),
+        defaultStateOfWater: window.ME.ref.FORMATION.lookup('H2O').state,
+        assumed: window.ME.ref.FORMATION.lookup('H2O').assumedState,
+        stated: window.ME.ref.FORMATION.lookup('H2O', 'g').assumedState,
+      };
+    });
+    [['o2', got.o2], ['n2', got.n2], ['h2', got.h2], ['fe', got.fe], ['c', got.c]]
+      .forEach(([what, v]) => assert.equal(v, 0, what + ' should be zero, got ' + v));
+    /* Both are single elements and neither is the standard state. */
+    assert.ok(got.ozone > 140, 'ozone: ' + got.ozone);
+    assert.ok(got.diamond > 1 && got.diamond < 3, 'diamond: ' + got.diamond);
+    assert.equal(got.waterLiquid, -285.83);
+    assert.equal(got.waterGas, -241.82);
+    /* Water with no state given is the liquid, and the caller is told it was
+     * assumed rather than stated. */
+    assert.equal(got.defaultStateOfWater, 'l');
+    assert.equal(got.assumed, true);
+    assert.equal(got.stated, false);
+  });
+
+  test('counts the runs in English, and marks up formulas without mangling the temperature', async () => {
+    const got = await run(() => {
+      const M = (f) => window.ME.formula.parse(f).mass;
+      const one = window.ME.thermo.energyFor('CH4 + O2 -> CO2 + H2O',
+        [{ name: 'CH4', grams: M('CH4') }]);
+      const many = window.ME.thermo.energyFor('CH4 + O2 -> CO2 + H2O',
+        [{ name: 'CH4', grams: M('CH4') * 3 }]);
+      const stateStep = one.steps.filter((st) => st.html && /standard state/.test(st.html))[0];
+      return {
+        oneWords: one.steps.map((st) => st.text).join(' | '),
+        manyWords: many.steps.map((st) => st.text).join(' | '),
+        stateHTML: stateStep ? stateStep.html : '',
+        stateText: stateStep ? stateStep.text : '',
+      };
+    });
+    assert.match(got.oneWords, /runs the reaction once\b/);
+    assert.ok(!/1 times/.test(got.oneWords), 'said "1 times": ' + got.oneWords);
+    assert.match(got.manyWords, /3 times over/);
+    /* The formulas get their subscripts — and 298 K, which is a temperature
+     * sitting in the same sentence, does not. */
+    assert.match(got.stateHTML, /CH<sub>4<\/sub>/);
+    assert.match(got.stateHTML, /H<sub>2<\/sub>O/);
+    assert.ok(!/<sub>98/.test(got.stateHTML) && /298 K/.test(got.stateHTML),
+      'the temperature was mangled: ' + got.stateHTML);
+    /* The plain sentence is still there for anything reading without a DOM. */
+    assert.match(got.stateText, /No state was given/);
+  });
+
+  test('writes formulas the way a reader would, not in Hill order', async () => {
+    const got = await run(() => {
+      const L = (f) => window.ME.ref.FORMATION.lookup(f);
+      const written = {};
+      window.ME.ref.FORMATION.groups.forEach((g) => g.items.forEach((row) => {
+        written[row[3]] = row[0];
+      }));
+      return {
+        written: written,
+        /* Either spelling has to reach the same row, because the index is
+         * keyed on what the formula parser makes of it, not on the string. */
+        sameRow: [
+          [L('Ca(OH)2').dh, L('CaH2O2').dh],
+          [L('NaHCO3').dh, L('CHNaO3').dh],
+          [L('C2H5OH').dh, L('C2H6O').dh],
+          [L('NH4NO3').dh, L('H4N2O3').dh],
+        ],
+      };
+    });
+    /* Hill order puts carbon first and the rest alphabetically, which turns
+     * slaked lime into CaH2O2 and baking soda into CHNaO3 — true, and
+     * unrecognisable. The table shows the formula a student would meet. */
+    assert.equal(got.written['slaked lime'], 'Ca(OH)2');
+    assert.equal(got.written['sodium hydrogen carbonate \u2014 baking soda'], 'NaHCO3');
+    assert.equal(got.written['magnesium hydroxide'], 'Mg(OH)2');
+    assert.equal(got.written['ammonium chloride'], 'NH4Cl');
+    assert.equal(got.written['ammonium nitrate'], 'NH4NO3');
+    /* C2H6O is two different substances; the table says which one it measured. */
+    assert.equal(got.written['ethanol'], 'C2H5OH');
+    assert.equal(got.written['methanol'], 'CH3OH');
+    assert.equal(got.written['ethanoic acid \u2014 vinegar'], 'CH3COOH');
+    got.sameRow.forEach(([a, b], i) => assert.equal(a, b, 'pair ' + i + ': ' + a + ' vs ' + b));
+  });
+
+  test('every template in both tools runs and gives a number', async () => {
+    const bad = await run(() => {
+      const out = [];
+      const tools = window.ME.tools.TOOLS.filter((t) => t.templates && t.templates.length);
+      if (tools.length < 2) out.push(['only ' + tools.length + ' tools have templates']);
+      tools.forEach((tool) => {
+        tool.templates.forEach((t) => {
+          /* Run the tool exactly as the chip would, including the select
+           * defaults the form would have supplied. */
+          const values = {};
+          tool.fields.forEach((f) => {
+            if (f.type === 'select' && f.options && f.options.length) values[f.k] = f.options[0][0];
+          });
+          Object.keys(t.values).forEach((k) => { values[k] = t.values[k]; });
+          let r;
+          try { r = tool.run(values); }
+          catch (e) { out.push([tool.key, t.label, 'threw: ' + e.message]); return; }
+          if (!r || r.error) out.push([tool.key, t.label, 'error: ' + (r && r.error)]);
+          else if (!r.headline || /undefined|NaN|null/.test(r.headline)) {
+            out.push([tool.key, t.label, 'headline: ' + (r && r.headline)]);
+          }
+        });
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad, null, 1));
+  });
+});
+
 /* ------------------------------------------------------------ simulations */
 describe('every simulation builds', () => {
   /* The page-render test covers the sims a lesson embeds, and not the ones

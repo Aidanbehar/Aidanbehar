@@ -80,6 +80,54 @@
     },
     {
       key: 'stoichiometry', name: 'Stoichiometry', blurb: 'From a mass of one substance to a mass of another, through a balanced equation.',
+      templates: [
+        { group: 'Combustion', label: 'Methane \u2192 CO\u2082',
+          values: { eq: 'CH4 + O2 -> CO2 + H2O', from: 'CH4', grams: '16', to: 'CO2' } },
+        { group: 'Combustion', label: 'Propane \u2192 water',
+          values: { eq: 'C3H8 + O2 -> CO2 + H2O', from: 'C3H8', grams: '44', to: 'H2O' } },
+        { group: 'Combustion', label: 'Octane \u2192 CO\u2082',
+          values: { eq: 'C8H18 + O2 -> CO2 + H2O', from: 'C8H18', grams: '114', to: 'CO2' },
+          note: 'How much carbon dioxide a tank of petrol makes' },
+        { group: 'Combustion', label: 'Ethanol \u2192 CO\u2082',
+          values: { eq: 'C2H6O + O2 -> CO2 + H2O', from: 'C2H6O', grams: '46', to: 'CO2' } },
+        { group: 'Combustion', label: 'Oxygen needed to burn methane',
+          values: { eq: 'CH4 + O2 -> CO2 + H2O', from: 'CH4', grams: '16', to: 'O2' } },
+
+        { group: 'Industry', label: 'Haber: N\u2082 \u2192 ammonia',
+          values: { eq: 'N2 + H2 -> NH3', from: 'N2', grams: '28', to: 'NH3' } },
+        { group: 'Industry', label: 'Haber: hydrogen needed',
+          values: { eq: 'N2 + H2 -> NH3', from: 'NH3', grams: '17', to: 'H2' } },
+        { group: 'Industry', label: 'Smelting: ore \u2192 iron',
+          values: { eq: 'Fe2O3 + CO -> Fe + CO2', from: 'Fe2O3', grams: '160', to: 'Fe' },
+          note: 'How much iron you get from a mass of ore' },
+        { group: 'Industry', label: 'Limestone \u2192 quicklime',
+          values: { eq: 'CaCO3 -> CaO + CO2', from: 'CaCO3', grams: '100', to: 'CaO' } },
+        { group: 'Industry', label: 'Thermite: aluminium \u2192 iron',
+          values: { eq: 'Fe2O3 + Al -> Al2O3 + Fe', from: 'Al', grams: '54', to: 'Fe' } },
+
+        { group: 'In the lab', label: 'Zinc and acid \u2192 hydrogen',
+          values: { eq: 'Zn + HCl -> ZnCl2 + H2', from: 'Zn', grams: '65.4', to: 'H2' } },
+        { group: 'In the lab', label: 'Marble and acid \u2192 CO\u2082',
+          values: { eq: 'CaCO3 + HCl -> CaCl2 + H2O + CO2', from: 'CaCO3', grams: '100', to: 'CO2' } },
+        { group: 'In the lab', label: 'Precipitating silver chloride',
+          values: { eq: 'AgNO3 + NaCl -> AgCl + NaNO3', from: 'NaCl', grams: '58.44', to: 'AgCl' } },
+        { group: 'In the lab', label: 'Neutralisation \u2192 salt',
+          values: { eq: 'HCl + NaOH -> NaCl + H2O', from: 'HCl', grams: '36.46', to: 'NaCl' } },
+        { group: 'In the lab', label: 'Decomposing hydrogen peroxide',
+          values: { eq: 'H2O2 -> H2O + O2', from: 'H2O2', grams: '68', to: 'O2' } },
+
+        { group: 'Everyday', label: 'Respiration: glucose \u2192 CO\u2082',
+          values: { eq: 'C6H12O6 + O2 -> CO2 + H2O', from: 'C6H12O6', grams: '180', to: 'CO2' } },
+        { group: 'Everyday', label: 'Photosynthesis: CO\u2082 \u2192 glucose',
+          values: { eq: 'CO2 + H2O -> C6H12O6 + O2', from: 'CO2', grams: '264', to: 'C6H12O6' } },
+        { group: 'Everyday', label: 'Rusting iron',
+          values: { eq: 'Fe + O2 -> Fe2O3', from: 'Fe', grams: '55.85', to: 'Fe2O3' } },
+        { group: 'Everyday', label: 'Airbag: sodium azide \u2192 N\u2082',
+          values: { eq: 'NaN3 -> Na + N2', from: 'NaN3', grams: '130', to: 'N2' },
+          note: 'The reaction that inflates a car airbag in 30 milliseconds' },
+        { group: 'Everyday', label: 'Baking soda decomposing',
+          values: { eq: 'CHNaO3 -> Na2CO3 + H2O + CO2', from: 'CHNaO3', grams: '168', to: 'CO2' } },
+      ],
       fields: [
         { k: 'eq', label: 'Equation', placeholder: 'CH4 + O2 -> CO2 + H2O', wide: true },
         { k: 'from', label: 'I have', placeholder: 'CH4' },
@@ -312,6 +360,146 @@
       },
     },
     {
+      key: 'reaction-energy', name: 'Reaction energy',
+      blurb: 'How much energy a reaction releases \u2014 for the equation as written, or for the amounts you actually have.',
+      templates: [
+        { group: 'Burning a fuel', label: 'Methane (natural gas)',
+          values: { eq: 'CH4 + O2 -> CO2 + H2O', have: 'CH4', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Propane (camping gas)',
+          values: { eq: 'C3H8 + O2 -> CO2 + H2O', have: 'C3H8', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Butane (lighter)',
+          values: { eq: 'C4H10 + O2 -> CO2 + H2O', have: 'C4H10', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Octane (petrol)',
+          values: { eq: 'C8H18 + O2 -> CO2 + H2O', have: 'C8H18', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Ethanol',
+          values: { eq: 'C2H6O + O2 -> CO2 + H2O', have: 'C2H6O', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Hydrogen',
+          values: { eq: 'H2 + O2 -> H2O', have: 'H2', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Ethyne (welding torch)',
+          values: { eq: 'C2H2 + O2 -> CO2 + H2O', have: 'C2H2', amount: '1' } },
+        { group: 'Burning a fuel', label: 'Carbon (coal)',
+          values: { eq: 'C + O2 -> CO2', have: 'C', amount: '1' } },
+
+        { group: 'In a living thing', label: 'Respiration of glucose',
+          values: { eq: 'C6H12O6 + O2 -> CO2 + H2O', have: 'C6H12O6', amount: '1' },
+          note: 'The reaction every cell in your body runs' },
+        { group: 'In a living thing', label: 'Photosynthesis',
+          values: { eq: 'CO2 + H2O -> C6H12O6 + O2', have: 'CO2', amount: '6' },
+          note: 'Respiration backwards \u2014 so it absorbs energy, which is what the sunlight is for' },
+        { group: 'In a living thing', label: 'Burning sugar',
+          values: { eq: 'C12H22O11 + O2 -> CO2 + H2O', have: 'C12H22O11', amount: '1' } },
+
+        { group: 'Industry', label: 'Haber process',
+          values: { eq: 'N2 + H2 -> NH3', have: 'N2', amount: '1' },
+          note: 'Exothermic, which is why it is run cooler than the rate would like' },
+        { group: 'Industry', label: 'Thermite',
+          values: { eq: 'Fe2O3 + Al -> Al2O3 + Fe', have: 'Al', amount: '2' },
+          note: 'Hot enough to weld railway track' },
+        { group: 'Industry', label: 'Smelting iron',
+          values: { eq: 'Fe2O3 + CO -> Fe + CO2', have: 'Fe2O3', amount: '1' } },
+        { group: 'Industry', label: 'Making quicklime',
+          values: { eq: 'CaCO3 -> CaO + CO2', have: 'CaCO3', amount: '1' },
+          note: 'Endothermic \u2014 a lime kiln has to be heated the whole time' },
+        { group: 'Industry', label: 'Slaking lime',
+          values: { eq: 'CaO + H2O -> CaH2O2', have: 'CaO', amount: '1' } },
+        { group: 'Industry', label: 'Burning sulfur to SO\u2082',
+          values: { eq: 'S + O2 -> SO2', have: 'S', amount: '1' } },
+
+        { group: 'In the lab', label: 'Neutralisation',
+          values: { eq: 'HCl(aq) + NaOH(aq) -> NaCl(aq) + H2O', have: 'HCl', amount: '1' },
+          note: 'Acid plus alkali, per mole of water made' },
+        { group: 'In the lab', label: 'Magnesium burning',
+          values: { eq: 'Mg + O2 -> MgO', have: 'Mg', amount: '2' } },
+        { group: 'In the lab', label: 'Decomposing hydrogen peroxide',
+          values: { eq: 'H2O2 -> H2O + O2', have: 'H2O2', amount: '2' } },
+        { group: 'In the lab', label: 'Baking soda decomposing',
+          values: { eq: 'CHNaO3 -> Na2CO3 + H2O + CO2', have: 'CHNaO3', amount: '2' } },
+
+        { group: 'Endothermic ones', label: 'Nitrogen and oxygen \u2192 NO',
+          values: { eq: 'N2 + O2 -> NO', have: 'N2', amount: '1' },
+          note: 'Only happens in a lightning strike or an engine, because it costs energy' },
+        { group: 'Endothermic ones', label: 'Cracking ethane',
+          values: { eq: 'C2H6 -> C2H4 + H2', have: 'C2H6', amount: '1' } },
+        { group: 'Endothermic ones', label: 'Splitting water',
+          values: { eq: 'H2O -> H2 + O2', have: 'H2O', amount: '2' },
+          note: 'Combustion run backwards, and it costs exactly what burning released' },
+      ],
+      fields: [
+        { k: 'eq', label: 'Reaction', placeholder: 'CH4 + O2 -> CO2 + H2O', wide: true },
+        { k: 'have', label: 'I have (leave blank for per-equation only)', placeholder: 'CH4' },
+        { k: 'amount', label: 'how much of it', placeholder: '1' },
+        { k: 'kind', label: 'which is', type: 'select', options: [['mol', 'moles'], ['g', 'grams']] },
+        { k: 'have2', label: 'and (optional second reactant)', placeholder: '' },
+        { k: 'amount2', label: 'how much of that', placeholder: '' },
+        { k: 'kind2', label: 'which is', type: 'select', options: [['mol', 'moles'], ['g', 'grams']] },
+      ],
+      run(v) {
+        if (!String(v.eq || '').trim()) return { error: 'Type a reaction, or pick one of the templates above.' };
+        const rxn = ME.thermo.reactionEnthalpy(v.eq);
+        if (!rxn.ok) return { error: rxn.error };
+
+        const word = rxn.exothermic ? 'releases' : 'absorbs';
+        const perEquation = Math.abs(rxn.deltaH);
+
+        /* The limiting-reactant code works in grams, so an amount given in
+         * moles is converted here rather than there. Moles is the default,
+         * because an equation's coefficients are already a mole ratio and a
+         * reader working from one usually has moles in hand. */
+        const asGrams = (name, amount, kind) => {
+          if (amount === null) return null;
+          if (kind !== 'mol') return amount;
+          const parsed = ME.formula.parse(name);
+          return parsed.ok ? amount * parsed.mass : null;
+        };
+
+        const amounts = [];
+        const a1 = asGrams(v.have, num(v.amount), v.kind);
+        const a2 = asGrams(v.have2, num(v.amount2), v.kind2);
+        if (v.have && a1 !== null) amounts.push({ name: v.have, grams: a1 });
+        if (v.have2 && a2 !== null) amounts.push({ name: v.have2, grams: a2 });
+
+        const dhRow = ['\u0394H for the equation as written',
+          (rxn.deltaH > 0 ? '+' : '') + ME.fmt.fmtSigned(rxn.deltaH, 5) + ' kJ',
+          rxn.exothermic ? 'exothermic' : 'endothermic'];
+        const perMoleRows = rxn.perMole
+          .filter((r) => r.side === 'reactants')
+          .map((r) => ['per mole of ' + r.display,
+            (r.kJ > 0 ? '+' : '') + ME.fmt.fmtSigned(r.kJ, 5) + ' kJ/mol', '']);
+
+        if (!amounts.length) {
+          return {
+            headline: (rxn.exothermic ? 'Releases ' : 'Absorbs ') +
+              ME.fmt.fmt(perEquation, 5) + ' kJ per equation as written',
+            sub: rxn.equation.text,
+            table: { head: ['', 'Energy', ''], rows: [dhRow].concat(perMoleRows) },
+            steps: rxn.steps,
+            source: ME.ref.FORMATION.source,
+          };
+        }
+
+        const scaled = ME.thermo.energyFor(v.eq, amounts);
+        if (!scaled.ok) return { error: scaled.error };
+        const cmp = ME.thermo.compare(scaled.energy);
+        return {
+          headline: (scaled.exothermic ? 'Releases ' : 'Absorbs ') +
+            ME.fmt.fmt(Math.abs(scaled.energy), 5) + ' kJ',
+          sub: rxn.equation.text + '  \u00b7  ' + scaled.limiting.name + ' runs out first, after ' +
+            ME.thermo.times(scaled.batches) +
+            (cmp ? '  \u00b7  ' + cmp.text : ''),
+          table: {
+            head: ['', 'Energy', ''],
+            rows: [dhRow].concat(perMoleRows).concat([
+              ['for the amounts given',
+                (scaled.energy > 0 ? '+' : '') + ME.fmt.fmtSigned(scaled.energy, 5) + ' kJ',
+                word + ' ' + ME.fmt.fmt(Math.abs(scaled.energy) / 1000, 4) + ' MJ'],
+            ]),
+          },
+          steps: scaled.steps,
+          source: ME.ref.FORMATION.source,
+        };
+      },
+    },
+    {
       key: 'gibbs', name: 'Gibbs free energy', blurb: 'ΔG = ΔH − TΔS, and whether a reaction goes by itself.',
       fields: [
         { k: 'H', label: 'ΔH (kJ/mol)', placeholder: '-92' },
@@ -470,6 +658,34 @@
     const values = {};
     const inputs = {};
 
+    /* Templates, where a tool has them: a row of worked starting points, so
+     * the reader can see the tool doing something real before having to
+     * invent an equation. Clicking one fills every field and runs it. */
+    if (tool.templates && tool.templates.length) {
+      const picker = el('div', { class: 'tl-templates' });
+      picker.appendChild(el('div', { class: 'tl-templates-label', text: 'Start from one of these' }));
+      let lastGroup = null;
+      tool.templates.forEach((t) => {
+        if (t.group && t.group !== lastGroup) {
+          lastGroup = t.group;
+          picker.appendChild(el('div', { class: 'tl-templates-group', text: t.group }));
+        }
+        const chip = el('button', { class: 'btn btn-sm tl-template', title: t.note || '' });
+        chip.appendChild(el('span', { html: ME.chemHTML(t.label) }));
+        chip.addEventListener('click', () => {
+          Object.keys(t.values).forEach((k) => {
+            values[k] = t.values[k];
+            if (inputs[k]) inputs[k].value = t.values[k];
+          });
+          ME.$$('.tl-template', picker).forEach((b) => b.classList.remove('on'));
+          chip.classList.add('on');
+          go();
+        });
+        picker.appendChild(chip);
+      });
+      card.appendChild(picker);
+    }
+
     tool.fields.forEach((f) => {
       const holder = el('div', { class: 'tl-field' + (f.wide ? ' wide' : '') });
       holder.appendChild(el('label', { text: f.label }));
@@ -603,7 +819,12 @@
     const list = el('ol');
     steps.forEach((s) => {
       const li = el('li');
-      li.appendChild(el('div', { text: typeof s === 'string' ? s : s.text }));
+      /* A step may carry marked-up prose as well as plain text; the plain
+       * text stays so that anything reading steps without a DOM still gets
+       * the sentence. */
+      li.appendChild(s && s.html
+        ? el('div', { html: s.html })
+        : el('div', { text: typeof s === 'string' ? s : s.text }));
       if (s && s.maths) li.appendChild(el('div', { class: 'tl-maths', text: s.maths }));
       list.appendChild(li);
     });

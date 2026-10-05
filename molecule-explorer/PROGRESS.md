@@ -334,19 +334,55 @@ calculators, 11 reference tables and a 49-word glossary.
   link resolves — the view exists, and the lesson, tool, element or molecule
   it names exists too.
 
-### Next, in order
-1. Unit 10 gases, 11 solutions, 12 acids and bases, 13 thermochemistry,
-   14 rates and equilibrium — one commit each
-2. The nine remaining Unit 15 organic lessons (IUPAC naming, functional groups
-   in depth, isomers, cis/trans and E/Z, chirality, reaction types, polymers,
-   biomolecules)
-3. Remaining simulations embedded in their lessons; reaction-type animations
-   and a calorimetry sim
-4. Lessons, tools, reference sections and glossary terms findable from the top
-   search bar
+## Stage 4 — asked for after the course was finished
 
+### Done
+- **Specific heats**, asked for as "way more": 96 substances in eight groups,
+  up from the handful the heat tool started with. Grouped or ranked, with the
+  ranked view making the point the table exists to make — uranium 0.116 to
+  hydrogen 14.30, a factor of more than a hundred. The values live in the
+  groups and the flat lookup is derived from them, so each number is written
+  down in exactly one place.
+- **Reaction energy tool.** Any equation the Balancer can balance, answered
+  either per equation or for the amounts you have. Built on 104 enthalpies of
+  formation and Hess's law rather than a list of reaction enthalpies, so it
+  covers reactions nobody thought to add. Amounts read as moles or grams, and
+  the limiting reactant sets the scale.
+- **Templates** on both Reaction energy (24, in five groups) and Stoichiometry
+  (20, in four), so each tool opens with something real on screen. Every chip
+  is clicked by a test.
+- **Formation enthalpies** added to Reference as its twelfth table, marked
+  LITERATURE, with a button through to the tool that uses it.
+
+### Bugs found and fixed
+- The Balancer's live preview printed `nullH₂ + nullO₂ → nullH₂O` (reported
+  with a screenshot). A species parsed from an equation with no leading number
+  carries `null`, which passes both `!== undefined` and `!== 1` — the two
+  tests the preview was using to decide whether a coefficient was worth
+  printing. It now requires an actual finite number above one.
+- Adding the formation table stopped the app booting. The index is keyed on
+  what `ME.formula.parse` makes of each formula, and `13-refdata.js` is
+  concatenated before the formula parser, so building the index eagerly read
+  `ME.formula` while it was still undefined. It is built on first use instead.
+  This is the third boot failure caused by build-order coupling between files.
+- The first templates asked for 16 g of methane and got 0.9973 mol, because
+  16 is not methane's molar mass. The amount fields now take moles or grams,
+  defaulting to moles.
+- The headline said "Releases" for endothermic reactions too: a `.replace()`
+  applied to the wrong string. Caught before it shipped, pinned by a test that
+  photosynthesis absorbs and respiration releases, exactly mirroring each other.
+- The table displayed slaked lime as `CaH2O2` and baking soda as `CHNaO3` —
+  Hill order, which is what the parser produces and what no student would
+  recognise. Stored formulas are now written the conventional way; the index
+  still keys on the parse, so either spelling finds the row.
+- The working said "runs the reaction 1 times over", which is the kind of
+  phrase that makes a reader stop and reread. Both counters now say it in
+  English.
+
+### Still open
 Phone and tablet layout is deliberately **not** being done yet, at the user's
-request. Seven-plus tabs will need a scrollable tab row before release.
+request. The nine tabs now on one row will need either a scrollable tab row or
+a "More" menu before release.
 
 ---
 

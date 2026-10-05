@@ -475,6 +475,203 @@
   /* Lower case, for use inside a compound name. */
   function elementNameLower(sym) { return elementName(sym).toLowerCase(); }
 
+  /* Standard enthalpies of formation, \u0394H\u00b0f at 298 K in kJ/mol.
+   *
+   * This is what makes a general reaction-energy tool possible: rather than
+   * storing the enthalpy of each reaction, which would be a list that only
+   * ever covers what somebody thought to add, store the formation enthalpy of
+   * each substance and compute any reaction from
+   *
+   *   \u0394H\u00b0rxn = \u03a3 \u0394H\u00b0f(products) \u2212 \u03a3 \u0394H\u00b0f(reactants)
+   *
+   * which is Hess\u2019s law in its most useful form.
+   *
+   * The state matters enormously and is part of the key: water as a liquid is
+   * \u2212285.8 and as a gas \u2212241.8, a difference of 44 kJ/mol, which is exactly
+   * the energy it takes to boil it. A reaction written without states gets the
+   * substance\u2019s standard state, and the tool says which one it used.
+   *
+   * An element in its standard state is zero by definition \u2014 that is what
+   * "formation" is measured from. Those zeroes are listed explicitly rather
+   * than applied as a rule, because the rule has exceptions: ozone is +142.7
+   * and diamond is +1.9, and both are single elements.
+   *
+   * Literature values, like the solubility rules and the activity series.
+   * There is no free machine-readable source for them, so they are marked as
+   * learned rather than verified, and they are taken from one consistent set
+   * so that a calculation combining several of them stays self-consistent. */
+  const FORMATION_GROUPS = [
+    {
+      name: 'Elements in their standard state',
+      note: 'Zero by definition \u2014 formation enthalpy is measured from here. The two entries that are not zero are the ones that are not the standard state.',
+      items: [
+        ['H2', 'g', 0, 'hydrogen'], ['O2', 'g', 0, 'oxygen'], ['N2', 'g', 0, 'nitrogen'],
+        ['F2', 'g', 0, 'fluorine'], ['Cl2', 'g', 0, 'chlorine'], ['Br2', 'l', 0, 'bromine'],
+        ['I2', 's', 0, 'iodine'], ['C', 's', 0, 'carbon, as graphite'],
+        ['S', 's', 0, 'sulfur, rhombic'], ['S8', 's', 0, 'sulfur, as the S8 ring'],
+        ['P4', 's', 0, 'phosphorus, white'],
+        ['Na', 's', 0, 'sodium'], ['K', 's', 0, 'potassium'], ['Li', 's', 0, 'lithium'],
+        ['Mg', 's', 0, 'magnesium'], ['Ca', 's', 0, 'calcium'], ['Ba', 's', 0, 'barium'],
+        ['Al', 's', 0, 'aluminium'], ['Fe', 's', 0, 'iron'], ['Cu', 's', 0, 'copper'],
+        ['Zn', 's', 0, 'zinc'], ['Pb', 's', 0, 'lead'], ['Ag', 's', 0, 'silver'],
+        ['Sn', 's', 0, 'tin'], ['Ti', 's', 0, 'titanium'], ['Si', 's', 0, 'silicon'],
+        ['Hg', 'l', 0, 'mercury'], ['He', 'g', 0, 'helium'], ['Ne', 'g', 0, 'neon'],
+        ['Ar', 'g', 0, 'argon'],
+        ['O3', 'g', 142.7, 'ozone \u2014 oxygen, and not the standard state'],
+        ['C', 's-diamond', 1.895, 'diamond \u2014 carbon, and not the standard state'],
+      ],
+    },
+    {
+      name: 'Water and simple oxides',
+      items: [
+        ['H2O', 'l', -285.83, 'water'],
+        ['H2O', 'g', -241.82, 'steam \u2014 44 kJ/mol above the liquid, which is what boiling costs'],
+        ['H2O2', 'l', -187.78, 'hydrogen peroxide'],
+        ['CO2', 'g', -393.51, 'carbon dioxide'],
+        ['CO', 'g', -110.53, 'carbon monoxide'],
+        ['SO2', 'g', -296.83, 'sulfur dioxide'],
+        ['SO3', 'g', -395.72, 'sulfur trioxide'],
+        ['NO', 'g', 90.25, 'nitrogen monoxide \u2014 positive, so making it costs energy'],
+        ['NO2', 'g', 33.18, 'nitrogen dioxide'],
+        ['N2O', 'g', 82.05, 'dinitrogen monoxide'],
+        ['N2O4', 'g', 9.16, 'dinitrogen tetroxide'],
+        ['CaO', 's', -635.09, 'quicklime'],
+        ['MgO', 's', -601.70, 'magnesium oxide'],
+        ['Al2O3', 's', -1675.7, 'aluminium oxide \u2014 one of the most negative there is'],
+        ['Fe2O3', 's', -824.2, 'iron(III) oxide, rust'],
+        ['Fe3O4', 's', -1118.4, 'magnetite'],
+        ['FeO', 's', -272.0, 'iron(II) oxide'],
+        ['CuO', 's', -157.3, 'copper(II) oxide'],
+        ['Cu2O', 's', -168.6, 'copper(I) oxide'],
+        ['ZnO', 's', -348.28, 'zinc oxide'],
+        ['PbO', 's', -219.0, 'lead(II) oxide'],
+        ['TiO2', 's', -944.0, 'titanium dioxide'],
+        ['SiO2', 's', -910.94, 'silica, as quartz'],
+        ['P4O10', 's', -2984.0, 'phosphorus(V) oxide'],
+      ],
+    },
+    {
+      name: 'Hydrocarbons and fuels',
+      note: 'The fuels are all mildly negative. Almost all the energy of burning them comes from how deeply negative CO\u2082 and water are, not from the fuel itself.',
+      items: [
+        ['CH4', 'g', -74.81, 'methane \u2014 natural gas'],
+        ['C2H6', 'g', -84.68, 'ethane'],
+        ['C3H8', 'g', -103.85, 'propane'],
+        ['C4H10', 'g', -126.15, 'butane'],
+        ['C8H18', 'l', -249.9, 'octane \u2014 the reference for petrol'],
+        ['C2H4', 'g', 52.26, 'ethene \u2014 positive, which is part of why it polymerises so readily'],
+        ['C2H2', 'g', 226.73, 'ethyne \u2014 strongly positive, which is why it burns so hot'],
+        ['C6H6', 'l', 49.0, 'benzene'],
+      ],
+    },
+    {
+      name: 'Alcohols, acids and sugars',
+      items: [
+        ['CH3OH', 'l', -238.66, 'methanol'],
+        ['C2H5OH', 'l', -277.69, 'ethanol'],
+        ['CH3COOH', 'l', -484.5, 'ethanoic acid \u2014 vinegar'],
+        ['C6H12O6', 's', -1273.3, 'glucose'],
+        ['C12H22O11', 's', -2226.1, 'sucrose \u2014 table sugar'],
+        ['CH2O2', 'l', -424.72, 'methanoic acid'],
+      ],
+    },
+    {
+      name: 'Acids, bases and salts',
+      note: 'The (aq) values use the usual convention for dissolved species, so a neutralisation worked out from them comes to about \u221256 kJ per mole of water made \u2014 the figure a school experiment measures is near \u221257.',
+      items: [
+        ['NH3', 'g', -46.11, 'ammonia'],
+        ['HCl', 'g', -92.31, 'hydrogen chloride gas'],
+        ['HCl', 'aq', -167.16, 'hydrochloric acid'],
+        ['HBr', 'g', -36.40, 'hydrogen bromide'],
+        ['HI', 'g', 26.48, 'hydrogen iodide'],
+        ['H2S', 'g', -20.63, 'hydrogen sulfide'],
+        ['H2SO4', 'l', -813.99, 'sulfuric acid'],
+        ['HNO3', 'l', -174.10, 'nitric acid'],
+        ['NaOH', 's', -425.61, 'sodium hydroxide'],
+        ['NaOH', 'aq', -470.11, 'sodium hydroxide solution'],
+        ['NaCl', 's', -411.15, 'table salt'],
+        ['NaCl', 'aq', -407.27, 'salt in solution'],
+        ['KCl', 's', -436.75, 'potassium chloride'],
+        ['NaBr', 's', -361.06, 'sodium bromide'],
+        ['LiCl', 's', -408.61, 'lithium chloride'],
+        ['AgCl', 's', -127.07, 'silver chloride'],
+        ['CaCl2', 's', -795.8, 'calcium chloride'],
+        ['CaCO3', 's', -1206.9, 'limestone, as calcite'],
+        ['MgCO3', 's', -1095.8, 'magnesium carbonate'],
+        ['Na2CO3', 's', -1130.68, 'washing soda'],
+        ['NaHCO3', 's', -950.81, 'sodium hydrogen carbonate \u2014 baking soda'],
+        ['Ca(OH)2', 's', -986.09, 'slaked lime'],
+        ['Mg(OH)2', 's', -924.54, 'magnesium hydroxide'],
+        ['CaSO4', 's', -1434.11, 'calcium sulfate'],
+        ['BaSO4', 's', -1473.2, 'barium sulfate'],
+        ['NH4Cl', 's', -314.43, 'ammonium chloride'],
+        ['NH4NO3', 's', -365.56, 'ammonium nitrate'],
+        ['KNO3', 's', -494.63, 'potassium nitrate'],
+      ],
+    },
+    {
+      name: 'Other compounds',
+      items: [
+        ['CCl4', 'l', -135.44, 'carbon tetrachloride'],
+        ['CHCl3', 'l', -134.47, 'chloroform'],
+        ['CS2', 'l', 89.70, 'carbon disulfide'],
+        ['PCl3', 'l', -319.7, 'phosphorus trichloride'],
+        ['PCl5', 's', -443.5, 'phosphorus pentachloride'],
+        ['SF6', 'g', -1209.0, 'sulfur hexafluoride'],
+      ],
+    },
+  ];
+
+  /* Keyed by the formula in Hill order and the state, so HOH and H2O land on
+   * the same entry and liquid water and steam do not.
+   *
+   * Built on first use rather than at load, because the key is produced by
+   * ME.formula.parse and this file is concatenated before the formula parser.
+   * Doing it eagerly left ME.formula undefined and stopped the app booting. */
+  let FORMATION_INDEX = null;
+  let FORMATION_DEFAULT = null;
+  function buildFormationIndex() {
+    FORMATION_INDEX = {};
+    FORMATION_DEFAULT = {};
+    FORMATION_GROUPS.forEach((g) => {
+      g.items.forEach((row) => {
+        const parsed = ME.formula.parse(row[0]);
+        const key = parsed.ok ? parsed.text : row[0];
+        FORMATION_INDEX[key + '|' + row[1]] = { f: row[0], hill: key, state: row[1], dh: row[2], name: row[3] };
+        /* The first state listed for a substance is its standard one, which is
+         * what a reaction written without state labels gets. */
+        if (FORMATION_DEFAULT[key] === undefined) FORMATION_DEFAULT[key] = row[1];
+      });
+    });
+  }
+
+  const FORMATION = {
+    source: 'Standard enthalpies of formation at 298 K, in kJ/mol, from one consistent set of tabulated values. Literature data \u2014 there is no free machine-readable source for these, so they are stated as learned rather than verified against anything.',
+    groups: FORMATION_GROUPS,
+    why: 'Store one number per substance and you can work out any reaction between them, because \u0394H\u00b0rxn is the products\u2019 formation enthalpies minus the reactants\u2019. That is Hess\u2019s law doing real work: a reaction nobody has ever run can be costed from substances that have each been measured once.',
+    /* Look a species up. `state` may be null, in which case the standard
+     * state is used and the caller is told which that was. */
+    lookup(formulaText, state) {
+      if (!FORMATION_INDEX) buildFormationIndex();
+      const parsed = ME.formula.parse(formulaText);
+      if (!parsed.ok) return null;
+      const want = state || FORMATION_DEFAULT[parsed.text];
+      if (want === undefined) return null;
+      const hit = FORMATION_INDEX[parsed.text + '|' + want];
+      if (!hit) return null;
+      return {
+        dh: hit.dh, state: hit.state, name: hit.name,
+        display: parsed.display,
+        assumedState: !state,
+      };
+    },
+    has(formulaText, state) { return FORMATION.lookup(formulaText, state) !== null; },
+    get count() {
+      if (!FORMATION_INDEX) buildFormationIndex();
+      return Object.keys(FORMATION_INDEX).length;
+    },
+  };
+
   /* SI prefixes, which are definitions rather than measurements. */
   const PREFIXES = [
     ['tera', 'T', 12], ['giga', 'G', 9], ['mega', 'M', 6], ['kilo', 'k', 3],
@@ -487,7 +684,7 @@
     setIons, get ions() { return IONS; }, ionByName, ionByFormula,
     typicalCharge, ideName, IDE_STEM, LATIN, FIXED_D_BLOCK,
     SOLUBILITY, ACTIVITY, moreReactive, STRONG_ACIDS, STRONG_BASES,
-    SPECIFIC_HEAT, LATENT, COLLIGATIVE, ORGANIC_BP, boilingPoint, PREFIXES,
+    SPECIFIC_HEAT, LATENT, COLLIGATIVE, ORGANIC_BP, boilingPoint, FORMATION, PREFIXES,
     elementName, elementNameLower, SPELLING,
   };
 })();

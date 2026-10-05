@@ -410,6 +410,91 @@ check('limiting reactant names the one that runs out',
   await page.locator('.tl-headline').innerText());
 await page.screenshot({ path: path.join(SHOTS, '11-tools.png') });
 
+/* Reaction energy. The engine tests pin the numbers; what matters here is
+ * that a reader who clicks a chip gets those numbers on screen, with nothing
+ * left as a blank or a NaN by the time it reaches the page. */
+await page.locator('.tl-navbtn', { hasText: 'Reaction energy' }).click();
+await page.waitForTimeout(400);
+const reTemplates = await page.locator('.tl-template').count();
+const reGroups = await page.locator('.tl-templates-group').count();
+check('the reaction energy tool offers plenty of templates, in groups',
+  reTemplates >= 20 && reGroups >= 4, reTemplates + ' templates in ' + reGroups + ' groups');
+
+await page.locator('.tl-template', { hasText: 'Methane' }).first().click();
+await page.waitForTimeout(400);
+let reHead = await page.locator('.tl-headline').innerText();
+check('burning methane shows the textbook figure',
+  /Releases/i.test(reHead) && /890/.test(reHead), reHead);
+check('and shows the working, not just the answer',
+  await page.locator('.tl-steps li').count() >= 3);
+
+/* Ten grams is well under a mole, so the energy has to come down with it. */
+await page.locator('#view-tools .tl-input').nth(2).fill('10');
+await page.selectOption('#view-tools .tl-select', 'g');
+await page.waitForTimeout(500);
+let scaled = await page.locator('.tl-headline').innerText();
+check('a smaller amount of fuel releases proportionally less',
+  /Releases/i.test(scaled) && /55[0-9]/.test(scaled.replace(/,/g, '')), scaled);
+
+await page.locator('.tl-template', { hasText: 'Photosynthesis' }).first().click();
+await page.waitForTimeout(400);
+const endo = await page.locator('.tl-headline').innerText();
+check('an endothermic reaction says it absorbs rather than releases',
+  /Absorbs/i.test(endo) && !/Releases/i.test(endo), endo);
+
+/* Every chip, clicked for real. A template that silently errors would be
+ * worse than no template, because it reads as the tool being broken. */
+const everyChip = await page.evaluate(async () => {
+  const chips = Array.from(document.querySelectorAll('.tl-template'));
+  const bad = [];
+  for (const chip of chips) {
+    chip.click();
+    await new Promise((r) => setTimeout(r, 0));
+    const head = document.querySelector('.tl-headline');
+    const err = document.querySelector('.tl-out .callout.warn');
+    const text = head ? head.innerText : '';
+    if (err || !head || !/kJ/.test(text) || /NaN|undefined|null/.test(text)) {
+      bad.push(chip.innerText.trim() + ' -> ' + (err ? err.innerText : text));
+    }
+  }
+  return { count: chips.length, bad: bad };
+});
+check('every reaction energy template gives a real answer when clicked',
+  everyChip.bad.length === 0 && everyChip.count >= 20,
+  everyChip.count + ' chips, bad: ' + everyChip.bad.join(' | '));
+
+/* Stoichiometry templates */
+await page.locator('.tl-navbtn', { hasText: 'Stoichiometry' }).click();
+await page.waitForTimeout(400);
+const stTemplates = await page.locator('.tl-template').count();
+check('stoichiometry has templates too', stTemplates >= 15, stTemplates + ' templates');
+const everyStoich = await page.evaluate(async () => {
+  const chips = Array.from(document.querySelectorAll('.tl-template'));
+  const bad = [];
+  for (const chip of chips) {
+    chip.click();
+    await new Promise((r) => setTimeout(r, 0));
+    const head = document.querySelector('.tl-headline');
+    const err = document.querySelector('.tl-out .callout.warn');
+    const text = head ? head.innerText : '';
+    if (err || !head || !/\d/.test(text) || /NaN|undefined|null/.test(text)) {
+      bad.push(chip.innerText.trim() + ' -> ' + (err ? err.innerText : text));
+    }
+  }
+  return bad;
+});
+check('every stoichiometry template gives a real answer when clicked',
+  everyStoich.length === 0, everyStoich.join(' | '));
+await page.locator('.tl-template').first().click();
+await page.waitForTimeout(350);
+await page.locator('.tl-navbtn', { hasText: 'Reaction energy' }).click();
+await page.waitForTimeout(400);
+await page.locator('.tl-template', { hasText: 'Methane' }).first().click();
+await page.waitForTimeout(400);
+await page.screenshot({ path: path.join(SHOTS, '11b-reaction-energy.png'), fullPage: true });
+
+
+
 /* Reference */
 await page.locator('.tab[data-view=reference]').click();
 await page.waitForTimeout(400);
