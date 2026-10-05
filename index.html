@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heat Explorer</title>
+<meta name="description" content="An interactive heat equation simulator for rods, plates and blocks, with explanations written for middle and high school students.">
+<!--
+==========================================================================================
+  HEAT EXPLORER — single-file interactive heat-equation simulator
+==========================================================================================
+  Open this file by double-clicking it. No build step, no backend, no external libraries
+  (the 3D view is drawn with the plain 2D canvas API, so it also works offline).
+
+  PHYSICS & NUMERICS
+  - Solves ∂T/∂t = α ∇²T with the explicit FTCS scheme (Forward Time, Centered Space)
+    on a uniform node-based grid. All internal math is SI: metres, seconds, °C
+    (°C and K differ only by an offset, and the equation is linear, so °C is exact),
+    α in m²/s. Units are converted only for display and input.
+  - Time step: Δt = 0.9 · 1 / (2 α Σ 1/Δx_i²). For equal spacing this is exactly
+    0.9 · Δx² / (2·d·α), i.e. 90 % of the FTCS stability limit. The user can never
+    choose Δt directly, so the scheme can never go unstable.
+  - Fixed-temperature edges (Dirichlet): edge nodes are held at the set value.
+    Insulated edges (Neumann, zero flux): a mirrored "ghost node" (T[-1] = T[1]).
+    With trapezoid weights (half weight on edge nodes) this conserves total heat
+    exactly (to round-off) when every edge is insulated.
+  - Where two sides meet and both are "fixed", the later side in the order
+    x, y, z wins at the shared corner/edge nodes (a 1-node detail).
+
+  APPROXIMATIONS (stated plainly)
+  - Conduction only: no convection (moving fluids), no radiation, no melting/boiling
+    (the ice cube never turns to water, so there is no latent heat).
+  - α is constant: real α changes a little with temperature.
+  - One material per object. A "hot spot" (coin, burner, chip) is modelled as a region
+    of the same material that starts at, or is held at, its own temperature.
+  - Edges are perfectly held or perfectly insulated; real edges are somewhere between.
+  - Grid sizes are capped for speed (1D ≤ 201 points, 2D ≤ 101×101, 3D ≤ 30³). If a run
+    would need too many steps (work budget ≈ 9·10⁷ point-updates per material), the grid
+    is coarsened and the user is told. In the rare case even the coarsest grid is too
+    slow, the simulated time is shortened and the user is told.
+  - Once a run has gone 6·L²/α past the start (L = longest side), every possible change has
+    decayed by a factor of e⁻¹⁵ or more, so the solver stops stepping and holds the final
+    field (steady state). The error from this is below 10⁻⁶ of the temperature range.
+  - The animation stores ~120–240 snapshots and linearly interpolates between them for
+    smooth playback; the solver itself takes many smaller steps between snapshots.
+  - The 3D view draws each grid node as a voxel cube centred on the node, so the drawn
+    block is half a grid cell bigger on each side than the real one (visual only).
+  - The "jiggling particles" overlay is exaggerated on purpose: jiggle strength maps the
+    current colour-bar range, not the true (much smaller) √T speed change.
+
+  QUALITY CHECKS: open "Explain this" → "More detail" → "Run self-checks", or call
+  HeatExplorer.selfTest() in the browser console. They verify the straight-line steady
+  state, heat conservation (1D and 3D), unit round-trips and that every template is
+  stable and finite.
+==========================================================================================
+-->
+<style>
+:root{
+  --bg:#f5f6fa; --panel:#ffffff; --panel2:#eef1f7; --text:#1b2232; --muted:#5a6476;
+  --border:#dce1ea; --accent:#e0582c; --accent-ink:#ffffff; --accent-soft:#fde7de;
+  --blue:#2f6fd6; --lineA:#6a3fb5; --lineB:#13877a; --err:#b3261e; --errbg:#fdecea;
+  --warn:#8a5a00; --warnbg:#fff4d6; --ok:#1d7a45; --shadow:0 2px 10px rgba(20,30,60,.07);
+  --canvas-bg:#f0f2f7; --grid:#d9dee8; --radius:16px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10131a; --panel:#181d27; --panel2:#212837; --text:#e7ebf3; --muted:#9aa4b7;
+    --border:#2c3445; --accent:#ff7a4a; --accent-ink:#1a0e08; --accent-soft:#3a2219;
+    --blue:#6aa6ff; --lineA:#b69cf5; --lineB:#4fd1c0; --err:#ff8a80; --errbg:#3a1d1f;
+    --warn:#ffd27a; --warnbg:#33290f; --ok:#6fdc9b; --shadow:0 2px 12px rgba(0,0,0,.35);
+    --canvas-bg:#121722; --grid:#2a3242; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10131a; --panel:#181d27; --panel2:#212837; --text:#e7ebf3; --muted:#9aa4b7;
+  --border:#2c3445; --accent:#ff7a4a; --accent-ink:#1a0e08; --accent-soft:#3a2219;
+  --blue:#6aa6ff; --lineA:#b69cf5; --lineB:#4fd1c0; --err:#ff8a80; --errbg:#3a1d1f;
+  --warn:#ffd27a; --warnbg:#33290f; --ok:#6fdc9b; --shadow:0 2px 12px rgba(0,0,0,.35);
+  --canvas-bg:#121722; --grid:#2a3242; color-scheme: dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0}
+body{background:var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; -webkit-text-size-adjust:100%}
+button,select,input{font:inherit; color:inherit}
+h1,h2,h3{line-height:1.2; margin:0}
+.wrap{max-width:1400px; margin:0 auto; padding:0 16px}
+/* ---------- top bar ---------- */
+.topbar{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 0 6px}
+.brand{display:flex; align-items:center; gap:12px}
+.logo{width:46px; height:46px; border-radius:14px; display:grid; place-items:center; font-size:26px; background:linear-gradient(135deg,#4575b4,#ffffbf 50%,#d73027)}
+.brand h1{font-size:1.55rem; letter-spacing:-.01em}
+.brand p{margin:0; color:var(--muted); font-size:.92rem}
+.top-actions{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.seg{display:inline-flex; background:var(--panel2); border:1px solid var(--border); border-radius:999px; padding:3px}
+.seg button{border:0; background:transparent; padding:7px 14px; border-radius:999px; cursor:pointer; font-weight:600; color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--panel); color:var(--text); box-shadow:var(--shadow)}
+.btn{border:1px solid var(--border); background:var(--panel); padding:9px 16px; border-radius:12px; cursor:pointer; font-weight:600; min-height:42px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent); color:var(--accent-ink); border-color:transparent}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.big{width:100%; font-size:1.1rem; padding:14px; min-height:54px}
+.btn.pulse{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(224,88,44,.45)}50%{box-shadow:0 0 0 8px rgba(224,88,44,0)}}
+.btn:disabled{opacity:.55; cursor:not-allowed}
+:focus-visible{outline:3px solid var(--blue); outline-offset:2px}
+/* ---------- mode tabs ---------- */
+.modes{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:10px 0 12px}
+.mode-card{display:flex; align-items:center; gap:14px; text-align:left; padding:14px 16px; border-radius:var(--radius); border:2px solid var(--border); background:var(--panel); cursor:pointer; box-shadow:var(--shadow); min-height:76px}
+.mode-card svg{flex:0 0 auto; width:54px; height:44px}
+.mode-card strong{display:block; font-size:1.15rem}
+.mode-card span{display:block; color:var(--muted); font-size:.9rem; line-height:1.3}
+.mode-card[aria-selected="true"]{border-color:var(--accent); background:linear-gradient(0deg,var(--accent-soft),var(--panel) 85%)}
+/* ---------- units bar ---------- */
+.unitsbar{display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; padding:10px 14px; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:14px}
+.unitsbar .lbl{font-weight:700}
+.unitsbar label{display:flex; align-items:center; gap:6px; color:var(--muted); font-size:.92rem}
+select,input[type=text],input[type=number]{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:7px 10px; min-height:40px}
+select{cursor:pointer}
+/* ---------- layout ---------- */
+.layout{display:grid; grid-template-columns:minmax(300px,390px) minmax(0,1fr); gap:16px; align-items:start; padding-bottom:40px}
+.panel{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow)}
+.setup{display:flex; flex-direction:column; gap:14px}
+.setup h2{font-size:1.1rem; display:flex; align-items:center; gap:8px; margin-bottom:10px}
+.step{display:inline-grid; place-items:center; width:26px; height:26px; border-radius:50%; background:var(--accent); color:var(--accent-ink); font-size:.85rem}
+.viz{display:flex; flex-direction:column; gap:16px; min-width:0}
+.templates{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.tpl{display:flex; flex-direction:column; gap:2px; text-align:left; border:1.5px solid var(--border); background:var(--panel2); border-radius:12px; padding:9px 10px; cursor:pointer; min-height:64px}
+.tpl:hover{border-color:var(--muted)}
+.tpl b{font-size:.95rem; line-height:1.25}
+.tpl small{color:var(--muted); font-size:.78rem; line-height:1.3}
+.tpl .ic{font-size:1.3rem; line-height:1}
+.tpl[aria-pressed="true"]{border-color:var(--accent); background:var(--accent-soft)}
+.field{display:flex; flex-direction:column; gap:4px; margin-bottom:10px}
+.field > label, .field .flabel{font-weight:600; font-size:.93rem; display:flex; align-items:center; gap:6px}
+.row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.row input[type=text]{width:110px}
+.ulabel{color:var(--muted); font-size:.92rem; min-width:2em}
+.ferr{color:var(--err); font-size:.85rem}
+input.bad{border-color:var(--err); background:var(--errbg)}
+.sub{border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin:0 0 10px; background:var(--panel2)}
+.sub legend{font-weight:700; padding:0 6px}
+.edge{display:grid; grid-template-columns:minmax(80px,auto) 1fr; gap:6px 8px; align-items:center; margin-bottom:6px}
+.edge .row{gap:6px}
+.edge select{max-width:100%}
+.check{display:flex; gap:8px; align-items:flex-start; cursor:pointer; font-weight:600}
+.check input{width:20px; height:20px; margin-top:2px; accent-color:var(--accent)}
+input[type=range]{accent-color:var(--accent); width:100%; min-height:28px}
+.mat-card{display:flex; gap:12px; align-items:flex-start; background:var(--panel2); border-radius:12px; padding:10px 12px; margin-top:8px}
+.swatch{flex:0 0 auto; width:34px; height:34px; border-radius:10px; border:1px solid rgba(0,0,0,.15); box-shadow:inset 0 6px 10px rgba(255,255,255,.35), inset 0 -6px 10px rgba(0,0,0,.18)}
+.mat-card p{margin:2px 0 0; font-size:.88rem; color:var(--muted)}
+.mat-card b{font-size:.95rem}
+.info{display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; border:1.5px solid var(--blue); color:var(--blue); background:transparent; font-size:.8rem; font-weight:800; cursor:pointer; padding:0; flex:0 0 auto; line-height:1}
+.info:hover{background:var(--blue); color:var(--panel)}
+.msgs{display:flex; flex-direction:column; gap:8px}
+.msg{border-radius:12px; padding:10px 12px; font-size:.92rem}
+.msg.err{background:var(--errbg); color:var(--err); border:1px solid var(--err)}
+.msg.warn{background:var(--warnbg); color:var(--warn); border:1px solid color-mix(in srgb,var(--warn) 50%,transparent)}
+.msg ul{margin:4px 0 0; padding-left:20px}
+/* ---------- viz ---------- */
+.viz-head{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:10px}
+.viz-head h2{font-size:1.25rem}
+.viz-head p{margin:2px 0 0; color:var(--muted); font-size:.92rem}
+.views{display:grid; grid-template-columns:1fr; gap:14px; position:relative}
+.views.two{grid-template-columns:1fr 1fr}
+.view{min-width:0}
+.view-title{display:flex; align-items:center; gap:8px; font-weight:700; margin-bottom:6px}
+.view-title .swatch{width:20px; height:20px; border-radius:6px}
+.view canvas{display:block; width:100%; border-radius:12px; background:var(--canvas-bg); touch-action:none; cursor:crosshair}
+.view.d3 canvas.main{cursor:grab}
+.view.d3 canvas.main:active{cursor:grabbing}
+.readout{display:flex; flex-wrap:wrap; gap:4px 14px; font-size:.9rem; margin-top:6px}
+.readout span{white-space:nowrap}
+.slicewrap{margin-top:8px}
+.slicewrap .cap{font-size:.85rem; color:var(--muted); margin-bottom:4px}
+.progress{position:absolute; inset:0; display:grid; place-items:center; background:color-mix(in srgb,var(--panel) 80%,transparent); border-radius:12px; z-index:5; min-height:120px}
+.progress .box{text-align:center; font-weight:700}
+.bar{width:220px; height:10px; border-radius:99px; background:var(--panel2); overflow:hidden; margin-top:8px; border:1px solid var(--border)}
+.bar i{display:block; height:100%; width:0; background:var(--accent)}
+.colorbar{margin-top:12px}
+.colorbar canvas{display:block; width:100%; height:52px}
+.playbar{display:grid; grid-template-columns:auto auto 1fr; gap:10px 12px; align-items:center; margin-top:12px}
+.clock{font-size:1.25rem; font-weight:800; font-variant-numeric:tabular-nums; grid-column:1/-1; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px}
+.clock small{font-weight:500; color:var(--muted); font-size:.85rem; align-self:center}
+.scrub{display:flex; flex-direction:column}
+.scrub label{font-size:.8rem; color:var(--muted)}
+.speed{display:flex; align-items:center; gap:10px; grid-column:1/-1; flex-wrap:wrap}
+.speed input{max-width:220px}
+.speed .muted{color:var(--muted); font-size:.88rem}
+.tools{display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin-top:12px; padding-top:12px; border-top:1px dashed var(--border)}
+.tools .cut{display:flex; gap:8px; align-items:center; flex-wrap:wrap; flex:1 1 300px}
+.tools .cut input{flex:1 1 140px}
+.graph canvas{display:block; width:100%; height:260px}
+.graph h3, .card h3{font-size:1.08rem; display:flex; gap:8px; align-items:center; margin-bottom:8px}
+.hint{color:var(--muted); font-size:.87rem; margin:6px 0 0}
+#summary p{margin:.4em 0}
+#summary ul{margin:.4em 0; padding-left:1.2em}
+#summary li{margin:.25em 0}
+.explain details{border:1px solid var(--border); border-radius:12px; margin:8px 0; background:var(--panel2)}
+.explain summary{cursor:pointer; padding:10px 14px; font-weight:700; list-style-position:inside}
+.explain .body{padding:0 16px 12px}
+.explain p{margin:.5em 0}
+.eq{font-family:"Cambria Math","STIX Two Math","Times New Roman",serif; font-size:1.35rem; text-align:center; padding:10px; background:var(--panel); border-radius:10px; margin:8px 0; border:1px solid var(--border); overflow-x:auto}
+.eq.small{font-size:1.05rem}
+.detail-only{display:none}
+body.detail .detail-only{display:block}
+body.detail span.detail-only{display:inline}
+.more{border-left:3px solid var(--blue); padding-left:10px; margin-top:8px}
+.more::before{content:"More detail"; display:block; font-size:.75rem; text-transform:uppercase; letter-spacing:.06em; color:var(--blue); font-weight:800}
+table.bts{border-collapse:collapse; width:100%; font-size:.9rem}
+table.bts td{padding:4px 6px; border-bottom:1px solid var(--border)}
+table.bts td:first-child{color:var(--muted)}
+.abars{display:flex; flex-direction:column; gap:4px; margin:8px 0}
+.abar{display:grid; grid-template-columns:120px 1fr 90px; gap:8px; align-items:center; font-size:.85rem}
+.abar i{display:block; height:12px; border-radius:6px}
+.abar span:last-child{color:var(--muted); text-align:right; font-variant-numeric:tabular-nums}
+.tests li.pass::marker{content:"✅ "}
+.tests li.fail::marker{content:"❌ "}
+/* ---------- popover ---------- */
+#pop{position:fixed; z-index:50; max-width:min(380px,calc(100vw - 24px)); background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:14px; padding:14px 16px; box-shadow:0 10px 30px rgba(0,0,0,.25); font-size:.95rem}
+#pop h4{margin:0 26px 6px 0; font-size:1.02rem}
+#pop p{margin:.4em 0}
+#pop .x{position:absolute; top:8px; right:8px; border:0; background:transparent; font-size:1.2rem; cursor:pointer; color:var(--muted); width:30px; height:30px}
+.sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0)}
+@media (max-width: 980px){
+  .layout{grid-template-columns:1fr}
+}
+@media (max-width: 720px){
+  .views.two{grid-template-columns:1fr}
+}
+@media (max-width: 600px){
+  .playbar{grid-template-columns:1fr 1fr}
+  .scrub{grid-column:1/-1}
+  .modes{grid-template-columns:1fr; gap:8px}
+  .mode-card{min-height:60px; padding:10px 12px}
+  .mode-card svg{width:42px; height:34px}
+  .brand h1{font-size:1.3rem}
+  .templates{grid-template-columns:1fr}
+  .abar{grid-template-columns:90px 1fr 70px}
+  .graph canvas{height:220px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">🌡️</div>
+      <div><h1>Heat Explorer</h1><p>Watch heat spread through rods, plates and blocks.</p></div>
+    </div>
+    <div class="top-actions">
+      <div class="seg" role="group" aria-label="How much explanation">
+        <button type="button" data-level="simple" aria-pressed="true">Simple</button>
+        <button type="button" data-level="detail" aria-pressed="false">More detail</button>
+      </div>
+      <button type="button" id="themeBtn" class="btn" aria-label="Change color theme">🌓 Auto</button>
+    </div>
+  </header>
+
+  <nav class="modes" role="tablist" aria-label="Choose a shape">
+    <button type="button" class="mode-card" role="tab" data-mode="1" aria-selected="true">
+      <svg viewBox="0 0 54 44" aria-hidden="true"><defs><linearGradient id="g1" x1="0" x2="1"><stop offset="0" stop-color="#d73027"/><stop offset=".5" stop-color="#fee090"/><stop offset="1" stop-color="#4575b4"/></linearGradient></defs><rect x="3" y="17" width="48" height="10" rx="5" fill="url(#g1)"/></svg>
+      <div><strong>1D Rod</strong><span>Heat flowing along a metal stick</span></div>
+    </button>
+    <button type="button" class="mode-card" role="tab" data-mode="2" aria-selected="false">
+      <svg viewBox="0 0 54 44" aria-hidden="true"><defs><radialGradient id="g2"><stop offset="0" stop-color="#d73027"/><stop offset=".45" stop-color="#fee090"/><stop offset="1" stop-color="#4575b4"/></radialGradient></defs><rect x="6" y="3" width="42" height="38" rx="5" fill="url(#g2)"/></svg>
+      <div><strong>2D Plate</strong><span>Heat spreading across a flat sheet</span></div>
+    </button>
+    <button type="button" class="mode-card" role="tab" data-mode="3" aria-selected="false">
+      <svg viewBox="0 0 54 44" aria-hidden="true"><polygon points="27,3 47,12 27,21 7,12" fill="#d73027"/><polygon points="7,12 27,21 27,42 7,33" fill="#4575b4"/><polygon points="27,21 47,12 47,33 27,42" fill="#fdae61"/></svg>
+      <div><strong>3D Block</strong><span>Heat soaking into a solid cube</span></div>
+    </button>
+  </nav>
+
+  <div class="unitsbar" aria-label="Units">
+    <span class="lbl">Units</span>
+    <label>Temperature <select id="uTemp"><option value="C">°C</option><option value="F">°F</option><option value="K">K</option></select></label>
+    <label>Length <select id="uLen"><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option><option value="in">in</option><option value="ft">ft</option></select></label>
+    <label>Time <select id="uTime"><option value="s">seconds</option><option value="min">minutes</option><option value="h">hours</option></select></label>
+    <label>Diffusivity <select id="uAlpha"><option value="m2/s">m²/s</option><option value="cm2/s">cm²/s</option><option value="mm2/s">mm²/s</option></select></label>
+    <span data-info="units"></span>
+  </div>
+
+  <main class="layout">
+    <aside class="setup">
+      <section class="panel">
+        <h2><span class="step">1</span>Pick a scenario <span data-info="template"></span></h2>
+        <div id="templates" class="templates"></div>
+      </section>
+      <section class="panel">
+        <h2><span class="step">2</span>Choose a material <span data-info="alpha"></span></h2>
+        <select id="material" aria-label="Material" style="width:100%"></select>
+        <div class="field" id="customAlphaField" hidden style="margin-top:8px">
+          <label for="customAlpha">Your α (thermal diffusivity) <span data-info="alpha"></span></label>
+          <div class="row"><input type="text" id="customAlpha" inputmode="decimal" data-q="alpha" data-path="customAlpha"><span class="ulabel" data-u="alpha"></span></div>
+          <span class="ferr" data-err="customAlpha"></span>
+        </div>
+        <div id="matCard" class="mat-card"></div>
+        <label class="check" style="margin-top:12px"><input type="checkbox" id="compare"> <span>Compare two materials side by side <span data-info="compare"></span></span></label>
+        <div id="compareBox" hidden>
+          <select id="material2" aria-label="Second material" style="width:100%; margin-top:8px"></select>
+          <div id="matCard2" class="mat-card"></div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2><span class="step">3</span>Make it your own</h2>
+        <div id="customForm"></div>
+      </section>
+      <div id="errors" class="msgs" aria-live="polite"></div>
+      <button type="button" id="runBtn" class="btn primary big">▶ Run simulation</button>
+    </aside>
+
+    <section class="viz">
+      <div class="panel">
+        <div class="viz-head">
+          <div><h2 id="vizTitle">Heat Explorer</h2><p id="vizSub"></p></div>
+        </div>
+        <div id="notices" class="msgs" style="margin-bottom:10px"></div>
+        <div id="views" class="views"></div>
+        <div class="colorbar"><canvas id="colorbar" aria-label="Color scale"></canvas></div>
+        <div class="playbar">
+          <div class="clock"><span id="clock" aria-live="off">Time: 0 seconds</span><small id="rateNote"></small></div>
+          <button type="button" class="btn primary" id="playBtn" aria-label="Play">▶ Play</button>
+          <button type="button" class="btn" id="restartBtn" aria-label="Restart">⟲ Restart</button>
+          <div class="scrub"><label for="scrub">Time scrubber — drag to any moment</label><input type="range" id="scrub" min="0" max="1000" value="0"></div>
+          <div class="speed"><label for="speed"><b>Speed</b></label><input type="range" id="speed" min="0" max="4" step="1" value="2"><b id="speedLbl">1×</b><span class="muted" id="speedNote"></span></div>
+        </div>
+        <div class="tools">
+          <label class="check" id="particlesToggle"><input type="checkbox" id="particles"> <span>Show jiggling particles <span data-info="particles"></span></span></label>
+          <div class="cut" id="cutTools" hidden>
+            <b>Cut open:</b>
+            <select id="cutAxis" aria-label="Cut direction"><option value="0">left ↔ right</option><option value="1">front ↔ back</option><option value="2">bottom ↔ top</option></select>
+            <input type="range" id="cut" min="0" max="100" value="60" aria-label="Cut position">
+            <span id="cutLbl" class="ulabel"></span>
+          </div>
+        </div>
+        <p class="hint" id="viewHint"></p>
+      </div>
+
+      <div class="panel graph" id="profilePanel">
+        <h3>📈 Temperature along the rod <span data-info="graph"></span></h3>
+        <canvas id="profileGraph" aria-label="Graph of temperature versus position"></canvas>
+        <p class="hint">The dashed line shows how things started. Hover over the graph to read values.</p>
+      </div>
+
+      <div class="panel graph">
+        <h3>⏱️ <span id="timeGraphTitle">Temperature over time at the probe ⊕</span> <span data-info="probe"></span></h3>
+        <canvas id="timeGraph" aria-label="Graph of temperature versus time at the probe"></canvas>
+        <p class="hint">Click or tap anywhere on the object to move the probe ⊕.</p>
+      </div>
+
+      <div class="panel card" id="summaryPanel">
+        <h3>💡 What just happened?</h3>
+        <div id="summary"><p>Run a simulation to see a summary here.</p></div>
+      </div>
+
+      <div class="panel card explain" id="explainPanel">
+        <h3>📘 Explain this <span class="hint" style="margin:0">(switch to “More detail” at the top for the math)</span></h3>
+        <div id="explain"></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="pop" role="dialog" aria-modal="false" hidden></div>
+
+<script>
+'use strict';
+/* =====================================================================================
+   1. SMALL UTILITIES
+   ===================================================================================== */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const SUP = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+function sci(v, sig = 3) {
+  if (v === 0) return '0';
+  let e = Math.floor(Math.log10(Math.abs(v)));
+  let m = Number((v / 10 ** e).toPrecision(sig));
+  if (Math.abs(m) >= 10) { m = Number((m / 10).toPrecision(sig)); e += 1; }
+  return `${m} × 10${String(e).split('').map(c => SUP[c]).join('')}`;
+}
+/** Friendly number: ~3 significant digits, commas, scientific only for huge/tiny values. */
+function nice(v, sig = 3) {
+  if (!Number.isFinite(v)) return '—';
+  if (v === 0) return '0';
+  const a = Math.abs(v);
+  if (a >= 1e7 || a < 1e-3) return sci(v, sig);
+  return Number(v.toPrecision(sig)).toLocaleString('en-US', { maximumFractionDigits: 6 });
+}
+/** Value for an <input>: up to 5 significant digits, no commas. */
+function inputStr(v) {
+  if (!Number.isFinite(v)) return '';
+  const s = Number(v.toPrecision(5));
+  return String(s);
+}
+function parseNum(str) {
+  let s = String(str).trim().replace(/\s+/g, '').replace(/−/g, '-');
+  if (s.includes(',') && !s.includes('.')) s = s.replace(',', '.');
+  if (s === '' || !/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s)) return NaN;
+  return Number(s);
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function store(key, val) { try { if (val === undefined) return localStorage.getItem('heatExplorer.' + key); localStorage.setItem('heatExplorer.' + key, val); } catch (e) { return null; } }
+function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
+function getPath(o, p) { return p.split('.').reduce((a, k) => a == null ? a : a[k], o); }
+function setPath(o, p, v) { const ks = p.split('.'); const last = ks.pop(); const t = ks.reduce((a, k) => a[k], o); t[last] = v; }
+
+/* =====================================================================================
+   2. UNITS — everything internal is SI (m, s, °C, m²/s); these convert at the edges
+   ===================================================================================== */
+const UNITS = {
+  temp: {
+    C: { label: '°C', to: c => c, from: v => v },
+    F: { label: '°F', to: c => c * 9 / 5 + 32, from: f => (f - 32) * 5 / 9 },
+    K: { label: 'K', to: c => c + 273.15, from: k => k - 273.15 },
+  },
+  len: { mm: { label: 'mm', f: 1e-3 }, cm: { label: 'cm', f: 1e-2 }, m: { label: 'm', f: 1 }, in: { label: 'in', f: 0.0254 }, ft: { label: 'ft', f: 0.3048 } },
+  time: { s: { label: 's', long: 'seconds', one: 'second', f: 1 }, min: { label: 'min', long: 'minutes', one: 'minute', f: 60 }, h: { label: 'h', long: 'hours', one: 'hour', f: 3600 } },
+  alpha: { 'm2/s': { label: 'm²/s', f: 1 }, 'cm2/s': { label: 'cm²/s', f: 1e-4 }, 'mm2/s': { label: 'mm²/s', f: 1e-6 } },
+};
+const U = { temp: 'C', len: 'cm', time: 's', alpha: 'mm2/s' };
+const conv = {
+  toDisp(kind, si) { if (kind === 'temp') return UNITS.temp[U.temp].to(si); return si / UNITS[kind][U[kind]].f; },
+  fromDisp(kind, v) { if (kind === 'temp') return UNITS.temp[U.temp].from(v); return v * UNITS[kind][U[kind]].f; },
+  label(kind) { return UNITS[kind][U[kind]].label; },
+};
+const fT = c => `${conv.toDisp('temp', c).toFixed(1)} ${conv.label('temp')}`;
+const fL = m => `${nice(conv.toDisp('len', m))} ${conv.label('len')}`;
+const fA = a => `${nice(conv.toDisp('alpha', a))} ${conv.label('alpha')}`;
+function fTime(s, long = true) {
+  const v = conv.toDisp('time', s); const u = UNITS.time[U.time];
+  return `${nice(v)} ${long ? (Math.abs(v) === 1 ? u.one : u.long) : u.label}`;
+}
+/** A human time with the most natural unit (used in summaries for things like "26 times longer"). */
+function fTimeAuto(s) {
+  if (s < 120) return `${nice(s)} seconds`;
+  if (s < 7200) return `${nice(s / 60)} minutes`;
+  if (s < 172800) return `${nice(s / 3600)} hours`;
+  if (s < 3.2e7 * 2) return `${nice(s / 86400)} days`;
+  return `${nice(s / 3.156e7)} years`;
+}
+
+/* =====================================================================================
+   3. MATERIALS — thermal diffusivity α in m²/s (room-temperature handbook values)
+   ===================================================================================== */
+const MATERIALS = [
+  { id: 'copper', name: 'Copper', alpha: 1.11e-4, color: '#c8703c', metal: true, fact: 'Copper is used in cooking pans because it spreads heat fast, so there are no cold spots and no burnt middle.' },
+  { id: 'silver', name: 'Silver', alpha: 1.65e-4, color: '#cfd3da', metal: true, fact: 'Silver is the champion: it spreads heat faster than any other metal. A real silver spoon in hot tea gets hot all the way up. Ouch!' },
+  { id: 'gold', name: 'Gold', alpha: 1.27e-4, color: '#dcb33c', metal: true, fact: 'Gold spreads heat well and never rusts, so thin gold layers are used in electronics and on spacecraft.' },
+  { id: 'aluminum', name: 'Aluminum', alpha: 9.7e-5, color: '#aab5c0', metal: true, fact: 'Aluminum is light and spreads heat quickly, which is why it’s used for heat sinks, baking sheets and soda cans.' },
+  { id: 'brass', name: 'Brass', alpha: 3.4e-5, color: '#c7a447', metal: true, fact: 'Brass is copper mixed with zinc. Mixing metals jumbles up the paths heat travels along, so brass is slower than pure copper.' },
+  { id: 'iron', name: 'Iron', alpha: 2.3e-5, color: '#6f6b67', metal: true, fact: 'Cast-iron pans heat slowly and unevenly, but once they’re hot they stay hot. Great for searing!' },
+  { id: 'lead', name: 'Lead', alpha: 2.4e-5, color: '#6c7783', metal: true, fact: 'Lead is very heavy but spreads heat about as fast as iron. (It’s also poisonous, so it’s best kept in simulations!)' },
+  { id: 'titanium', name: 'Titanium', alpha: 9e-6, color: '#8f96a4', metal: true, fact: 'Titanium is strong and light but spreads heat slowly, which is why titanium camping pots can get hot spots.' },
+  { id: 'steel', name: 'Stainless steel', alpha: 4.2e-6, color: '#a2abb5', metal: true, fact: 'Stainless steel spreads heat about 26 times slower than copper. That’s why good steel pans often hide a copper or aluminum layer in the bottom.' },
+  { id: 'ice', name: 'Ice', alpha: 1.2e-6, color: '#bfe6f5', metal: false, fact: 'Ice spreads heat slowly, which is part of why an ice cube melts from the outside in.' },
+  { id: 'water', name: 'Water (still)', alpha: 1.43e-7, color: '#3f8fd2', metal: false, fact: 'Still water spreads heat about 800 times slower than copper. In a real pot, water heats mostly by swirling around (convection), not by conduction.' },
+  { id: 'glass', name: 'Glass', alpha: 3.4e-7, color: '#9fd4da', metal: false, fact: 'Glass spreads heat so slowly that a glass rod can be glowing at one end and cool enough to hold at the other.' },
+  { id: 'wood', name: 'Wood (pine)', alpha: 8.2e-8, color: '#b27e49', metal: false, fact: 'Wood is one of the slowest heat spreaders here. That’s why pan handles and stirring spoons are often wooden.' },
+  { id: 'air', name: 'Air (still)', alpha: 1.9e-5, color: '#d6e2ea', metal: false, fact: 'Surprise: still air has a big α, about like iron! Air is so light that a tiny bit of heat warms it. But it carries very little heat overall, so trapped air (in a puffy jacket) is a great insulator. α tells you how fast temperature spreads, not how much heat moves.' },
+];
+const matById = id => MATERIALS.find(m => m.id === id);
+function materialOf(st, which) {
+  const id = which === 2 ? st.material2 : st.material;
+  if (id === 'custom') return { id: 'custom', name: 'Custom material', alpha: st.customAlpha, color: '#8a7fd8', metal: false, fact: 'Your own material. Try a tiny α to see heat crawl, or a big one to watch it race.' };
+  return matById(id);
+}
+
+/* =====================================================================================
+   4. COLOR SCALE — reversed ColorBrewer RdYlBu: colorblind-friendly blue → yellow → red
+   ===================================================================================== */
+const CSTOPS = ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026'];
+const LUT = new Uint8ClampedArray(256 * 3);
+(function buildLUT() {
+  const rgb = CSTOPS.map(h => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16)));
+  for (let k = 0; k < 256; k++) {
+    const f = k / 255 * (rgb.length - 1); const i = Math.min(rgb.length - 2, Math.floor(f)); const w = f - i;
+    for (let c = 0; c < 3; c++) LUT[k * 3 + c] = Math.round(rgb[i][c] * (1 - w) + rgb[i + 1][c] * w);
+  }
+})();
+const SHADES = [1, 0.88, 0.76, 0.62];
+const LUTSTR = SHADES.map(s => Array.from({ length: 256 }, (_, k) => `rgb(${Math.round(LUT[k * 3] * s)},${Math.round(LUT[k * 3 + 1] * s)},${Math.round(LUT[k * 3 + 2] * s)})`));
+const lutIndex = (v, lo, hi) => clamp(Math.round((v - lo) / (hi - lo) * 255), 0, 255) | 0;
+
+/* =====================================================================================
+   5. EXPLANATIONS — written like a warm science teacher: the WHY first, then the rule
+   ===================================================================================== */
+const TEXT = {
+  temperature: { title: 'Temperature (T)',
+    simple: '<p>Everything is made of tiny particles (atoms and molecules) that never sit still. <b>Temperature is how fast they’re jiggling.</b> Hot = fast jiggling. Cold = slow jiggling.</p>',
+    detail: '<p>More exactly, temperature measures the average energy of that jiggling motion. The Kelvin scale starts at <b>absolute zero</b> (0 K = −273.15 °C = −459.67 °F), where the jiggling is as small as nature allows. A change of 1 K is the same size as a change of 1 °C; a change of 1 °F is only 5/9 as big.</p>' },
+  heat: { title: 'Heat flow',
+    simple: '<p>Fast-jiggling particles bump into slower neighbors and speed them up. That’s all heat flow is: jiggles passed along, bump by bump. It’s why heat always moves from hot to cold, never the other way.</p>',
+    detail: '<p>This kind of heat flow, through a material that isn’t moving, is called <b>conduction</b>. Fourier’s law says the heat flow is proportional to how steeply temperature changes with distance (the <i>temperature gradient</i>): q = −k ∇T. A steeper slope pushes heat faster.</p>' },
+  alpha: { title: 'Thermal diffusivity (α)',
+    simple: '<p>α (the Greek letter “alpha”) is <b>how quickly a material spreads heat through itself.</b> Big α means heat races across (copper). Small α means heat crawls (wood). That’s why pan handles are often wood or plastic.</p>',
+    detail: '<p>α = k / (ρ·c): conductivity k (how well it passes heat along) divided by density ρ times specific heat c (how much heat it takes to warm up a chunk of it). Its unit is m²/s, an area per time, because a heated region spreads over an area that grows steadily with time. Handy rule: in time t, heat travels roughly √(α·t).</p>' },
+  time: { title: 'Time (t)',
+    simple: '<p>Time is how long we let things happen. The computer moves forward in tiny steps, like the pages of a flip-book. Each picture you see bundles many of those tiny steps.</p>',
+    detail: '<p>The tiny step is called Δt (“delta t”). Heat Explorer picks it for you using the stability rule, so the math can never blow up.</p>' },
+  simtime: { title: 'Simulation time',
+    simple: '<p>How much real-world time to simulate. A spoon in soup changes over minutes; a giant iron bar might take hours. The animation always squeezes that time into a few seconds so you can watch it.</p>',
+    detail: '<p>Rule of thumb: heat needs about <b>L²/α</b> to cross something of size L. Doubling the size makes it take <i>four</i> times as long.</p>' },
+  position: { title: 'Position (x, y, z)',
+    simple: '<p>Position tells you <i>where</i> on the object you are. x goes left to right. On the plate, y goes bottom to top. On the block, y goes front to back and z goes bottom to top.</p>',
+    detail: '<p>Temperature depends on both position and time: T(x, y, z, t). That’s why the equation uses “∂” (partial derivatives): we ask how T changes in one direction while holding the others still.</p>' },
+  size: { title: 'Size',
+    simple: '<p>How big the object is. Bigger things take much longer to heat through, because heat has farther to travel.</p>',
+    detail: '<p>Time to heat through grows with size <i>squared</i>: a rod twice as long takes about four times as long.</p>' },
+  initial: { title: 'Starting temperature',
+    simple: '<p>The temperature of the whole object at the very beginning, before anything starts warming or cooling it, like a spoon that’s been sitting on the counter.</p>',
+    detail: '<p>Mathematicians call this the <i>initial condition</i>, T(x, 0). The equation needs it, plus the edge rules, to know exactly what happens next.</p>' },
+  grid: { title: 'Grid spacing (Δx) and detail',
+    simple: '<p>The computer can’t keep track of every single point, so it chops the object into little pieces and tracks one temperature for each. The distance between pieces is the <b>grid spacing</b>, Δx. Smaller pieces give a sharper picture, but take more work.</p>',
+    detail: '<p>This is a <b>finite-difference grid</b>. Halving Δx sharpens the picture but means 4× as many time steps (Δt shrinks with Δx²), and in 3D it also means 8× as many points, so 32× more work! That’s why the 3D block uses fewer points.</p>' },
+  boundary: { title: 'Boundary conditions (the edges)',
+    simple: '<p>What’s happening at the edges: is that end touching ice, a flame, or wrapped in a blanket? Edges matter a lot, because that’s where heat gets in or out.</p>',
+    detail: '<p>There are two kinds here. <b>Fixed temperature</b> (a <i>Dirichlet</i> condition): T at the edge = a set value. <b>Insulated</b> (a <i>Neumann</i> condition): ∂T/∂n = 0, meaning the temperature slope across the edge is zero, so no heat flows through it.</p>' },
+  fixed: { title: 'Held at a temperature',
+    simple: '<p>The edge stays at one temperature no matter what, like a spoon end sitting in boiling soup, or a block sitting in ice water. Whatever heat arrives gets carried away (or supplied) right away.</p>', detail: '' },
+  insulated: { title: 'Insulated (wrapped in a blanket)',
+    simple: '<p>A perfect blanket covers the edge, so no heat gets in or out. Heat that reaches it piles up and spreads back inside. If <i>every</i> edge is insulated, the total heat stays exactly the same; it just evens out.</p>', detail: '' },
+  spot: { title: 'Hot (or cold) spot',
+    simple: '<p>A patch that starts at a different temperature, like a coin straight out of hot water, or a burner under a pan. Tick “keep it at this temperature” if something keeps feeding it (a flame, a working computer chip). Otherwise it just starts hot and is allowed to cool. It can be cold, too: try an ice cube!</p>',
+    detail: '<p>A held spot acts like an extra fixed-temperature edge inside the object. The spot is made of the same material as the rest (a simplification).</p>' },
+  equation: { title: 'The heat equation',
+    simple: '<div class="eq">∂T/∂t = α ∇²T</div><p>Read it like a sentence: <b>how fast the temperature at a spot changes</b> (∂T/∂t) equals <b>α times how different that spot is from its neighbors</b> (∇²T).</p><p>So a spot heats up if it’s colder than the average of its neighbors, and cools down if it’s hotter. α controls how fast.</p>',
+    detail: '<p>∇² (“del squared”, the <b>Laplacian</b>) means ∂²T/∂x² + ∂²T/∂y² + ∂²T/∂z²: how much the temperature curve bends in each direction. A dip (colder than neighbors) has positive bend, so T goes up. A peak has negative bend, so T goes down.</p>' },
+  stability: { title: 'The stability rule',
+    simple: '<p>If the computer takes time steps that are too big, it overshoots: a spot gets “corrected” so hard it ends up hotter than its hot neighbors, and the numbers explode. So Heat Explorer always picks a step small enough to stay safe.</p>',
+    detail: '<div class="eq small">Δt ≤ Δx² / (2·d·α)</div><p>where d is the number of dimensions (1, 2 or 3). Heat Explorer uses 90 % of this limit. In 3D the limit is tighter because each point has 6 neighbors pulling on it instead of 2.</p>' },
+  steady: { title: 'Steady state',
+    simple: '<p>When temperatures stop changing. Heat may still be flowing (in at the hot end, out at the cold end), but every spot gets exactly as much as it gives away, like a bathtub with the tap and the drain perfectly matched.</p>', detail: '<p>Mathematically ∂T/∂t = 0, so ∇²T = 0. In 1D that means the second derivative is zero: a straight line!</p>' },
+  material: { title: 'Material', simple: '<p>What the object is made of. Different materials spread heat at very different speeds. That speed is measured by α.</p>', detail: '' },
+  compare: { title: 'Compare two materials',
+    simple: '<p>Runs the exact same setup twice, once for each material, side by side, so you can <i>see</i> which one spreads heat faster. Copper versus stainless steel is a great race!</p>',
+    detail: '<p>With the same shape and edges, the only difference is α, and the heat equation says time just stretches by the ratio of the α values: half the α, twice the time.</p>' },
+  particles: { title: 'Jiggling particles',
+    simple: '<p>These dots stand for the tiny particles inside the material. Faster jiggling = hotter. Watch the jiggling spread from hot places to cold ones; that’s heat flow!</p>',
+    detail: '<p>We exaggerated the effect so you can see it. Real particle speed grows with √T in kelvin, so going from 20 °C to 100 °C only speeds particles up by about 13 %.</p>' },
+  units: { title: 'Units',
+    simple: '<p>Pick whichever units you like. Changing units only changes how numbers are <i>shown</i>; the simulation itself doesn’t change at all. 100 °C, 212 °F and 373.15 K are the same temperature.</p>',
+    detail: '<p>Inside, Heat Explorer always works in SI units: meters, seconds, °C, and m²/s, and converts only for display. °F = °C × 9/5 + 32, K = °C + 273.15, 1 in = 2.54 cm, 1 cm²/s = 100 mm²/s = 0.0001 m²/s.</p>' },
+  template: { title: 'Scenarios', simple: '<p>Each scenario sets up a real-life situation with one click: size, material, temperatures and edges. Then you can change anything you like in step 3.</p>', detail: '' },
+  probe: { title: 'The probe ⊕', simple: '<p>Like sticking a thermometer into one spot. The graph shows how that spot’s temperature changed over the whole run. Click anywhere on the object to move it.</p>', detail: '' },
+  graph: { title: 'Temperature along the rod', simple: '<p>Each point on this line is the temperature at that spot on the rod. Left to right on the graph matches left to right on the rod. Higher on the graph = hotter.</p>', detail: '<p>The slope of this line tells you which way heat is flowing (downhill, from high to low) and how fast (steeper = faster). The curviness tells you which spots are heating or cooling.</p>' },
+  detailLvl: { title: 'Detail (number of grid points)', simple: '<p>How many little pieces the computer chops the object into. More detail looks smoother but takes longer to calculate.</p>', detail: '' },
+};
+function infoBtn(term) {
+  const t = TEXT[term]; if (!t) return '';
+  return `<button type="button" class="info" data-term="${term}" aria-label="What is ${esc(t.title)}?">?</button>`;
+}
+
+/* =====================================================================================
+   6. SCENARIO TEMPLATES (SI units; positions are fractions 0..1 of each side)
+   ===================================================================================== */
+const F_ = (T) => ({ type: 'fixed', T });
+const I_ = (T = 20) => ({ type: 'insulated', T });
+const NOSPOT = { on: false, T: 100, r: 0.01, pos: [0.5, 0.5, 0.5], held: false };
+const TEMPLATES = {
+  1: [
+    { id: 'spoon', icon: '🥄', name: 'Spoon in hot soup', desc: 'A steel spoon with one end dipped in 90 °C soup.', material: 'steel', material2: 'silver', L: [0.2, 0, 0], T0: 22, bc: { xmin: F_(90), xmax: I_(22) }, spot: NOSPOT, time: 600 },
+    { id: 'iceRod', icon: '🧊', name: 'Rod with one end in ice', desc: 'A copper rod: one end in ice water, the other in a 25 °C room.', material: 'copper', material2: 'steel', L: [0.3, 0, 0], T0: 25, bc: { xmin: F_(0), xmax: F_(25) }, spot: NOSPOT, time: 400 },
+    { id: 'wire', icon: '🕯️', name: 'Heating the middle of a wire', desc: 'A flame holds the middle of an aluminum wire at 200 °C.', material: 'aluminum', material2: 'iron', L: [0.1, 0, 0], T0: 20, bc: { xmin: F_(20), xmax: F_(20) }, spot: { on: true, T: 200, r: 0.004, pos: [0.5, 0.5, 0.5], held: true }, time: 15 },
+    { id: 'fireSnow', icon: '🔥', name: 'Between a fire and snow', desc: 'An iron bar with one end in a fire, the other in snow. It ends up a straight line!', material: 'iron', material2: 'copper', L: [0.5, 0, 0], T0: 20, bc: { xmin: F_(300), xmax: F_(0) }, spot: NOSPOT, time: 3600 },
+    { id: 'blanket', icon: '🧣', name: 'Half-hot rod in a blanket', desc: 'Left half starts at 100 °C, right half at 20 °C. No heat can escape.', material: 'copper', material2: 'steel', L: [0.2, 0, 0], T0: 20, bc: { xmin: I_(), xmax: I_() }, spot: { on: true, T: 100, r: 0.05, pos: [0.25, 0.5, 0.5], held: false }, time: 120 },
+    { id: 'glassRod', icon: '🧪', name: 'Glass rod in a flame', desc: 'Glassblowers hold glass rods in flames with bare hands. Here’s why!', material: 'glass', material2: 'copper', L: [0.15, 0, 0], T0: 20, bc: { xmin: F_(400), xmax: I_() }, spot: NOSPOT, time: 120 },
+  ],
+  2: [
+    { id: 'pan', icon: '🍳', name: 'Frying pan on a burner', desc: 'A 200 °C burner under the middle of an aluminum pan.', material: 'aluminum', material2: 'steel', L: [0.26, 0.26, 0], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_() }, spot: { on: true, T: 200, r: 0.05, pos: [0.5, 0.5, 0.5], held: true }, time: 60 },
+    { id: 'coin', icon: '🪙', name: 'Hot coin on a cold plate', desc: 'A coin from hot water (80 °C) lands on a 5 °C plate from the fridge.', material: 'aluminum', material2: 'steel', L: [0.1, 0.1, 0], T0: 5, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_() }, spot: { on: true, T: 80, r: 0.012, pos: [0.5, 0.5, 0.5], held: false }, time: 15 },
+    { id: 'chip', icon: '💻', name: 'Heat sink cooling a chip', desc: 'An 85 °C computer chip on an aluminum heat sink with fan-cooled 25 °C edges.', material: 'aluminum', material2: 'copper', L: [0.06, 0.06, 0], T0: 25, bc: { xmin: F_(25), xmax: F_(25), ymin: F_(25), ymax: F_(25) }, spot: { on: true, T: 85, r: 0.008, pos: [0.5, 0.5, 0.5], held: true }, time: 4 },
+    { id: 'window', icon: '🪟', name: 'Window on a winter day', desc: 'A slice through window glass: warm room (20 °C) left, freezing air (−10 °C) right.', material: 'glass', material2: 'wood', L: [0.008, 0.02, 0], T0: 20, bc: { xmin: F_(20), xmax: F_(-10), ymin: I_(), ymax: I_() }, spot: NOSPOT, time: 120 },
+    { id: 'tray', icon: '🧊', name: 'Ice cube on a metal tray', desc: 'An ice cube keeps one patch of a 22 °C aluminum tray at 0 °C.', material: 'aluminum', material2: 'steel', L: [0.2, 0.2, 0], T0: 22, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_() }, spot: { on: true, T: 0, r: 0.02, pos: [0.3, 0.6, 0.5], held: true }, time: 120 },
+    { id: 'hotEdge', icon: '♨️', name: 'Plate with one hot edge', desc: 'A brass plate: bottom edge on a 150 °C stove, other edges in 20 °C water.', material: 'brass', material2: 'copper', L: [0.1, 0.1, 0], T0: 20, bc: { xmin: F_(20), xmax: F_(20), ymin: F_(150), ymax: F_(20) }, spot: NOSPOT, time: 60 },
+  ],
+  3: [
+    { id: 'ice', icon: '🧊', name: 'Ice cube warming up', desc: 'A −18 °C cube from the freezer. Its melting surface stays at 0 °C.', material: 'ice', material2: 'steel', L: [0.03, 0.03, 0.03], T0: -18, bc: { xmin: F_(0), xmax: F_(0), ymin: F_(0), ymax: F_(0), zmin: F_(0), zmax: F_(0) }, spot: NOSPOT, time: 120 },
+    { id: 'quench', icon: '🔨', name: 'Hot metal block cooling', desc: 'A blacksmith drops a 300 °C iron block into 20 °C water.', material: 'iron', material2: 'aluminum', L: [0.08, 0.08, 0.08], T0: 300, bc: { xmin: F_(20), xmax: F_(20), ymin: F_(20), ymax: F_(20), zmin: F_(20), zmax: F_(20) }, spot: NOSPOT, time: 80 },
+    { id: 'oneFace', icon: '🔥', name: 'Cube heated from one face', desc: 'An aluminum cube on a 150 °C hot plate. Other faces insulated.', material: 'aluminum', material2: 'steel', L: [0.05, 0.05, 0.05], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: F_(150), zmax: I_() }, spot: NOSPOT, time: 60 },
+    { id: 'core', icon: '🟠', name: 'Hot core evens out', desc: 'A titanium block with a 400 °C core, wrapped in perfect insulation.', material: 'titanium', material2: 'copper', L: [0.06, 0.06, 0.06], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() }, spot: { on: true, T: 400, r: 0.015, pos: [0.5, 0.5, 0.5], held: false }, time: 45 },
+    { id: 'solder', icon: '🔧', name: 'Soldering iron on a corner', desc: 'A 350 °C soldering iron touches one top corner of a copper block.', material: 'copper', material2: 'steel', L: [0.04, 0.04, 0.04], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() }, spot: { on: true, T: 350, r: 0.008, pos: [1, 0, 1], held: true }, time: 20 },
+    { id: 'between', icon: '🧱', name: 'Hot face, cold face', desc: 'A brass block between a 100 °C wall and a 0 °C wall.', material: 'brass', material2: 'copper', L: [0.05, 0.05, 0.05], T0: 20, bc: { xmin: F_(100), xmax: F_(0), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() }, spot: NOSPOT, time: 40 },
+  ],
+};
+const SIDES = {
+  1: [['xmin', 'Left end'], ['xmax', 'Right end']],
+  2: [['xmin', 'Left edge'], ['xmax', 'Right edge'], ['ymin', 'Bottom edge'], ['ymax', 'Top edge']],
+  3: [['xmin', 'Left face'], ['xmax', 'Right face'], ['ymin', 'Front face'], ['ymax', 'Back face'], ['zmin', 'Bottom face'], ['zmax', 'Top face']],
+};
+const OBJ = { 1: 'rod', 2: 'plate', 3: 'block' };
+const AXN = ['x', 'y', 'z'];
+
+/* =====================================================================================
+   7. STATE
+   ===================================================================================== */
+function blankState(dim) {
+  return { dim, template: null, material: 'copper', material2: 'steel', customAlpha: 1e-5, compare: false,
+    L: [0.1, 0.1, 0.1], T0: 20, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() },
+    spot: deepCopy(NOSPOT), time: 60, detail: 'medium' };
+}
+function applyTemplate(st, tpl) {
+  st.template = tpl.id; st.material = tpl.material;
+  if (tpl.material2 && tpl.material2 !== tpl.material) st.material2 = tpl.material2;
+  st.L = tpl.L.slice(); st.T0 = tpl.T0; st.time = tpl.time;
+  for (const k of Object.keys(st.bc)) st.bc[k] = tpl.bc[k] ? { ...tpl.bc[k] } : I_(tpl.T0);
+  for (const k of Object.keys(st.bc)) if (st.bc[k].type === 'insulated') st.bc[k].T = tpl.T0;
+  st.spot = deepCopy(tpl.spot);
+}
+const S = { mode: 1, level: 'simple', states: {} };
+for (const d of [1, 2, 3]) { S.states[d] = blankState(d); applyTemplate(S.states[d], TEMPLATES[d][0]); }
+const st = () => S.states[S.mode];
+const fieldErrors = {}; // path -> message
+
+/* =====================================================================================
+   8. SOLVER — explicit FTCS on a node grid, generic for 1, 2 or 3 dimensions
+   ===================================================================================== */
+const DETAIL = { 1: { low: 41, medium: 101, high: 201, min: 11 }, 2: { low: 31, medium: 61, high: 101, min: 11 }, 3: { low: 14, medium: 22, high: 30, min: 8 } };
+const FRAMES = { 1: 241, 2: 181, 3: 121 };
+const BUDGET = 9e7;   // point-updates per material per run (~0.3–0.6 s in a modern browser)
+const SAFETY = 0.9;
+
+/** Decide grid size and time step. Coarsens the grid (and as a last resort shortens time) to stay in budget. */
+function planGrid(cfg) {
+  const d = cfg.dim, L = cfg.L.slice(0, d), Lmax = Math.max(...L), alpha = cfg.alpha;
+  const det = DETAIL[d], F = FRAMES[d];
+  const requested = det[cfg.detail] || det.medium;
+  let T = cfg.time, Nmax = requested, shortened = false, plan;
+  for (let guard = 0; guard < 80; guard++) {
+    const n = [1, 1, 1], dx = [1, 1, 1];
+    let inv = 0;
+    for (let a = 0; a < d; a++) {
+      n[a] = Math.max(det.min, Math.round((Nmax - 1) * L[a] / Lmax) + 1);
+      dx[a] = L[a] / (n[a] - 1); inv += 1 / (dx[a] * dx[a]);
+    }
+    const dtMax = SAFETY * 0.5 / (alpha * inv);
+    const frameDt = T / (F - 1);
+    const spf = Math.max(1, Math.ceil(frameDt / dtMax - 1e-9));
+    const dt = frameDt / spf;
+    const Tsteady = 6 * Lmax * Lmax / alpha;
+    const framesToCompute = Math.min(F - 1, Math.ceil(Math.min(T, Tsteady) / frameDt));
+    const nodes = n[0] * n[1] * n[2];
+    const work = framesToCompute * spf * nodes;
+    plan = { dim: d, n, dx, dt, dtMax, spf, F, frameDt, T, framesToCompute, nodes, work, Tsteady,
+      r: [0, 1, 2].map(a => a < d ? alpha * dt / (dx[a] * dx[a]) : 0), requested, Nmax, shortened };
+    if (work <= BUDGET) break;
+    if (Nmax > det.min) { Nmax = Math.max(det.min, Math.floor((Nmax - 1) * 0.85) + 1); continue; }
+    // Even the coarsest grid is too slow (very skinny shapes): shorten the simulated time.
+    T = T * BUDGET / work * 0.95; shortened = true;
+  }
+  plan.coarsened = plan.Nmax < requested;
+  plan.shortened = shortened;
+  return plan;
+}
+
+function nodeIndex(sim, i, j, k) { return i + sim.n[0] * (j + sim.n[1] * k); }
+
+function createSim(cfg, plan) {
+  const { n, dx } = plan, N = plan.nodes, d = cfg.dim;
+  const cur = new Float64Array(N).fill(cfg.T0), fixed = new Uint8Array(N);
+  const sim = { cfg, plan, n, dx, d, N, cur, next: new Float64Array(N), fixed, alpha: cfg.alpha,
+    F: plan.F, frameDt: plan.frameDt, T: plan.T, frames: [], done: 0, lo: Infinity, hi: -Infinity, steadyAt: null };
+  const forEachNode = fn => { let idx = 0; for (let k = 0; k < n[2]; k++) for (let j = 0; j < n[1]; j++) for (let i = 0; i < n[0]; i++, idx++) fn(idx, i, j, k); };
+  // hot spot region
+  let spotNodes = [];
+  if (cfg.spot && cfg.spot.on) {
+    const c = [0, 1, 2].map(a => a < d ? cfg.spot.pos[a] * cfg.L[a] : 0), r2 = cfg.spot.r * cfg.spot.r;
+    let best = -1, bestD = Infinity;
+    forEachNode((idx, i, j, k) => {
+      const p = [i * dx[0], j * dx[1], k * dx[2]];
+      let d2 = 0; for (let a = 0; a < d; a++) d2 += (p[a] - c[a]) ** 2;
+      if (d2 <= r2 + 1e-15) spotNodes.push(idx);
+      if (d2 < bestD) { bestD = d2; best = idx; }
+    });
+    if (!spotNodes.length) spotNodes = [best];   // spot smaller than a grid cell: use nearest point
+    if (!cfg.spot.held) for (const idx of spotNodes) cur[idx] = cfg.spot.T;
+  }
+  // fixed-temperature edges
+  const faces = [['xmin', 0, 0], ['xmax', 0, 1], ['ymin', 1, 0], ['ymax', 1, 1], ['zmin', 2, 0], ['zmax', 2, 1]];
+  for (const [key, a, side] of faces) {
+    if (a >= d) continue; const b = cfg.bc[key]; if (!b || b.type !== 'fixed') continue;
+    const target = side ? n[a] - 1 : 0;
+    forEachNode((idx, i, j, k) => { if ([i, j, k][a] === target) { cur[idx] = b.T; fixed[idx] = 1; } });
+  }
+  if (cfg.spot && cfg.spot.on && cfg.spot.held) for (const idx of spotNodes) { cur[idx] = cfg.spot.T; fixed[idx] = 1; }
+  sim.spotNodes = spotNodes;
+  pushFrame(sim);
+  return sim;
+}
+
+function pushFrame(sim) {
+  const f = new Float32Array(sim.cur);
+  let lo = sim.lo, hi = sim.hi;
+  for (let i = 0; i < f.length; i++) { const v = f[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+  sim.lo = lo; sim.hi = hi; sim.frames.push(f);
+}
+
+/** Advance nsteps FTCS steps. Insulated edges use mirrored ghost nodes; fixed nodes are skipped. */
+function stepN(sim, nsteps) {
+  const [nx, ny, nz] = sim.n, [rx, ry, rz] = sim.plan.r, fixed = sim.fixed;
+  const sy = nx, sz = nx * ny;
+  let a = sim.cur, b = sim.next;
+  for (let s = 0; s < nsteps; s++) {
+    let idx = 0;
+    for (let k = 0; k < nz; k++) {
+      const zm = nz === 1 ? 0 : (k > 0 ? -sz : sz), zp = nz === 1 ? 0 : (k < nz - 1 ? sz : -sz);
+      for (let j = 0; j < ny; j++) {
+        const ym = ny === 1 ? 0 : (j > 0 ? -sy : sy), yp = ny === 1 ? 0 : (j < ny - 1 ? sy : -sy);
+        for (let i = 0; i < nx; i++, idx++) {
+          const c = a[idx];
+          if (fixed[idx]) { b[idx] = c; continue; }
+          const xm = i > 0 ? -1 : 1, xp = i < nx - 1 ? 1 : -1;
+          b[idx] = c + rx * (a[idx + xm] + a[idx + xp] - 2 * c)
+                     + ry * (a[idx + ym] + a[idx + yp] - 2 * c)
+                     + rz * (a[idx + zm] + a[idx + zp] - 2 * c);
+        }
+      }
+    }
+    const t = a; a = b; b = t;
+  }
+  sim.cur = a; sim.next = b;
+}
+
+/** Compute one stored frame. Returns true when the simulation is complete. */
+function advanceFrame(sim) {
+  if (sim.frames.length >= sim.F) return true;
+  if (sim.frames.length - 1 >= sim.plan.framesToCompute) {
+    // steady state reached long ago: hold the final field
+    if (sim.steadyAt == null) sim.steadyAt = (sim.frames.length - 1) * sim.frameDt;
+    sim.frames.push(sim.frames[sim.frames.length - 1]);
+  } else {
+    stepN(sim, sim.plan.spf);
+    pushFrame(sim);
+  }
+  return sim.frames.length >= sim.F;
+}
+function runSync(sim) { while (!advanceFrame(sim)); return sim; }
+
+/** Run several sims in small chunks so the page never freezes. */
+function runAsync(sims, onProgress, token) {
+  return new Promise((resolve, reject) => {
+    const total = sims.reduce((s, x) => s + x.plan.framesToCompute * x.plan.spf * x.plan.nodes, 0) || 1;
+    const chunk = () => {
+      if (token.cancelled) return reject(new Error('cancelled'));
+      const t0 = performance.now();
+      let allDone = true;
+      while (performance.now() - t0 < 14) {
+        allDone = true;
+        for (const s of sims) if (!advanceFrame(s)) allDone = false;
+        if (allDone) break;
+      }
+      const doneWork = sims.reduce((s, x) => s + Math.min(x.frames.length - 1, x.plan.framesToCompute) * x.plan.spf * x.plan.nodes, 0);
+      onProgress(Math.min(1, doneWork / total));
+      if (allDone) resolve(sims); else setTimeout(chunk, 0);
+    };
+    chunk();
+  });
+}
+
+function sampleField(sim, t, out) {
+  const f = clamp(t / sim.frameDt, 0, sim.F - 1);
+  const i = Math.min(sim.F - 2, Math.floor(f)), w = f - i;
+  const A = sim.frames[i], B = sim.frames[i + 1];
+  if (w <= 0) { out.set(A); return out; }
+  for (let k = 0; k < out.length; k++) out[k] = A[k] + (B[k] - A[k]) * w;
+  return out;
+}
+function sampleAt(sim, t, idx) {
+  const f = clamp(t / sim.frameDt, 0, sim.F - 1);
+  const i = Math.min(sim.F - 2, Math.floor(f)), w = f - i;
+  return sim.frames[i][idx] + (sim.frames[i + 1][idx] - sim.frames[i][idx]) * w;
+}
+/** Total heat (∝ ∫T dV) using trapezoid weights: exactly conserved by the scheme when all edges are insulated. */
+function totalHeat(sim, field) {
+  const [nx, ny, nz] = sim.n; let s = 0, idx = 0;
+  const w = (i, n) => (n === 1 ? 1 : (i === 0 || i === n - 1 ? 0.5 : 1));
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++, idx++) s += field[idx] * w(i, nx) * w(j, ny) * w(k, nz);
+  return s;
+}
+function weightedMean(sim, field) {
+  const [nx, ny, nz] = sim.n;
+  const W = (nx > 1 ? nx - 1 : 1) * (ny > 1 ? ny - 1 : 1) * (nz > 1 ? nz - 1 : 1);
+  return totalHeat(sim, field) / W;
+}
+
+/** Build a solver config (SI) from a UI state. */
+function cfgFromState(s, which) {
+  const m = materialOf(s, which);
+  return { dim: s.dim, L: s.L.slice(), alpha: m.alpha, T0: s.T0, bc: deepCopy(s.bc), spot: deepCopy(s.spot), time: s.time, detail: s.detail, material: m };
+}
+
+/* =====================================================================================
+   9. VALIDATION — friendly messages instead of crashes or NaN
+   ===================================================================================== */
+function validateValue(kind, si, path) {
+  if (!Number.isFinite(si)) return 'Please type a number here (like 25).';
+  if (kind === 'temp') {
+    if (si < -273.15 - 1e-9) return `Nothing can be colder than absolute zero (−273.15 °C = −459.67 °F = 0 K). Try a warmer temperature.`;
+    if (si > 6000) return 'That’s hotter than the surface of the Sun! Please keep it under 6,000 °C (10,832 °F).';
+  }
+  if (kind === 'len') {
+    if (si <= 0) return path === 'spot.r' ? 'The spot needs a size bigger than zero.' : 'Sizes need to be bigger than zero.';
+    if (path !== 'spot.r' && si < 1e-4) return 'That’s smaller than 0.1 mm, too tiny to see! Try something bigger.';
+    if (si > 100) return 'Let’s keep things under 100 m (about the length of a football field).';
+  }
+  if (kind === 'time') {
+    if (si <= 0) return 'The time needs to be more than zero.';
+    if (si > 3.156e7) return 'That’s more than a year! Please pick a shorter time.';
+  }
+  if (kind === 'alpha') {
+    if (si <= 0) return 'α has to be bigger than zero (every material spreads heat at least a little).';
+    if (si < 1e-9) return 'That α is smaller than any real material’s. Try at least 1 × 10⁻⁹ m²/s (0.001 mm²/s).';
+    if (si > 1e-2) return 'That α is bigger than any real material’s (even diamond is about 1.2 × 10⁻³ m²/s). Try something smaller.';
+  }
+  return null;
+}
+function crossChecks(s) {
+  const errs = [];
+  const L = s.L.slice(0, s.dim);
+  if (s.dim > 1 && L.every(v => v > 0)) {
+    const ratio = Math.max(...L) / Math.min(...L);
+    if (ratio > 20) errs.push(`That ${OBJ[s.dim]} is super skinny: the longest side is ${nice(ratio)} times the shortest. Please keep it under 20 times.`);
+  }
+  if (s.spot.on && s.spot.r > Math.max(...L)) errs.push('The hot spot is bigger than the whole object! Make the spot smaller (or turn it off).');
+  return errs;
+}
+
+/* =====================================================================================
+   10. UI: TEMPLATES, MATERIALS, CUSTOM FORM
+   ===================================================================================== */
+function renderTemplates() {
+  const s = st();
+  $('#templates').innerHTML = TEMPLATES[S.mode].map(t => `<button type="button" class="tpl" data-tpl="${t.id}" aria-pressed="${s.template === t.id}">
+      <span class="ic" aria-hidden="true">${t.icon}</span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small></button>`).join('');
+}
+function fillMaterialSelects() {
+  const opts = (withCustom) => `<optgroup label="Metals">${MATERIALS.filter(m => m.metal).map(m => `<option value="${m.id}">${m.name}</option>`).join('')}</optgroup>
+     <optgroup label="Non-metals (for comparison)">${MATERIALS.filter(m => !m.metal).map(m => `<option value="${m.id}">${m.name}</option>`).join('')}</optgroup>
+     ${withCustom ? '<optgroup label="Your own"><option value="custom">Custom α…</option></optgroup>' : ''}`;
+  $('#material').innerHTML = opts(true);
+  $('#material2').innerHTML = opts(false);
+}
+function matCardHTML(m, other) {
+  let extra = '';
+  if (other && other.alpha > 0) {
+    const r = m.alpha / other.alpha;
+    extra = r >= 1.05 ? ` <b>${nice(r, 2)}×</b> faster than ${other.name.toLowerCase()}.` : r <= 0.95 ? ` <b>${nice(1 / r, 2)}×</b> slower than ${other.name.toLowerCase()}.` : ' About the same speed as the other one.';
+  }
+  return `<span class="swatch" style="background:${m.color}"></span><div><b>${esc(m.name)}</b> · α = ${fA(m.alpha)}${extra}<p>${esc(m.fact)}</p></div>`;
+}
+function renderMaterial() {
+  const s = st();
+  $('#material').value = s.material; $('#material2').value = s.material2;
+  $('#compare').checked = s.compare; $('#compareBox').hidden = !s.compare;
+  $('#customAlphaField').hidden = s.material !== 'custom';
+  const ca = $('#customAlpha'); if (!fieldErrors.customAlpha) ca.value = inputStr(conv.toDisp('alpha', s.customAlpha));
+  const m1 = materialOf(s, 1), m2 = materialOf(s, 2);
+  $('#matCard').innerHTML = matCardHTML(m1, s.compare ? m2 : null);
+  $('#matCard2').innerHTML = matCardHTML(m2, m1);
+}
+function numInput(path, kind, val, extra = '') {
+  return `<div class="row"><input type="text" inputmode="decimal" data-path="${path}" data-q="${kind}" value="${fieldErrors[path] ? '' : inputStr(conv.toDisp(kind, val))}" ${extra}><span class="ulabel" data-u="${kind}">${conv.label(kind)}</span></div><span class="ferr" data-err="${path}"></span>`;
+}
+function renderForm() {
+  const s = st(), d = s.dim;
+  const sizeNames = { 1: ['Length of the rod'], 2: ['Width (left ↔ right)', 'Height (bottom ↔ top)'], 3: ['Width (left ↔ right)', 'Depth (front ↔ back)', 'Height (bottom ↔ top)'] }[d];
+  let h = '';
+  h += `<fieldset class="sub"><legend>Size ${infoBtn('size')}</legend>`;
+  sizeNames.forEach((nm, a) => { h += `<div class="field"><label>${nm}</label>${numInput('L.' + a, 'len', s.L[a])}</div>`; });
+  h += `</fieldset>`;
+  h += `<div class="field"><label>Starting temperature ${infoBtn('initial')}</label>${numInput('T0', 'temp', s.T0)}</div>`;
+  h += `<fieldset class="sub"><legend>${d === 1 ? 'Ends' : d === 2 ? 'Edges' : 'Faces'} ${infoBtn('boundary')}</legend>`;
+  for (const [key, label] of SIDES[d]) {
+    const b = s.bc[key];
+    h += `<div class="edge"><span class="flabel">${label}</span><div><div class="row">
+      <select data-path="bc.${key}.type" aria-label="${label} type">
+        <option value="fixed" ${b.type === 'fixed' ? 'selected' : ''}>Held at a temperature</option>
+        <option value="insulated" ${b.type === 'insulated' ? 'selected' : ''}>Insulated (blanket)</option></select>
+      ${b.type === 'fixed' ? `<input type="text" inputmode="decimal" style="width:84px" aria-label="${label} temperature" data-path="bc.${key}.T" data-q="temp" value="${fieldErrors['bc.' + key + '.T'] ? '' : inputStr(conv.toDisp('temp', b.T))}"><span class="ulabel" data-u="temp">${conv.label('temp')}</span>` : ''}
+      </div><span class="ferr" data-err="bc.${key}.T"></span></div></div>`;
+  }
+  h += `<p class="hint" style="margin:2px 0 0">${infoBtn('fixed')} Held = touching ice, a flame, water… &nbsp; ${infoBtn('insulated')} Insulated = no heat in or out.</p></fieldset>`;
+  h += `<fieldset class="sub"><legend>Hot (or cold) spot ${infoBtn('spot')}</legend>
+    <label class="check"><input type="checkbox" data-path="spot.on" ${s.spot.on ? 'checked' : ''}> Add a spot</label>`;
+  if (s.spot.on) {
+    h += `<div class="field" style="margin-top:8px"><label>Spot temperature</label>${numInput('spot.T', 'temp', s.spot.T)}</div>`;
+    h += `<div class="field"><label>Spot size (radius)</label>${numInput('spot.r', 'len', s.spot.r)}</div>`;
+    const axLabel = d === 1 ? ['Where along the rod'] : d === 2 ? ['Left ↔ right', 'Bottom ↔ top'] : ['Left ↔ right', 'Front ↔ back', 'Bottom ↔ top'];
+    for (let a = 0; a < d; a++) {
+      h += `<div class="field"><label>${axLabel[a]}: <span data-poslbl="${a}">${fL(s.spot.pos[a] * s.L[a])}</span></label>
+        <input type="range" min="0" max="100" step="1" data-path="spot.pos.${a}" value="${Math.round(s.spot.pos[a] * 100)}" aria-label="${axLabel[a]}"></div>`;
+    }
+    h += `<label class="check"><input type="checkbox" data-path="spot.held" ${s.spot.held ? 'checked' : ''}> Keep it at this temperature the whole time (like a burner)</label>`;
+  }
+  h += `</fieldset>`;
+  h += `<div class="field"><label>How long to simulate ${infoBtn('simtime')}</label>${numInput('time', 'time', s.time)}</div>`;
+  h += `<div class="field"><label>Detail ${infoBtn('detailLvl')}</label><select data-path="detail">
+      ${['low', 'medium', 'high'].map(v => `<option value="${v}" ${s.detail === v ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)} (${DETAIL[d][v]}${d > 1 ? ' points per side' : ' points'})</option>`).join('')}</select></div>`;
+  $('#customForm').innerHTML = h;
+  for (const p of Object.keys(fieldErrors)) showFieldError(p);
+}
+function showFieldError(path) {
+  const el = $(`[data-err="${CSS.escape(path)}"]`); const inp = $(`input[data-path="${CSS.escape(path)}"]`);
+  if (el) el.textContent = fieldErrors[path] || '';
+  if (inp) inp.classList.toggle('bad', !!fieldErrors[path]);
+}
+function markDirty() { $('#runBtn').classList.add('pulse'); $('#runBtn').textContent = '▶ Run with new settings'; }
+function onFormInput(e) {
+  const el = e.target, path = el.dataset.path; if (!path) return;
+  const s = st();
+  if (el.type === 'checkbox') { setPath(s, path, el.checked); s.template = null; renderForm(); renderTemplates(); markDirty(); renderErrors(); return; }
+  if (el.type === 'range') { setPath(s, path, Number(el.value) / 100); s.template = null; const a = path.split('.').pop(); const lbl = $(`[data-poslbl="${a}"]`); if (lbl) lbl.textContent = fL(s.spot.pos[a] * s.L[a]); renderTemplates(); markDirty(); return; }
+  if (el.tagName === 'SELECT') { setPath(s, path, el.value); s.template = null; if (path.endsWith('.type')) renderForm(); renderTemplates(); markDirty(); renderErrors(); return; }
+  const kind = el.dataset.q; const v = parseNum(el.value);
+  const si = Number.isFinite(v) ? conv.fromDisp(kind, v) : NaN;
+  const msg = validateValue(kind, si, path);
+  if (msg) fieldErrors[path] = msg; else { delete fieldErrors[path]; setPath(s, path, si); }
+  if (path !== 'customAlpha') s.template = null;
+  showFieldError(path);
+  if (path.startsWith('L.')) for (let a = 0; a < s.dim; a++) { const lbl = $(`[data-poslbl="${a}"]`); if (lbl) lbl.textContent = fL(s.spot.pos[a] * s.L[a]); }
+  if (path === 'customAlpha') renderMaterial();
+  renderTemplates(); markDirty(); renderErrors();
+}
+function renderErrors() {
+  const s = st();
+  const msgs = Object.values(fieldErrors).concat(crossChecks(s));
+  $('#errors').innerHTML = msgs.length ? `<div class="msg err"><b>Almost! Fix ${msgs.length === 1 ? 'this' : 'these'} first:</b><ul>${[...new Set(msgs)].map(m => `<li>${esc(m)}</li>`).join('')}</ul></div>` : '';
+  $('#runBtn').disabled = msgs.length > 0;
+  return msgs.length === 0;
+}
+function refreshUnitsEverywhere() {
+  for (const k of Object.keys(fieldErrors)) delete fieldErrors[k];
+  renderForm(); renderMaterial(); renderErrors();
+  $$('[data-u]').forEach(e => e.textContent = conv.label(e.dataset.u));
+  if (R) { buildSummary(); renderExplain(); }
+  dirty = true; layoutAll();
+}
+
+/* =====================================================================================
+   11. RUN CONTROLLER
+   ===================================================================================== */
+let R = null;            // the current finished run
+let runToken = null;
+let dirty = true;
+const play = { t: 0, playing: false, speedIdx: 2, last: 0 };
+const SPEEDS = [0.25, 0.5, 1, 2, 4];
+const BASE_SECONDS = 12; // whole run plays in 12 s at 1×
+
+async function startRun() {
+  if (!renderErrors()) return;
+  const s = st();
+  if (runToken) runToken.cancelled = true;
+  const token = runToken = { cancelled: false };
+  $('#runBtn').classList.remove('pulse'); $('#runBtn').textContent = '▶ Run simulation';
+  const cfgs = [cfgFromState(s, 1)]; if (s.compare) cfgs.push(cfgFromState(s, 2));
+  const plans = cfgs.map(planGrid);
+  const sims = cfgs.map((c, i) => createSim(c, plans[i]));
+  // progress overlay
+  const views = $('#views');
+  let prog = $('.progress', views);
+  if (!prog) { prog = document.createElement('div'); prog.className = 'progress'; views.appendChild(prog); }
+  prog.innerHTML = '<div class="box">Calculating… <span>0%</span><div class="bar"><i></i></div></div>';
+  const t0 = performance.now();
+  try {
+    await runAsync(sims, p => { const sp = prog.querySelector('span'); if (sp) { sp.textContent = Math.round(p * 100) + '%'; prog.querySelector('i').style.width = (p * 100) + '%'; } }, token);
+  } catch (e) { return; }
+  if (token.cancelled) return;
+  prog.remove();
+  const ms = performance.now() - t0;
+  let lo = Math.min(...sims.map(x => x.lo)), hi = Math.max(...sims.map(x => x.hi));
+  if (!(hi - lo > 1e-6)) { lo -= 1; hi += 1; }
+  R = { dim: s.dim, sims, lo, hi, T: sims[0].T, computeMs: ms, state: deepCopy(s), probe: null, probeAuto: true };
+  chooseDefaultProbe();
+  buildViews();
+  renderNotices();
+  play.t = 0; play.playing = true; updatePlayBtn(); updateCutLabel();
+  buildSummary(); renderExplain();
+  dirty = true;
+}
+function chooseDefaultProbe() {
+  const sim = R.sims[0], d = R.dim;
+  const cands = d === 1 ? [[0.5], [0.25], [0.75], [0.1]] : d === 2 ? [[0.5, 0.5], [0.25, 0.5], [0.5, 0.25], [0.75, 0.5], [0.2, 0.2]] : [[0.5, 0.5, 0.5], [0.25, 0.5, 0.5], [0.5, 0.5, 0.25], [0.75, 0.75, 0.75], [0.25, 0.25, 0.25]];
+  for (const c of cands) {
+    const p = [c[0], c[1] ?? 0, c[2] ?? 0];
+    const idx = probeIdx(sim, p);
+    if (!sim.fixed[idx]) { R.probe = p; R.probeCenter = c.every(v => v === 0.5); return; }
+  }
+  R.probe = [0.5, 0.5, 0.5]; R.probeCenter = true;
+}
+function probeIdx(sim, p) {
+  const ijk = [0, 1, 2].map(a => Math.round(clamp(p[a], 0, 1) * (sim.n[a] - 1)));
+  return nodeIndex(sim, ijk[0], ijk[1], ijk[2]);
+}
+function nodePos(sim, idx) {
+  const nx = sim.n[0], ny = sim.n[1];
+  const i = idx % nx, j = Math.floor(idx / nx) % ny, k = Math.floor(idx / (nx * ny));
+  return [i * sim.dx[0], j * sim.dx[1], k * sim.dx[2]];
+}
+function posStr(sim, idx) {
+  const p = nodePos(sim, idx), d = sim.d;
+  if (d === 1) return `${fL(p[0])} from the left end`;
+  return `(${p.slice(0, d).map(v => nice(conv.toDisp('len', v))).join(', ')}) ${conv.label('len')}`;
+}
+function renderNotices() {
+  const msgs = [];
+  R.sims.forEach(sim => {
+    const p = sim.plan, name = sim.cfg.material.name;
+    const pre = R.sims.length > 1 ? `${name}: ` : '';
+    if (p.coarsened) msgs.push(`${pre}That would take forever to compute, so I used fewer points (${p.Nmax} instead of ${p.requested} across). The picture is a little blockier, but the physics is the same.`);
+    if (p.shortened) msgs.push(`${pre}This shape needs a LOT of tiny steps, so I only simulated the first ${fTime(p.T)} instead of ${fTime(sim.cfg.time)}.`);
+  });
+  // Data-driven: when did every point get within 2 % of its final value (only if it truly settled)?
+  const settle = R.sims.map(sim => {
+    const fin = sim.frames[sim.F - 1], prev = sim.frames[sim.F - 2], rng = sim.hi - sim.lo || 1;
+    let md = 0; for (let i = 0; i < fin.length; i++) md = Math.max(md, Math.abs(fin[i] - prev[i]));
+    if (md > 1e-3 * rng) return Infinity;
+    for (let k = 0; k < sim.F; k++) { const f = sim.frames[k]; let m = 0; for (let i = 0; i < f.length; i++) { const d = Math.abs(f[i] - fin[i]); if (d > m) m = d; } if (m < 0.02 * rng) return k * sim.frameDt; }
+    return Infinity;
+  });
+  const tSettle = Math.max(...settle);
+  if (Number.isFinite(tSettle) && tSettle < 0.3 * R.T) msgs.push(`Things pretty much stop changing after about ${fTime(tSettle)}, so most of this animation stays still. Try a shorter time, like ${fTime(Number((tSettle * 1.3).toPrecision(2)))}, to see more of the action.`);
+  $('#notices').innerHTML = msgs.map(m => `<div class="msg warn">ℹ️ ${esc(m)}</div>`).join('');
+}
+
+/* =====================================================================================
+   12. VIEWS & RENDERING
+   ===================================================================================== */
+let VIEWS = [];
+let cssVars = {};
+function readCss() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['text', 'muted', 'border', 'panel', 'panel2', 'grid', 'lineA', 'lineB', 'canvas-bg', 'blue', 'accent']) cssVars[k] = cs.getPropertyValue('--' + k).trim();
+}
+const view3D = { yaw: -0.62, pitch: 0.42, cutAxis: 0, cut: 0.6 };
+let particlesOn = false;
+
+function buildViews() {
+  const box = $('#views');
+  box.querySelectorAll('.view').forEach(e => e.remove());
+  box.classList.toggle('two', R.sims.length > 1);
+  VIEWS = R.sims.map((sim, vi) => {
+    const v = document.createElement('div'); v.className = 'view d' + R.dim;
+    const m = sim.cfg.material;
+    v.innerHTML = `<div class="view-title"><span class="swatch" style="background:${m.color}"></span>${esc(m.name)} <span class="hint" style="margin:0">α = ${fA(m.alpha)}</span></div>
+      <canvas class="main"></canvas>${R.dim === 3 ? '<div class="slicewrap"><div class="cap"></div><canvas class="slice"></canvas></div>' : ''}
+      <div class="readout"></div>`;
+    box.appendChild(v);
+    const view = { sim, el: v, canvas: $('canvas.main', v), ctx: null, field: new Float32Array(sim.N), hover: null, readout: $('.readout', v), vi, particles: null };
+    view.ctx = view.canvas.getContext('2d');
+    if (R.dim === 3) { view.slice = $('canvas.slice', v); view.sctx = view.slice.getContext('2d'); view.scap = $('.cap', v); }
+    view.off = document.createElement('canvas');
+    attachPointer(view);
+    return view;
+  });
+  $('#profilePanel').hidden = R.dim !== 1;
+  $('#particlesToggle').hidden = R.dim === 3;
+  $('#cutTools').hidden = R.dim !== 3;
+  $('#viewHint').textContent = R.dim === 1 ? 'Hover over the rod to read the temperature anywhere. Click to move the probe ⊕.'
+    : R.dim === 2 ? 'Hover over the plate to read the temperature at any point. Click to move the probe ⊕.'
+    : 'Drag to spin the block. Use “Cut open” to slice it and peek inside. Click a face to move the probe ⊕.';
+  const s = R.state, tpl = TEMPLATES[R.dim].find(t => t.id === s.template);
+  $('#vizTitle').textContent = tpl ? `${tpl.icon} ${tpl.name}` : `🛠️ Your own ${OBJ[R.dim]}`;
+  $('#vizSub').textContent = tpl ? tpl.desc : 'Custom setup';
+  layoutAll();
+}
+
+function fitCanvas(c, w, h) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  c.style.height = h + 'px';
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { W: w, H: h };
+}
+function layoutAll() {
+  readCss();
+  if (R) for (const v of VIEWS) {
+    const w = v.canvas.clientWidth || v.el.clientWidth || 300;
+    let h;
+    if (R.dim === 1) h = 170;
+    else if (R.dim === 2) {
+      const pad = 34, L = v.sim.cfg.L; const maxH = Math.min(480, Math.max(260, window.innerHeight * 0.6));
+      let pw = w - 2 * pad, ph = pw * L[1] / L[0];
+      if (ph > maxH - 2 * pad) { ph = maxH - 2 * pad; pw = ph * L[0] / L[1]; }
+      h = ph + 2 * pad;
+    } else h = Math.round(clamp(w * 0.82, 240, 440));
+    v.size = fitCanvas(v.canvas, w, h);
+    if (v.slice) { const sw = v.slice.clientWidth || w; v.ssize = fitCanvas(v.slice, sw, Math.round(clamp(sw * 0.45, 150, 220))); }
+    v.particles = null;
+  }
+  const cb = $('#colorbar'); fitCanvas(cb, cb.clientWidth || 300, 52);
+  for (const id of ['profileGraph', 'timeGraph']) { const c = $('#' + id); if (c.offsetParent) fitCanvas(c, c.clientWidth || 300, c.clientHeight || 260); }
+  dirty = true;
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function edgeTag(b) {
+  if (!b || b.type !== 'fixed') return '🧣 insulated';
+  const icon = b.T >= 45 ? '🔥' : b.T <= 5 ? '🧊' : '🌡️';
+  return `${icon} ${fT(b.T)}`;
+}
+function tooltip(ctx, x, y, lines, W, H) {
+  ctx.save(); ctx.font = '600 13px system-ui, sans-serif';
+  const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, h = lines.length * 17 + 10;
+  let bx = x + 14, by = y - h - 10;
+  if (bx + w > W - 4) bx = x - w - 14; if (by < 4) by = y + 14; if (by + h > H - 2) by = H - h - 2; if (bx < 2) bx = 2;
+  ctx.fillStyle = 'rgba(20,24,34,.92)'; roundRectPath(ctx, bx, by, w, h, 8); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.textBaseline = 'top'; lines.forEach((l, i) => ctx.fillText(l, bx + 8, by + 6 + i * 17));
+  ctx.restore();
+}
+function probeMarker(ctx, x, y) {
+  ctx.save(); ctx.lineWidth = 2.5; ctx.strokeStyle = '#111'; ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.stroke();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.moveTo(x - 7, y); ctx.lineTo(x + 7, y); ctx.moveTo(x, y - 7); ctx.lineTo(x, y + 7); ctx.stroke(); ctx.restore();
+}
+/** Paint an nu×nv field into the offscreen canvas, then stretch it smoothly into a rect (texel centres at the rect edges). */
+function paintField(view, ctx, nu, nv, get, x, y, w, h, flipV = true) {
+  const off = view.off; if (off.width !== nu || off.height !== nv) { off.width = nu; off.height = nv; view.offImg = null; }
+  const octx = off.getContext('2d'); if (!view.offImg) view.offImg = octx.createImageData(nu, nv);
+  const img = view.offImg.data, lo = R.lo, hi = R.hi;
+  for (let r = 0; r < nv; r++) { const jv = flipV ? nv - 1 - r : r; for (let u = 0; u < nu; u++) { const k = lutIndex(get(u, jv), lo, hi) * 3, p = (r * nu + u) * 4; img[p] = LUT[k]; img[p + 1] = LUT[k + 1]; img[p + 2] = LUT[k + 2]; img[p + 3] = 255; } }
+  octx.putImageData(view.offImg, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  if (nu > 1 && nv > 1) ctx.drawImage(off, 0.5, 0.5, nu - 1, nv - 1, x, y, w, h);
+  else if (nv === 1) ctx.drawImage(off, 0.5, 0, nu - 1, 1, x, y, w, h);
+}
+function particleSet(view, count) {
+  if (!view.particles || view.particles.length !== count.length) {
+    view.particles = count.map(([u, v]) => ({ u, v, a: Math.random() * 6.28, b: Math.random() * 6.28, wa: 0.7 + Math.random() * 0.6, wb: 0.7 + Math.random() * 0.6 }));
+  }
+  return view.particles;
+}
+function drawParticles(ctx, view, pts, toXY, tempAt, dtReal) {
+  const lo = R.lo, hi = R.hi;
+  ctx.save(); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 1;
+  for (const p of pts) {
+    const f = clamp((tempAt(p.u, p.v) - lo) / (hi - lo), 0, 1);
+    const w = 3 + 30 * f; p.a += dtReal * w * p.wa; p.b += dtReal * w * p.wb;
+    const amp = 0.6 + 4.2 * f; const [x, y] = toXY(p.u, p.v);
+    ctx.beginPath(); ctx.arc(x + amp * Math.sin(p.a), y + amp * Math.cos(p.b), 2.6, 0, 6.29); ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ---------- 1D rod ---------- */
+function rodGeom(view) { const { W, H } = view.size; const x0 = 70, x1 = W - 70, rh = 38, cy = 62; return { W, H, x0, x1, rh, cy }; }
+function draw1D(view, dtReal) {
+  const ctx = view.ctx, sim = view.sim, f = view.field, n = sim.n[0];
+  const { W, H, x0, x1, rh, cy } = rodGeom(view);
+  ctx.clearRect(0, 0, W, H);
+  // glow behind hot parts
+  const lo = R.lo, hi = R.hi, segs = Math.min(n - 1, 48);
+  ctx.save();
+  for (let s = 0; s < segs; s++) {
+    const i = Math.round((s + 0.5) / segs * (n - 1)); const fr = (f[i] - lo) / (hi - lo);
+    if (fr < 0.6) continue;
+    const k = lutIndex(f[i], lo, hi) * 3;
+    ctx.shadowColor = `rgba(${LUT[k]},${LUT[k + 1]},${LUT[k + 2]},${clamp((fr - 0.6) * 2.2, 0, 0.9)})`; ctx.shadowBlur = 26;
+    ctx.fillStyle = `rgb(${LUT[k]},${LUT[k + 1]},${LUT[k + 2]})`;
+    ctx.fillRect(x0 + s / segs * (x1 - x0), cy - rh / 2 + 4, (x1 - x0) / segs + 1, rh - 8);
+  }
+  ctx.restore();
+  ctx.save(); roundRectPath(ctx, x0, cy - rh / 2, x1 - x0, rh, rh / 2); ctx.clip();
+  paintField(view, ctx, n, 1, u => f[u], x0, cy - rh / 2, x1 - x0, rh, false);
+  const g = ctx.createLinearGradient(0, cy - rh / 2, 0, cy + rh / 2);
+  g.addColorStop(0, 'rgba(255,255,255,.45)'); g.addColorStop(0.35, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,.18)');
+  ctx.fillStyle = g; ctx.fillRect(x0, cy - rh / 2, x1 - x0, rh);
+  if (particlesOn) {
+    const pts = particleSet(view, Array.from({ length: 64 }, (_, i) => [(i % 32 + 0.5) / 32, i < 32 ? 0.3 : 0.7]));
+    drawParticles(ctx, view, pts, (u, v) => [x0 + u * (x1 - x0), cy - rh / 2 + v * rh], u => interp1(f, u), dtReal);
+  }
+  ctx.restore();
+  ctx.strokeStyle = cssVars.muted; ctx.lineWidth = 1.2; roundRectPath(ctx, x0, cy - rh / 2, x1 - x0, rh, rh / 2); ctx.stroke();
+  // ends
+  const bc = sim.cfg.bc;
+  ctx.fillStyle = cssVars.text; ctx.font = '600 13px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+  const endLbl = (b, x, align) => { const [ic, ...rest] = edgeTag(b).split(' '); ctx.textAlign = align; ctx.font = '22px system-ui'; ctx.fillText(ic, x, cy - 4); ctx.font = '600 11px system-ui, sans-serif'; ctx.fillText(rest.join(' '), x, cy + 22); };
+  endLbl(bc.xmin, x0 / 2, 'center'); endLbl(bc.xmax, (x1 + W) / 2, 'center');
+  // ruler
+  ctx.strokeStyle = cssVars.muted; ctx.fillStyle = cssVars.muted; ctx.lineWidth = 1; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const L = sim.cfg.L[0], ticks = niceTicks(0, conv.toDisp('len', L), Math.max(2, Math.floor((x1 - x0) / 90)));
+  const ry = cy + rh / 2 + 22;
+  ctx.beginPath(); ctx.moveTo(x0, ry); ctx.lineTo(x1, ry); ctx.stroke();
+  for (const t of ticks) { const x = x0 + conv.fromDisp('len', t) / L * (x1 - x0); ctx.beginPath(); ctx.moveTo(x, ry - 4); ctx.lineTo(x, ry + 4); ctx.stroke(); ctx.fillText(`${nice(t)}`, x, ry + 7); }
+  ctx.textAlign = 'right'; ctx.fillText(conv.label('len'), W - 8, ry + 7);
+  // probe
+  const pi = probeIdx(sim, R.probe); probeMarker(ctx, x0 + pi / (n - 1) * (x1 - x0), cy);
+  if (sim.spotNodes.length && sim.cfg.spot.on) { ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.font = '600 11px system-ui'; ctx.fillStyle = cssVars.text; const i = sim.spotNodes[Math.floor(sim.spotNodes.length / 2)]; ctx.fillText(sim.cfg.spot.held ? `held at ${fT(sim.cfg.spot.T)}` : `spot started at ${fT(sim.cfg.spot.T)}`, x0 + i / (n - 1) * (x1 - x0), cy - rh / 2 - 6); }
+  if (view.hover) {
+    const u = (view.hover.x - x0) / (x1 - x0);
+    if (u >= 0 && u <= 1) { ctx.strokeStyle = cssVars.text; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(view.hover.x, cy - rh / 2 - 4); ctx.lineTo(view.hover.x, cy + rh / 2 + 4); ctx.stroke(); ctx.setLineDash([]); tooltip(ctx, view.hover.x, view.hover.y, [fT(interp1(f, u)), `at x = ${fL(u * L)}`], W, H); }
+  }
+}
+function interp1(f, u) { const n = f.length, x = clamp(u, 0, 1) * (n - 1), i = Math.min(n - 2, Math.floor(x)), w = x - i; return f[i] * (1 - w) + f[i + 1] * w; }
+function interp2(f, nx, ny, u, v) {
+  const x = clamp(u, 0, 1) * (nx - 1), y = clamp(v, 0, 1) * (ny - 1); const i = Math.min(nx - 2, Math.floor(x)), j = Math.min(ny - 2, Math.floor(y)); const a = x - i, b = y - j;
+  const k = j * nx + i; return f[k] * (1 - a) * (1 - b) + f[k + 1] * a * (1 - b) + f[k + nx] * (1 - a) * b + f[k + nx + 1] * a * b;
+}
+
+/* ---------- 2D plate ---------- */
+function plateGeom(view) { const { W, H } = view.size, pad = 34, L = view.sim.cfg.L; let pw = W - 2 * pad, ph = H - 2 * pad; const asp = L[0] / L[1]; if (pw / ph > asp) pw = ph * asp; else ph = pw / asp; return { W, H, x: (W - pw) / 2, y: (H - ph) / 2, w: pw, h: ph }; }
+function draw2D(view, dtReal) {
+  const ctx = view.ctx, sim = view.sim, f = view.field, [nx, ny] = sim.n;
+  const { W, H, x, y, w, h } = plateGeom(view);
+  ctx.clearRect(0, 0, W, H);
+  const bc = sim.cfg.bc;
+  // edge bands: colored for held edges, hatched gray "blanket" for insulated
+  const band = (key, rx, ry, rw, rh) => {
+    const b = bc[key];
+    if (b.type === 'fixed') { const k = lutIndex(b.T, R.lo, R.hi) * 3; ctx.fillStyle = `rgb(${LUT[k]},${LUT[k + 1]},${LUT[k + 2]})`; }
+    else ctx.fillStyle = cssVars.panel2;
+    ctx.fillRect(rx, ry, rw, rh);
+    if (b.type !== 'fixed') { ctx.save(); ctx.strokeStyle = cssVars.muted; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip(); for (let t = -40; t < Math.max(rw, rh) + 40; t += 6) { ctx.moveTo(rx + t, ry); ctx.lineTo(rx + t - 12, ry + rh + 12); } ctx.stroke(); ctx.restore(); }
+  };
+  const bw = 7;
+  band('ymax', x, y - bw, w, bw); band('ymin', x, y + h, w, bw); band('xmin', x - bw, y, bw, h); band('xmax', x + w, y, bw, h);
+  paintField(view, ctx, nx, ny, (u, v) => f[v * nx + u], x, y, w, h, true);
+  if (particlesOn) {
+    const cols = 16, rows = Math.max(3, Math.round(cols * h / w)); const list = [];
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) list.push([(i + 0.5) / cols, (j + 0.5) / rows]);
+    drawParticles(ctx, view, particleSet(view, list), (u, v) => [x + u * w, y + (1 - v) * h], (u, v) => interp2(f, nx, ny, u, v), dtReal);
+  }
+  ctx.strokeStyle = cssVars.muted; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
+  // edge labels
+  ctx.fillStyle = cssVars.text; ctx.font = '600 12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(edgeTag(bc.ymax), x + w / 2, y - bw - 11); ctx.fillText(edgeTag(bc.ymin), x + w / 2, y + h + bw + 12);
+  ctx.save(); ctx.translate(x - bw - 12, y + h / 2); ctx.rotate(-Math.PI / 2); ctx.fillText(edgeTag(bc.xmin), 0, 0); ctx.restore();
+  ctx.save(); ctx.translate(x + w + bw + 12, y + h / 2); ctx.rotate(Math.PI / 2); ctx.fillText(edgeTag(bc.xmax), 0, 0); ctx.restore();
+  const pi = probeIdx(sim, R.probe), px = (pi % nx) / (nx - 1), py = Math.floor(pi / nx) / (ny - 1);
+  probeMarker(ctx, x + px * w, y + (1 - py) * h);
+  if (view.hover) {
+    const u = (view.hover.x - x) / w, v = 1 - (view.hover.y - y) / h;
+    if (u >= 0 && u <= 1 && v >= 0 && v <= 1) tooltip(ctx, view.hover.x, view.hover.y, [fT(interp2(f, nx, ny, u, v)), `at (${nice(conv.toDisp('len', u * sim.cfg.L[0]))}, ${nice(conv.toDisp('len', v * sim.cfg.L[1]))}) ${conv.label('len')}`], W, H);
+  }
+}
+
+/* ---------- 3D block (hand-rolled orthographic voxel renderer) ---------- */
+const FACE_DEFS = [ // [axis, side, shade index]
+  [0, 0, 1], [0, 1, 1], [1, 0, 2], [1, 1, 2], [2, 0, 3], [2, 1, 0]];
+function cutIndex(sim) { const a = view3D.cutAxis; return Math.round(view3D.cut * (sim.n[a] - 1)); }
+function draw3D(view) {
+  const ctx = view.ctx, sim = view.sim, f = view.field, n = sim.n, dx = sim.dx;
+  const { W, H } = view.size;
+  ctx.clearRect(0, 0, W, H);
+  const sz = [n[0] * dx[0], n[1] * dx[1], n[2] * dx[2]], Smax = Math.max(...sz);
+  const hiN = n.slice(); const ca = view3D.cutAxis, ci = cutIndex(sim); hiN[ca] = ci + 1;
+  const cyw = Math.cos(view3D.yaw), syw = Math.sin(view3D.yaw), cp = Math.cos(view3D.pitch), sp = Math.sin(view3D.pitch);
+  const scale = Math.min(W, H) * 0.52, cx = W / 2, cy = H / 2 + 6;
+  const rot = (X, Y, Z) => { const x1 = X * cyw - Y * syw, y1 = X * syw + Y * cyw; return [x1, y1 * cp - Z * sp, y1 * sp + Z * cp]; };
+  const proj = (x, y, z) => { const r = rot((x - sz[0] / 2) / Smax, (y - sz[1] / 2) / Smax, (z - sz[2] / 2) / Smax); return [cx + scale * r[0], cy - scale * r[2]]; };
+  // ghost outline of the full block
+  const corners = []; for (let c = 0; c < 8; c++) corners.push(proj(c & 1 ? sz[0] : 0, c & 2 ? sz[1] : 0, c & 4 ? sz[2] : 0));
+  ctx.save(); ctx.strokeStyle = cssVars.muted; ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.beginPath();
+  for (let c = 0; c < 8; c++) for (const bit of [1, 2, 4]) if (!(c & bit)) { ctx.moveTo(...corners[c]); ctx.lineTo(...corners[c | bit]); }
+  ctx.stroke(); ctx.restore();
+  view.faces = [];
+  const lo = R.lo, hi = R.hi, sy = n[0], sz2 = n[0] * n[1];
+  const stride = [1, sy, sz2];
+  for (const [a, side, shade] of FACE_DEFS) {
+    const nv = [0, 0, 0]; nv[a] = side ? 1 : -1;
+    const ry = rot(nv[0], nv[1], nv[2])[1];
+    if (ry > -1e-6) continue; // facing away
+    const u = (a + 1) % 3, v = (a + 2) % 3;
+    const plane = side ? hiN[a] * dx[a] : 0, ia = side ? hiN[a] - 1 : 0;
+    const p0 = [0, 0, 0]; p0[a] = plane; const O = proj(...p0);
+    const pu = p0.slice(); pu[u] = dx[u]; const PU = proj(...pu); const DU = [PU[0] - O[0], PU[1] - O[1]];
+    const pv = p0.slice(); pv[v] = dx[v]; const PV = proj(...pv); const DV = [PV[0] - O[0], PV[1] - O[1]];
+    const nu = hiN[u], nvv = hiN[v], lut = LUTSTR[shade];
+    ctx.lineWidth = 0.8; ctx.lineJoin = 'round';
+    for (let iu = 0; iu < nu; iu++) for (let iv = 0; iv < nvv; iv++) {
+      const idx = ia * stride[a] + iu * stride[u] + iv * stride[v];
+      const col = lut[lutIndex(f[idx], lo, hi)];
+      const X = O[0] + iu * DU[0] + iv * DV[0], Y = O[1] + iu * DU[1] + iv * DV[1];
+      ctx.beginPath(); ctx.moveTo(X, Y); ctx.lineTo(X + DU[0], Y + DU[1]); ctx.lineTo(X + DU[0] + DV[0], Y + DU[1] + DV[1]); ctx.lineTo(X + DV[0], Y + DV[1]); ctx.closePath();
+      ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = col; ctx.stroke();
+    }
+    // face outline
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(O[0], O[1]); ctx.lineTo(O[0] + nu * DU[0], O[1] + nu * DU[1]); ctx.lineTo(O[0] + nu * DU[0] + nvv * DV[0], O[1] + nu * DU[1] + nvv * DV[1]); ctx.lineTo(O[0] + nvv * DV[0], O[1] + nvv * DV[1]); ctx.closePath(); ctx.stroke();
+    view.faces.push({ a, u, v, ia, O, DU, DV, nu, nv: nvv });
+  }
+  // probe (drawn "x-ray" style even if inside)
+  const pi = probeIdx(sim, R.probe), pp = nodePos(sim, pi);
+  const P = proj(pp[0] + dx[0] / 2, pp[1] + dx[1] / 2, pp[2] + dx[2] / 2); probeMarker(ctx, P[0], P[1]);
+  // labels
+  ctx.fillStyle = cssVars.muted; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText('Drag to rotate', 8, 8);
+  if (view.hover) {
+    const hit = pick3D(view, view.hover.x, view.hover.y);
+    if (hit != null) tooltip(ctx, view.hover.x, view.hover.y, [fT(f[hit]), `at ${posStr(sim, hit)}`], W, H);
+  }
+  drawSlice(view);
+}
+function pick3D(view, x, y) {
+  if (!view.faces) return null;
+  const sim = view.sim, n = sim.n, stride = [1, n[0], n[0] * n[1]];
+  for (const fc of view.faces) {
+    const px = x - fc.O[0], py = y - fc.O[1], det = fc.DU[0] * fc.DV[1] - fc.DU[1] * fc.DV[0];
+    if (Math.abs(det) < 1e-9) continue;
+    const s = (px * fc.DV[1] - py * fc.DV[0]) / det, t = (fc.DU[0] * py - fc.DU[1] * px) / det;
+    if (s >= 0 && s < fc.nu && t >= 0 && t < fc.nv) return fc.ia * stride[fc.a] + Math.floor(s) * stride[fc.u] + Math.floor(t) * stride[fc.v];
+  }
+  return null;
+}
+function sliceAxes() { const a = view3D.cutAxis; return a === 0 ? [1, 2] : a === 1 ? [0, 2] : [0, 1]; }
+function drawSlice(view) {
+  if (!view.slice || !view.ssize) return;
+  const ctx = view.sctx, sim = view.sim, f = view.field, n = sim.n, { W, H } = view.ssize;
+  ctx.clearRect(0, 0, W, H);
+  const a = view3D.cutAxis, ci = cutIndex(sim), [hu, hv] = sliceAxes();
+  const Lu = sim.cfg.L[hu], Lv = sim.cfg.L[hv]; let ph = H - 20, pw = ph * Lu / Lv; if (pw > W - 20) { pw = W - 20; ph = pw * Lv / Lu; }
+  const x = (W - pw) / 2, y = (H - ph) / 2, stride = [1, n[0], n[0] * n[1]];
+  view.sliceGeom = { x, y, w: pw, h: ph, hu, hv, ci, a };
+  paintField(view, ctx, n[hu], n[hv], (u, v) => f[ci * stride[a] + u * stride[hu] + v * stride[hv]], x, y, pw, ph, true);
+  ctx.strokeStyle = cssVars.muted; ctx.strokeRect(x, y, pw, ph);
+  const names = ['x', 'y', 'z'];
+  view.scap.textContent = `Inside view: the cut face, laid flat (at ${names[a]} = ${fL(ci * sim.dx[a])}). ${a === 2 ? 'Seen from above.' : 'Bottom is the bottom face.'}`;
+  if (view.shover) {
+    const g = view.sliceGeom, u = (view.shover.x - g.x) / g.w, v = 1 - (view.shover.y - g.y) / g.h;
+    if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
+      const iu = Math.round(u * (n[hu] - 1)), iv = Math.round(v * (n[hv] - 1)); const idx = ci * stride[a] + iu * stride[hu] + iv * stride[hv];
+      tooltip(ctx, view.shover.x, view.shover.y, [fT(f[idx]), `at ${posStr(sim, idx)}`], W, H);
+    }
+  }
+}
+
+/* ---------- pointer handling ---------- */
+function attachPointer(view) {
+  const c = view.canvas; let drag = null;
+  const pos = e => { const r = c.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  c.addEventListener('pointerdown', e => { const p = pos(e); drag = { ...p, sx: p.x, sy: p.y, moved: false }; try { c.setPointerCapture(e.pointerId); } catch (_) {} });
+  c.addEventListener('pointermove', e => {
+    const p = pos(e);
+    if (drag && R.dim === 3) {
+      const ddx = p.x - drag.x, ddy = p.y - drag.y;
+      if (Math.abs(p.x - drag.sx) + Math.abs(p.y - drag.sy) > 4) drag.moved = true;
+      view3D.yaw -= ddx * 0.01; view3D.pitch = clamp(view3D.pitch + ddy * 0.01, -1.45, 1.45);
+      drag.x = p.x; drag.y = p.y; view.hover = null; dirty = true; return;
+    }
+    view.hover = e.pointerType === 'touch' && !drag ? null : p; dirty = true;
+  });
+  c.addEventListener('pointerup', e => {
+    const p = pos(e);
+    if (drag && !drag.moved) { setProbeFromView(view, p.x, p.y); if (e.pointerType === 'touch') view.hover = p; }
+    drag = null; dirty = true;
+  });
+  c.addEventListener('pointerleave', () => { if (!drag) { view.hover = null; dirty = true; } });
+  c.addEventListener('pointercancel', () => { drag = null; view.hover = null; dirty = true; });
+  if (view.slice) {
+    const sc = view.slice;
+    const sp = e => { const r = sc.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    sc.addEventListener('pointermove', e => { view.shover = sp(e); dirty = true; });
+    sc.addEventListener('pointerdown', e => { view.shover = sp(e); dirty = true; });
+    sc.addEventListener('pointerleave', () => { view.shover = null; dirty = true; });
+  }
+}
+function setProbeFromView(view, x, y) {
+  const sim = view.sim;
+  if (R.dim === 1) { const { x0, x1 } = rodGeom(view); const u = (x - x0) / (x1 - x0); if (u < -0.02 || u > 1.02) return; R.probe = [clamp(u, 0, 1), 0, 0]; }
+  else if (R.dim === 2) { const g = plateGeom(view); const u = (x - g.x) / g.w, v = 1 - (y - g.y) / g.h; if (u < 0 || u > 1 || v < 0 || v > 1) return; R.probe = [u, v, 0]; }
+  else { const idx = pick3D(view, x, y); if (idx == null) return; const p = nodePos(sim, idx); R.probe = [0, 1, 2].map(a => sim.n[a] > 1 ? p[a] / sim.cfg.L[a] : 0); }
+  R.probeCenter = false; R.probeAuto = false;
+  buildSummary(); dirty = true;
+}
+
+/* ---------- colour bar & graphs ---------- */
+function niceTicks(lo, hi, count = 5) {
+  const span = hi - lo; if (!(span > 0)) return [lo];
+  const step0 = span / Math.max(1, count), mag = 10 ** Math.floor(Math.log10(step0)), e = step0 / mag;
+  const step = (e >= 7.5 ? 10 : e >= 3.5 ? 5 : e >= 1.5 ? 2 : 1) * mag;
+  const out = []; for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + step * 1e-9; v += step) out.push(Math.abs(v) < step * 1e-9 ? 0 : v);
+  return out;
+}
+function drawColorbar() {
+  const c = $('#colorbar'), ctx = c.getContext('2d'), W = c.clientWidth, H = 52;
+  ctx.clearRect(0, 0, W, H); if (!R) return;
+  const x0 = 70, x1 = W - 70, y = 6, h = 16;
+  const g = ctx.createLinearGradient(x0, 0, x1, 0); CSTOPS.forEach((s, i) => g.addColorStop(i / (CSTOPS.length - 1), s));
+  ctx.fillStyle = g; roundRectPath(ctx, x0, y, x1 - x0, h, 6); ctx.fill();
+  ctx.fillStyle = cssVars.text; ctx.font = '600 12px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+  ctx.textAlign = 'right'; ctx.fillText('❄️ cold', x0 - 8, y + h / 2); ctx.textAlign = 'left'; ctx.fillText('hot 🔥', x1 + 8, y + h / 2);
+  const dlo = conv.toDisp('temp', R.lo), dhi = conv.toDisp('temp', R.hi);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.font = '12px system-ui, sans-serif'; ctx.strokeStyle = cssVars.text;
+  for (const t of niceTicks(dlo, dhi, Math.max(2, Math.floor((x1 - x0) / 70)))) {
+    const x = x0 + (t - dlo) / (dhi - dlo) * (x1 - x0);
+    ctx.beginPath(); ctx.moveTo(x, y + h); ctx.lineTo(x, y + h + 4); ctx.stroke();
+    ctx.fillText(`${nice(t)}${conv.label('temp') === 'K' ? ' K' : conv.label('temp')}`, x, y + h + 6);
+  }
+}
+function graphFrame(ctx, W, H, xr, yr, xlab, ylab) {
+  const L = 58, Rm = 14, T = 12, B = 42; const pw = W - L - Rm, ph = H - T - B;
+  const X = v => L + (v - xr[0]) / (xr[1] - xr[0]) * pw, Y = v => T + ph - (v - yr[0]) / (yr[1] - yr[0]) * ph;
+  ctx.clearRect(0, 0, W, H);
+  ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = cssVars.muted; ctx.strokeStyle = cssVars.grid; ctx.lineWidth = 1;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (const t of niceTicks(yr[0], yr[1], Math.max(2, Math.floor(ph / 45)))) { const y = Y(t); ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + pw, y); ctx.stroke(); ctx.fillText(nice(t), L - 6, y); }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (const t of niceTicks(xr[0], xr[1], Math.max(2, Math.floor(pw / 80)))) { const x = X(t); ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke(); ctx.fillText(nice(t), x, T + ph + 5); }
+  ctx.fillStyle = cssVars.text; ctx.font = '600 12px system-ui, sans-serif'; ctx.fillText(xlab, L + pw / 2, T + ph + 22);
+  ctx.save(); ctx.translate(14, T + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = 'middle'; ctx.fillText(ylab, 0, 0); ctx.restore();
+  ctx.strokeStyle = cssVars.muted; ctx.strokeRect(L, T, pw, ph);
+  return { X, Y, L, T, pw, ph };
+}
+const seriesStyle = i => ({ color: i === 0 ? cssVars.lineA : cssVars.lineB, dash: i === 0 ? [] : [7, 4] });
+function legend(ctx, g) {
+  if (R.sims.length < 2) return;
+  ctx.font = '600 12px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  let x = g.L + 10; const y = g.T + 12;
+  R.sims.forEach((s, i) => { const st_ = seriesStyle(i); ctx.strokeStyle = st_.color; ctx.setLineDash(st_.dash); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 24, y); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = cssVars.text; ctx.fillText(s.cfg.material.name, x + 30, y); x += 44 + ctx.measureText(s.cfg.material.name).width; });
+}
+let profHover = null, timeHover = null;
+function drawProfile() {
+  const c = $('#profileGraph'); if (!R || R.dim !== 1 || !c.offsetParent) return;
+  const ctx = c.getContext('2d'), W = c.clientWidth, H = c.clientHeight;
+  const Ld = conv.toDisp('len', R.sims[0].cfg.L[0]);
+  const ylo = conv.toDisp('temp', R.lo), yhi = conv.toDisp('temp', R.hi), pad = (yhi - ylo) * 0.06;
+  const g = graphFrame(ctx, W, H, [0, Ld], [ylo - pad, yhi + pad], `Position along the rod (${conv.label('len')})`, `Temperature (${conv.label('temp')})`);
+  ctx.save(); ctx.beginPath(); ctx.rect(g.L, g.T, g.pw, g.ph); ctx.clip();
+  VIEWS.forEach((v, i) => {
+    const sim = v.sim, n = sim.n[0], s_ = seriesStyle(i);
+    const line = (arr, width, dash, alpha) => { ctx.globalAlpha = alpha; ctx.strokeStyle = s_.color; ctx.lineWidth = width; ctx.setLineDash(dash); ctx.beginPath(); for (let k = 0; k < n; k++) { const x = g.X(k / (n - 1) * Ld), y = g.Y(conv.toDisp('temp', arr[k])); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; };
+    if (i === 0) line(sim.frames[0], 1.5, [3, 4], 0.6);
+    line(v.field, 3, s_.dash, 1);
+  });
+  // probe
+  const px = g.X(R.probe[0] * Ld); ctx.strokeStyle = cssVars.text; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(px, g.T); ctx.lineTo(px, g.T + g.ph); ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+  legend(ctx, g);
+  if (profHover && profHover.x >= g.L && profHover.x <= g.L + g.pw) {
+    const u = (profHover.x - g.L) / g.pw; ctx.strokeStyle = cssVars.text; ctx.beginPath(); ctx.moveTo(profHover.x, g.T); ctx.lineTo(profHover.x, g.T + g.ph); ctx.stroke();
+    const lines = [`x = ${fL(u * R.sims[0].cfg.L[0])}`].concat(VIEWS.map(v => `${R.sims.length > 1 ? v.sim.cfg.material.name + ': ' : ''}${fT(interp1(v.field, u))}`));
+    tooltip(ctx, profHover.x, profHover.y, lines, W, H);
+  }
+}
+function drawTimeGraph() {
+  const c = $('#timeGraph'); if (!R) return;
+  const ctx = c.getContext('2d'), W = c.clientWidth, H = c.clientHeight;
+  const Td = conv.toDisp('time', R.T);
+  const series = R.sims.map(sim => { const idx = probeIdx(sim, R.probe); return sim.frames.map(fr => conv.toDisp('temp', fr[idx])); });
+  let lo = Math.min(...series.flat()), hi = Math.max(...series.flat()); if (hi - lo < 1e-6) { lo -= 1; hi += 1; } const pad = (hi - lo) * 0.08;
+  const g = graphFrame(ctx, W, H, [0, Td], [lo - pad, hi + pad], `Time (${UNITS.time[U.time].long})`, `Temperature (${conv.label('temp')})`);
+  const tNow = conv.toDisp('time', play.t);
+  ctx.save(); ctx.beginPath(); ctx.rect(g.L, g.T, g.pw, g.ph); ctx.clip();
+  series.forEach((ser, i) => {
+    const sim = R.sims[i], s_ = seriesStyle(i);
+    ctx.strokeStyle = s_.color; ctx.setLineDash(s_.dash);
+    for (const pass of [0, 1]) {
+      ctx.globalAlpha = pass ? 1 : 0.25; ctx.lineWidth = pass ? 3 : 2; ctx.beginPath(); let started = false;
+      for (let k = 0; k < ser.length; k++) { const t = conv.toDisp('time', k * sim.frameDt); if (pass && t > tNow + 1e-12) { const y = conv.toDisp('temp', sampleAt(sim, play.t, probeIdx(sim, R.probe))); ctx.lineTo(g.X(tNow), g.Y(y)); break; } const x = g.X(t), y = g.Y(ser[k]); started ? ctx.lineTo(x, y) : ctx.moveTo(x, y); started = true; }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    const yv = conv.toDisp('temp', sampleAt(sim, play.t, probeIdx(sim, R.probe)));
+    ctx.fillStyle = s_.color; ctx.beginPath(); ctx.arc(g.X(tNow), g.Y(yv), 5, 0, 7); ctx.fill();
+  });
+  ctx.strokeStyle = cssVars.text; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(g.X(tNow), g.T); ctx.lineTo(g.X(tNow), g.T + g.ph); ctx.stroke();
+  ctx.restore();
+  legend(ctx, g);
+  if (timeHover && timeHover.x >= g.L && timeHover.x <= g.L + g.pw) {
+    const tt = (timeHover.x - g.L) / g.pw * R.T;
+    ctx.strokeStyle = cssVars.muted; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(timeHover.x, g.T); ctx.lineTo(timeHover.x, g.T + g.ph); ctx.stroke(); ctx.setLineDash([]);
+    tooltip(ctx, timeHover.x, timeHover.y, [`t = ${fTime(tt)}`].concat(R.sims.map(sim => `${R.sims.length > 1 ? sim.cfg.material.name + ': ' : ''}${fT(sampleAt(sim, tt, probeIdx(sim, R.probe)))}`)), W, H);
+  }
+  const sim0 = R.sims[0], idx = probeIdx(sim0, R.probe);
+  $('#timeGraphTitle').textContent = `Temperature over time at the probe ⊕ (${R.probeCenter ? 'the middle, ' : ''}${posStr(sim0, idx)})`;
+}
+
+/* ---------- readouts & frame loop ---------- */
+function updateReadouts() {
+  for (const v of VIEWS) {
+    const f = v.field; let mi = 0, ma = 0;
+    for (let i = 1; i < f.length; i++) { if (f[i] < f[mi]) mi = i; if (f[i] > f[ma]) ma = i; }
+    const pidx = probeIdx(v.sim, R.probe);
+    v.readout.innerHTML = `<span>🔥 Hottest: <b>${fT(f[ma])}</b> at ${posStr(v.sim, ma)}</span><span>❄️ Coldest: <b>${fT(f[mi])}</b> at ${posStr(v.sim, mi)}</span><span>⊕ Probe: <b>${fT(f[pidx])}</b></span>`;
+  }
+  const total = R.T, dec = conv.toDisp('time', total) >= 100 ? 0 : conv.toDisp('time', total) >= 10 ? 1 : 2;
+  const tv = conv.toDisp('time', play.t);
+  $('#clock').textContent = `Time: ${tv.toFixed(dec)} ${Math.abs(tv - 1) < 1e-9 ? UNITS.time[U.time].one : UNITS.time[U.time].long}`;
+  $('#scrub').value = Math.round(play.t / R.T * 1000);
+  $('#scrub').setAttribute('aria-valuetext', $('#clock').textContent);
+  $('#rateNote').textContent = `of ${fTime(R.T)} total`;
+  const sp = SPEEDS[play.speedIdx];
+  $('#speedLbl').textContent = `${sp}×`;
+  $('#speedNote').textContent = `1 second of animation = ${fTimeAuto(R.T / BASE_SECONDS * sp)} of real time`;
+}
+let fpsLog = [], lastNow = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dtReal = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0; lastNow = now;
+  if (!R) return;
+  if (play.playing) {
+    play.t += dtReal * SPEEDS[play.speedIdx] * R.T / BASE_SECONDS;
+    if (play.t >= R.T) { play.t = R.T; play.playing = false; updatePlayBtn(); }
+    dirty = true;
+  }
+  const animParticles = particlesOn && R.dim !== 3;
+  if (!dirty && !animParticles) return;
+  const t0 = performance.now();
+  for (const v of VIEWS) {
+    if (!v.size) continue;
+    if (dirty) sampleField(v.sim, play.t, v.field);
+    if (R.dim === 1) draw1D(v, dtReal); else if (R.dim === 2) draw2D(v, dtReal); else draw3D(v);
+  }
+  if (dirty) { drawColorbar(); drawProfile(); drawTimeGraph(); updateReadouts(); }
+  dirty = false;
+  if (play.playing || animParticles) { fpsLog.push(now); while (fpsLog.length && now - fpsLog[0] > 1000) fpsLog.shift(); }
+  HeatExplorer.lastRenderMs = performance.now() - t0;
+}
+function fps() { return fpsLog.length > 1 ? (fpsLog.length - 1) / ((fpsLog[fpsLog.length - 1] - fpsLog[0]) / 1000) : 0; }
+function updatePlayBtn() { const b = $('#playBtn'); b.textContent = play.playing ? '⏸ Pause' : (R && play.t >= R.T ? '▶ Replay' : '▶ Play'); b.setAttribute('aria-label', play.playing ? 'Pause' : 'Play'); }
+
+/* =====================================================================================
+   13. "WHAT JUST HAPPENED?" — auto-generated from the results
+   ===================================================================================== */
+function crossTime(sim, idx, target, rising) {
+  const fr = sim.frames;
+  for (let k = 1; k < fr.length; k++) {
+    const a = fr[k - 1][idx], b = fr[k][idx];
+    if (rising ? (a < target && b >= target) : (a > target && b <= target)) return (k - 1 + (target - a) / (b - a)) * sim.frameDt;
+  }
+  return null;
+}
+function buildSummary() {
+  if (!R) return;
+  const out = [], A = R.sims[0], d = R.dim, obj = OBJ[d], s = R.state;
+  const mA = A.cfg.material;
+  const where = R.probeCenter ? `the middle of the ${obj}` : `the probe point ⊕`;
+  const idx = probeIdx(A, R.probe), ser = A.frames.map(f => f[idx]);
+  const start = ser[0], end = ser[ser.length - 1];
+  if (R.hi - R.lo <= 2.0001 && Math.abs(A.hi - A.lo) < 1e-6) {
+    $('#summary').innerHTML = '<p>Everything was already the same temperature as its edges, so <b>no heat flowed at all</b>. Heat only moves when there’s a temperature difference. Try making one edge hotter!</p>';
+    return;
+  }
+  const spotTxt = s.spot.on ? ` with a ${s.spot.T > s.T0 ? 'hot' : 'cold'} spot at ${fT(s.spot.T)}${s.spot.held ? ' (kept there the whole time)' : ''}` : '';
+  out.push(`<p>The ${esc(mA.name.toLowerCase())} ${obj} started at <b>${fT(s.T0)}</b>${spotTxt}. We watched it for <b>${fTime(R.T)}</b>.</p>`);
+  const li = [];
+  const change = end - start;
+  if (Math.abs(change) < 0.5) {
+    li.push(`At ${where}, the temperature barely changed (${fT(start)} → ${fT(end)}). Heat didn’t have time to get there! In ${fTime(R.T)}, heat in ${esc(mA.name.toLowerCase())} only spreads about ${fL(Math.sqrt(mA.alpha * R.T))}. Try a longer time, or a faster material like copper.`);
+  } else {
+    li.push(`${where[0].toUpperCase() + where.slice(1)} went from <b>${fT(start)}</b> to <b>${fT(end)}</b> (it ${change > 0 ? 'warmed up' : 'cooled down'} by ${nice(Math.abs(conv.toDisp('temp', end) - conv.toDisp('temp', start)))} ${conv.label('temp') === 'K' ? 'K' : 'degrees'}).`);
+    const target = start + change / 2, tHalf = crossTime(A, idx, target, change > 0);
+    if (tHalf != null) {
+      li.push(`It got halfway there (to ${fT(target)}) after <b>${fTime(tHalf)}</b>.`);
+      if (R.sims.length > 1) {
+        const B = R.sims[1], mB = B.cfg.material, ratio = mA.alpha / mB.alpha, tB = tHalf * ratio;
+        const shown = crossTime(B, probeIdx(B, R.probe), target, change > 0);
+        if (ratio > 1.05) li.push(`🏁 <b>${esc(mA.name)} wins!</b> ${esc(mB.name)} needs about <b>${nice(ratio, 2)} times longer</b> to get to the same temperature (about ${fTimeAuto(tB)}). ${shown != null ? 'You can see that on the graph.' : 'That’s longer than this simulation ran!'}`);
+        else if (ratio < 0.95) li.push(`🏁 <b>${esc(mB.name)} wins!</b> It gets there about <b>${nice(1 / ratio, 2)} times faster</b> (after about ${fTimeAuto(tB)}).`);
+        else li.push(`🏁 It’s a tie: both materials spread heat at about the same speed.`);
+      } else {
+        const other = mA.alpha >= 5e-5 ? matById('steel') : matById('copper');
+        if (other.id !== mA.id) {
+          const ratio = mA.alpha / other.alpha;
+          li.push(ratio > 1 ? `A ${other.name.toLowerCase()} ${obj} would take about <b>${nice(ratio, 2)} times longer</b> (about ${fTimeAuto(tHalf * ratio)}). Tick “Compare” to see the race!` : `A copper ${obj} would get there about <b>${nice(1 / ratio, 2)} times faster</b> (in about ${fTimeAuto(tHalf * ratio)}). Tick “Compare” to see the race!`);
+        }
+      }
+    }
+  }
+  // steady state / conservation
+  const last = A.frames[A.F - 1], prev = A.frames[A.F - 2]; let maxd = 0; for (let i = 0; i < last.length; i++) maxd = Math.max(maxd, Math.abs(last[i] - prev[i]));
+  const steady = maxd < 1e-3 * (A.hi - A.lo + 1e-9) || A.steadyAt != null;
+  const keys = SIDES[d].map(x => x[0]); const allIns = keys.every(k => s.bc[k].type === 'insulated') && !(s.spot.on && s.spot.held);
+  const fixedKeys = keys.filter(k => s.bc[k].type === 'fixed');
+  if (allIns) {
+    const mean = weightedMean(A, A.frames[0]);
+    li.push(`Every edge was insulated, so <b>no heat could escape</b>. The total amount of heat stayed exactly the same; it just ${steady ? 'evened out' : 'kept evening out'} toward <b>${fT(mean)}</b> everywhere (the average of where it started).`);
+  } else if (steady) {
+    li.push(`By the end, temperatures had <b>stopped changing</b>. That’s called <i>steady state</i>: every spot gets exactly as much heat as it passes on.`);
+    if (d === 1 && fixedKeys.length === 2 && !s.spot.on && s.bc.xmin.T !== s.bc.xmax.T) li.push(`Look at the graph: the line is <b>perfectly straight</b>! With both ends held steady, heat flows through at a constant rate, and that makes a straight line.`);
+  } else li.push(`It was still changing when we stopped. Run it longer to see where it ends up.`);
+  let mi = 0, ma = 0; for (let i = 1; i < last.length; i++) { if (last[i] < last[mi]) mi = i; if (last[i] > last[ma]) ma = i; }
+  li.push(`At the end, the hottest point was <b>${fT(last[ma])}</b> and the coldest was <b>${fT(last[mi])}</b>.`);
+  const Lmax = Math.max(...s.L.slice(0, d));
+  out.push(`<ul>${li.map(x => `<li>${x}</li>`).join('')}</ul>`);
+  out.push(`<p class="detail-only more">Rule of thumb: heat needs roughly L²/α to cross something of size L. For this ${obj} (L = ${fL(Lmax)}, α = ${fA(mA.alpha)}), that’s about <b>${fTimeAuto(Lmax * Lmax / mA.alpha)}</b>. The solver took ${A.plan.framesToCompute * A.plan.spf} tiny steps of Δt = ${fTime(A.plan.dt)}${A.steadyAt != null ? `, then held the final picture once nothing could change any more (after ${fTime(A.steadyAt)})` : ''}.</p>`);
+  $('#summary').innerHTML = out.join('');
+}
+
+/* =====================================================================================
+   14. "EXPLAIN THIS" PANEL & POPOVERS
+   ===================================================================================== */
+function tblock(key) { const t = TEXT[key]; return t.simple + (t.detail ? `<div class="detail-only more">${t.detail}</div>` : ''); }
+function renderExplain() {
+  const open = new Set($$('#explain details[open]').map(d => d.dataset.k));
+  if (!open.size && !$('#explain').childElementCount) open.add('eq');
+  const sec = (k, title, body) => `<details data-k="${k}" ${open.has(k) ? 'open' : ''}><summary>${title}</summary><div class="body">${body}</div></details>`;
+  let h = '';
+  h += sec('temp', '🌡️ What is temperature?', tblock('temperature'));
+  h += sec('heat', '🔁 How does heat move?', tblock('heat'));
+  h += sec('eq', '🧮 The heat equation, in plain words', tblock('equation') + `<p>Here’s what each letter means:</p><ul>
+     <li><b>T</b>: temperature ${infoBtn('temperature')}</li><li><b>t</b>: time ${infoBtn('time')}</li><li><b>x, y, z</b>: position ${infoBtn('position')}</li><li><b>α</b>: thermal diffusivity ${infoBtn('alpha')}</li></ul>
+     <div class="detail-only more"><p>The computer can’t do calculus directly, so it uses <b>finite differences</b>: it replaces the smooth curve with temperatures at grid points Δx apart, and steps forward by Δt. In 1D:</p>
+     <div class="eq small">T<sub>i</sub><sup>new</sup> = T<sub>i</sub> + (α·Δt / Δx²) · (T<sub>i−1</sub> − 2T<sub>i</sub> + T<sub>i+1</sub>)</div>
+     <p>Look closely: (T<sub>i−1</sub> + T<sub>i+1</sub>)/2 − T<sub>i</sub> is exactly “average of my neighbors minus me”. That’s the plain-words rule, written as arithmetic! In 2D and 3D the same term is added for each direction. This method is called <b>FTCS</b>: Forward in Time, Centered in Space.</p></div>`);
+  const sorted = MATERIALS.slice().sort((a, b) => b.alpha - a.alpha), amax = Math.log10(sorted[0].alpha), amin = Math.log10(sorted[sorted.length - 1].alpha) - 0.3;
+  h += sec('alpha', '⚡ Why do some materials spread heat faster?', tblock('alpha') + `<p>Here’s every material, fastest at the top. (The bars use a <i>log scale</i>, because the numbers are so different: copper is about 1,350 times faster than wood!)</p>
+     <div class="abars">${sorted.map(m => `<div class="abar"><span>${m.name}</span><i style="width:${((Math.log10(m.alpha) - amin) / (amax - amin) * 100).toFixed(1)}%; background:${m.color}"></i><span>${nice(conv.toDisp('alpha', m.alpha))} ${conv.label('alpha')}</span></div>`).join('')}</div>`);
+  h += sec('edges', '🧱 What happens at the edges?', tblock('boundary') + `<p><b>${TEXT.fixed.title}:</b> ${TEXT.fixed.simple.replace(/<\/?p>/g, '')}</p><p><b>${TEXT.insulated.title}:</b> ${TEXT.insulated.simple.replace(/<\/?p>/g, '')}</p>`);
+  let bts = '';
+  if (R) {
+    bts = R.sims.map(sim => { const p = sim.plan, d = sim.d; return `<table class="bts"><tr><td colspan="2"><b>${esc(sim.cfg.material.name)}</b></td></tr>
+      <tr><td>Grid points</td><td>${p.n.slice(0, d).join(' × ')} = ${p.nodes.toLocaleString()} points${p.coarsened ? ' (coarsened to keep it fast)' : ''}</td></tr>
+      <tr><td>Grid spacing Δx</td><td>${p.dx.slice(0, d).map(fL).join(', ')}</td></tr>
+      <tr><td>Stability limit</td><td>Δt ≤ ${fTime(p.dtMax / SAFETY)}</td></tr>
+      <tr><td>Time step used Δt</td><td>${fTime(p.dt)} (${Math.round(p.dt / (p.dtMax / SAFETY) * 100)} % of the limit)</td></tr>
+      <tr><td>α·Δt/Δx²</td><td>${p.r.slice(0, d).map(r => r.toFixed(4)).join(', ')} (must total ≤ ${1 / 2}; here ${p.r.reduce((a, b) => a + b, 0).toFixed(4)})</td></tr>
+      <tr><td>Steps calculated</td><td>${(p.framesToCompute * p.spf).toLocaleString()} (${p.spf} per animation frame, ${p.F} frames)</td></tr></table>`; }).join('') +
+      `<p class="hint">Calculated in ${Math.round(R.computeMs)} ms. Animation: <span id="fpsOut">—</span> frames per second.</p>`;
+  }
+  h += sec('comp', '💻 How does the computer do it?', tblock('grid') + tblock('stability') + (bts ? `<div class="detail-only more"><p><b>Behind the scenes for this run:</b></p>${bts}</div>` : ''));
+  h += sec('steady', '⚖️ Steady state', tblock('steady'));
+  h += sec('limits', '⚠️ What this simulator leaves out', `<p>Every model simplifies the real world. Here’s what Heat Explorer leaves out:</p><ul>
+     <li><b>No melting or boiling.</b> The ice cube never turns to water. (Melting soaks up lots of extra heat.)</li>
+     <li><b>Only conduction.</b> No moving air or water (convection) and no glowing heat (radiation).</li>
+     <li><b>Perfect edges.</b> Real edges are never perfectly held or perfectly insulated.</li>
+     <li><b>One material.</b> A coin or burner is treated as a patch of the same material, just at a different temperature.</li>
+     <li><b>α never changes.</b> In real life it changes a little with temperature.</li></ul>
+     <div class="detail-only more"><p><b>Check the solver yourself:</b> these tests compare the computer’s answers with things we know must be true.</p>
+     <button type="button" class="btn" id="selfTestBtn">Run self-checks</button><ul class="tests" id="testOut"></ul></div>`);
+  $('#explain').innerHTML = h;
+  hydrateInfo();
+}
+function hydrateInfo() { $$('[data-info]').forEach(e => { if (!e.firstChild) e.innerHTML = infoBtn(e.dataset.info); }); }
+function showPop(btn) {
+  const t = TEXT[btn.dataset.term]; if (!t) return;
+  const pop = $('#pop');
+  pop.innerHTML = `<button type="button" class="x" aria-label="Close">×</button><h4>${t.title}</h4>${t.simple}${t.detail ? `<div class="detail-only more">${t.detail}</div>` : ''}${S.level === 'simple' && t.detail ? '<p class="hint">Switch to “More detail” at the top for the deeper version.</p>' : ''}`;
+  pop.hidden = false;
+  const r = btn.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
+  let x = clamp(r.left + r.width / 2 - pw / 2, 12, window.innerWidth - pw - 12), y = r.bottom + 8;
+  if (y + ph > window.innerHeight - 8) y = Math.max(8, r.top - ph - 8);
+  pop.style.left = x + 'px'; pop.style.top = y + 'px';
+  $('.x', pop).focus({ preventScroll: true });
+  pop._btn = btn;
+}
+function hidePop() { const p = $('#pop'); if (!p.hidden) { p.hidden = true; if (p._btn) p._btn.focus({ preventScroll: true }); } }
+
+/* =====================================================================================
+   15. SELF-TESTS (also exposed as HeatExplorer.selfTest())
+   ===================================================================================== */
+function selfTest() {
+  const res = [];
+  const ok = (name, pass, info) => res.push({ name, pass: !!pass, info });
+  const base = { dim: 1, L: [1, 0, 0], alpha: 1e-4, T0: 0, detail: 'medium', spot: { on: false }, bc: {} };
+  // 1. both ends fixed -> straight line
+  { const cfg = { ...base, bc: { xmin: F_(100), xmax: F_(0) }, time: 8 / 1e-4 };
+    const sim = runSync(createSim(cfg, planGrid(cfg))); const f = sim.frames[sim.F - 1]; let err = 0;
+    for (let i = 0; i < sim.n[0]; i++) err = Math.max(err, Math.abs(f[i] - 100 * (1 - i / (sim.n[0] - 1))));
+    ok('Rod with both ends fixed (100 °C and 0 °C) settles to a straight line', err < 0.01, `largest difference from a straight line: ${err.toExponential(2)} °C`); }
+  // 2. insulated 1D conserves heat
+  { const cfg = { ...base, bc: { xmin: I_(), xmax: I_() }, spot: { on: true, T: 100, r: 0.2, pos: [0.3, 0, 0], held: false }, time: 2000 };
+    const sim = runSync(createSim(cfg, planGrid(cfg))); const h0 = totalHeat(sim, Float64Array.from(sim.frames[0])), h1 = totalHeat(sim, sim.cur);
+    ok('Insulated rod keeps its total heat', Math.abs(h1 - h0) / Math.abs(h0) < 1e-9, `relative change: ${(Math.abs(h1 - h0) / Math.abs(h0)).toExponential(2)}`); }
+  // 3. insulated 3D conserves heat
+  { const cfg = { dim: 3, L: [0.05, 0.05, 0.05], alpha: 1e-5, T0: 20, detail: 'low', time: 60, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() }, spot: { on: true, T: 300, r: 0.01, pos: [0.5, 0.5, 0.5], held: false } };
+    const sim = createSim(cfg, planGrid(cfg)); const h0 = totalHeat(sim, sim.cur); runSync(sim); const h1 = totalHeat(sim, sim.cur);
+    ok('Insulated 3D block keeps its total heat', Math.abs(h1 - h0) / Math.abs(h0) < 1e-9, `relative change: ${(Math.abs(h1 - h0) / Math.abs(h0)).toExponential(2)}`); }
+  // 4. units round trip
+  { const t = UNITS.temp; const f = t.F.to(100), k = t.K.to(100);
+    const back = [t.F.from(212), t.K.from(373.15), t.F.from(t.F.to(-40)), t.F.to(-40)];
+    ok('100 °C = 212 °F = 373.15 K (and back)', Math.abs(f - 212) < 1e-9 && Math.abs(k - 373.15) < 1e-9 && Math.abs(back[0] - 100) < 1e-9 && Math.abs(back[1] - 100) < 1e-9 && Math.abs(back[3] + 40) < 1e-9, `100 °C → ${f} °F, ${k} K; 212 °F → ${back[0]} °C; −40 °C = ${back[3]} °F`);
+    const L = UNITS.len, Ti = UNITS.time, A = UNITS.alpha;
+    ok('Length, time and diffusivity conversions', Math.abs(L.in.f / L.cm.f - 2.54) < 1e-12 && Math.abs(L.ft.f / L.in.f - 12) < 1e-12 && Ti.h.f === 3600 && Ti.min.f === 60 && Math.abs(A['cm2/s'].f / A['mm2/s'].f - 100) < 1e-9, '1 in = 2.54 cm, 1 ft = 12 in, 1 h = 3600 s, 1 cm²/s = 100 mm²/s'); }
+  // 5. every template: stable, finite, within physical bounds
+  { let bad = [], count = 0, maxR = 0;
+    for (const d of [1, 2, 3]) for (const tpl of TEMPLATES[d]) for (const which of [1, 2]) {
+      const s = blankState(d); applyTemplate(s, tpl); const cfg = cfgFromState(s, which); cfg.detail = 'low';
+      const plan = planGrid(cfg); const sim = runSync(createSim(cfg, plan)); count++;
+      maxR = Math.max(maxR, plan.r.reduce((a, b) => a + b, 0));
+      const temps = [cfg.T0, ...Object.values(cfg.bc).filter(b => b.type === 'fixed').map(b => b.T), cfg.spot.on ? cfg.spot.T : cfg.T0];
+      const lo = Math.min(...temps) - 1e-6, hi = Math.max(...temps) + 1e-6;
+      let fine = true; for (const f of sim.frames) for (let i = 0; i < f.length; i++) if (!Number.isFinite(f[i]) || f[i] < lo || f[i] > hi) { fine = false; break; }
+      if (!fine) bad.push(`${tpl.name} (${which === 1 ? tpl.material : tpl.material2})`);
+    }
+    ok(`All ${count} template runs are stable: no NaN, no infinity, never hotter or colder than anything we put in`, bad.length === 0, bad.length ? 'Problems: ' + bad.join(', ') : `largest α·Δt·Σ(1/Δx²) = ${maxR.toFixed(3)} (stability needs ≤ 0.5)`); }
+  return res;
+}
+
+/* =====================================================================================
+   16. WIRING & STARTUP
+   ===================================================================================== */
+function setMode(m, run = true) {
+  S.mode = m;
+  $$('.mode-card').forEach(b => b.setAttribute('aria-selected', String(Number(b.dataset.mode) === m)));
+  for (const k of Object.keys(fieldErrors)) delete fieldErrors[k];
+  $('#profilePanel').hidden = m !== 1;
+  renderTemplates(); renderMaterial(); renderForm(); renderErrors();
+  store('mode', String(m));
+  if (run) startRun();
+}
+function setLevel(l) {
+  S.level = l; document.body.classList.toggle('detail', l === 'detail');
+  $$('.seg [data-level]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.level === l)));
+  store('level', l);
+}
+const THEMES = ['auto', 'light', 'dark'];
+function setTheme(t) {
+  if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  $('#themeBtn').textContent = { auto: '🌓 Auto', light: '☀️ Light', dark: '🌙 Dark' }[t]; $('#themeBtn').dataset.t = t;
+  store('theme', t); readCss(); dirty = true;
+}
+
+function init() {
+  fillMaterialSelects();
+  // restore preferences (never required)
+  const lv = store('level'); setLevel(lv === 'detail' ? 'detail' : 'simple');
+  const th = store('theme'); setTheme(THEMES.includes(th) ? th : 'auto');
+  for (const [k, id] of [['temp', 'uTemp'], ['len', 'uLen'], ['time', 'uTime'], ['alpha', 'uAlpha']]) {
+    const v = store('u.' + k); if (v && (k === 'temp' ? UNITS.temp[v] : UNITS[k][v])) U[k] = v;
+    $('#' + id).value = U[k];
+    $('#' + id).addEventListener('change', e => { U[k] = e.target.value; store('u.' + k, U[k]); refreshUnitsEverywhere(); });
+  }
+  $$('.mode-card').forEach(b => b.addEventListener('click', () => setMode(Number(b.dataset.mode))));
+  $$('.seg [data-level]').forEach(b => b.addEventListener('click', () => { setLevel(b.dataset.level); if (R) buildSummary(); }));
+  $('#themeBtn').addEventListener('click', () => setTheme(THEMES[(THEMES.indexOf($('#themeBtn').dataset.t) + 1) % 3]));
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { readCss(); dirty = true; });
+  $('#templates').addEventListener('click', e => {
+    const b = e.target.closest('[data-tpl]'); if (!b) return;
+    const tpl = TEMPLATES[S.mode].find(t => t.id === b.dataset.tpl); const s = st();
+    applyTemplate(s, tpl); for (const k of Object.keys(fieldErrors)) delete fieldErrors[k];
+    renderTemplates(); renderMaterial(); renderForm(); renderErrors(); startRun();
+  });
+  $('#material').addEventListener('change', e => { const s = st(); s.material = e.target.value; if (s.material2 === s.material) s.material2 = s.material === 'steel' ? 'copper' : 'steel'; renderMaterial(); markDirty(); renderErrors(); });
+  $('#material2').addEventListener('change', e => { st().material2 = e.target.value; renderMaterial(); markDirty(); });
+  $('#compare').addEventListener('change', e => { st().compare = e.target.checked; renderMaterial(); startRun(); });
+  $('#customAlpha').addEventListener('input', onFormInput);
+  $('#customForm').addEventListener('input', onFormInput);
+  $('#customForm').addEventListener('change', e => { if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') return; });
+  $('#runBtn').addEventListener('click', startRun);
+  // playback
+  $('#playBtn').addEventListener('click', () => { if (!R) return; if (!play.playing && play.t >= R.T) play.t = 0; play.playing = !play.playing; updatePlayBtn(); dirty = true; });
+  $('#restartBtn').addEventListener('click', () => { if (!R) return; play.t = 0; play.playing = true; updatePlayBtn(); dirty = true; });
+  $('#scrub').addEventListener('input', e => { if (!R) return; play.t = Number(e.target.value) / 1000 * R.T; play.playing = false; updatePlayBtn(); dirty = true; });
+  $('#speed').addEventListener('input', e => { play.speedIdx = Number(e.target.value); dirty = true; });
+  $('#particles').addEventListener('change', e => { particlesOn = e.target.checked; dirty = true; });
+  $('#cutAxis').addEventListener('change', e => { view3D.cutAxis = Number(e.target.value); updateCutLabel(); dirty = true; });
+  $('#cut').addEventListener('input', e => { view3D.cut = Number(e.target.value) / 100; updateCutLabel(); dirty = true; });
+  for (const [id, setter] of [['profileGraph', v => profHover = v], ['timeGraph', v => timeHover = v]]) {
+    const c = $('#' + id);
+    c.addEventListener('pointermove', e => { const r = c.getBoundingClientRect(); setter({ x: e.clientX - r.left, y: e.clientY - r.top }); dirty = true; });
+    c.addEventListener('pointerleave', () => { setter(null); dirty = true; });
+  }
+  // info popovers
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.info');
+    if (b) { e.preventDefault(); e.stopPropagation(); const p = $('#pop'); if (!p.hidden && p._btn === b) hidePop(); else showPop(b); return; }
+    if (e.target.closest('#pop .x')) { hidePop(); return; }
+    if (!e.target.closest('#pop')) hidePop();
+    if (e.target.id === 'selfTestBtn') {
+      const out = $('#testOut'); out.innerHTML = '<li>Running…</li>';
+      setTimeout(() => { const r = selfTest(); out.innerHTML = r.map(t => `<li class="${t.pass ? 'pass' : 'fail'}"><b>${esc(t.name)}</b><br><span class="hint">${esc(t.info)}</span></li>`).join(''); }, 30);
+    }
+  }, true);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hidePop();
+    if (e.key === ' ' && R && !e.target.closest('input,select,button,textarea,summary')) { e.preventDefault(); $('#playBtn').click(); }
+  });
+  window.addEventListener('resize', () => layoutAll());
+  if ('ResizeObserver' in window) new ResizeObserver(() => layoutAll()).observe($('.viz'));
+  setInterval(() => { const o = $('#fpsOut'); if (o) o.textContent = play.playing || particlesOn ? Math.round(fps()) : 'paused'; }, 1000);
+  hydrateInfo(); renderExplain();
+  const m = Number(store('mode')); setMode([1, 2, 3].includes(m) ? m : 1);
+  requestAnimationFrame(frame);
+}
+function updateCutLabel() {
+  if (!R || R.dim !== 3) return; const sim = R.sims[0], a = view3D.cutAxis, ci = cutIndex(sim);
+  $('#cutLbl').textContent = ci >= sim.n[a] - 1 ? 'whole block' : `keep ${['x', 'y', 'z'][a]} ≤ ${fL(ci * sim.dx[a])}`;
+}
+
+window.HeatExplorer = { selfTest, planGrid, createSim, runSync, totalHeat, UNITS, conv, U, TEMPLATES, S, get run() { return R; }, play, fps, setMode, startRun, view3D, lastRenderMs: 0 };
+init();
+</script>
+</body>
+</html>
