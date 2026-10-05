@@ -202,6 +202,11 @@ input[type=range]{accent-color:var(--accent); width:100%; min-height:28px}
 .speed input{max-width:220px}
 .speed .muted{color:var(--muted); font-size:.88rem}
 .tools{display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin-top:12px; padding-top:12px; border-top:1px dashed var(--border)}
+.avgtool{display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; flex:1 1 100%}
+.avgtool input{width:90px}
+.avgchip{display:inline-flex; align-items:center; gap:4px; padding:6px 12px; border-radius:999px; background:var(--accent-soft); border:1.5px solid var(--accent); font-weight:700; font-variant-numeric:tabular-nums}
+#avgOut{font-weight:700}
+#avgOut.err{color:var(--err); font-weight:600}
 .tools .cut{display:flex; gap:8px; align-items:center; flex-wrap:wrap; flex:1 1 300px}
 .tools .cut input{flex:1 1 140px}
 .graph canvas{display:block; width:100%; height:260px}
@@ -350,6 +355,14 @@ table.bts td:first-child{color:var(--muted)}
           <div class="speed"><label for="speed"><b>Speed</b></label><input type="range" id="speed" min="0" max="4" step="1" value="2"><b id="speedLbl">1×</b><span class="muted" id="speedNote"></span></div>
         </div>
         <div class="tools">
+          <div class="avgtool">
+            <span class="avgchip" id="avgChip" aria-live="off">🌡️ Average: —</span>
+            <label for="avgT"><b>Average at time</b></label>
+            <input type="text" id="avgT" inputmode="decimal" placeholder="e.g. 30" aria-label="Time for average temperature">
+            <span class="ulabel" data-u="time"></span>
+            <span id="avgOut" aria-live="polite"></span>
+            <span data-info="average"></span>
+          </div>
           <label class="check" id="particlesToggle"><input type="checkbox" id="particles"> <span>Show jiggling particles <span data-info="particles"></span></span></label>
           <div class="cut" id="cutTools" hidden>
             <b>Cut open:</b>
@@ -370,7 +383,7 @@ table.bts td:first-child{color:var(--muted)}
       <div class="panel graph">
         <h3>⏱️ <span id="timeGraphTitle">Temperature over time at the probe ⊕</span> <span data-info="probe"></span></h3>
         <canvas id="timeGraph" aria-label="Graph of temperature versus time at the probe"></canvas>
-        <p class="hint">Click the object to move the probe ⊕.</p>
+        <p class="hint">Solid line = the probe ⊕ (click the object to move it). Dotted line = the average of the whole thing.</p>
       </div>
 
       <div class="panel card" id="summaryPanel">
@@ -565,6 +578,9 @@ const TEXT = {
     detail: '<p>Inside, everything is meters, seconds, °C and m²/s. °F = °C × 9/5 + 32. K = °C + 273.15.</p>' },
   template: { title: 'Scenarios', simple: '<p>Each one sets up a real-life situation in one click. Then change anything you like under Settings.</p>', detail: '' },
   probe: { title: 'The probe ⊕', simple: '<p>Like a thermometer stuck in one spot. The graph shows that spot’s temperature over time. Click the object to move it.</p>', detail: '' },
+  average: { title: 'Average temperature',
+    simple: '<p>If you could mix the whole object up so every part was the same temperature, this is what it would be. Hot parts and cold parts balance out.</p>',
+    detail: '<p>For the rod at time a: <b>T̄(a) = (1/L) ∫₀ᴸ T(x, a) dx</b>. Add up (integrate) the temperature along the whole length, then divide by the length. For the plate it’s ∬T dA ÷ area, and for the block ∭T dV ÷ volume. The computer uses the <i>trapezoid rule</i>, which is exact for the straight-line pieces between grid points. If every edge is wrapped up, this number never changes: no heat gets in or out!</p>' },
   graph: { title: 'Temperature along the rod', simple: '<p>Left to right on the graph matches left to right on the rod. Higher means hotter.</p>', detail: '<p>Heat flows downhill on this graph. The steeper the line, the faster it flows.</p>' },
   detailLvl: { title: 'Detail', simple: '<p>How many little pieces the object is chopped into. More looks smoother but takes longer.</p>', detail: '' },
   evaluator: { title: 'Solve a point', simple: '<p>Type in the numbers, pick a spot and a time, and get the temperature there. The animation runs too, so you can see how it got there.</p>', detail: '<p>The answer comes from the same solver. Between grid points, we blend the nearest ones (linear interpolation).</p>' },
@@ -800,6 +816,22 @@ function totalHeat(sim, field) {
   for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++, idx++) s += field[idx] * w(i, nx) * w(j, ny) * w(k, nz);
   return s;
 }
+/** Average temperature at time t: (1/L)∫T dx (or ÷ area / volume), interpolated between stored frames. */
+function avgAt(i, t) {
+  const sim = R.sims[i], a = R.avg[i];
+  const f = clamp(t / sim.frameDt, 0, sim.F - 1), k = Math.min(sim.F - 2, Math.floor(f)), w = f - k;
+  return a[k] + (a[k + 1] - a[k]) * w;
+}
+function updateAvgTool() {
+  const out = $('#avgOut'); if (!out) return;
+  const raw = $('#avgT').value; out.classList.remove('err');
+  if (!R || raw.trim() === '') { out.textContent = ''; return; }
+  const v = parseNum(raw), t = Number.isFinite(v) ? conv.fromDisp('time', v) : NaN;
+  if (!Number.isFinite(t)) { out.textContent = 'Type a number, like 30.'; out.classList.add('err'); return; }
+  if (t < 0) { out.textContent = 'Time can’t be negative.'; out.classList.add('err'); return; }
+  if (t > R.T * (1 + 1e-9)) { out.textContent = `This run only goes to ${fTime(R.T)}.`; out.classList.add('err'); return; }
+  out.textContent = '→ ' + R.sims.map((sim, i) => `${R.sims.length > 1 ? sim.cfg.material.name + ': ' : ''}${fT(avgAt(i, t))}`).join(' · ');
+}
 function weightedMean(sim, field) {
   const [nx, ny, nz] = sim.n;
   const W = (nx > 1 ? nx - 1 : 1) * (ny > 1 ? ny - 1 : 1) * (nz > 1 ? nz - 1 : 1);
@@ -953,7 +985,7 @@ function renderErrors() {
 }
 function refreshUnitsEverywhere() {
   for (const k of Object.keys(fieldErrors)) delete fieldErrors[k];
-  renderForm(); renderMaterial(); renderErrors(); evalErrors = {}; renderEval(); if (R && R.evalPoint) showEvalResult();
+  renderForm(); renderMaterial(); renderErrors(); evalErrors = {}; renderEval(); if (R && R.evalPoint) showEvalResult(); updateAvgTool();
   $$('[data-u]').forEach(e => e.textContent = conv.label(e.dataset.u));
   if (R) { buildSummary(); renderExplain(); }
   dirty = true; layoutAll();
@@ -993,13 +1025,14 @@ async function startRun(opts = {}) {
   let lo = Math.min(...sims.map(x => x.lo)), hi = Math.max(...sims.map(x => x.hi));
   if (!(hi - lo > 1e-6)) { lo -= 1; hi += 1; }
   R = { dim: s.dim, sims, lo, hi, T: sims[0].T, computeMs: ms, state: deepCopy(s), probe: null, probeAuto: true };
+  R.avg = sims.map(sim => Float64Array.from(sim.frames, f => weightedMean(sim, f)));
   chooseDefaultProbe();
   if (opts.probe) { R.probe = opts.probe; R.probeCenter = false; R.probeAuto = false; }
   R.evalPoint = opts.evalPoint || null;
   buildViews();
   renderNotices();
   play.t = 0; play.playing = true; updatePlayBtn(); updateCutLabel();
-  buildSummary(); renderExplain();
+  buildSummary(); renderExplain(); updateAvgTool();
   if (R.evalPoint) showEvalResult();
   dirty = true;
 }
@@ -1470,7 +1503,8 @@ function drawTimeGraph() {
   const ctx = c.getContext('2d'), W = c.clientWidth, H = c.clientHeight;
   const Td = conv.toDisp('time', R.T);
   const series = R.sims.map(sim => sim.frames.map(fr => conv.toDisp('temp', probeValue(sim, fr))));
-  let lo = Math.min(...series.flat()), hi = Math.max(...series.flat()); if (hi - lo < 1e-6) { lo -= 1; hi += 1; } const pad = (hi - lo) * 0.08;
+  const avgSer = R.avg.map(a => Array.from(a, v => conv.toDisp('temp', v)));
+  let lo = Math.min(...series.flat(), ...avgSer.flat()), hi = Math.max(...series.flat(), ...avgSer.flat()); if (hi - lo < 1e-6) { lo -= 1; hi += 1; } const pad = (hi - lo) * 0.08;
   const g = graphFrame(ctx, W, H, [0, Td], [lo - pad, hi + pad], `Time (${UNITS.time[U.time].long})`, `Temperature (${conv.label('temp')})`);
   const tNow = conv.toDisp('time', play.t);
   ctx.save(); ctx.beginPath(); ctx.rect(g.L, g.T, g.pw, g.ph); ctx.clip();
@@ -1486,13 +1520,20 @@ function drawTimeGraph() {
     const yv = conv.toDisp('temp', probeAtTime(sim, play.t));
     ctx.fillStyle = s_.color; ctx.beginPath(); ctx.arc(g.X(tNow), g.Y(yv), 5, 0, 7); ctx.fill();
   });
+  avgSer.forEach((ser, i) => {
+    const sim = R.sims[i]; ctx.strokeStyle = seriesStyle(i).color; ctx.globalAlpha = 0.8; ctx.lineWidth = 2; ctx.setLineDash([2, 4]);
+    ctx.beginPath(); ser.forEach((v, k) => { const x = g.X(conv.toDisp('time', k * sim.frameDt)), y = g.Y(v); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    ctx.fillStyle = seriesStyle(i).color; ctx.font = '600 11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText('average', g.L + g.pw - 4, g.Y(ser[ser.length - 1]) - 3);
+  });
   ctx.strokeStyle = cssVars.text; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(g.X(tNow), g.T); ctx.lineTo(g.X(tNow), g.T + g.ph); ctx.stroke();
   ctx.restore();
   legend(ctx, g);
   if (timeHover && timeHover.x >= g.L && timeHover.x <= g.L + g.pw) {
     const tt = (timeHover.x - g.L) / g.pw * R.T;
     ctx.strokeStyle = cssVars.muted; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(timeHover.x, g.T); ctx.lineTo(timeHover.x, g.T + g.ph); ctx.stroke(); ctx.setLineDash([]);
-    tooltip(ctx, timeHover.x, timeHover.y, [`t = ${fTime(tt)}`].concat(R.sims.map(sim => `${R.sims.length > 1 ? sim.cfg.material.name + ': ' : ''}${fT(probeAtTime(sim, tt))}`)), W, H);
+    tooltip(ctx, timeHover.x, timeHover.y, [`t = ${fTime(tt)}`].concat(R.sims.flatMap((sim, i) => [`${R.sims.length > 1 ? sim.cfg.material.name + ' ' : ''}probe: ${fT(probeAtTime(sim, tt))}`, `${R.sims.length > 1 ? sim.cfg.material.name + ' ' : ''}average: ${fT(avgAt(i, tt))}`])), W, H);
   }
   const sim0 = R.sims[0], idx = probeIdx(sim0, R.probe);
   const pd = R.evalPoint ? (R.dim === 1 ? `${fL(R.evalPoint[0])} from the left end` : `(${R.evalPoint.slice(0, R.dim).map(v => nice(conv.toDisp('len', v))).join(', ')}) ${conv.label('len')}`) : posStr(sim0, idx);
@@ -1501,11 +1542,12 @@ function drawTimeGraph() {
 
 /* ---------- readouts & frame loop ---------- */
 function updateReadouts() {
+  $('#avgChip').textContent = `🌡️ Average now: ${R.sims.map((sim, i) => fT(avgAt(i, play.t))).join(' / ')}`;
   for (const v of VIEWS) {
     const f = v.field; let mi = 0, ma = 0;
     for (let i = 1; i < f.length; i++) { if (f[i] < f[mi]) mi = i; if (f[i] > f[ma]) ma = i; }
     const pidx = probeIdx(v.sim, R.probe);
-    v.readout.innerHTML = `<span>🔥 Hottest: <b>${fT(f[ma])}</b> at ${posStr(v.sim, ma)}</span><span>❄️ Coldest: <b>${fT(f[mi])}</b> at ${posStr(v.sim, mi)}</span><span>⊕ Probe: <b>${fT(probeValue(v.sim, f))}</b></span>`;
+    v.readout.innerHTML = `<span>🌡️ Average: <b>${fT(avgAt(v.vi, play.t))}</b></span><span>🔥 Hottest: <b>${fT(f[ma])}</b> at ${posStr(v.sim, ma)}</span><span>❄️ Coldest: <b>${fT(f[mi])}</b> at ${posStr(v.sim, mi)}</span><span>⊕ Probe: <b>${fT(probeValue(v.sim, f))}</b></span>`;
   }
   const total = R.T, dec = conv.toDisp('time', total) >= 100 ? 0 : conv.toDisp('time', total) >= 10 ? 1 : 2;
   const tv = conv.toDisp('time', play.t);
@@ -1604,7 +1646,7 @@ function buildSummary() {
     if (d === 1 && fixedKeys.length === 2 && !s.spot.on && s.bc.xmin.T !== s.bc.xmax.T) li.push(`Look at the graph: it’s a <b>straight line</b>! Heat flows through at a steady rate, and a steady rate makes a straight line.`);
   } else li.push(`It was still changing at the end. Run it longer to see where it ends up.`);
   let mi = 0, ma = 0; for (let i = 1; i < last.length; i++) { if (last[i] < last[mi]) mi = i; if (last[i] > last[ma]) ma = i; }
-  li.push(`At the end: hottest <b>${fT(last[ma])}</b>, coldest <b>${fT(last[mi])}</b>.`);
+  li.push(`At the end: hottest <b>${fT(last[ma])}</b>, coldest <b>${fT(last[mi])}</b>, average <b>${fT(R.avg[0][A.F - 1])}</b>.`);
   const Lmax = Math.max(...s.L.slice(0, d));
   out.push(`<ul>${li.map(x => `<li>${x}</li>`).join('')}</ul>`);
   out.push(`<p class="detail-only more">Heat takes about L²/α to cross something of size L. Here (L = ${fL(Lmax)}, α = ${fA(mA.alpha)}) that’s about <b>${fTimeAuto(Lmax * Lmax / mA.alpha)}</b>. The solver took ${A.plan.framesToCompute * A.plan.spf} steps of Δt = ${fTime(A.plan.dt)}${A.steadyAt != null ? `, then stopped once nothing could change (after ${fTime(A.steadyAt)})` : ''}.</p>`);
@@ -1804,6 +1846,8 @@ function showEvalResult() {
     li.push(`Heat is flowing <b>${dirs.join(' and ')}</b> through this spot (from hot toward cold). The temperature changes about ${nice(steep)} ${tLab} per ${conv.label('len')} here.`);
   }
   let mi = 0, ma = 0; for (let i = 1; i < fin.length; i++) { if (fin[i] < fin[mi]) mi = i; if (fin[i] > fin[ma]) ma = i; }
+  const avgEnd = weightedMean(sim, fin), avgStart = weightedMean(sim, sim.frames[0]);
+  li.push(`<b>Average of the whole ${OBJ[d]}: ${fT(avgEnd)}</b> (it started at ${fT(avgStart)}). ${infoBtn('average')}<span class="detail-only">That’s ${d === 1 ? '(1/L) ∫₀ᴸ T(x, a) dx' : d === 2 ? '∬ T dA ÷ area' : '∭ T dV ÷ volume'} with a = ${fTime(R.T)}.</span>`);
   li.push(`Whole ${OBJ[d]} at that time: hottest ${fT(fin[ma])}, coldest ${fT(fin[mi])}.`);
   out.innerHTML = `<div class="eval-out" aria-live="polite"><div>At ${where}, after ${fTime(R.T)}:</div><div class="big">${fT(Tend)}</div><ul>${li.map(x => `<li>${x}</li>`).join('')}</ul><p class="hint" style="margin:6px 0 0">The animation shows how it got there. The probe ⊕ marks your spot.</p></div>`;
   const box = $('.eval-out', out); if (box && box.scrollIntoView) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -1829,6 +1873,10 @@ function selfTest() {
   { const cfg = { dim: 3, L: [0.05, 0.05, 0.05], alpha: 1e-5, T0: 20, detail: 'low', time: 60, bc: { xmin: I_(), xmax: I_(), ymin: I_(), ymax: I_(), zmin: I_(), zmax: I_() }, spot: { on: true, T: 300, r: 0.01, pos: [0.5, 0.5, 0.5], held: false } };
     const sim = createSim(cfg, planGrid(cfg)); const h0 = totalHeat(sim, sim.cur); runSync(sim); const h1 = totalHeat(sim, sim.cur);
     ok('Insulated 3D block keeps its total heat', Math.abs(h1 - h0) / Math.abs(h0) < 1e-9, `relative change: ${(Math.abs(h1 - h0) / Math.abs(h0)).toExponential(2)}`); }
+  // 3b. average = (1/L)∫T dx
+  { const cfg = { ...base, bc: { xmin: F_(100), xmax: F_(0) }, time: 8 / 1e-4 };
+    const sim = runSync(createSim(cfg, planGrid(cfg))); const avg = weightedMean(sim, sim.frames[sim.F - 1]);
+    ok('Average of a straight-line rod from 100 °C to 0 °C is exactly 50 °C', Math.abs(avg - 50) < 1e-6, `computed (1/L)∫T dx = ${avg.toFixed(6)} °C`); }
   // 4. units round trip
   { const t = UNITS.temp; const f = t.F.to(100), k = t.K.to(100);
     const back = [t.F.from(212), t.K.from(373.15), t.F.from(t.F.to(-40)), t.F.to(-40)];
@@ -1901,6 +1949,7 @@ function init() {
   $('#customForm').addEventListener('input', onFormInput);
   $('#customForm').addEventListener('change', e => { if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') return; });
   $('#runBtn').addEventListener('click', () => startRun());
+  $('#avgT').addEventListener('input', updateAvgTool);
   $$('.side-tabs [data-tab]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
   $('#evalBox').addEventListener('input', onEvalInput);
   $('#evalBox').addEventListener('change', e => { if (e.target.id === 'evMat') { EV[S.mode].material = e.target.value; $('#evAlphaWrap').hidden = e.target.value !== 'custom'; } });
