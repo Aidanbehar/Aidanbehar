@@ -1,0 +1,1996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tangent Field Grapher</title>
+<meta name="description" content="Graph first-order differential equations as a field of fully extended tangent lines, with intercepts, intersections and RK4 solution curves.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<style>
+:root {
+  --bg: #eef0f6;
+  --panel: #ffffff;
+  --panel-2: #f7f8fc;
+  --ink: #0f172a;
+  --ink-2: #475569;
+  --ink-3: #94a3b8;
+  --hair: #e3e7f0;
+  --accent: #4f46e5;
+  --accent-ink: #ffffff;
+  --accent-soft: #eef0ff;
+  --good: #059669;
+  --bad: #dc2626;
+  --bad-soft: #fef2f2;
+  --graph-bg: #ffffff;
+  --grid-minor: #f1f3f8;
+  --grid-major: #e1e5ee;
+  --axis: #334155;
+  --tick-label: #64748b;
+  --anchor: #1e293b;
+  --xint: #059669;
+  --yint: #d97706;
+  --isect: #475569;
+  --slope-neg: #2563eb;
+  --slope-zero: #8b5cf6;
+  --slope-pos: #f43f5e;
+  --shadow: 0 1px 2px rgba(15,23,42,.05), 0 8px 24px rgba(15,23,42,.07);
+  --shadow-lg: 0 2px 6px rgba(15,23,42,.08), 0 18px 48px rgba(15,23,42,.14);
+  --radius: 16px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #090d1a; --panel: #111729; --panel-2: #161d33; --ink: #e5e9f5; --ink-2: #a3aec6; --ink-3: #64708c;
+    --hair: #232c46; --accent: #818cf8; --accent-ink: #0b1020; --accent-soft: #1d2346; --good: #34d399; --bad: #f87171; --bad-soft: #2a1520;
+    --graph-bg: #0d1324; --grid-minor: #131a2f; --grid-major: #1f2842; --axis: #9aa6c2; --tick-label: #7f8bab;
+    --anchor: #e5e9f5; --xint: #34d399; --yint: #fbbf24; --isect: #a3aec6;
+    --slope-neg: #60a5fa; --slope-zero: #a78bfa; --slope-pos: #fb7185;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35); --shadow-lg: 0 2px 6px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #090d1a; --panel: #111729; --panel-2: #161d33; --ink: #e5e9f5; --ink-2: #a3aec6; --ink-3: #64708c;
+  --hair: #232c46; --accent: #818cf8; --accent-ink: #0b1020; --accent-soft: #1d2346; --good: #34d399; --bad: #f87171; --bad-soft: #2a1520;
+  --graph-bg: #0d1324; --grid-minor: #131a2f; --grid-major: #1f2842; --axis: #9aa6c2; --tick-label: #7f8bab;
+  --anchor: #e5e9f5; --xint: #34d399; --yint: #fbbf24; --isect: #a3aec6;
+  --slope-neg: #60a5fa; --slope-zero: #a78bfa; --slope-pos: #fb7185;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35); --shadow-lg: 0 2px 6px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.5);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+html { overflow: hidden; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  display: grid;
+  grid-template-columns: 372px minmax(0, 1fr);
+  overflow: hidden;
+}
+button, input, select { font: inherit; color: inherit; }
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  height: 100vh;
+  overflow-y: auto;
+  padding: 16px 12px 28px 16px;
+  scrollbar-width: thin;
+}
+.brand {
+  display: flex; align-items: center; gap: 12px;
+  padding: 4px 4px 14px;
+}
+.brand-mark {
+  width: 38px; height: 38px; border-radius: 11px; flex: none;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  display: grid; place-items: center; box-shadow: var(--shadow);
+}
+.brand h1 { font-size: 17px; margin: 0; letter-spacing: -.01em; }
+.brand p { margin: 0; color: var(--ink-2); font-size: 12.5px; }
+.brand .spacer { flex: 1; }
+.icon-btn {
+  width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--hair);
+  background: var(--panel); display: grid; place-items: center; cursor: pointer;
+  color: var(--ink-2); transition: background .15s, color .15s, transform .1s;
+}
+.icon-btn:hover { color: var(--ink); background: var(--panel-2); }
+.icon-btn:active { transform: scale(.95); }
+
+.card {
+  background: var(--panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
+  border: 1px solid var(--hair);
+}
+.card > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 16px; font-weight: 600; font-size: 13.5px;
+}
+.card > summary::-webkit-details-marker { display: none; }
+.card > summary .chev { margin-left: auto; color: var(--ink-3); transition: transform .2s; }
+.card[open] > summary .chev { transform: rotate(90deg); }
+.card > summary .sec-icon {
+  width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent); flex: none;
+}
+.card-body { padding: 2px 16px 16px; }
+
+/* ---------- Equation editor ---------- */
+.math-field {
+  border: 1.5px solid var(--hair);
+  border-radius: 14px;
+  background: var(--panel-2);
+  transition: border-color .15s, box-shadow .15s;
+  cursor: text;
+}
+.math-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.math-field.has-error { border-color: var(--bad); }
+.mf-render {
+  min-height: 64px; padding: 14px 14px 8px;
+  display: flex; align-items: center;
+  font-size: 19px; overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none;
+}
+.mf-render .katex { font-size: 1.12em; }
+.mf-render.fallback { font-family: "Cambria Math", "Times New Roman", serif; font-style: italic; }
+.mf-input-row {
+  display: flex; align-items: center; gap: 8px;
+  border-top: 1px dashed var(--hair);
+  padding: 6px 10px 6px 14px;
+}
+.mf-input-row svg { color: var(--ink-3); flex: none; }
+#eqInput {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+  font-size: 14px; padding: 6px 0; color: var(--ink-2);
+  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+.keypad { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.key {
+  border: 1px solid var(--hair); background: var(--panel); border-radius: 9px;
+  padding: 5px 9px; cursor: pointer; font-size: 13px; min-width: 36px;
+  color: var(--ink); transition: background .12s, border-color .12s, transform .08s;
+}
+.key:hover { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
+.key:active { transform: translateY(1px); }
+.key .katex { font-size: 1em; }
+.status {
+  margin-top: 10px; font-size: 12.5px; border-radius: 10px; padding: 8px 11px;
+  display: flex; gap: 8px; align-items: flex-start;
+}
+.status.ok { color: var(--ink-2); background: var(--panel-2); }
+.status.ok .dot { background: var(--good); }
+.status.err { color: var(--bad); background: var(--bad-soft); }
+.status.err .dot { background: var(--bad); }
+.status .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-top: 6px; }
+.status small { display: block; color: var(--ink-2); margin-top: 2px; }
+
+label.field-label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 14px 0 6px; }
+select, .num-input {
+  width: 100%; height: 38px; border-radius: 10px; border: 1px solid var(--hair);
+  background: var(--panel-2); padding: 0 10px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+select:focus, .num-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+select { appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; }
+
+.view-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.view-grid label { font-size: 11.5px; color: var(--ink-2); font-weight: 600; display: block; margin-bottom: 4px; }
+.view-grid .katex { font-size: 1.05em; }
+.btn-row { display: flex; gap: 8px; margin-top: 12px; }
+.btn {
+  flex: 1; height: 36px; border-radius: 10px; border: 1px solid var(--hair);
+  background: var(--panel); cursor: pointer; font-weight: 500; font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background .15s, transform .08s;
+}
+.btn:hover { background: var(--panel-2); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.btn.primary:hover { filter: brightness(1.06); }
+
+.slider { margin-top: 14px; }
+.slider-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+.slider-head output { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.slider-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); margin-top: 3px; }
+input[type=range] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; margin: 0;
+}
+input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 6px; background: linear-gradient(to right, var(--accent) var(--pct, 50%), var(--hair) var(--pct, 50%)); }
+input[type=range]::-moz-range-track { height: 6px; border-radius: 6px; background: var(--hair); }
+input[type=range]::-moz-range-progress { height: 6px; border-radius: 6px; background: var(--accent); }
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; margin-top: -6px;
+  background: var(--panel); border: 2px solid var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,.2);
+}
+input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); }
+
+.toggle { position: relative; display: flex; align-items: center; gap: 10px; padding: 7px 0; cursor: pointer; font-size: 13.5px; user-select: none; }
+.toggle input { position: absolute; left: 0; top: 50%; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.toggle .sw {
+  width: 34px; height: 20px; border-radius: 20px; background: var(--hair); position: relative; flex: none;
+  transition: background .18s;
+}
+.toggle .sw::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s;
+}
+.toggle input:checked + .sw { background: var(--accent); }
+.toggle input:checked + .sw::after { transform: translateX(14px); }
+.toggle input:focus-visible + .sw { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toggle .chip { width: 10px; height: 10px; border-radius: 50%; margin-left: auto; flex: none; }
+.toggle .chip.grad { width: 34px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--slope-neg), var(--slope-zero), var(--slope-pos)); }
+.toggle.disabled { opacity: .45; pointer-events: none; }
+.note { font-size: 12px; color: var(--ink-2); background: var(--panel-2); border-radius: 10px; padding: 8px 10px; margin-top: 8px; }
+.note.warn { color: var(--yint); }
+.hidden { display: none !important; }
+
+.curve-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.curve-list li {
+  display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 10px; border-radius: 10px; background: var(--panel-2); font-size: 13px;
+}
+.curve-list .sw-color { width: 14px; height: 4px; border-radius: 2px; flex: none; }
+.curve-list button { margin-left: auto; border: 0; background: transparent; cursor: pointer; color: var(--ink-3); width: 24px; height: 24px; border-radius: 6px; }
+.curve-list button:hover { background: var(--hair); color: var(--ink); }
+
+/* Explanation */
+.explain p { margin: 0 0 10px; color: var(--ink-2); font-size: 13.5px; }
+.explain p strong { color: var(--ink); }
+.explain .eqbox { background: var(--panel-2); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; text-align: center; overflow-x: auto; }
+.explain ol { padding-left: 18px; margin: 0 0 10px; color: var(--ink-2); }
+.explain li { margin-bottom: 6px; }
+.syntax { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
+.syntax code { font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--ink); background: var(--panel-2); padding: 1px 6px; border-radius: 5px; justify-self: start; }
+
+/* ---------- Stage ---------- */
+.stage { position: relative; height: 100vh; padding: 16px 16px 16px 4px; min-width: 0; }
+.graph {
+  position: relative; width: 100%; height: 100%;
+  border-radius: 20px; overflow: hidden;
+  background: var(--graph-bg); box-shadow: var(--shadow); border: 1px solid var(--hair);
+  touch-action: none; cursor: grab;
+}
+.graph.dragging { cursor: grabbing; }
+.graph.sol-mode { cursor: crosshair; }
+.graph.over-point { cursor: pointer; }
+.graph canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.float { position: absolute; z-index: 3; }
+.zoom-ctl {
+  top: 14px; right: 14px; display: flex; flex-direction: column;
+  background: var(--panel); border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--hair); overflow: hidden;
+}
+.zoom-ctl button { width: 40px; height: 40px; border: 0; background: transparent; cursor: pointer; color: var(--ink-2); display: grid; place-items: center; }
+.zoom-ctl button:hover { background: var(--panel-2); color: var(--ink); }
+.zoom-ctl button + button { border-top: 1px solid var(--hair); }
+
+.readout {
+  left: 14px; bottom: 14px; padding: 7px 12px; border-radius: 11px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(8px);
+  box-shadow: var(--shadow); border: 1px solid var(--hair);
+  font-size: 13px; display: flex; gap: 14px; font-variant-numeric: tabular-nums; pointer-events: none;
+  max-width: calc(100% - 28px); flex-wrap: wrap;
+}
+.readout .v { font-family: "Cambria Math", "Times New Roman", serif; font-style: italic; color: var(--ink-2); margin-right: 4px; }
+.readout b { font-weight: 600; }
+.legend {
+  right: 14px; bottom: 14px; padding: 8px 12px; border-radius: 11px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(8px);
+  box-shadow: var(--shadow); border: 1px solid var(--hair); font-size: 11.5px; color: var(--ink-2); pointer-events: none;
+}
+.legend .bar { width: 130px; height: 6px; border-radius: 3px; margin: 5px 0 3px; background: linear-gradient(90deg, var(--slope-neg), var(--slope-zero), var(--slope-pos)); }
+.legend .ends { display: flex; justify-content: space-between; }
+.hint {
+  left: 50%; top: 14px; transform: translateX(-50%);
+  background: var(--accent); color: var(--accent-ink); padding: 8px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 500;
+  box-shadow: var(--shadow); pointer-events: none; white-space: nowrap;
+}
+.empty-msg {
+  left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center;
+  background: var(--panel); border-radius: 14px; padding: 14px 18px; box-shadow: var(--shadow); border: 1px solid var(--hair);
+  font-size: 13px; color: var(--ink-2); pointer-events: none; max-width: 300px;
+}
+
+.tooltip {
+  position: absolute; z-index: 5; pointer-events: none;
+  min-width: 210px; max-width: 320px;
+  background: color-mix(in srgb, var(--panel) 96%, transparent); backdrop-filter: blur(10px);
+  border: 1px solid var(--hair); border-radius: 14px; box-shadow: var(--shadow-lg);
+  padding: 10px 14px 12px; font-size: 13px;
+  opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s;
+}
+.tooltip.show { opacity: 1; transform: none; }
+.tooltip.pinned { pointer-events: auto; }
+.tt-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.tt-title .pin { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--accent); }
+.tt-row { padding: 5px 0; border-top: 1px solid var(--hair); }
+.tt-row:first-of-type { border-top: 0; }
+.tt-k { display: block; font-size: 11px; color: var(--ink-2); font-weight: 600; margin-bottom: 1px; }
+.tt-v { display: block; font-size: 14.5px; overflow-x: auto; scrollbar-width: none; }
+.tt-v .katex { font-size: 1.05em; }
+.tt-foot { font-size: 11.5px; color: var(--ink-3); margin-top: 6px; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 860px) {
+  body { grid-template-columns: 1fr; grid-template-rows: auto auto; overflow: auto; height: auto; }
+  html, body { height: auto; }
+  html { overflow: auto; }
+  .stage { order: -1; height: 62vh; min-height: 360px; padding: 12px 16px 6px; }
+  .sidebar { height: auto; overflow: visible; padding: 8px 16px 32px; }
+  .legend { display: none; }
+  .hint { white-space: normal; text-align: center; width: max-content; max-width: calc(100% - 120px); }
+}
+</style>
+</head>
+<body>
+
+<!-- ======================= SIDEBAR ======================= -->
+<aside class="sidebar" aria-label="Controls">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round">
+        <path d="M2 18 L22 8" opacity=".55"/><path d="M2 7 L22 15" opacity=".55"/><path d="M3 21 C 8 12, 14 9, 21 3"/>
+        <circle cx="12" cy="11.5" r="2.2" fill="#fff" stroke="none"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Tangent Field</h1>
+      <p>See the tangent line at every point</p>
+    </div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="themeBtn" title="Toggle light / dark" aria-label="Toggle light or dark theme">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
+
+  <!-- Equation -->
+  <details class="card" open>
+    <summary><span class="sec-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h7M7.5 4v6M14 17h6M4 17l6 0"/></svg></span>Equation<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></summary>
+    <div class="card-body">
+      <div class="math-field" id="mathField">
+        <div class="mf-render" id="eqRender" aria-live="polite"></div>
+        <div class="mf-input-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          <input id="eqInput" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Differential equation" value="dy/dx = x + y" placeholder="dy/dx = x + y">
+        </div>
+      </div>
+      <div class="keypad" id="keypad">
+        <button class="key" data-ins="^2" data-tex="x^2" title="Square">x²</button>
+        <button class="key" data-ins="^" data-tex="x^{n}" title="Power">xⁿ</button>
+        <button class="key" data-ins="sqrt()" data-back="1" data-tex="\sqrt{x}" title="Square root">√</button>
+        <button class="key" data-ins="()/()" data-back="4" data-tex="\tfrac{a}{b}" title="Fraction">a/b</button>
+        <button class="key" data-ins="sin()" data-back="1" data-tex="\sin" title="Sine">sin</button>
+        <button class="key" data-ins="cos()" data-back="1" data-tex="\cos" title="Cosine">cos</button>
+        <button class="key" data-ins="e^()" data-back="1" data-tex="e^{x}" title="Exponential">eˣ</button>
+        <button class="key" data-ins="ln()" data-back="1" data-tex="\ln" title="Natural log">ln</button>
+        <button class="key" data-ins="pi" data-tex="\pi" title="Pi">π</button>
+        <button class="key" data-ins="abs()" data-back="1" data-tex="|x|" title="Absolute value">|x|</button>
+      </div>
+      <div class="status ok" id="eqStatus"><span class="dot"></span><div id="eqStatusText">Updates as you type.</div></div>
+
+      <label class="field-label" for="presetSelect">Preset equations</label>
+      <select id="presetSelect">
+        <option value="">Choose an example…</option>
+        <optgroup label="Starter examples">
+          <option value="dy/dx = x">Simple — dy/dx = x</option>
+          <option value="dy/dx = y">Exponential — dy/dx = y</option>
+          <option value="dy/dx = x - y">Linear — dy/dx = x − y</option>
+          <option value="dy/dx = x^2 - y^2">Nonlinear — dy/dx = x² − y²</option>
+          <option value="dy/dx = sin(x) - y">Trigonometric — dy/dx = sin(x) − y</option>
+          <option value="dy/dx = y(1-y)">Growth / decay — dy/dx = y(1 − y)</option>
+        </optgroup>
+        <optgroup label="More to explore">
+          <option value="dy/dx = x + y">dy/dx = x + y</option>
+          <option value="dy/dx = y/x">Lines through the origin — dy/dx = y/x</option>
+          <option value="dy/dx = -x/y">Circles — dy/dx = −x/y</option>
+          <option value="dy/dx = e^(-x^2)">Bell curve slope — dy/dx = e^(−x²)</option>
+          <option value="dy/dx = (x+y)/(x-y)">Spirals — dy/dx = (x+y)/(x−y)</option>
+          <option value="dy/dx = cos(x)">dy/dx = cos(x)</option>
+          <option value="dy/dx = x y^2">dy/dx = xy²</option>
+        </optgroup>
+      </select>
+    </div>
+  </details>
+
+  <!-- View -->
+  <details class="card" open>
+    <summary><span class="sec-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 12h18M12 3v18"/></svg></span>View<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></summary>
+    <div class="card-body">
+      <div class="view-grid">
+        <div><label for="xMin">X minimum</label><input class="num-input" id="xMin" type="number" step="any"></div>
+        <div><label for="xMax">X maximum</label><input class="num-input" id="xMax" type="number" step="any"></div>
+        <div><label for="yMin">Y minimum</label><input class="num-input" id="yMin" type="number" step="any"></div>
+        <div><label for="yMax">Y maximum</label><input class="num-input" id="yMax" type="number" step="any"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="resetViewBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Reset view</button>
+        <button class="btn" id="equalBtn" title="Use the same scale on both axes so angles look true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>Equal scale</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- Tangent field -->
+  <details class="card" open>
+    <summary><span class="sec-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 18 21 6M3 9l18 6"/></svg></span>Tangent field<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></summary>
+    <div class="card-body">
+      <div class="slider" style="margin-top:2px">
+        <div class="slider-head"><span>Tangent density</span><output id="densityOut">Normal</output></div>
+        <input type="range" id="density" min="1" max="10" step="1" value="4" aria-label="Tangent density">
+        <div class="slider-scale"><span>Sparse</span><span>Normal</span><span>Dense</span><span>Very dense</span></div>
+      </div>
+      <div class="slider">
+        <div class="slider-head"><span>Line thickness</span><output id="thicknessOut">1.0 px</output></div>
+        <input type="range" id="thickness" min="0.5" max="4" step="0.25" value="1">
+      </div>
+      <div class="slider">
+        <div class="slider-head"><span>Line opacity</span><output id="opacityOut">40%</output></div>
+        <input type="range" id="opacity" min="0.08" max="1" step="0.01" value="0.4">
+      </div>
+      <div class="slider">
+        <div class="slider-head"><span>Anchor-point size</span><output id="anchorSizeOut">2.5 px</output></div>
+        <input type="range" id="anchorSize" min="1" max="6" step="0.5" value="2.5">
+      </div>
+      <div style="margin-top:10px">
+        <label class="toggle"><input type="checkbox" id="showLines" checked><span class="sw"></span>Show tangent lines</label>
+        <label class="toggle"><input type="checkbox" id="showAnchors" checked><span class="sw"></span>Show anchor points<span class="chip" style="background:var(--anchor)"></span></label>
+        <label class="toggle"><input type="checkbox" id="colorBySlope" checked><span class="sw"></span>Color lines by slope<span class="chip grad"></span></label>
+      </div>
+      <div class="note" id="fieldNote">Hover any dot to see its tangent line. Click a dot to pin the details.</div>
+    </div>
+  </details>
+
+  <!-- Intercepts -->
+  <details class="card" open>
+    <summary><span class="sec-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 17h18"/><circle cx="12" cy="17" r="2.5"/><path d="M5 5l14 14" opacity=".5"/></svg></span>Intercepts<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></summary>
+    <div class="card-body">
+      <label class="toggle"><input type="checkbox" id="showXInt" checked><span class="sw"></span>Show x-intercepts<span class="chip" style="background:var(--xint)"></span></label>
+      <label class="toggle"><input type="checkbox" id="showYInt" checked><span class="sw"></span>Show y-intercepts<span class="chip" style="background:var(--yint)"></span></label>
+      <label class="toggle"><input type="checkbox" id="showIntLabels"><span class="sw"></span>Show intercept coordinates</label>
+      <div class="note">Where each tangent line crosses an axis. Coordinates appear automatically when only a few are visible.</div>
+    </div>
+  </details>
+
+  <!-- Intersections -->
+  <details class="card" open>
+    <summary><span class="sec-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 20 20 4M4 4l16 16"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg></span>Intersections<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></summary>
+    <div class="card-body">
+      <label class="toggle"><input type="checkbox" id="showIsect" checked><span class="sw"></span>Show intersections<span class="chip" style="background:var(--isect)"></span></label>
+      <label class="toggle"><input type="checkbox" id="showIsectLabels"><span class="sw"></span>Show intersection coordinates</label>
+      <div class="note" id="isectNote">Points where two tangent lines cross. Larger dots mark places where three or more lines meet.</div>
+    </div>
+  </details>
+
+  <!-- Solution curves -->
+  <details class="card" open>
+    <summary><span class="sec-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 19c5-1 7-13 18-14"/></svg></span>Solution curves<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></summary>
+    <div class="card-body">
+      <label class="toggle"><input type="checkbox" id="solMode"><span class="sw"></span>Show solution curves (click graph)</label>
+      <label class="toggle"><input type="checkbox" id="solHover" checked><span class="sw"></span>Preview solution when hovering a dot</label>
+      <div class="slider">
+        <div class="slider-head"><span>Numerical step size (RK4)</span><output id="solStepOut">h = 0.02</output></div>
+        <input type="range" id="solStep" min="0" max="8" step="1" value="4">
+        <div class="slider-scale"><span>Finer</span><span>Coarser</span></div>
+      </div>
+      <ul class="curve-list" id="curveList"></ul>
+      <div class="btn-row"><button class="btn" id="clearCurves">Clear solution curves</button></div>
+    </div>
+  </details>
+
+  <!-- Explanation -->
+  <details class="card explain">
+    <summary><span class="sec-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg></span>How does this work?<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></summary>
+    <div class="card-body">
+      <p>A differential equation like this one doesn't tell you <strong>what <span data-tex="y"></span> is</strong>. It tells you the <strong>slope</strong> a solution curve must have at every point <span data-tex="(x, y)"></span>.</p>
+      <div class="eqbox" data-tex="\dfrac{dy}{dx} = x + y" data-display="1"></div>
+      <p>For example, at the point <span data-tex="(2, 3)"></span> this equation says:</p>
+      <div class="eqbox" data-tex="\text{slope} = 2 + 3 = 5" data-display="1"></div>
+      <p>So the program draws the straight line through <span data-tex="(2,3)"></span> with slope <span data-tex="5"></span>:</p>
+      <div class="eqbox" data-tex="y - 3 = 5(x - 2)" data-display="1"></div>
+      <p>It repeats this at hundreds of evenly spaced points. Each dot is a point where the slope was calculated, and its line is the <strong>tangent line</strong> a solution would have there. Together they form a map of how solutions can behave.</p>
+      <p>A real <strong>solution curve</strong> threads through this map: wherever it passes a dot, it just touches that dot's line, going in the same direction. Turn on <em>Show solution curves</em> and click anywhere to watch one being traced with the Runge–Kutta (RK4) method.</p>
+      <p style="margin-bottom:4px"><strong>Typing equations</strong></p>
+      <div class="syntax">
+        <code>2x</code><span>means 2 times x</span>
+        <code>xy</code><span>means x times y</span>
+        <code>x^2</code><span>powers</span>
+        <code>sqrt(x)</code><span>square root</span>
+        <code>e^x, exp(x)</code><span>exponential</span>
+        <code>ln(x)</code><span>natural log; <code>log(x)</code> is base 10</span>
+        <code>sin, cos, tan</code><span>trig (radians)</span>
+        <code>pi</code><span>π</span>
+        <code>abs(x), |x|</code><span>absolute value</span>
+        <code>y'</code><span>same as dy/dx</span>
+      </div>
+    </div>
+  </details>
+</aside>
+
+<!-- ======================= GRAPH ======================= -->
+<main class="stage">
+  <div class="graph" id="graph" aria-label="Graph of tangent lines" role="img">
+    <canvas id="baseCanvas"></canvas>
+    <canvas id="overCanvas"></canvas>
+    <div class="float zoom-ctl" role="group" aria-label="Zoom">
+      <button id="zoomIn" title="Zoom in" aria-label="Zoom in"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button id="zoomOut" title="Zoom out" aria-label="Zoom out"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+      <button id="zoomReset" title="Reset view" aria-label="Reset view"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg></button>
+    </div>
+    <div class="float hint hidden" id="solHint">Click anywhere to draw a solution curve through that point</div>
+    <div class="float empty-msg hidden" id="emptyMsg"></div>
+    <div class="float readout" id="readout"><span>Move over the graph to read slopes</span></div>
+    <div class="float legend" id="legend">
+      <div>Line color = slope</div>
+      <div class="bar"></div>
+      <div class="ends"><span>negative</span><span>0</span><span>positive</span></div>
+    </div>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+</main>
+
+<!-- ======================= CORE MATH (pure, no DOM) ======================= -->
+<script id="core">
+const Core = (() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  // Tokenizer
+  // ---------------------------------------------------------------------------
+  const FUNC_NAMES = ['arcsin', 'arccos', 'arctan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
+    'sqrt', 'cbrt', 'floor', 'ceil', 'sign', 'sgn', 'sin', 'cos', 'tan', 'sec', 'csc', 'cot',
+    'exp', 'abs', 'log', 'ln'];
+  const CONST_NAMES = ['pi', 'e'];
+  const VAR_NAMES = ['x', 'y'];
+  const ALL_NAMES = [...FUNC_NAMES, ...CONST_NAMES, ...VAR_NAMES].sort((a, b) => b.length - a.length);
+
+  class MathError extends Error {}
+
+  function normalize(src) {
+    return src
+      .replace(/[\u2212\u2013\u2014]/g, '-')
+      .replace(/[\u00b7\u22c5\u00d7\u2217]/g, '*')
+      .replace(/\u00f7/g, '/')
+      .replace(/\u03c0/g, 'pi')
+      .replace(/\u00b2/g, '^2').replace(/\u00b3/g, '^3')
+      .replace(/\u221a/g, 'sqrt')
+      .replace(/\*\*/g, '^')
+      .replace(/[\[{]/g, '(').replace(/[\]}]/g, ')')
+      .replace(/[\u2032\u2019]/g, "'");
+  }
+
+  function tokenize(s) {
+    const toks = [];
+    let i = 0;
+    while (i < s.length) {
+      const c = s[i];
+      if (/\s/.test(c)) { i++; continue; }
+      if (/[0-9.]/.test(c)) {
+        const m = /^(\d+\.?\d*|\.\d+)/.exec(s.slice(i));
+        if (!m) throw new MathError(`A lone "." isn't a number.`);
+        toks.push({ type: 'num', value: parseFloat(m[1]), raw: m[1] });
+        i += m[1].length;
+        continue;
+      }
+      if (/[a-zA-Z]/.test(c)) {
+        let j = i;
+        while (j < s.length && /[a-zA-Z]/.test(s[j])) j++;
+        const word = s.slice(i, j);
+        let k = 0;
+        while (k < word.length) {
+          const rest = word.slice(k).toLowerCase();
+          const name = ALL_NAMES.find(n => rest.startsWith(n));
+          if (!name) {
+            const ch = word[k];
+            if (ch === 'X' || ch === 'Y') { toks.push({ type: 'var', name: ch.toLowerCase() }); k++; continue; }
+            if (/[a-z]/i.test(ch) && word.length - k <= 2 && !/[xy]/.test(rest)) {
+              throw new MathError(`Use x and y as the variables (found "${ch}").`);
+            }
+            throw new MathError(`I don't recognise "${word.slice(k)}".`);
+          }
+          if (FUNC_NAMES.includes(name)) toks.push({ type: 'func', name });
+          else if (CONST_NAMES.includes(name)) toks.push({ type: 'const', name });
+          else toks.push({ type: 'var', name });
+          k += name.length;
+        }
+        i = j;
+        continue;
+      }
+      if ('+-*/^()|,'.includes(c)) { toks.push({ type: 'op', value: c }); i++; continue; }
+      throw new MathError(`The symbol "${c}" isn't supported here.`);
+    }
+    return toks;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Parser  (recursive descent, implicit multiplication)
+  //   expr   := term (('+'|'-') term)*
+  //   term   := unary (('*'|'/'|<implicit>) unary)*
+  //   unary  := ('-'|'+') unary | power
+  //   power  := primary ('^' unary)?
+  // ---------------------------------------------------------------------------
+  function parseTokens(toks) {
+    let p = 0, absDepth = 0;
+    const peek = () => toks[p];
+    const isOp = (t, v) => t && t.type === 'op' && t.value === v;
+    const next = () => toks[p++];
+    const expect = (v, msg) => { if (!isOp(peek(), v)) throw new MathError(msg); p++; };
+
+    const startsFactor = t => t && (t.type === 'num' || t.type === 'var' || t.type === 'const' || t.type === 'func'
+      || isOp(t, '(') || (isOp(t, '|') && absDepth === 0));
+
+    function expr() {
+      let node = term();
+      while (isOp(peek(), '+') || isOp(peek(), '-')) {
+        const op = next().value;
+        node = { t: 'bin', op, a: node, b: term() };
+      }
+      return node;
+    }
+    function term() {
+      let node = unary();
+      for (;;) {
+        const t = peek();
+        if (isOp(t, '*') || isOp(t, '/')) { next(); node = { t: 'bin', op: t.value, a: node, b: unary() }; }
+        else if (startsFactor(t)) {
+          if (node.t === 'num' && t.type === 'num') throw new MathError('Two numbers in a row — did you mean to multiply them with *?');
+          node = { t: 'bin', op: '*', a: node, b: power() };
+        } else break;
+      }
+      return node;
+    }
+    function unary() {
+      if (isOp(peek(), '-')) { next(); return { t: 'neg', a: unary() }; }
+      if (isOp(peek(), '+')) { next(); return unary(); }
+      return power();
+    }
+    function power() {
+      const base = primary();
+      if (isOp(peek(), '^')) {
+        next();
+        if (!peek()) throw new MathError('Something is missing after "^".');
+        return { t: 'bin', op: '^', a: base, b: unary() };
+      }
+      return base;
+    }
+    // Argument for a function written without parentheses: "sin 2x" -> sin(2x)
+    function bareArg() {
+      let node = power();
+      while (startsFactor(peek()) && peek().type !== 'func') node = { t: 'bin', op: '*', a: node, b: power() };
+      return node;
+    }
+    function primary() {
+      const t = next();
+      if (!t) throw new MathError('The expression ends too early.');
+      if (t.type === 'num') return { t: 'num', v: t.value, raw: t.raw };
+      if (t.type === 'var') return { t: 'var', n: t.name };
+      if (t.type === 'const') return { t: 'const', n: t.name };
+      if (t.type === 'func') {
+        let pw = null;
+        if (isOp(peek(), '^')) { next(); pw = unary(); }       // sin^2(x)
+        let arg;
+        if (isOp(peek(), '(')) {
+          next();
+          if (isOp(peek(), ')')) throw new MathError(`${t.name}( ) needs something inside the parentheses.`);
+          arg = expr();
+          if (isOp(peek(), ',')) throw new MathError(`${t.name} takes a single input.`);
+          expect(')', `Missing ")" after ${t.name}(…`);
+        } else {
+          if (!startsFactor(peek()) && !isOp(peek(), '-')) throw new MathError(`${t.name} needs an input, like ${t.name}(x).`);
+          arg = isOp(peek(), '-') ? unary() : bareArg();
+        }
+        const name = { arcsin: 'asin', arccos: 'acos', arctan: 'atan', sgn: 'sign' }[t.name] || t.name;
+        return { t: 'fn', n: name, a: arg, p: pw };
+      }
+      if (isOp(t, '(')) {
+        if (isOp(peek(), ')')) throw new MathError('Empty parentheses "( )".');
+        const e = expr();
+        expect(')', 'A closing parenthesis ")" is missing.');
+        return e;
+      }
+      if (isOp(t, '|')) {
+        absDepth++;
+        const e = expr();
+        absDepth--;
+        expect('|', 'A closing "|" is missing.');
+        return { t: 'fn', n: 'abs', a: e, p: null };
+      }
+      if (isOp(t, ')')) throw new MathError('There is an extra ")".');
+      throw new MathError(`Unexpected "${t.value}".`);
+    }
+
+    if (!toks.length) throw new MathError('The right-hand side is empty.');
+    const tree = expr();
+    if (p < toks.length) {
+      const t = toks[p];
+      if (isOp(t, ')')) throw new MathError('There is an extra ")".');
+      throw new MathError(`Unexpected "${t.value || t.name}".`);
+    }
+    return tree;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Compile AST -> fast JS function F(x, y)
+  // ---------------------------------------------------------------------------
+  function safePow(a, b) {
+    const r = Math.pow(a, b);
+    if (r === r || a >= 0) return r;
+    // Negative base with fractional exponent: allow odd roots, e.g. (-8)^(1/3) = -2
+    for (let q = 3; q <= 15; q += 2) {
+      const pq = b * q, pr = Math.round(pq);
+      if (Math.abs(pq - pr) < 1e-9) return (pr % 2 === 0 ? 1 : -1) * Math.pow(-a, b);
+    }
+    return NaN;
+  }
+  const H = {
+    pow: safePow,
+    sin: Math.sin, cos: Math.cos, tan: Math.tan,
+    sec: x => 1 / Math.cos(x), csc: x => 1 / Math.sin(x), cot: x => 1 / Math.tan(x),
+    asin: Math.asin, acos: Math.acos, atan: Math.atan,
+    sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
+    sqrt: Math.sqrt, cbrt: Math.cbrt, exp: Math.exp, abs: Math.abs,
+    ln: Math.log, log: Math.log10, floor: Math.floor, ceil: Math.ceil, sign: Math.sign,
+  };
+
+  function toJS(n) {
+    switch (n.t) {
+      case 'num': return '(' + n.v + ')';
+      case 'var': return n.n;
+      case 'const': return n.n === 'pi' ? 'Math.PI' : 'Math.E';
+      case 'neg': return '(-' + toJS(n.a) + ')';
+      case 'fn': {
+        const call = `H.${n.n}(${toJS(n.a)})`;
+        return n.p ? `H.pow(${call},${toJS(n.p)})` : call;
+      }
+      case 'bin':
+        if (n.op === '^') {
+          if (n.a.t === 'const' && n.a.n === 'e') return `Math.exp(${toJS(n.b)})`;
+          return `H.pow(${toJS(n.a)},${toJS(n.b)})`;
+        }
+        return `(${toJS(n.a)}${n.op}${toJS(n.b)})`;
+    }
+    throw new MathError('Internal error');
+  }
+
+  // ---------------------------------------------------------------------------
+  // AST -> LaTeX (with optional numeric substitution for x and y)
+  // ---------------------------------------------------------------------------
+  function numTex(v, digits = 3) {
+    if (!isFinite(v)) return v > 0 ? '\\infty' : (v < 0 ? '-\\infty' : '\\text{undefined}');
+    if (Math.abs(v) < 0.5 * Math.pow(10, -digits)) return '0';
+    const a = Math.abs(v);
+    if (a >= 1e6 || a < 1e-4) {
+      const [m, e] = v.toExponential(2).split('e');
+      return `${parseFloat(m)} \\times 10^{${parseInt(e, 10)}}`;
+    }
+    return String(parseFloat(v.toFixed(digits)));
+  }
+  function numTexFixed(v, d = 2) {
+    if (!isFinite(v) || Math.abs(v) >= 1e6) return numTex(v);
+    if (Math.abs(v) < 0.5 * Math.pow(10, -d)) v = 0;
+    return v.toFixed(d);
+  }
+
+  function toTex(root, sub) {
+    const isAddSub = n => n.t === 'bin' && (n.op === '+' || n.op === '-');
+    const isFrac = n => n.t === 'bin' && n.op === '/';
+    const subbed = n => sub && n.t === 'var' && sub[n.n] !== undefined;
+    function leftNumeric(n) {
+      if (n.t === 'num' || subbed(n) || n.t === 'neg') return true;
+      if (n.t === 'bin' && n.op !== '/') return leftNumeric(n.a);
+      return false;
+    }
+    const paren = s => `\\left(${s}\\right)`;
+    function atomBase(n) {
+      if (n.t === 'num' || n.t === 'const') return true;
+      if (n.t === 'var') return true;               // substituted negatives are already parenthesised
+      return false;
+    }
+    function tx(n) {
+      switch (n.t) {
+        case 'num': return n.raw;
+        case 'var': {
+          if (subbed(n)) { const v = sub[n.n]; const s = numTex(v); return v < 0 && s !== '0' ? paren(s) : s; }
+          return n.n;
+        }
+        case 'const': return n.n === 'pi' ? '\\pi' : 'e';
+        case 'neg': {
+          const inner = tx(n.a);
+          return '-' + (isAddSub(n.a) || n.a.t === 'neg' ? paren(inner) : inner);
+        }
+        case 'fn': {
+          const a = tx(n.a);
+          if (n.n === 'sqrt') return n.p ? `\\left(\\sqrt{${a}}\\right)^{${tx(n.p)}}` : `\\sqrt{${a}}`;
+          if (n.n === 'abs') return `\\left|${a}\\right|` + (n.p ? `^{${tx(n.p)}}` : '');
+          if (n.n === 'exp') return n.p ? `\\left(e^{${a}}\\right)^{${tx(n.p)}}` : `e^{${a}}`;
+          if (n.n === 'cbrt') return `\\sqrt[3]{${a}}` + (n.p ? `^{${tx(n.p)}}` : '');
+          const names = { sin: '\\sin', cos: '\\cos', tan: '\\tan', sec: '\\sec', csc: '\\csc', cot: '\\cot',
+            asin: '\\arcsin', acos: '\\arccos', atan: '\\arctan', sinh: '\\sinh', cosh: '\\cosh', tanh: '\\tanh',
+            ln: '\\ln', log: '\\log_{10}', floor: '\\operatorname{floor}', ceil: '\\operatorname{ceil}', sign: '\\operatorname{sign}' };
+          const nm = names[n.n] || `\\operatorname{${n.n}}`;
+          return `${nm}${n.p ? `^{${tx(n.p)}}` : ''}${paren(a)}`;
+        }
+        case 'bin': {
+          const { op, a, b } = n;
+          if (op === '+') return `${tx(a)} + ${b.t === 'neg' ? paren(tx(b)) : tx(b)}`;
+          if (op === '-') return `${tx(a)} - ${isAddSub(b) || b.t === 'neg' ? paren(tx(b)) : tx(b)}`;
+          if (op === '/') return `\\dfrac{${tx(a)}}{${tx(b)}}`;
+          if (op === '^') {
+            const base = atomBase(a) ? tx(a) : paren(tx(a));
+            return `${base}^{${tx(b)}}`;
+          }
+          // multiplication
+          const L = isAddSub(a) ? paren(tx(a)) : tx(a);
+          const R = isAddSub(b) || b.t === 'neg' ? paren(tx(b)) : tx(b);
+          const cdot = (leftNumeric(b) && !(isAddSub(b) || b.t === 'neg')) || isFrac(b);
+          return cdot ? `${L} \\cdot ${R}` : `${L} ${R}`;
+        }
+      }
+      return '';
+    }
+    return tx(root);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Full equation:  "dy/dx = ...", "y' = ...", or just "..."
+  // ---------------------------------------------------------------------------
+  const LHS_OK = [/^dy\/dx$/, /^y'$/, /^y'\(x\)$/, /^dydx$/, /^\(dy\)\/\(dx\)$/, /^f\(x,y\)$/, /^d\/dx\(?y\)?$/, /^y_?x$/];
+  function parseEquation(src) {
+    const raw = normalize(String(src || ''));
+    if (!raw.trim()) throw new MathError('Type an equation, for example dy/dx = x + y.');
+    const parts = raw.split('=');
+    if (parts.length > 2) throw new MathError('Use just one "=" sign.');
+    let rhs = raw;
+    if (parts.length === 2) {
+      const lhs = parts[0].replace(/\s+/g, '').toLowerCase();
+      if (lhs === 'y') throw new MathError('This app graphs dy/dx = …, so start with dy/dx = (or y\' =).');
+      if (!LHS_OK.some(r => r.test(lhs))) throw new MathError('The left side should be dy/dx or y\'.');
+      rhs = parts[1];
+    } else if (/^\s*(dy\/dx|y')\s*$/i.test(raw)) {
+      throw new MathError('Add "=" and an expression, for example dy/dx = x + y.');
+    }
+    if (!rhs.trim()) throw new MathError('The right-hand side is empty.');
+    if (rhs.includes("'")) throw new MathError('The right-hand side can use x and y, but not y\'.');
+    const ast = parseTokens(tokenize(rhs));
+    const code = toJS(ast);
+    // eslint-disable-next-line no-new-func
+    const fn = new Function('H', `"use strict"; return function F(x, y) { return ${code}; };`)(H);
+    return { ast, fn, code, tex: toTex(ast) };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Geometry
+  // ---------------------------------------------------------------------------
+  /** Tangent line through (x0,y0) with slope F(x0,y0); null when the slope is undefined. */
+  function tangentAt(F, x0, y0) {
+    const m = F(x0, y0);
+    if (typeof m !== 'number' || !isFinite(m)) return null;
+    return { x0, y0, m };
+  }
+  /** Unit direction vector (dx, dy) of a line with slope m; robust for huge |m|. */
+  function direction(m) {
+    const h = Math.hypot(1, m);
+    return [1 / h, m / h];
+  }
+  function lineY(L, x) { return L.y0 + L.m * (x - L.x0); }
+  function xIntercept(L) {
+    if (L.m === 0) return null;                 // horizontal: parallel to the x-axis (or is the axis)
+    const x = L.x0 - L.y0 / L.m;
+    return isFinite(x) ? x : null;
+  }
+  function yIntercept(L) {
+    const y = L.y0 - L.m * L.x0;
+    return isFinite(y) ? y : null;
+  }
+  /** Intersection of two tangent lines (point + direction form, stable for steep lines). */
+  function intersect(A, B) {
+    const [ax, ay] = direction(A.m), [bx, by] = direction(B.m);
+    const cross = ax * by - ay * bx;
+    if (Math.abs(cross) < 1e-10) return null;   // parallel or coincident
+    const t = ((B.x0 - A.x0) * by - (B.y0 - A.y0) * bx) / cross;
+    const x = A.x0 + t * ax, y = A.y0 + t * ay;
+    return isFinite(x) && isFinite(y) ? [x, y] : null;
+  }
+  /** Liang–Barsky clip of the infinite line P + t·D against a rectangle. */
+  function clipLine(px, py, dx, dy, x0, y0, x1, y1) {
+    let t0 = -Infinity, t1 = Infinity;
+    const P = [-dx, dx, -dy, dy], Q = [px - x0, x1 - px, py - y0, y1 - py];
+    for (let i = 0; i < 4; i++) {
+      if (P[i] === 0) { if (Q[i] < 0) return null; }
+      else {
+        const r = Q[i] / P[i];
+        if (P[i] < 0) { if (r > t0) t0 = r; } else if (r < t1) t1 = r;
+      }
+    }
+    if (t0 > t1 || !isFinite(t0) || !isFinite(t1)) return null;
+    return [px + t0 * dx, py + t0 * dy, px + t1 * dx, py + t1 * dy];
+  }
+
+  // ---------------------------------------------------------------------------
+  // View transform
+  // ---------------------------------------------------------------------------
+  const toPx = (v, x, y) => [v.W / 2 + (x - v.cx) * v.sx, v.H / 2 - (y - v.cy) * v.sy];
+  const toWorld = (v, px, py) => [v.cx + (px - v.W / 2) / v.sx, v.cy - (py - v.H / 2) / v.sy];
+  function bounds(v) {
+    return { xMin: v.cx - v.W / 2 / v.sx, xMax: v.cx + v.W / 2 / v.sx, yMin: v.cy - v.H / 2 / v.sy, yMax: v.cy + v.H / 2 / v.sy };
+  }
+  /** Zoom by factor k keeping the world point under pixel (px,py) fixed. */
+  function zoomAt(v, px, py, k) {
+    const [wx, wy] = toWorld(v, px, py);
+    const sx = Math.min(1e8, Math.max(1e-6, v.sx * k)), sy = Math.min(1e8, Math.max(1e-6, v.sy * k));
+    return { ...v, sx, sy, cx: wx - (px - v.W / 2) / sx, cy: wy + (py - v.H / 2) / sy };
+  }
+
+  /** Nice step from {1, 2, 5}·10^k at or above raw. */
+  function niceStep(raw) {
+    const e = Math.floor(Math.log10(raw)), b = Math.pow(10, e), f = raw / b;
+    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * b;
+  }
+  /** Step from {1, 2, 2.5, 5}·10^k closest (in log scale) to raw — used for anchor spacing. */
+  function anchorStep(raw) {
+    const e = Math.floor(Math.log10(raw)), b = Math.pow(10, e);
+    let best = b, bestErr = Infinity;
+    for (const f of [1, 2, 2.5, 5, 10]) {
+      const err = Math.abs(Math.log(f * b / raw));
+      if (err < bestErr) { bestErr = err; best = f * b; }
+    }
+    return best;
+  }
+  const clean = v => parseFloat(v.toPrecision(12));
+
+  // ---------------------------------------------------------------------------
+  // RK4 integration in x, from (x0,y0) to xEnd. Returns flat [x,y,x,y,...].
+  // Stops at undefined slopes or when the solution leaves [yLo, yHi].
+  // ---------------------------------------------------------------------------
+  function rk4(F, x0, y0, h, xEnd, yLo = -1e12, yHi = 1e12, maxSteps = 60000) {
+    const out = [x0, y0];
+    const dir = xEnd >= x0 ? 1 : -1;
+    const span = Math.abs(xEnd - x0);
+    if (span === 0) return out;
+    h = Math.abs(h);
+    let n = Math.ceil(span / h - 1e-9);
+    if (n > maxSteps) { n = maxSteps; h = span / n; }
+    let x = x0, y = y0;
+    for (let i = 1; i <= n; i++) {
+      const xn = i === n ? xEnd : x0 + dir * i * h;
+      const hh = xn - x;
+      const k1 = F(x, y);
+      const k2 = F(x + hh / 2, y + hh / 2 * k1);
+      const k3 = F(x + hh / 2, y + hh / 2 * k2);
+      const k4 = F(x + hh, y + hh * k3);
+      const yn = y + hh / 6 * (k1 + 2 * k2 + 2 * k3 + k4);
+      if (!isFinite(yn) || yn < yLo || yn > yHi) break;
+      x = xn; y = yn;
+      out.push(x, y);
+    }
+    return out;
+  }
+
+  return { MathError, normalize, tokenize, parseTokens, parseEquation, toTex, numTex, numTexFixed,
+    tangentAt, direction, lineY, xIntercept, yIntercept, intersect, clipLine,
+    toPx, toWorld, bounds, zoomAt, niceStep, anchorStep, clean, rk4 };
+})();
+if (typeof module !== 'undefined') module.exports = Core;
+</script>
+
+<!-- ======================= APPLICATION ======================= -->
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const graphEl = $('graph'), baseCv = $('baseCanvas'), overCv = $('overCanvas');
+  const bctx = baseCv.getContext('2d'), octx = overCv.getContext('2d');
+  const tooltip = $('tooltip');
+
+  const MAX_LINES = 4200;            // hard cap on tangent lines per frame
+  const MAX_ISECT_LINES = 650;       // pairwise intersections only up to this many lines
+  const MAX_ISECTS = 40000;
+  const DENSITY_PX = [150, 120, 96, 78, 62, 50, 40, 32, 25, 19];
+  const STEP_SIZES = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5];
+  const CURVE_COLORS = ['#e11d48', '#2563eb', '#059669', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
+
+  // ------------------------------------------------------------------ state
+  const S = {
+    eq: null,                       // { fn, tex, ast }
+    eqText: '',
+    view: { cx: 0, cy: 0, sx: 50, sy: 50, W: 800, H: 600 },
+    dpr: 1,
+    opts: {
+      density: 4, thickness: 1, opacity: 0.4, anchorSize: 2.5,
+      showLines: true, showAnchors: true, colorBySlope: true,
+      showXInt: true, showYInt: true, showIntLabels: false,
+      showIsect: true, showIsectLabels: false,
+      solMode: false, solHover: true, solStepIdx: 4,
+    },
+    curves: [],                     // { x0, y0, color }
+    frame: null,                    // computed geometry for the current view
+    hover: null,                    // { kind, ... }
+    pinned: null,
+    colors: {},
+    interacting: false,
+  };
+
+  // ------------------------------------------------------------------ helpers
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    const g = n => cs.getPropertyValue(n).trim();
+    S.colors = {
+      bg: g('--graph-bg'), gridMinor: g('--grid-minor'), gridMajor: g('--grid-major'), axis: g('--axis'),
+      tick: g('--tick-label'), anchor: g('--anchor'), xint: g('--xint'), yint: g('--yint'), isect: g('--isect'),
+      ink: g('--ink'), ink2: g('--ink-2'), accent: g('--accent'), panel: g('--panel'),
+      neg: hexToRgb(g('--slope-neg')), zero: hexToRgb(g('--slope-zero')), pos: hexToRgb(g('--slope-pos')),
+    };
+    S.bucketColors = [];
+    const NB = 15;
+    for (let i = 0; i < NB; i++) {
+      const t = i / (NB - 1);
+      const [a, b, u] = t < 0.5 ? [S.colors.neg, S.colors.zero, t * 2] : [S.colors.zero, S.colors.pos, t * 2 - 1];
+      S.bucketColors.push(`rgb(${Math.round(a[0] + (b[0] - a[0]) * u)},${Math.round(a[1] + (b[1] - a[1]) * u)},${Math.round(a[2] + (b[2] - a[2]) * u)})`);
+    }
+  }
+  function hexToRgb(h) {
+    h = h.replace('#', '');
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const n = parseInt(h, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const slopeBucket = m => Math.max(0, Math.min(14, Math.round((Math.atan(m) / Math.PI + 0.5) * 14)));
+  function slopeColor(m) { return S.opts.colorBySlope ? S.bucketColors[slopeBucket(m)] : S.colors.accent; }
+
+  function fmt(v, d = 2) {                // plain text number for canvas labels
+    if (!isFinite(v)) return '∞';
+    const a = Math.abs(v);
+    if (a !== 0 && (a >= 1e6 || a < 1e-4)) return v.toExponential(2).replace('e+', 'e');
+    if (a < 0.5 * Math.pow(10, -d)) v = 0;
+    return v.toFixed(d).replace('-', '−');
+  }
+  const trimNum = v => {
+    if (!isFinite(v)) return '∞';
+    const a = Math.abs(v);
+    if (a !== 0 && (a >= 1e6 || a < 1e-4)) return v.toExponential(2).replace('e+', 'e');
+    return String(parseFloat(v.toFixed(3))).replace('-', '−');
+  };
+  const T = Core.numTex, TF = Core.numTexFixed;
+
+  function renderTex(el, tex, display = false) {
+    if (window.katex) {
+      try { katex.render(tex, el, { throwOnError: false, displayMode: display, strict: false }); el.classList.remove('fallback'); return; }
+      catch (e) { /* fall through */ }
+    }
+    el.textContent = tex
+      .replace(/\\[dt]?frac\{dy\}\{dx\}/g, 'dy/dx')
+      .replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)')
+      .replace(/\\text\{([^}]*)\}/g, '$1').replace(/\\cdot/g, '·').replace(/\\times/g, '×').replace(/\\pi/g, 'π')
+      .replace(/\\left|\\right|\\[,;! ]|\\(?=[a-z])/g, '').replace(/[{}]/g, '');
+    el.classList.add('fallback');
+  }
+  function texHTML(tex) {
+    if (window.katex) { try { return katex.renderToString(tex, { throwOnError: false, strict: false }); } catch (e) { /* ignore */ } }
+    const s = document.createElement('span'); renderTex(s, tex); return s.outerHTML;
+  }
+
+  /** Point-slope form  y − y0 = m(x − x0)  as LaTeX. */
+  function pointSlopeTex(x0, y0, m) {
+    const ys = Math.abs(y0) < 5e-4 ? 'y' : y0 > 0 ? `y - ${T(y0)}` : `y + ${T(-y0)}`;
+    if (Math.abs(m) < 5e-4) return `${ys} = 0`;
+    const ms = Math.abs(m - 1) < 5e-4 ? '' : Math.abs(m + 1) < 5e-4 ? '-' : T(m);
+    const xs = Math.abs(x0) < 5e-4 ? 'x' : x0 > 0 ? `(x - ${T(x0)})` : `(x + ${T(-x0)})`;
+    const join = ms && /\d$/.test(ms) && xs === 'x' ? ms + xs : ms + xs;
+    return `${ys} = ${join}`;
+  }
+  function slopeInterceptTex(m, b) {
+    const mPart = Math.abs(m) < 5e-4 ? '' : Math.abs(m - 1) < 5e-4 ? 'x' : Math.abs(m + 1) < 5e-4 ? '-x' : `${T(m)}x`;
+    if (!mPart) return `y = ${T(b)}`;
+    if (Math.abs(b) < 5e-4) return `y = ${mPart}`;
+    return `y = ${mPart} ${b > 0 ? '+' : '-'} ${T(Math.abs(b))}`;
+  }
+  const ptTex = (x, y) => `\\left(${TF(x)},\\ ${TF(y)}\\right)`;
+
+  // ------------------------------------------------------------------ equation
+  const LHS_TEX = '\\dfrac{dy}{dx} = ';
+  let parseTimer = 0;
+  function setEquation(text, immediate) {
+    S.eqText = text;
+    clearTimeout(parseTimer);
+    const run = () => {
+      const field = $('mathField'), st = $('eqStatus'), stText = $('eqStatusText');
+      try {
+        const eq = Core.parseEquation(text);
+        // sanity probe: does the expression evaluate at all?
+        S.eq = eq;
+        field.classList.remove('has-error');
+        renderTex($('eqRender'), LHS_TEX + eq.tex);
+        st.className = 'status ok';
+        stText.innerHTML = 'Graphing ' + texHTML(LHS_TEX.replace('\\dfrac', '\\tfrac') + eq.tex) + '';
+        try { localStorage.setItem('tf-eq', text); } catch (e) { /* storage unavailable */ }
+      } catch (err) {
+        field.classList.add('has-error');
+        st.className = 'status err';
+        const detail = err instanceof Core.MathError ? err.message : 'That expression could not be evaluated.';
+        stText.innerHTML = `Couldn't understand that equation. Try something like: <b>dy/dx = x + y</b><small>${escapeHTML(detail)}</small>`;
+        if (!S.eq) renderTex($('eqRender'), LHS_TEX + '\\;?');
+      }
+      S.pinned = null;
+      requestDraw();
+    };
+    if (immediate) run(); else parseTimer = setTimeout(run, 140);
+  }
+  const escapeHTML = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // ------------------------------------------------------------------ sizing / view
+  function resize() {
+    const r = graphEl.getBoundingClientRect();
+    const W = Math.max(50, r.width), H = Math.max(50, r.height);
+    S.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    for (const cv of [baseCv, overCv]) {
+      cv.width = Math.round(W * S.dpr); cv.height = Math.round(H * S.dpr);
+    }
+    const first = !S.view.init;
+    S.view = { ...S.view, W, H, init: true };
+    if (first) resetView(false);
+    requestDraw();
+  }
+  function resetView(draw = true) {
+    const { W, H } = S.view;
+    const s = Math.min(W / 16, H / 11);
+    S.view = { ...S.view, cx: 0, cy: 0, sx: s, sy: s };
+    if (draw) requestDraw();
+  }
+  function equalScale() {
+    const v = S.view, s = Math.sqrt(v.sx * v.sy);
+    S.view = { ...v, sx: s, sy: s };
+    requestDraw();
+  }
+  function zoomBy(k, px, py) {
+    const v = S.view;
+    S.view = Core.zoomAt(v, px ?? v.W / 2, py ?? v.H / 2, k);
+    markInteracting();
+    requestDraw();
+  }
+  function syncViewInputs() {
+    const b = Core.bounds(S.view);
+    const span = Math.max(b.xMax - b.xMin, b.yMax - b.yMin);
+    const d = Math.max(0, Math.min(8, 2 - Math.floor(Math.log10(span))));
+    for (const [id, v] of [['xMin', b.xMin], ['xMax', b.xMax], ['yMin', b.yMin], ['yMax', b.yMax]]) {
+      const el = $(id);
+      if (document.activeElement !== el) el.value = parseFloat(v.toFixed(d));
+    }
+  }
+  function applyViewInputs() {
+    const vals = ['xMin', 'xMax', 'yMin', 'yMax'].map(id => parseFloat($(id).value));
+    const [x0, x1, y0, y1] = vals;
+    if (vals.some(v => !isFinite(v)) || x1 <= x0 || y1 <= y0) { syncViewInputs(); return; }
+    const v = S.view;
+    S.view = { ...v, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, sx: v.W / (x1 - x0), sy: v.H / (y1 - y0) };
+    requestDraw();
+  }
+
+  let idleTimer = 0;
+  function markInteracting() {
+    S.interacting = true;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { S.interacting = false; requestDraw(); }, 140);
+  }
+
+  // ------------------------------------------------------------------ point bins (dedupe by pixel tolerance)
+  class PointBin {
+    constructor(tol) { this.tol = tol; this.cells = new Map(); this.pts = []; this.full = false; }
+    key(cx, cy) { return (cx + 4096) * 16384 + (cy + 4096); }
+    add(px, py, wx, wy, ref) {
+      const tol = this.tol, cx = Math.floor(px / tol), cy = Math.floor(py / tol);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+        const arr = this.cells.get(this.key(cx + i, cy + j));
+        if (!arr) continue;
+        for (const idx of arr) {
+          const p = this.pts[idx];
+          if (Math.abs(p.px - px) <= tol && Math.abs(p.py - py) <= tol) {
+            p.n++;
+            if (ref !== undefined && p.refs.length < 12) {
+              if (Array.isArray(ref)) { for (const r of ref) if (!p.refs.includes(r)) p.refs.push(r); }
+              else if (!p.refs.includes(ref)) p.refs.push(ref);
+            }
+            return idx;
+          }
+        }
+      }
+      if (this.pts.length >= MAX_ISECTS) { this.full = true; return -1; }
+      const idx = this.pts.length;
+      this.pts.push({ px, py, wx, wy, n: 1, refs: ref === undefined ? [] : (Array.isArray(ref) ? ref.slice() : [ref]) });
+      const k = this.key(cx, cy);
+      const arr = this.cells.get(k);
+      if (arr) arr.push(idx); else this.cells.set(k, [idx]);
+      return idx;
+    }
+    nearest(px, py, r) {
+      const tol = this.tol, cx = Math.floor(px / tol), cy = Math.floor(py / tol), reach = Math.ceil(r / tol);
+      let best = null, bd = r * r;
+      for (let i = -reach; i <= reach; i++) for (let j = -reach; j <= reach; j++) {
+        const arr = this.cells.get(this.key(cx + i, cy + j));
+        if (!arr) continue;
+        for (const idx of arr) {
+          const p = this.pts[idx], d = (p.px - px) ** 2 + (p.py - py) ** 2;
+          if (d <= bd) { bd = d; best = p; }
+        }
+      }
+      return best;
+    }
+  }
+
+  // ------------------------------------------------------------------ frame computation
+  function computeFrame() {
+    const v = S.view, F = S.eq && S.eq.fn;
+    const b = Core.bounds(v);
+    const frame = { lines: [], xints: null, yints: null, isects: null, isectSkipped: false, xs: 1, ys: 1, b, undefinedCount: 0 };
+    if (!F) return frame;
+
+    const spacing = DENSITY_PX[S.opts.density - 1];
+    let xs = Core.anchorStep(spacing / v.sx), ys = Core.anchorStep(spacing / v.sy);
+    const count = () => (Math.floor(b.xMax / xs) - Math.ceil(b.xMin / xs) + 1) * (Math.floor(b.yMax / ys) - Math.ceil(b.yMin / ys) + 1);
+    while (count() > MAX_LINES) { xs = Core.anchorStep(xs * 1.6); ys = Core.anchorStep(ys * 1.6); }
+    frame.xs = xs; frame.ys = ys;
+
+    const pad = 2;
+    const i0 = Math.ceil(b.xMin / xs), i1 = Math.floor(b.xMax / xs);
+    const j0 = Math.ceil(b.yMin / ys), j1 = Math.floor(b.yMax / ys);
+    for (let i = i0; i <= i1; i++) {
+      const x0 = Core.clean(i * xs);
+      for (let j = j0; j <= j1; j++) {
+        const y0 = Core.clean(j * ys);
+        const L = Core.tangentAt(F, x0, y0);
+        if (!L) { frame.undefinedCount++; continue; }
+        const [px, py] = Core.toPx(v, x0, y0);
+        const [dx, dy] = Core.direction(L.m);
+        const seg = Core.clipLine(px, py, dx * v.sx, -dy * v.sy, -pad, -pad, v.W + pad, v.H + pad);
+        if (!seg) continue;
+        L.px = px; L.py = py; L.seg = seg; L.bucket = slopeBucket(L.m);
+        L.id = frame.lines.length;
+        frame.lines.push(L);
+      }
+    }
+
+    // Axis intercepts
+    const inX = x => x >= b.xMin && x <= b.xMax, inY = y => y >= b.yMin && y <= b.yMax;
+    if (S.opts.showXInt && inY(0)) {
+      frame.xints = new PointBin(2.5);
+      for (const L of frame.lines) {
+        if (L.y0 === 0) continue;                   // anchor already on the axis: the anchor is its own intercept
+        const x = Core.xIntercept(L);
+        if (x !== null && inX(x)) { const [px, py] = Core.toPx(v, x, 0); frame.xints.add(px, py, x, 0, L.id); }
+      }
+    }
+    if (S.opts.showYInt && inX(0)) {
+      frame.yints = new PointBin(2.5);
+      for (const L of frame.lines) {
+        if (L.x0 === 0) continue;
+        const y = Core.yIntercept(L);
+        if (y !== null && inY(y)) { const [px, py] = Core.toPx(v, 0, y); frame.yints.add(px, py, 0, y, L.id); }
+      }
+    }
+
+    // Pairwise line–line intersections
+    if (S.opts.showIsect) {
+      const n = frame.lines.length;
+      if (n > MAX_ISECT_LINES) frame.isectSkipped = true;
+      else if (S.interacting && n > 260 && S.frame && S.frame.isects) {
+        frame.isectStale = true;                    // keep panning smooth; recompute when idle
+      } else {
+        const bin = new PointBin(3);
+        const L = frame.lines;
+        // precompute directions
+        const DX = new Float64Array(n), DY = new Float64Array(n);
+        for (let i = 0; i < n; i++) { const d = Core.direction(L[i].m); DX[i] = d[0]; DY[i] = d[1]; }
+        outer:
+        for (let i = 0; i < n; i++) {
+          const A = L[i], ax = DX[i], ay = DY[i];
+          for (let j = i + 1; j < n; j++) {
+            const bx = DX[j], by = DY[j];
+            const cross = ax * by - ay * bx;
+            if (Math.abs(cross) < 1e-10) continue;
+            const B = L[j];
+            const t = ((B.x0 - A.x0) * by - (B.y0 - A.y0) * bx) / cross;
+            const x = A.x0 + t * ax, y = A.y0 + t * ay;
+            if (x < b.xMin || x > b.xMax || y < b.yMin || y > b.yMax) continue;
+            const px = v.W / 2 + (x - v.cx) * v.sx, py = v.H / 2 - (y - v.cy) * v.sy;
+            if (bin.add(px, py, x, y, [A.id, B.id]) < 0) break outer;
+          }
+        }
+        frame.isects = bin;
+      }
+    }
+    return frame;
+  }
+
+  // ------------------------------------------------------------------ drawing
+  let drawQueued = false;
+  function requestDraw() {
+    if (drawQueued) return;
+    drawQueued = true;
+    requestAnimationFrame(() => { drawQueued = false; drawBase(); drawOverlay(); });
+  }
+  let overlayQueued = false;
+  function requestOverlay() {
+    if (overlayQueued) return;
+    overlayQueued = true;
+    requestAnimationFrame(() => { overlayQueued = false; drawOverlay(); });
+  }
+
+  function drawGrid(ctx, v, b) {
+    const C = S.colors;
+    const tx = Core.niceStep(90 / v.sx), ty = Core.niceStep(90 / v.sy);
+    const minor = s => { const m = s / Math.pow(10, Math.floor(Math.log10(s) + 1e-9)); return s / (Math.round(m) === 2 ? 4 : 5); };
+    const mx = minor(tx), my = minor(ty);
+    const vLines = (step, color) => {
+      ctx.beginPath();
+      for (let i = Math.ceil(b.xMin / step); i <= Math.floor(b.xMax / step); i++) { const px = Math.round(v.W / 2 + (i * step - v.cx) * v.sx) + 0.5; ctx.moveTo(px, 0); ctx.lineTo(px, v.H); }
+      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
+    };
+    const hLines = (step, color) => {
+      ctx.beginPath();
+      for (let j = Math.ceil(b.yMin / step); j <= Math.floor(b.yMax / step); j++) { const py = Math.round(v.H / 2 - (j * step - v.cy) * v.sy) + 0.5; ctx.moveTo(0, py); ctx.lineTo(v.W, py); }
+      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
+    };
+    if (mx * v.sx > 7) vLines(mx, C.gridMinor);
+    if (my * v.sy > 7) hLines(my, C.gridMinor);
+    vLines(tx, C.gridMajor); hLines(ty, C.gridMajor);
+
+    // axes
+    const [ox, oy] = Core.toPx(v, 0, 0);
+    ctx.strokeStyle = C.axis; ctx.lineWidth = 1.5; ctx.beginPath();
+    if (oy >= 0 && oy <= v.H) { ctx.moveTo(0, Math.round(oy) + 0.5); ctx.lineTo(v.W, Math.round(oy) + 0.5); }
+    if (ox >= 0 && ox <= v.W) { ctx.moveTo(Math.round(ox) + 0.5, 0); ctx.lineTo(Math.round(ox) + 0.5, v.H); }
+    ctx.stroke();
+    return { tx, ty, ox, oy };
+  }
+
+  function drawTickLabels(ctx, v, b, g) {
+    const C = S.colors;
+    const { tx, ty } = g;
+    const decX = Math.max(0, -Math.floor(Math.log10(tx) + 1e-9)), decY = Math.max(0, -Math.floor(Math.log10(ty) + 1e-9));
+    const lab = (val, dec, step) => (step >= 1e6 || step < 1e-4) ? val.toExponential(1).replace('e+', 'e') : val.toFixed(dec).replace('-', '−');
+    ctx.font = '500 11.5px Inter, system-ui, sans-serif';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3.5; ctx.strokeStyle = C.bg; ctx.fillStyle = C.tick;
+    const axisY = Math.min(v.H - 20, Math.max(4, g.oy + 6));     // pin labels to an edge if axis is off-screen
+    const axisX = Math.min(v.W - 6, Math.max(30, g.ox - 7));
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.beginPath(); ctx.strokeStyle = C.axis; ctx.lineWidth = 1.2;
+    const tickMarks = [];
+    for (let i = Math.ceil(b.xMin / tx); i <= Math.floor(b.xMax / tx); i++) {
+      if (i === 0) continue;
+      const val = Core.clean(i * tx), px = v.W / 2 + (val - v.cx) * v.sx;
+      if (g.oy >= 0 && g.oy <= v.H) { ctx.moveTo(px, g.oy - 4); ctx.lineTo(px, g.oy + 4); }
+      tickMarks.push(['x', px, axisY, lab(val, decX, tx)]);
+    }
+    for (let j = Math.ceil(b.yMin / ty); j <= Math.floor(b.yMax / ty); j++) {
+      if (j === 0) continue;
+      const val = Core.clean(j * ty), py = v.H / 2 - (val - v.cy) * v.sy;
+      if (g.ox >= 0 && g.ox <= v.W) { ctx.moveTo(g.ox - 4, py); ctx.lineTo(g.ox + 4, py); }
+      tickMarks.push(['y', axisX, py, lab(val, decY, ty)]);
+    }
+    ctx.stroke();
+    ctx.lineWidth = 3.5; ctx.strokeStyle = C.bg; ctx.fillStyle = C.tick;
+    for (const [k, x, y, s] of tickMarks) {
+      if (k === 'x') { ctx.textAlign = 'center'; ctx.textBaseline = 'top'; }
+      else { ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; }
+      ctx.strokeText(s, x, y); ctx.fillText(s, x, y);
+    }
+    if (g.ox >= 0 && g.ox <= v.W && g.oy >= 0 && g.oy <= v.H) {
+      ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      ctx.strokeText('0', g.ox - 6, g.oy + 5); ctx.fillText('0', g.ox - 6, g.oy + 5);
+    }
+    // axis names
+    ctx.font = 'italic 600 14px "Cambria Math", "Times New Roman", serif';
+    ctx.fillStyle = C.axis;
+    if (g.oy >= 0 && g.oy <= v.H) { ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.strokeText('x', v.W - 10, g.oy - 6); ctx.fillText('x', v.W - 10, g.oy - 6); }
+    if (g.ox >= 0 && g.ox <= v.W) { ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.strokeText('y', g.ox + 8, 64); ctx.fillText('y', g.ox + 8, 64); }
+  }
+
+  /** Greedy label placement that avoids overlaps. */
+  class Labeler {
+    constructor(ctx, W, H) { this.ctx = ctx; this.W = W; this.H = H; this.rects = []; }
+    hit(r) { return r.x < 0 || r.y < 0 || r.x + r.w > this.W || r.y + r.h > this.H || this.rects.some(q => r.x < q.x + q.w && r.x + r.w > q.x && r.y < q.y + q.h && r.y + r.h > q.y); }
+    place(text, px, py, color, prefer = 0) {
+      const ctx = this.ctx, w = ctx.measureText(text).width + 8, h = 16;
+      const cand = [[6, -h - 4], [-w - 6, -h - 4], [6, 4], [-w - 6, 4]];
+      for (let k = 0; k < 4; k++) {
+        const [ox, oy] = cand[(k + prefer) % 4];
+        const r = { x: px + ox, y: py + oy, w, h };
+        if (this.hit(r)) continue;
+        this.rects.push(r);
+        ctx.fillStyle = S.colors.panel; ctx.globalAlpha = 0.9;
+        roundRect(ctx, r.x, r.y, w, h, 5); ctx.fill();
+        ctx.globalAlpha = 1; ctx.fillStyle = color;
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(text, r.x + 4, r.y + h / 2 + 0.5);
+        return true;
+      }
+      return false;
+    }
+  }
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function dots(ctx, pts, r, color, stroke) {
+    ctx.beginPath();
+    for (const p of pts) { ctx.moveTo(p.px + r, p.py); ctx.arc(p.px, p.py, r, 0, Math.PI * 2); }
+    ctx.fillStyle = color; ctx.fill();
+    if (stroke) { ctx.lineWidth = 1.2; ctx.strokeStyle = stroke; ctx.stroke(); }
+  }
+
+  /** Integrate a solution curve across the visible x-range in both directions. */
+  function solutionPath(x0, y0, hOverride) {
+    const F = S.eq.fn, v = S.view, b = Core.bounds(v);
+    const h = hOverride || STEP_SIZES[S.opts.solStepIdx];
+    const yr = b.yMax - b.yMin, lo = b.yMin - 20 * yr, hi = b.yMax + 20 * yr;
+    const margin = (b.xMax - b.xMin) * 0.05;
+    const fwd = x0 < b.xMax + margin ? Core.rk4(F, x0, y0, h, b.xMax + margin, lo, hi, 50000) : [x0, y0];
+    const bwd = x0 > b.xMin - margin ? Core.rk4(F, x0, y0, h, b.xMin - margin, lo, hi, 50000) : [x0, y0];
+    return { fwd, bwd };
+  }
+  function strokePath(ctx, flat) {
+    const v = S.view;
+    let started = false, lpx = 0, lpy = 0;
+    for (let i = 0; i < flat.length; i += 2) {
+      const [px, py] = Core.toPx(v, flat[i], flat[i + 1]);
+      if (!started) { ctx.moveTo(px, py); started = true; lpx = px; lpy = py; continue; }
+      if (Math.abs(py - lpy) > v.H * 4) { ctx.moveTo(px, py); lpx = px; lpy = py; continue; }   // discontinuity jump
+      if (i + 2 < flat.length && Math.abs(px - lpx) < 0.6 && Math.abs(py - lpy) < 0.6) continue;
+      ctx.lineTo(px, py); lpx = px; lpy = py;
+    }
+  }
+
+  function drawBase() {
+    const ctx = bctx, v = S.view, C = S.colors;
+    ctx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, v.W, v.H);
+    const b = Core.bounds(v);
+    const prev = S.frame;
+    const frame = computeFrame();
+    if (frame.isectStale && prev) frame.isects = null;
+    S.frame = frame;
+    const g = drawGrid(ctx, v, b);
+    const o = S.opts;
+
+    // tangent lines (bucketed by slope colour: a handful of strokes total)
+    if (o.showLines && frame.lines.length) {
+      ctx.lineWidth = o.thickness; ctx.lineCap = 'round';
+      ctx.globalAlpha = o.opacity;
+      if (o.colorBySlope) {
+        const buckets = Array.from({ length: 15 }, () => []);
+        for (const L of frame.lines) buckets[L.bucket].push(L);
+        buckets.forEach((arr, k) => {
+          if (!arr.length) return;
+          ctx.beginPath();
+          for (const L of arr) { ctx.moveTo(L.seg[0], L.seg[1]); ctx.lineTo(L.seg[2], L.seg[3]); }
+          ctx.strokeStyle = S.bucketColors[k]; ctx.stroke();
+        });
+      } else {
+        ctx.beginPath();
+        for (const L of frame.lines) { ctx.moveTo(L.seg[0], L.seg[1]); ctx.lineTo(L.seg[2], L.seg[3]); }
+        ctx.strokeStyle = C.accent; ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // intersections
+    if (frame.isects && frame.isects.pts.length) {
+      const pts = frame.isects.pts, single = [], multi = [];
+      for (const p of pts) (p.n >= 3 ? multi : single).push(p);
+      ctx.globalAlpha = 0.5;
+      if (single.length > 6000) {
+        ctx.fillStyle = C.isect;
+        for (const p of single) ctx.fillRect(p.px - 0.9, p.py - 0.9, 1.8, 1.8);
+      } else dots(ctx, single, 1.4, C.isect);
+      ctx.globalAlpha = 0.9;
+      dots(ctx, multi, 3, C.isect, C.bg);
+      ctx.globalAlpha = 1;
+    }
+
+    // axis intercepts
+    if (frame.xints) dots(ctx, frame.xints.pts, 3, C.xint, C.bg);
+    if (frame.yints) dots(ctx, frame.yints.pts, 3, C.yint, C.bg);
+
+    // anchors
+    if (o.showAnchors && frame.lines.length) {
+      const r = o.anchorSize;
+      ctx.fillStyle = C.anchor;
+      ctx.beginPath();
+      if (frame.lines.length > 2000 && r <= 2) for (const L of frame.lines) ctx.rect(L.px - r, L.py - r, 2 * r, 2 * r);
+      else for (const L of frame.lines) { ctx.moveTo(L.px + r, L.py); ctx.arc(L.px, L.py, r, 0, Math.PI * 2); }
+      ctx.fill();
+    }
+
+    // solution curves on top
+    if (S.eq) {
+      for (const c of S.curves) {
+        const { fwd, bwd } = solutionPath(c.x0, c.y0);
+        for (const [w, col] of [[6, C.bg], [2.75, c.color]]) {
+          ctx.beginPath(); strokePath(ctx, bwd); strokePath(ctx, fwd);
+          ctx.lineWidth = w; ctx.strokeStyle = col; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+          ctx.globalAlpha = w > 4 ? 0.85 : 1; ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        const [px, py] = Core.toPx(v, c.x0, c.y0);
+        ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2);
+        ctx.fillStyle = c.color; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = C.bg; ctx.stroke();
+      }
+    }
+
+    drawTickLabels(ctx, v, b, g);
+
+    // coordinate labels (only when asked for, or when there are only a few)
+    ctx.font = '500 11px Inter, system-ui, sans-serif';
+    const lab = new Labeler(ctx, v.W, v.H);
+    const labelSet = (bin, color, force) => {
+      if (!bin) return;
+      const pts = bin.pts;
+      if (!(force || pts.length <= 6)) return;
+      let placed = 0;
+      for (const p of pts) { if (placed > 180) break; if (lab.place(`(${fmt(p.wx)}, ${fmt(p.wy)})`, p.px, p.py, color)) placed++; }
+    };
+    labelSet(frame.xints, C.xint, o.showIntLabels);
+    labelSet(frame.yints, C.yint, o.showIntLabels);
+    if (frame.isects && frame.isects.pts.length) {
+      const pts = frame.isects.pts;
+      if (o.showIsectLabels || pts.length <= 4) {
+        const sorted = pts.slice().sort((a, b2) => b2.n - a.n);
+        let placed = 0;
+        for (const p of sorted) { if (placed > 150) break; if (lab.place(`(${fmt(p.wx)}, ${fmt(p.wy)})`, p.px, p.py, C.ink2, 2)) placed++; }
+      }
+    }
+
+    updateSidebarInfo(frame);
+    syncViewInputs();
+  }
+
+  function updateSidebarInfo(frame) {
+    const n = frame.lines.length;
+    $('densityOut').textContent = `${densityName(S.opts.density)} · ${n} line${n === 1 ? '' : 's'}`;
+    const note = $('isectNote');
+    if (!S.opts.showIsect) note.textContent = 'Points where two tangent lines cross.';
+    else if (frame.isectSkipped) note.textContent = `Too many lines (${n}) for intersections to be meaningful — lower the density to see them.`;
+    else if (frame.isects) {
+      const k = frame.isects.pts.length;
+      note.textContent = `${k}${frame.isects.full ? '+' : ''} intersection${k === 1 ? '' : 's'} visible. Larger dots mark places where three or more lines meet. Hover a dot for its coordinates.`;
+    }
+    note.classList.toggle('warn', !!frame.isectSkipped && S.opts.showIsect);
+
+    const empty = $('emptyMsg');
+    if (S.eq && n === 0 && frame.undefinedCount > 0) {
+      empty.textContent = 'The slope is undefined at every sampled point in this view. Try panning, zooming out, or a different equation.';
+      empty.classList.remove('hidden');
+    } else empty.classList.add('hidden');
+    const fn = $('fieldNote');
+    fn.textContent = frame.undefinedCount
+      ? `${frame.undefinedCount} point${frame.undefinedCount === 1 ? ' was' : 's were'} skipped because the slope is undefined there (for example, division by zero).`
+      : 'Hover any dot to see its tangent line. Click a dot to pin the details.';
+  }
+  const densityName = d => d <= 2 ? 'Sparse' : d <= 5 ? 'Normal' : d <= 8 ? 'Dense' : 'Very dense';
+
+  // ------------------------------------------------------------------ overlay (hover / pinned)
+  function drawOverlay() {
+    const ctx = octx, v = S.view, C = S.colors;
+    ctx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+    ctx.clearRect(0, 0, v.W, v.H);
+    const target = S.pinned || S.hover;
+    if (!target || !S.eq) { hideTooltip(); return; }
+
+    if (target.kind === 'anchor') {
+      const L = Core.tangentAt(S.eq.fn, target.x0, target.y0);
+      if (!L) { hideTooltip(); return; }
+      // dim everything else
+      ctx.globalAlpha = 0.62; ctx.fillStyle = C.bg; ctx.fillRect(0, 0, v.W, v.H); ctx.globalAlpha = 1;
+
+      if (S.opts.solHover) {
+        const { fwd, bwd } = solutionPath(L.x0, L.y0, 0.02);
+        ctx.beginPath(); strokePath(ctx, bwd); strokePath(ctx, fwd);
+        ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.strokeStyle = C.ink2; ctx.globalAlpha = 0.75; ctx.stroke();
+        ctx.setLineDash([]); ctx.globalAlpha = 1;
+      }
+      drawHighlightedLine(ctx, L, 3);
+      drawSlopeTriangle(ctx, L);
+      drawLineIntercepts(ctx, L, true);
+      const [px, py] = Core.toPx(v, L.x0, L.y0);
+      ctx.beginPath(); ctx.arc(px, py, 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = C.anchor; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = C.bg; ctx.stroke();
+      showAnchorTooltip(L, px, py);
+    } else if (target.kind === 'xint' || target.kind === 'yint' || target.kind === 'isect') {
+      const p = target.p;
+      const lines = p.refs.map(id => S.frame.lines[id]).filter(Boolean);
+      ctx.globalAlpha = 0.5; ctx.fillStyle = C.bg; ctx.fillRect(0, 0, v.W, v.H); ctx.globalAlpha = 1;
+      for (const L of lines.slice(0, 8)) {
+        drawHighlightedLine(ctx, L, 2);
+        ctx.beginPath(); ctx.arc(L.px, L.py, 4.5, 0, Math.PI * 2); ctx.fillStyle = C.anchor; ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = C.bg; ctx.stroke();
+      }
+      const col = target.kind === 'xint' ? C.xint : target.kind === 'yint' ? C.yint : C.isect;
+      ctx.beginPath(); ctx.arc(p.px, p.py, 6, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = C.bg; ctx.stroke();
+      showPointTooltip(target, lines);
+    }
+  }
+  function drawHighlightedLine(ctx, L, w) {
+    const v = S.view;
+    const [px, py] = Core.toPx(v, L.x0, L.y0);
+    const [dx, dy] = Core.direction(L.m);
+    const seg = Core.clipLine(px, py, dx * v.sx, -dy * v.sy, -4, -4, v.W + 4, v.H + 4);
+    if (!seg) return;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(seg[0], seg[1]); ctx.lineTo(seg[2], seg[3]);
+    ctx.lineWidth = w + 4; ctx.strokeStyle = S.colors.bg; ctx.stroke();
+    ctx.lineWidth = w; ctx.strokeStyle = S.opts.colorBySlope ? slopeColor(L.m) : S.colors.accent; ctx.stroke();
+  }
+  function drawSlopeTriangle(ctx, L) {
+    const v = S.view, C = S.colors;
+    const run = Core.niceStep(60 / v.sx);
+    const rise = L.m * run;
+    const [ax, ay] = Core.toPx(v, L.x0, L.y0);
+    const [bx, by] = Core.toPx(v, L.x0 + run, L.y0);
+    const [cx, cy] = Core.toPx(v, L.x0 + run, L.y0 + rise);
+    if (Math.abs(cy - by) > v.H * 3) return;
+    ctx.save();
+    ctx.setLineDash([4, 3]); ctx.lineWidth = 1.5; ctx.strokeStyle = C.ink2;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(cx, cy); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.fillStyle = C.ink2;
+    ctx.lineWidth = 3; ctx.strokeStyle = C.bg; ctx.lineJoin = 'round';
+    const runTxt = `run ${trimNum(run)}`, riseTxt = `rise ${trimNum(rise)}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = rise >= 0 ? 'top' : 'bottom';
+    const ry = by + (rise >= 0 ? 5 : -5);
+    ctx.strokeText(runTxt, (ax + bx) / 2, ry); ctx.fillText(runTxt, (ax + bx) / 2, ry);
+    if (Math.abs(cy - by) > 14) {
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      const my = Math.max(12, Math.min(v.H - 12, (by + cy) / 2));
+      ctx.strokeText(riseTxt, bx + 6, my); ctx.fillText(riseTxt, bx + 6, my);
+    }
+    ctx.restore();
+  }
+  function drawLineIntercepts(ctx, L, label) {
+    const v = S.view, C = S.colors, b = Core.bounds(v);
+    ctx.font = '600 11px Inter, system-ui, sans-serif';
+    const lab = new Labeler(ctx, v.W, v.H);
+    const xi = Core.xIntercept(L), yi = Core.yIntercept(L);
+    const pts = [];
+    if (xi !== null && xi >= b.xMin && xi <= b.xMax && 0 >= b.yMin && 0 <= b.yMax) pts.push([xi, 0, C.xint]);
+    if (yi !== null && 0 >= b.xMin && 0 <= b.xMax && yi >= b.yMin && yi <= b.yMax) pts.push([0, yi, C.yint]);
+    for (const [x, y, col] of pts) {
+      const [px, py] = Core.toPx(v, x, y);
+      ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = C.bg; ctx.stroke();
+      if (label) lab.place(`(${fmt(x)}, ${fmt(y)})`, px, py, col);
+    }
+  }
+
+  // ------------------------------------------------------------------ tooltip
+  function hideTooltip() { tooltip.classList.remove('show', 'pinned'); }
+  function placeTooltip(px, py) {
+    const v = S.view;
+    tooltip.style.left = '0px'; tooltip.style.top = '0px';
+    const w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+    let x = px + 18, y = py + 18;
+    if (x + w > v.W - 10) x = px - w - 18;
+    if (y + h > v.H - 10) y = py - h - 18;
+    x = Math.max(10, Math.min(v.W - w - 10, x)); y = Math.max(10, Math.min(v.H - h - 10, y));
+    tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
+    tooltip.classList.add('show');
+    tooltip.classList.toggle('pinned', !!S.pinned);
+  }
+  const row = (k, tex) => `<div class="tt-row"><span class="tt-k">${k}</span><span class="tt-v">${texHTML(tex)}</span></div>`;
+  let lastTipKey = '';
+  function showAnchorTooltip(L, px, py) {
+    const key = `a|${L.x0}|${L.y0}|${S.eqText}|${!!S.pinned}`;
+    if (key !== lastTipKey) {
+      lastTipKey = key;
+      const xi = Core.xIntercept(L), yi = Core.yIntercept(L);
+      let sub = '';
+      try {
+        const s = Core.toTex(S.eq.ast, { x: L.x0, y: L.y0 });
+        if (s.length < 90) sub = `${s} = `;
+      } catch (e) { /* ignore */ }
+      const b = yi;
+      tooltip.innerHTML =
+        `<div class="tt-title">Anchor point${S.pinned ? '<span class="pin">Pinned · Esc to close</span>' : ''}</div>` +
+        row('Point', ptTex(L.x0, L.y0)) +
+        row('Slope', `m = ${sub}${TF(L.m)}`) +
+        row('Tangent line', pointSlopeTex(L.x0, L.y0, L.m)) +
+        (b !== null ? row('Same line, slope–intercept form', slopeInterceptTex(L.m, b)) : '') +
+        row('x-intercept', xi === null ? (Math.abs(L.y0) < 1e-12 ? '\\text{the line is the }x\\text{-axis}' : '\\text{none (horizontal line)}') : `\\left(${TF(xi)},\\ 0\\right)`) +
+        row('y-intercept', yi === null ? '\\text{none}' : `\\left(0,\\ ${TF(yi)}\\right)`) +
+        (S.opts.solHover ? '<div class="tt-foot">Dashed curve: the solution passing through this point.</div>' : '');
+    }
+    placeTooltip(px, py);
+  }
+  function showPointTooltip(target, lines) {
+    const p = target.p;
+    const key = `${target.kind}|${p.wx}|${p.wy}|${!!S.pinned}`;
+    if (key !== lastTipKey) {
+      lastTipKey = key;
+      const title = target.kind === 'xint' ? 'x-intercept' : target.kind === 'yint' ? 'y-intercept' : 'Intersection';
+      let body = row('Coordinates', ptTex(p.wx, p.wy));
+      if (target.kind === 'isect') {
+        const nLines = Math.max(2, p.refs.length);
+        body += row('Lines meeting here', `${nLines}${p.refs.length >= 12 ? '+' : ''}\\ \\text{tangent lines}`);
+      } else if (p.n > 1) {
+        body += row('Shared by', `${p.n}\\ \\text{tangent lines}`);
+      }
+      lines.slice(0, 2).forEach((L, i) => {
+        body += row(i === 0 ? (lines.length > 1 ? 'Tangent lines' : 'Tangent line') : '&nbsp;', `${pointSlopeTex(L.x0, L.y0, L.m)}`);
+      });
+      if (lines.length > 2) body += `<div class="tt-foot">…and ${lines.length - 2} more highlighted on the graph.</div>`;
+      tooltip.innerHTML = `<div class="tt-title">${title}${S.pinned ? '<span class="pin">Pinned · Esc to close</span>' : ''}</div>` + body;
+    }
+    placeTooltip(p.px, p.py);
+  }
+
+  // ------------------------------------------------------------------ hit testing
+  function hitTest(px, py) {
+    const f = S.frame;
+    if (!f || !S.eq) return null;
+    if (S.opts.showAnchors || S.opts.showLines) {
+      let best = null, bd = Math.max(9, S.opts.anchorSize + 6) ** 2;
+      for (const L of f.lines) {
+        const d = (L.px - px) ** 2 + (L.py - py) ** 2;
+        if (d < bd) { bd = d; best = L; }
+      }
+      if (best) return { kind: 'anchor', x0: best.x0, y0: best.y0 };
+    }
+    for (const [bin, kind] of [[f.xints, 'xint'], [f.yints, 'yint']]) {
+      if (!bin) continue;
+      const p = bin.nearest(px, py, 7);
+      if (p) return { kind, p };
+    }
+    if (f.isects) {
+      const p = f.isects.nearest(px, py, 6);
+      if (p) return { kind: 'isect', p };
+    }
+    return null;
+  }
+  const sameTarget = (a, b) => a && b && a.kind === b.kind && (a.kind === 'anchor' ? a.x0 === b.x0 && a.y0 === b.y0 : a.p === b.p);
+
+  // ------------------------------------------------------------------ readout
+  function updateReadout(px, py) {
+    const ro = $('readout');
+    if (px === null) { ro.innerHTML = '<span>Move over the graph to read slopes</span>'; return; }
+    const [x, y] = Core.toWorld(S.view, px, py);
+    const sx = Core.bounds(S.view);
+    const d = Math.max(2, Math.min(6, 2 - Math.floor(Math.log10((sx.xMax - sx.xMin) / 10))));
+    const f = v => (Math.abs(v) < 0.5 * Math.pow(10, -d) ? 0 : v).toFixed(d).replace('-', '−');
+    let m = S.eq ? S.eq.fn(x, y) : NaN;
+    const ms = isFinite(m) ? fmt(m, 3) : 'undefined';
+    ro.innerHTML = `<span><span class="v">x</span>= <b>${f(x)}</b></span><span><span class="v">y</span>= <b>${f(y)}</b></span><span><span class="v">dy/dx</span>= <b>${ms}</b></span>`;
+  }
+
+  // ------------------------------------------------------------------ pointer interaction
+  const pointers = new Map();
+  let drag = null, pinch = null;
+  const localXY = e => { const r = graphEl.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+
+  graphEl.addEventListener('pointerdown', e => {
+    if (e.target.closest('.zoom-ctl') || e.target.closest('.tooltip.pinned')) return;
+    graphEl.setPointerCapture(e.pointerId);
+    const [x, y] = localXY(e);
+    pointers.set(e.pointerId, { x, y });
+    if (pointers.size === 1) drag = { sx: x, sy: y, lx: x, ly: y, moved: false };
+    else if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) };
+      drag = null;
+    }
+  });
+  graphEl.addEventListener('pointermove', e => {
+    const [x, y] = localXY(e);
+    if (pointers.has(e.pointerId)) {
+      pointers.set(e.pointerId, { x, y });
+      if (pointers.size === 2 && pinch) {
+        const [a, b] = [...pointers.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinch.d > 0) zoomBy(d / pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        pinch.d = d;
+        return;
+      }
+      if (drag) {
+        const dx = x - drag.lx, dy = y - drag.ly;
+        if (!drag.moved && Math.hypot(x - drag.sx, y - drag.sy) > 4) { drag.moved = true; graphEl.classList.add('dragging'); S.hover = null; }
+        if (drag.moved) {
+          S.view = { ...S.view, cx: S.view.cx - dx / S.view.sx, cy: S.view.cy + dy / S.view.sy };
+          drag.lx = x; drag.ly = y;
+          markInteracting();
+          requestDraw();
+        }
+        updateReadout(x, y);
+        return;
+      }
+    }
+    updateReadout(x, y);
+    const h = hitTest(x, y);
+    graphEl.classList.toggle('over-point', !!h && !S.opts.solMode);
+    if (!sameTarget(h, S.hover)) { S.hover = h; if (!S.pinned) requestOverlay(); }
+  });
+  const endPointer = e => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (drag && !drag.moved && e.type === 'pointerup') onClick(drag.sx, drag.sy);
+    if (pointers.size === 0) { drag = null; graphEl.classList.remove('dragging'); }
+  };
+  graphEl.addEventListener('pointerup', endPointer);
+  graphEl.addEventListener('pointercancel', endPointer);
+  graphEl.addEventListener('pointerleave', e => {
+    if (pointers.size) return;
+    S.hover = null; updateReadout(null);
+    if (!S.pinned) requestOverlay();
+  });
+  graphEl.addEventListener('wheel', e => {
+    e.preventDefault();
+    const [x, y] = localXY(e);
+    const unit = e.deltaMode === 1 ? 0.05 : e.deltaMode === 2 ? 1 : 0.0018;
+    zoomBy(Math.exp(-e.deltaY * unit * (e.ctrlKey ? 4 : 1)), x, y);
+  }, { passive: false });
+
+  function onClick(px, py) {
+    if (!S.eq) return;
+    const h = hitTest(px, py);
+    if (S.opts.solMode) {
+      let x0, y0;
+      if (h && h.kind === 'anchor') { x0 = h.x0; y0 = h.y0; }
+      else [x0, y0] = Core.toWorld(S.view, px, py);
+      addCurve(x0, y0);
+      return;
+    }
+    if (h && !sameTarget(h, S.pinned)) S.pinned = h;
+    else S.pinned = null;
+    lastTipKey = '';
+    requestOverlay();
+  }
+
+  // ------------------------------------------------------------------ solution curves
+  function addCurve(x0, y0) {
+    const color = CURVE_COLORS[S.curves.length % CURVE_COLORS.length];
+    S.curves.push({ x0, y0, color });
+    renderCurveList();
+    requestDraw();
+  }
+  function renderCurveList() {
+    const ul = $('curveList');
+    ul.innerHTML = '';
+    S.curves.forEach((c, i) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="sw-color" style="background:${c.color}"></span><span>${texHTML(`y\\left(${T(c.x0)}\\right) = ${T(c.y0)}`)}</span><button aria-label="Remove curve" title="Remove">✕</button>`;
+      li.querySelector('button').addEventListener('click', () => { S.curves.splice(i, 1); renderCurveList(); requestDraw(); });
+      ul.appendChild(li);
+    });
+    $('clearCurves').disabled = !S.curves.length;
+  }
+
+  // ------------------------------------------------------------------ controls
+  const eqInput = $('eqInput');
+  eqInput.addEventListener('input', () => { $('presetSelect').value = ''; setEquation(eqInput.value); });
+  eqInput.addEventListener('keydown', e => { if (e.key === 'Enter') setEquation(eqInput.value, true); });
+  $('mathField').addEventListener('mousedown', e => { if (e.target !== eqInput) { e.preventDefault(); eqInput.focus(); } });
+  $('presetSelect').addEventListener('change', e => {
+    if (!e.target.value) return;
+    eqInput.value = e.target.value;
+    S.curves = []; renderCurveList();
+    setEquation(e.target.value, true);
+  });
+  $('keypad').addEventListener('click', e => {
+    const k = e.target.closest('.key');
+    if (!k) return;
+    const ins = k.dataset.ins, back = +(k.dataset.back || 0);
+    const s = eqInput.selectionStart ?? eqInput.value.length, t = eqInput.selectionEnd ?? s;
+    eqInput.value = eqInput.value.slice(0, s) + ins + eqInput.value.slice(t);
+    const caret = s + ins.length - back;
+    eqInput.focus(); eqInput.setSelectionRange(caret, caret);
+    setEquation(eqInput.value);
+  });
+
+  for (const id of ['xMin', 'xMax', 'yMin', 'yMax']) {
+    $(id).addEventListener('change', applyViewInputs);
+    $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { applyViewInputs(); e.target.blur(); } });
+  }
+  $('resetViewBtn').addEventListener('click', () => resetView());
+  $('zoomReset').addEventListener('click', () => resetView());
+  $('equalBtn').addEventListener('click', equalScale);
+  $('zoomIn').addEventListener('click', () => zoomBy(1.4));
+  $('zoomOut').addEventListener('click', () => zoomBy(1 / 1.4));
+
+  function bindRange(id, key, format, parse = parseFloat) {
+    const el = $(id), out = $(id + 'Out');
+    const update = () => {
+      S.opts[key] = parse(el.value);
+      el.style.setProperty('--pct', ((el.value - el.min) / (el.max - el.min) * 100) + '%');
+      if (out && format) out.textContent = format(S.opts[key]);
+      requestDraw();
+    };
+    el.addEventListener('input', update);
+    update();
+  }
+  bindRange('density', 'density', null, v => parseInt(v, 10));
+  bindRange('thickness', 'thickness', v => v.toFixed(2).replace(/0$/, '') + ' px');
+  bindRange('opacity', 'opacity', v => Math.round(v * 100) + '%');
+  bindRange('anchorSize', 'anchorSize', v => v.toFixed(1) + ' px');
+  bindRange('solStep', 'solStepIdx', i => `h = ${STEP_SIZES[i]}`, v => parseInt(v, 10));
+
+  function bindToggle(id, key, after) {
+    const el = $(id);
+    el.checked = S.opts[key];
+    el.addEventListener('change', () => { S.opts[key] = el.checked; if (after) after(); lastTipKey = ''; requestDraw(); });
+  }
+  bindToggle('showLines', 'showLines');
+  bindToggle('showAnchors', 'showAnchors');
+  bindToggle('colorBySlope', 'colorBySlope', () => $('legend').classList.toggle('hidden', !S.opts.colorBySlope));
+  bindToggle('showXInt', 'showXInt');
+  bindToggle('showYInt', 'showYInt');
+  bindToggle('showIntLabels', 'showIntLabels');
+  bindToggle('showIsect', 'showIsect', () => $('showIsectLabels').closest('.toggle').classList.toggle('disabled', !S.opts.showIsect));
+  bindToggle('showIsectLabels', 'showIsectLabels');
+  bindToggle('solHover', 'solHover');
+  bindToggle('solMode', 'solMode', () => {
+    $('solHint').classList.toggle('hidden', !S.opts.solMode);
+    graphEl.classList.toggle('sol-mode', S.opts.solMode);
+    S.pinned = null;
+  });
+  $('clearCurves').addEventListener('click', () => { S.curves = []; renderCurveList(); requestDraw(); });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && S.pinned) { S.pinned = null; requestOverlay(); }
+  });
+
+  // theme
+  function applyTheme(t) {
+    if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+    readColors(); lastTipKey = ''; requestDraw();
+  }
+  $('themeBtn').addEventListener('click', () => {
+    const dark = getComputedStyle(document.documentElement).getPropertyValue('--graph-bg').trim() !== '#ffffff';
+    const t = dark ? 'light' : 'dark';
+    try { localStorage.setItem('tf-theme', t); } catch (e) { /* ignore */ }
+    applyTheme(t);
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { readColors(); requestDraw(); });
+
+  // ------------------------------------------------------------------ static math rendering (KaTeX)
+  function renderStaticMath() {
+    document.querySelectorAll('[data-tex]').forEach(el => {
+      if (el.classList.contains('key')) { if (window.katex) el.innerHTML = texHTML(el.dataset.tex); return; }
+      renderTex(el, el.dataset.tex, el.dataset.display === '1');
+    });
+    $('legend').querySelector('.ends').innerHTML = '<span>negative</span><span>0</span><span>positive</span>';
+    if (S.eq) setEquation(S.eqText, true);
+    renderCurveList();
+  }
+
+  // ------------------------------------------------------------------ boot
+  try { const t = localStorage.getItem('tf-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) { /* ignore */ }
+  readColors();
+  let saved = null;
+  try { saved = localStorage.getItem('tf-eq'); } catch (e) { /* ignore */ }
+  if (saved) eqInput.value = saved;
+  new ResizeObserver(resize).observe(graphEl);
+  resize();
+  setEquation(eqInput.value, true);
+  renderStaticMath();
+  if (!window.katex) {
+    const kt = document.querySelector('script[src*="katex"]');
+    if (kt) kt.addEventListener('load', renderStaticMath);
+  }
+
+  // expose for debugging / automated tests
+  window.TangentField = { S, Core, setEquation, addCurve, requestDraw, hitTest, computeFrame };
+})();
+</script>
+</body>
+</html>
