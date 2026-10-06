@@ -79,6 +79,18 @@
       });
     }
 
+    /* The reaction animations are findable by what they are about: typing
+     * "thermite" should reach the one that plays it, not only the molecules. */
+    if (ME.reactionsim && ME.reactionsim.REACTIONS) {
+      ME.reactionsim.REACTIONS.forEach((r) => {
+        out.push({
+          kind: 'tool', title: r.name, hash: '#/reactions/' + r.id,
+          sub: 'An animation of ' + r.eq.replace(/->/g, '\u2192'),
+          terms: [r.name, r.id.replace(/-/g, ' '), r.group, r.eq, r.note].join(' '),
+        });
+      });
+    }
+
     if (ME.tools && ME.tools.TOOLS) {
       ME.tools.TOOLS.forEach((t) => {
         out.push({

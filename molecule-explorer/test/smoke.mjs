@@ -63,12 +63,14 @@ await page.waitForTimeout(1200);
 check('page loads with no script errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 check('no network requests attempted on load', attempted.length === 0, attempted.slice(0, 3).join(', '));
 const tabNames = (await page.locator('.nav .tab').allInnerTexts()).join('|');
-check('navigation rendered', await page.locator('.nav .tab').count() >= 9, tabNames);
-/* The order is part of the spec: Balancer and Gas Simulator go immediately
-   after Elements, and Gallery and Search stay at the end. */
+check('navigation rendered', await page.locator('.nav .tab').count() >= 10, tabNames);
+/* The order is part of the spec: the three playable tabs — Balancer, Gas
+   Simulator and Reactions — go immediately after Elements, and Gallery and
+   Search stay at the end. */
 check('the tabs are in the order the app promises',
-  tabNames === 'Learn|Draw|Elements|Balancer|Gas Simulator|Tools|Reference|Gallery|Search', tabNames);
-/* Nine tabs plus the search box must not push the nav onto a second row on a
+  tabNames === 'Learn|Draw|Elements|Balancer|Gas Simulator|Reactions|Tools|Reference|Gallery|Search',
+  tabNames);
+/* Ten tabs plus the search box must not push the nav onto a second row on a
    laptop, which is what dropped the search box below the tabs once. */
 const navFits = await page.evaluate(() => {
   const tabs = document.querySelector('.tabs').getBoundingClientRect();
@@ -390,6 +392,97 @@ check('every scenario preset obeys the gas law too', presetsOk && presetCount >=
 await page.evaluate(() => window.scrollTo(0, 0));
 await page.waitForTimeout(400);
 await page.screenshot({ path: path.join(SHOTS, '10-gas.png') });
+
+/* The animations are findable from the search bar, by the name of the thing
+ * rather than by the name of a molecule in it. */
+await page.fill('.searchbox input', 'thermite');
+await page.waitForTimeout(500);
+await page.keyboard.press('Enter');
+await page.waitForTimeout(600);
+const rxSearchText = await page.locator('#view-search').innerText();
+check('searching for a reaction finds its animation',
+  /Thermite/i.test(rxSearchText), rxSearchText.slice(0, 180));
+await page.locator('#view-search .res', { hasText: 'Thermite' }).first().click();
+await page.waitForTimeout(700);
+check('and clicking it opens the reactions tab on that reaction',
+  (await page.locator('.rx-navbtn.on').innerText()) === 'Thermite',
+  await page.locator('.rx-navbtn.on').innerText().catch(() => 'nothing selected'));
+await page.fill('.searchbox input', '');
+
+/* Reactions */
+await page.locator('.tab[data-view=reactions]').click();
+await page.waitForTimeout(700);
+/* The search check above left this tab on thermite, so say which one. */
+await page.locator('.rx-navbtn', { hasText: 'Natural gas burning' }).click();
+await page.waitForTimeout(500);
+check('the reaction list is there, in groups',
+  (await page.locator('.rx-navbtn').count()) >= 20 && (await page.locator('.rx-group').count()) >= 4,
+  (await page.locator('.rx-navbtn').count()) + ' reactions in '
+    + (await page.locator('.rx-group').count()) + ' groups');
+
+/* Counting painted pixels is the only way to know a canvas drew anything;
+ * a blank one throws nothing and reads as a perfectly fine element. */
+const painted = (sel) => page.evaluate((s) => {
+  const c = document.querySelector(s);
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  let n = 0, minX = 1e9, maxX = -1e9;
+  for (let y = 0; y < c.height; y += 3) for (let x = 0; x < c.width; x += 3) {
+    if (d[(y * c.width + x) * 4 + 3] > 12) { n++; minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+  }
+  return { n: n, spread: (maxX - minX) / c.width };
+}, sel);
+
+const first = await painted('.rx-canvas');
+check('the first reaction draws something', first.n > 200, JSON.stringify(first));
+check('and it is spread across the stage rather than piled in one spot',
+  first.spread > 0.3, 'spread ' + first.spread.toFixed(2));
+
+const eq = await page.locator('.rx-eqtext').innerText();
+check('the balanced equation is shown above it', /CH4\s*\+\s*2O2/.test(eq.replace(/\u2082|\u2084/g, (m) => m === '\u2082' ? '2' : '4')), eq);
+check('and the energy comes from the thermochemistry table',
+  /890/.test(await page.locator('.rx-energy').innerText()),
+  await page.locator('.rx-energy').innerText());
+
+/* Scrub to the middle of the rearrangement and check the picture changed. */
+const setT = (v) => page.evaluate((x) => {
+  const s = document.querySelector('.rx-scrub');
+  s.value = String(Math.round(x * 1000));
+  s.dispatchEvent(new Event('input', { bubbles: true }));
+}, v);
+await setT(0.5);
+await page.waitForTimeout(250);
+const mid = await painted('.rx-canvas');
+check('dragging the scrubber moves the animation', mid.n !== first.n,
+  first.n + ' painted at the start, ' + mid.n + ' in the middle');
+check('and dragging it pauses playback',
+  (await page.locator('.rx-controls .btn-primary').innerText()) === 'Play',
+  await page.locator('.rx-controls .btn-primary').innerText());
+
+await setT(0.68);
+await page.waitForTimeout(250);
+check('the caption follows the phase',
+  /stronger|heat/.test(await page.locator('.rx-caption').innerText()),
+  await page.locator('.rx-caption').innerText());
+
+/* A reaction whose energy the table cannot supply must say so, not imply none. */
+await page.locator('.rx-navbtn', { hasText: 'A precipitate appearing' }).click();
+await page.waitForTimeout(500);
+check('a precipitation reaction draws too',
+  (await painted('.rx-canvas')).n > 150);
+const noE = await page.locator('.rx-energy').innerText();
+check('and says why no energy figure is shown rather than showing none',
+  /No energy figure/.test(noE) && /formation-enthalpy table/.test(noE), noE || '(empty)');
+
+/* Leaving the tab has to stop the loop; an animation running behind a hidden
+ * view is a flat battery with nobody watching. */
+await page.locator('.tab[data-view=tools]').click();
+await page.waitForTimeout(400);
+check('leaving the tab stops the animation',
+  await page.evaluate(() => window.ME.reactionsim.state.raf === null),
+  'raf ' + await page.evaluate(() => String(window.ME.reactionsim.state.raf)));
+await page.locator('.tab[data-view=reactions]').click();
+await page.waitForTimeout(500);
+await page.screenshot({ path: path.join(SHOTS, '12-reactions.png'), fullPage: true });
 
 /* Tools */
 await page.locator('.tab[data-view=tools]').click();

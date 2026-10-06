@@ -20,6 +20,7 @@ What is in it:
 | **Elements** | All 118 elements with shells, orbital diagrams, 3D orbital shapes and properties. |
 | **Balancer** | Balances any equation in exact arithmetic, with the working, an atom tally, a by-hand walkthrough and a try-it-yourself mode. |
 | **Gas Simulator** | Particles with a draggable piston, PV = nRT computed live in whatever units you pick, four graphs and a real-gas comparison. |
+| **Reactions** | 22 reactions animated atom by atom, with a scrubber to stop on the frame where the bonds break. |
 | **Tools** | 20 calculators, every one showing its working, several with worked templates to start from. |
 | **Reference** | 13 tables, each stating where its data came from, and a 49-word glossary. |
 | **Gallery** | 688 molecules grouped by what they are for. |
@@ -318,6 +319,33 @@ blocked, with the reason.
 A gas has three degrees of freedom, not four, so one variable is always
 recomputed from the other three — including at startup, which is how the first
 version came to violate PV = nRT by 1.4% on its opening frame.
+
+**Reactions.** Pick one of 22 reactions and watch the atoms rearrange. Nothing
+here is hand-choreographed, because hand-choreographing twenty reactions means
+twenty chances to draw a molecule that does not exist. The whole animation is
+derived: the equation goes through the balancer for its coefficients, each
+species through OpenChemLib for a real structure with real coordinates, and the
+reaction through the formation enthalpies for the size of the flash at the end.
+A test checks the first of those directly — every species' drawn atoms must
+match its formula, element for element. That check earns its keep: OpenChemLib
+will happily hand a bare `[Al]` three implicit hydrogens, and the first build of
+this animated aluminium hydride under a label reading "aluminium".
+
+Which bonds survive the reaction is computed rather than decided. Each atom on
+the left is matched to an atom of the same element on the right, and a bond
+whose two atoms stay together is drawn unbroken the whole way through; only the
+ones that really break get to fade and turn red. The matching optimises for
+keeping bonds intact, with travel distance as a tie-breaker, which is both
+prettier and closer to the truth than the nearest-atom matching it started as —
+that one tore the acetate group apart in vinegar and baking soda, a group the
+reaction never touches.
+
+What the animation honestly shows is that atoms are conserved and rearranged,
+which is the whole idea of a chemical reaction. What it does not show is
+mechanism: the path each atom takes between its old molecule and its new one is
+drawn, not computed. The page says so rather than letting a pretty animation
+imply more than it knows. Where the enthalpy table cannot supply a number, it
+says which substance is missing instead of quietly showing no energy at all.
 
 **Tools.** 20 calculators, all sharing the engine the lessons and the graders
 use, so an answer here and an answer there can never disagree. Each one shows

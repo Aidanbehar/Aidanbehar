@@ -359,6 +359,13 @@ calculators, 11 reference tables and a 49-word glossary.
   second proton of sulfuric acid and 10⁻⁸ M acid are all the same code. 26
   templates, and a pKa table in Reference as its thirteenth section.
 
+- **Reactions**, a tenth tab and the first thing here built for fun rather
+  than for a syllabus: 22 reactions animated atom by atom, with play, speed,
+  loop and a scrubber for stopping on the frame where the bonds break. Every
+  frame is derived — balancer for the coefficients, OpenChemLib for the
+  structures, formation enthalpies for the flash — and findable from the
+  search bar by name.
+
 ### Bugs found and fixed
 - The Balancer's live preview printed `nullH₂ + nullO₂ → nullH₂O` (reported
   with a screenshot). A species parsed from an equation with no leading number
@@ -387,6 +394,24 @@ calculators, 11 reference tables and a 49-word glossary.
   bar. It only moves the page when the panel top is actually off screen, so
   picking a tool while already at the top is still a no-op, and it follows
   the reader's reduced-motion setting.
+- The reaction player drew iron(III) oxide carrying six hydrogen atoms, because
+  OpenChemLib applies valence rules to a bare `[Fe]` and `[Al]`. Ionic oxides
+  are written as ions now, lone atoms are built directly rather than through
+  SMILES, and a tripwire refuses to draw any structure whose atoms do not match
+  its own formula.
+- Water came out of that layout straight rather than bent, which contradicts a
+  page of Unit 6. Hydrogens on an atom with nothing else attached are now
+  fanned at the angle VSEPR calls for, counting lone pairs — so water is 109.5°
+  and ammonia is pyramidal.
+- The second line of every double bond was drawn four bond-lengths above the
+  molecule: the offset was computed in pixels and applied to coordinates that
+  had not been scaled yet.
+- The atom matching between the two sides chose purely by distance, which tore
+  the acetate group apart in vinegar and baking soda. It now optimises for
+  bonds kept whole, with distance only as a tie-breaker.
+- A canvas label called table salt `ClNa`, the same Hill-order wart as the
+  formation table. Structures are looked up by Hill text; labels use what the
+  reader wrote.
 - `pH 7` printed where `pH 7.00` belonged. pH is not a significant-figures
   quantity — the digits in front of the point are the exponent of a
   concentration — so trimming the trailing zero threw away the part that
@@ -400,8 +425,9 @@ calculators, 11 reference tables and a 49-word glossary.
 
 ### Still open
 Phone and tablet layout is deliberately **not** being done yet, at the user's
-request. The nine tabs now on one row will need either a scrollable tab row or
-a "More" menu before release.
+request. The ten tabs now on one row will need either a scrollable tab row or
+a "More" menu before release — they still fit a laptop, and a test checks that,
+but there is no room left for an eleventh.
 
 ---
 

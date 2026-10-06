@@ -1,0 +1,52 @@
+/* ------------------------------------------------------------- reactions */
+.rx-layout { display: grid; gap: 18px; grid-template-columns: minmax(190px, 230px) minmax(0, 1fr); }
+@media (max-width: 860px) { .rx-layout { grid-template-columns: 1fr; } }
+
+.rx-nav { display: grid; gap: 2px; align-content: start; }
+.rx-group {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-faint); font-weight: 700; padding: 12px 11px 4px;
+}
+.rx-navbtn {
+  text-align: left; cursor: pointer; font: inherit; color: inherit;
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-sm);
+  padding: 7px 11px; font-size: .9rem;
+}
+.rx-navbtn:hover { background: var(--surface-2); }
+.rx-navbtn.on {
+  background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.rx-eq { margin: 2px 0 12px; }
+.rx-eqtext { font-family: var(--font-mono); font-size: 1.05rem; }
+
+.rx-stage {
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface-2); overflow: hidden;
+}
+.rx-canvas { display: block; width: 100%; }
+
+.rx-caption {
+  margin-top: 10px; min-height: 1.4em; font-size: .92rem; color: var(--text-dim);
+}
+
+.rx-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.rx-scrub { flex: 1 1 180px; min-width: 140px; accent-color: var(--accent); }
+.rx-speed { width: auto; }
+.rx-loop { display: flex; align-items: center; gap: 5px; font-size: .85rem; color: var(--text-dim); }
+
+.rx-note { margin-top: 14px; }
+.rx-energy { margin-top: 8px; font-size: .85rem; }
+.rx-badge {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-weight: 600; font-size: .8rem; margin-right: 6px;
+}
+.rx-badge.hot { background: #ffedd5; color: #9a3412; }
+.rx-badge.cold { background: #dbeafe; color: #1e40af; }
+:root[data-theme="dark"] .rx-badge.hot { background: #7c2d12; color: #fed7aa; }
+:root[data-theme="dark"] .rx-badge.cold { background: #1e3a8a; color: #bfdbfe; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .rx-badge.hot { background: #7c2d12; color: #fed7aa; }
+  :root:not([data-theme="light"]) .rx-badge.cold { background: #1e3a8a; color: #bfdbfe; }
+}

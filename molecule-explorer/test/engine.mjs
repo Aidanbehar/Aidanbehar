@@ -1742,6 +1742,213 @@ describe('pH of a mixture', () => {
   });
 });
 
+/* ------------------------------------------------------- the reaction player */
+describe('reaction animations', () => {
+  test('every stored structure holds the atoms its own formula claims', async () => {
+    /* The one check that matters for a table of hand-written SMILES. OpenChemLib
+     * will happily give a bare [Al] three hydrogens, and an animation of
+     * aluminium hydride labelled "aluminium" is exactly the kind of quiet
+     * fiction this project is not allowed to ship. */
+    const bad = await run(() => window.ME.reactionsim.checkStructures());
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('every reaction in the list builds a scene', async () => {
+    const bad = await run(() => window.ME.reactionsim.REACTIONS
+      .map((r) => { const s = window.ME.reactionsim.buildScene(r); return s.ok ? null : [r.id, s.error]; })
+      .filter(Boolean));
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('no atom is created or destroyed on the way across', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.reactionsim.REACTIONS.forEach((r) => {
+        const s = window.ME.reactionsim.buildScene(r);
+        if (!s.ok) { out.push([r.id, s.error]); return; }
+        const count = (atoms) => atoms.reduce((m, a) => { m[a.sym] = (m[a.sym] || 0) + 1; return m; }, {});
+        const l = count(s.left.atoms), p = count(s.right.atoms);
+        Object.keys(l).concat(Object.keys(p)).forEach((k) => {
+          if (l[k] !== p[k]) out.push([r.id, k + ': ' + l[k] + ' in, ' + p[k] + ' out']);
+        });
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('the atom mapping is one-to-one, and never swaps an element', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.reactionsim.REACTIONS.forEach((r) => {
+        const s = window.ME.reactionsim.buildScene(r);
+        if (!s.ok) return;
+        const seen = {};
+        s.map.forEach((to, from) => {
+          if (to < 0) out.push([r.id, 'atom ' + from + ' goes nowhere']);
+          else if (seen[to]) out.push([r.id, 'two atoms land on ' + to]);
+          else if (s.left.atoms[from].sym !== s.right.atoms[to].sym) {
+            /* A carbon that turns into an oxygen would animate beautifully
+             * and be a lie about the one thing this is showing. */
+            out.push([r.id, s.left.atoms[from].sym + ' becomes ' + s.right.atoms[to].sym]);
+          }
+          seen[to] = true;
+        });
+        if (s.map.length !== s.right.atoms.length) out.push([r.id, 'sides are different sizes']);
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('structures come out the shape the chemistry says', async () => {
+    const got = await run(() => {
+      const R = window.ME.reactionsim;
+      const angle = (f, centre) => {
+        const sh = R.shapeOf(f);
+        const c = sh.atoms[centre];
+        const others = sh.atoms.filter((a, i) => i !== centre);
+        const a0 = Math.atan2(others[0].y - c.y, others[0].x - c.x);
+        const a1 = Math.atan2(others[1].y - c.y, others[1].x - c.x);
+        let d = Math.abs(a0 - a1) * 180 / Math.PI;
+        if (d > 180) d = 360 - d;
+        return d;
+      };
+      return {
+        water: angle('H2O', 0),
+        co2: angle('CO2', 1),
+        methaneAtoms: R.shapeOf('CH4').atoms.length,
+        methaneBonds: R.shapeOf('CH4').bonds.length,
+        o2Order: R.shapeOf('O2').bonds[0].order,
+        n2Order: R.shapeOf('N2').bonds[0].order,
+        magnesium: R.shapeOf('Mg').atoms.length,
+        saltPieces: R.shapeOf('NaCl').bonds.length,
+      };
+    });
+    /* Water is bent. The lessons spend a page on why, so an animation that
+     * drew it straight would be contradicting the course. */
+    assert.ok(Math.abs(got.water - 109.5) < 1, 'water came out at ' + got.water + '°');
+    assert.ok(Math.abs(got.co2 - 180) < 1, 'carbon dioxide came out at ' + got.co2 + '°');
+    assert.equal(got.methaneAtoms, 5);
+    assert.equal(got.methaneBonds, 4);
+    assert.equal(got.o2Order, 2, 'oxygen is double bonded');
+    assert.equal(got.n2Order, 3, 'nitrogen is triple bonded');
+    assert.equal(got.magnesium, 1, 'a magnesium atom is one atom, with no hydrogens');
+    assert.equal(got.saltPieces, 0, 'sodium chloride is ions, not a bonded molecule');
+  });
+
+  test('molecules are labelled the way they are written, not in Hill order', async () => {
+    const got = await run(() => {
+      const R = window.ME.reactionsim;
+      const labels = (id) => {
+        const s = R.buildScene(R.REACTIONS.filter((r) => r.id === id)[0]);
+        const out = {};
+        s.left.atoms.concat(s.right.atoms).forEach((a) => { out[a.formula] = true; });
+        return Object.keys(out).sort();
+      };
+      return { silver: labels('silver'), neutralise: labels('neutralise') };
+    });
+    /* Hill order would make these ClNa, NNaO3 and HNaO — all true, and none
+     * of them anything a reader would recognise. */
+    assert.ok(got.silver.indexOf('NaCl') >= 0, got.silver.join(','));
+    assert.ok(got.silver.indexOf('NaNO3') >= 0, got.silver.join(','));
+    assert.ok(got.neutralise.indexOf('NaOH') >= 0, got.neutralise.join(','));
+    assert.ok(got.silver.indexOf('ClNa') < 0, 'Hill order leaked into a label');
+  });
+
+  test('a bond is called unbroken only when both its atoms stay together', async () => {
+    const got = await run(() => {
+      const s = window.ME.reactionsim.buildScene(
+        window.ME.reactionsim.REACTIONS.filter((r) => r.id === 'methane')[0]);
+      const v = window.ME.reactionsim.buildScene(
+        window.ME.reactionsim.REACTIONS.filter((r) => r.id === 'vinegar-soda')[0]);
+      return {
+        methaneSurvivors: s.left.bonds.filter((b) => b.persists).length,
+        methaneTotal: s.left.bonds.length,
+        vinegarSurvivors: v.left.bonds.filter((b) => b.persists).length,
+        vinegarTotal: v.left.bonds.length,
+      };
+    });
+    /* Burning methane takes every bond apart: four C–H and two O=O, and
+     * nothing on the right is a C–H or an O=O. */
+    assert.equal(got.methaneSurvivors, 0, 'combustion should break every bond');
+    assert.equal(got.methaneTotal, 6);
+    /* Vinegar and baking soda is the opposite case — most of the acetate
+     * rides through untouched, and only the ends swap over. */
+    assert.ok(got.vinegarSurvivors > got.vinegarTotal / 2,
+      'most of the acetate should survive: ' + got.vinegarSurvivors + '/' + got.vinegarTotal);
+  });
+
+  test('every atom has a real position at every moment of every reaction', async () => {
+    /* A single NaN puts an atom at the end of the universe and takes its
+     * bonds with it, and canvas fails silently rather than throwing. */
+    const bad = await run(() => {
+      const out = [];
+      window.ME.reactionsim.REACTIONS.forEach((r) => {
+        const s = window.ME.reactionsim.buildScene(r);
+        if (!s.ok) return;
+        for (let step = 0; step <= 40; step++) {
+          const t = step / 40;
+          s.left.atoms.forEach((a, i) => {
+            const p = window.ME.reactionsim.atomAt(s, i, t);
+            if (!isFinite(p.x) || !isFinite(p.y) || Math.abs(p.x) > 60 || Math.abs(p.y) > 60) {
+              out.push([r.id, 'atom ' + i + ' at t=' + t.toFixed(2) + ': ' + p.x + ',' + p.y]);
+            }
+          });
+        }
+      });
+      return out;
+    });
+    assert.deepEqual(bad.slice(0, 6), [], JSON.stringify(bad.slice(0, 6)));
+  });
+
+  test('the animation starts where the reactants are and ends where the products are', async () => {
+    const got = await run(() => {
+      const R = window.ME.reactionsim;
+      const s = R.buildScene(R.REACTIONS.filter((r) => r.id === 'haber')[0]);
+      const at = (t) => s.left.atoms.map((a, i) => R.atomAt(s, i, t));
+      const start = at(0), end = at(1);
+      const off = (list, side, viaMap) => list.reduce((m, p, i) => {
+        const q = viaMap ? side.atoms[s.map[i]] : side.atoms[i];
+        return Math.max(m, Math.hypot(p.x - q.x, p.y - q.y));
+      }, 0);
+      return { startOff: off(start, s.left, false), endOff: off(end, s.right, true) };
+    });
+    assert.ok(got.startOff < 0.08, 'frame one should be the reactants, off by ' + got.startOff);
+    assert.ok(got.endOff < 0.08, 'the last frame should be the products, off by ' + got.endOff);
+  });
+
+  test('the energy shown is the energy the thermochemistry engine computes', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.reactionsim.REACTIONS.forEach((r) => {
+        const s = window.ME.reactionsim.buildScene(r);
+        if (!s.ok) return;
+        const e = window.ME.thermo.reactionEnthalpy(r.eq);
+        if (e.ok && Math.abs(e.deltaH - s.energy) > 1e-9) out.push([r.id, s.energy, e.deltaH]);
+        /* And where there is no number, there is a reason for there being no
+         * number, rather than a silent nothing. */
+        if (!e.ok && !s.energyMissing) out.push([r.id, 'no energy and no explanation']);
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('combustion releases, photosynthesis absorbs', async () => {
+    const got = await run(() => {
+      const R = window.ME.reactionsim;
+      const of = (id) => R.buildScene(R.REACTIONS.filter((r) => r.id === id)[0]).energy;
+      return { methane: of('methane'), photo: of('photosynthesis'), resp: of('respiration'),
+        kiln: of('quicklime') };
+    });
+    assert.ok(got.methane < 0 && Math.abs(got.methane + 890.36) < 0.5);
+    assert.ok(got.photo > 0, 'photosynthesis has to be paid for');
+    assert.ok(Math.abs(got.photo + got.resp) < 0.01, 'and it is exactly respiration backwards');
+    assert.ok(got.kiln > 0, 'a lime kiln has to be heated');
+  });
+});
+
 /* ------------------------------------------------------------ simulations */
 describe('every simulation builds', () => {
   /* The page-render test covers the sims a lesson embeds, and not the ones
@@ -1854,13 +2061,15 @@ describe('the search bar finds more than molecules', () => {
   test('every indexed link actually goes somewhere', async () => {
     const bad = await run(() => {
       const out = [];
-      const views = ['learn', 'draw', 'elements', 'balancer', 'gas', 'tools', 'reference', 'gallery', 'search'];
+      const views = ['learn', 'draw', 'elements', 'balancer', 'gas', 'reactions', 'tools',
+        'reference', 'gallery', 'search'];
       window.ME.siteIndex.all().forEach((e) => {
         const parts = e.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
         if (!parts.length || views.indexOf(parts[0]) < 0) { out.push([e.title, e.hash]); return; }
         if (parts[0] === 'learn' && parts[1] && !window.ME.course.lesson(parts[1])) out.push([e.title, e.hash, 'no such lesson']);
         if (parts[0] === 'tools' && parts[1] && !window.ME.tools.TOOLS.some((t) => t.key === parts[1])) out.push([e.title, e.hash, 'no such tool']);
         if (parts[0] === 'reference' && parts[1] && !window.ME.reference.SECTIONS.some((x) => x.key === parts[1])) out.push([e.title, e.hash, 'no such section']);
+        if (parts[0] === 'reactions' && parts[1] && !window.ME.reactionsim.REACTIONS.some((x) => x.id === parts[1])) out.push([e.title, e.hash, 'no such reaction']);
       });
       return out;
     });

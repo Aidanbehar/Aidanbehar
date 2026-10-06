@@ -6,13 +6,14 @@
   const ME = window.ME;
   const el = ME.el;
 
-  const VIEWS = ['learn', 'draw', 'elements', 'balancer', 'gas', 'tools', 'reference', 'gallery', 'search', 'molecule'];
+  const VIEWS = ['learn', 'draw', 'elements', 'balancer', 'gas', 'reactions', 'tools', 'reference', 'gallery', 'search', 'molecule'];
   const TABS = [
     { k: 'learn', label: 'Learn', icon: 'book' },
     { k: 'draw', label: 'Draw', icon: 'pencil' },
     { k: 'elements', label: 'Elements', icon: 'grid' },
     { k: 'balancer', label: 'Balancer', icon: 'check' },
     { k: 'gas', label: 'Gas Simulator', icon: 'grid' },
+    { k: 'reactions', label: 'Reactions', icon: 'check' },
     { k: 'tools', label: 'Tools', icon: 'pencil' },
     { k: 'reference', label: 'Reference', icon: 'book' },
     { k: 'gallery', label: 'Gallery', icon: 'grid' },
@@ -166,6 +167,9 @@
 
   function setView(name) {
     if (currentView === 'gas' && name !== 'gas' && ME.gassim) ME.gassim.pause();
+    /* Same reason as the gas tab: an animation left running behind a hidden
+     * view is a battery drain with nobody watching it. */
+    if (currentView === 'reactions' && name !== 'reactions' && ME.reactionsim) ME.reactionsim.pause();
     currentView = name;
     VIEWS.forEach((v) => {
       const node = ME.$('#view-' + v);
@@ -224,6 +228,13 @@
       setView('gas');
       ME.gassim.ensureBuilt(ME.$('#view-gas'));
       ME.gassim.resume();
+      return;
+    }
+    if (parts[0] === 'reactions') {
+      setView('reactions');
+      ME.reactionsim.ensureBuilt(ME.$('#view-reactions'));
+      if (parts[1]) ME.reactionsim.show(decodeURIComponent(parts[1]));
+      ME.reactionsim.resume();
       return;
     }
     if (parts[0] === 'tools') {
