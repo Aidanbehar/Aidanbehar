@@ -75,6 +75,7 @@
     { key: 'prefixes', name: 'SI prefixes', render: prefixes },
     { key: 'heats', name: 'Specific heats', render: heats },
     { key: 'formation', name: 'Formation enthalpies', render: formation },
+    { key: 'pka', name: 'Acid and base strengths', render: pkaTable },
     { key: 'colligative', name: 'Freezing and boiling constants', render: colligative },
     { key: 'organic-bp', name: 'Boiling points of small isomers', render: organicBP },
     { key: 'glossary', name: 'Glossary', render: glossary },
@@ -169,6 +170,68 @@
     go.addEventListener('click', () => ME.router.go('#/tools/reaction-energy'));
     body.appendChild(go);
     return card('Formation enthalpies', T.source, body);
+  }
+
+  /* pKa values. One number per substance is enough to work out the pH of that
+   * acid at any concentration, mixed with anything else here, at any point in
+   * a titration — which is why this table is short and the tool built on it
+   * is not. Literature data, and it says so. */
+  function pkaTable() {
+    const T = ME.ref.ACID_BASE;
+    const body = el('div');
+    body.appendChild(el('div', { class: 'callout' },
+      'A pKa is not a fact about one solution. It is the equilibrium constant behind every solution '
+      + 'that substance can make, which is why a single number per acid is enough to answer an '
+      + 'unlimited number of questions about it. Low pKa means the proton leaves easily: every unit '
+      + 'down is ten times more willing to let go.'));
+    body.appendChild(el('p', { class: 'note rf-groupnote' },
+      'For a base the number shown is the pKa of its conjugate acid — what you get once it has taken '
+      + 'a proton. Subtract from 14 for the pKb you may be used to. Strong acids and strong bases '
+      + 'have no pKa at all, because there is no equilibrium left to describe.'));
+
+    T.groups.forEach((g) => {
+      if (g.name === 'Neither') return;
+      body.appendChild(el('h3', { class: 'section-head', text: g.name }));
+      if (g.note) body.appendChild(el('p', { class: 'note rf-groupnote', text: g.note }));
+      const t = el('table', { class: 'rf-table rf-heats' });
+      const head = el('tr');
+      ['Substance', 'Formula', 'pKa', ''].forEach((h, i) =>
+        head.appendChild(el('th', { class: i === 2 ? 'rf-unit' : '', text: h })));
+      t.appendChild(head);
+      g.items.forEach((it) => {
+        const tr = el('tr');
+        tr.appendChild(el('td', { text: it.n }));
+        tr.appendChild(el('td', { html: ME.formulaHTML(it.f) }));
+        tr.appendChild(el('td', { class: 'mono num',
+          text: it.pKa.length ? it.pKa.map((k) => String(k)).join(', ')
+            : (it.kind === 'base' ? 'strong, ' + it.zFull + ' OH⁻ each' : 'strong') }));
+        tr.appendChild(el('td', { class: 'note', text: it.note || '' }));
+        t.appendChild(tr);
+      });
+      body.appendChild(t);
+    });
+
+    body.appendChild(el('h3', { class: 'section-head', text: 'Things you have held' }));
+    body.appendChild(el('p', { class: 'note rf-groupnote' },
+      'Middle of the usual range, and only ever used by the tools to say "about as acidic as". '
+      + 'Real lemons differ.'));
+    const e = el('table', { class: 'rf-table rf-heats' });
+    const eh = el('tr');
+    ['Roughly', 'pH'].forEach((h, i) => eh.appendChild(el('th', { class: i === 1 ? 'rf-unit' : '', text: h })));
+    e.appendChild(eh);
+    T.everyday.forEach(([pH, what]) => {
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: what }));
+      tr.appendChild(el('td', { class: 'mono num', text: pH.toFixed(1) }));
+      e.appendChild(tr);
+    });
+    body.appendChild(e);
+
+    body.appendChild(el('p', { class: 'note rf-src', text: T.source }));
+    const go = el('button', { class: 'btn btn-sm', style: { marginTop: '10px' }, text: 'Open the mixing tool' });
+    go.addEventListener('click', () => ME.router.go('#/tools/mix-ph'));
+    body.appendChild(go);
+    return card('Acid and base strengths', T.source, body);
   }
 
   const St = { built: false, host: null, panel: null };

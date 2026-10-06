@@ -1662,6 +1662,9 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
   font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
   color: var(--text-faint); font-weight: 700;
 }
+/* Some labels cannot be shouted. pH means something specific and PH does not,
+ * so a field that names it opts out of the uppercasing the rest get. */
+.tl-field label.keep-case { text-transform: none; letter-spacing: .03em; font-size: .75rem; }
 .tl-inline { display: flex; gap: 5px; }
 .tl-input, .tl-select, .tl-area {
   font: inherit; font-size: .95rem; padding: 7px 10px; border-radius: var(--r-sm);
@@ -1698,6 +1701,8 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
 .tl-steps li::marker { color: var(--accent); font-weight: 700; }
 .tl-maths {
   margin-top: 5px; font-family: var(--font-mono); font-size: .88rem;
+  /* A step may lay several lines of working out one under the other. */
+  white-space: pre-line;
   background: var(--surface-2); padding: 7px 10px; border-radius: var(--r-sm);
   display: inline-block;
 }
@@ -2414,6 +2419,16 @@ window.ME = window.ME || {};
     const p = sciParts(x, sig);
     return p.mantText + ' × 10^' + p.exp;
   }
+  /* The same thing with the exponent in real superscript characters, for
+   * places that take plain text but are read by a person \u2014 a table cell,
+   * a label \u2014 where "10^-5" looks like source code rather than a number. */
+  const SUPER = { '-': '\u207b', '0': '\u2070', '1': '\u00b9', '2': '\u00b2', '3': '\u00b3',
+    '4': '\u2074', '5': '\u2075', '6': '\u2076', '7': '\u2077', '8': '\u2078', '9': '\u2079' };
+  function sciUnicode(x, sig) {
+    const p = sciParts(x, sig);
+    return p.mantText + ' \u00d7 10' + String(p.exp).split('').map((c) => SUPER[c] || c).join('');
+  }
+
   /* The same thing with a real superscript, for anywhere HTML is allowed. */
   function sciHTML(x, sig) {
     const p = sciParts(x, sig);
@@ -2520,6 +2535,7 @@ window.ME = window.ME || {};
   }
 
   ME.fmt = {
+    sciUnicode,
     CONST, UNITS, convert, canonicalUnit, dimensionOf, unitsFor, unitLabel,
     sigFigs, sigFigsAmbiguous, roundSig,
     fmt, fmtSigned, sciParts, sciText, sciHTML, withUnit, parseQuantity, checkAnswer,
@@ -2748,6 +2764,181 @@ window.ME = window.ME || {};
       { f: 'Ba(OH)2', n: 'Barium hydroxide' },
     ],
     why: 'These come apart completely in water and release every hydroxide they have.',
+  };
+
+  /* ------------------------------- LITERATURE: acid and base strengths */
+  /* What makes this table worth having is that one number per substance is
+   * enough. Give the solver a pKa and it can work out the pH of that acid at
+   * any concentration, mixed with anything else in the table, at any point in
+   * a titration — because the pKa is not a fact about one solution, it is the
+   * equilibrium constant that governs all of them.
+   *
+   * Every species is written the same way, as something that can hold protons
+   * and let them go:
+   *
+   *   zFull — the charge of the form carrying every proton it can hold
+   *   pKa   — one per proton it can lose, strongest first
+   *
+   * A strong acid has no pKa here at all: hydrochloric acid in water is
+   * chloride, full stop, so chloride is written as a charge of −1 that never
+   * changes. A base is the same idea read backwards — ammonium is a +1 that
+   * can lose a proton at pKa 9.25, and what is left is ammonia. That one
+   * convention means the pH solver needs no cases.
+   *
+   * Values are for 25 °C. They are literature values: pKa data exists in
+   * PubChem only as unstructured text, so unlike the ion table these cannot
+   * be checked against anything free and machine-readable, and the app says
+   * so rather than implying a verification that did not happen.
+   */
+  const ACID_BASE_GROUPS = [
+    {
+      name: 'Strong acids',
+      note: 'Every molecule hands its proton over. There is no equilibrium left to write a pKa about, which is exactly what "strong" means.',
+      items: [
+        { id: 'hydrochloric-acid', f: 'HCl', n: 'Hydrochloric acid', kind: 'acid', strong: true, zFull: -1, pKa: [],
+          note: 'Stomach acid, and the one every textbook problem uses.' },
+        { id: 'nitric-acid', f: 'HNO3', n: 'Nitric acid', kind: 'acid', strong: true, zFull: -1, pKa: [] },
+        { id: 'hydrobromic-acid', f: 'HBr', n: 'Hydrobromic acid', kind: 'acid', strong: true, zFull: -1, pKa: [] },
+        { id: 'hydroiodic-acid', f: 'HI', n: 'Hydroiodic acid', kind: 'acid', strong: true, zFull: -1, pKa: [] },
+        { id: 'perchloric-acid', f: 'HClO4', n: 'Perchloric acid', kind: 'acid', strong: true, zFull: -1, pKa: [] },
+        { id: 'sulfuric-acid', f: 'H2SO4', n: 'Sulfuric acid', kind: 'acid', strong: true, zFull: -1, pKa: [1.92],
+          note: 'Strong for its first proton only. The second comes off with pKa 1.92, which is why 0.1 M sulfuric acid is pH 0.96 and not 0.70.' },
+      ],
+    },
+    {
+      name: 'Weak acids',
+      note: 'Most of the molecules keep their proton. The pKa says how reluctant they are: every unit higher is ten times more reluctant.',
+      items: [
+        { id: 'sulfurous-acid', f: 'H2SO3', n: 'Sulfurous acid', kind: 'acid', zFull: 0, pKa: [1.81, 6.97],
+          note: 'What sulfur dioxide becomes in rain.' },
+        { id: 'oxalic-acid', f: 'H2C2O4', n: 'Oxalic acid', kind: 'acid', zFull: 0, pKa: [1.25, 4.27],
+          note: 'In rhubarb leaves, and why they are poisonous.' },
+        { id: 'phosphoric-acid', f: 'H3PO4', n: 'Phosphoric acid', kind: 'acid', zFull: 0, pKa: [2.15, 7.20, 12.35],
+          note: 'The tang in cola.' },
+        { id: 'chloroacetic-acid', f: 'C2H3ClO2', n: 'Chloroacetic acid', kind: 'acid', zFull: 0, pKa: [2.87],
+          note: 'Acetic acid with one chlorine added — and a hundred times stronger for it.' },
+        { id: 'citric-acid', f: 'C6H8O7', n: 'Citric acid', kind: 'acid', zFull: 0, pKa: [3.13, 4.76, 6.40],
+          note: 'Lemons.' },
+        { id: 'hydrofluoric-acid', f: 'HF', n: 'Hydrofluoric acid', kind: 'acid', zFull: 0, pKa: [3.17],
+          note: 'Weak, and still able to dissolve glass. Strength and danger are different axes.' },
+        { id: 'nitrous-acid', f: 'HNO2', n: 'Nitrous acid', kind: 'acid', zFull: 0, pKa: [3.35] },
+        { id: 'aspirin', f: 'C9H8O4', n: 'Aspirin', kind: 'acid', zFull: 0, pKa: [3.49],
+          note: 'Acetylsalicylic acid — the "acid" in the name is this proton.' },
+        { id: 'formic-acid', f: 'HCOOH', n: 'Formic acid', kind: 'acid', zFull: 0, pKa: [3.75],
+          note: 'What an ant sting injects.' },
+        { id: 'lactic-acid', f: 'C3H6O3', n: 'Lactic acid', kind: 'acid', zFull: 0, pKa: [3.86],
+          note: 'Sour milk, and aching muscles.' },
+        { id: 'benzoic-acid', f: 'C7H6O2', n: 'Benzoic acid', kind: 'acid', zFull: 0, pKa: [4.20],
+          note: 'A food preservative, because mould cannot cope with it.' },
+        { id: 'ascorbic-acid', f: 'C6H8O6', n: 'Ascorbic acid', kind: 'acid', zFull: 0, pKa: [4.17, 11.6],
+          note: 'Vitamin C.' },
+        { id: 'acetic-acid', f: 'CH3COOH', n: 'Acetic acid', kind: 'acid', zFull: 0, pKa: [4.76],
+          note: 'Vinegar is about 0.8 M of this. The pKa every course uses as its example.' },
+        { id: 'propanoic-acid', f: 'C3H6O2', n: 'Propanoic acid', kind: 'acid', zFull: 0, pKa: [4.87] },
+        { id: 'butanoic-acid', f: 'C4H8O2', n: 'Butanoic acid', kind: 'acid', zFull: 0, pKa: [4.82],
+          note: 'Rancid butter, and parmesan.' },
+        { id: 'carbonic-acid', f: 'H2CO3', n: 'Carbonic acid', kind: 'acid', zFull: 0, pKa: [6.35, 10.33],
+          note: 'Dissolved CO₂. It is why fizzy drinks and rainwater are both mildly acidic.' },
+        { id: 'hydrosulfuric-acid', f: 'H2S', n: 'Hydrosulfuric acid', kind: 'acid', zFull: 0, pKa: [7.05, 12.9],
+          note: 'The second pKa is poorly pinned down; sources put it anywhere from 12 to 19.' },
+        { id: 'hypochlorous-acid', f: 'HOCl', n: 'Hypochlorous acid', kind: 'acid', zFull: 0, pKa: [7.53],
+          note: 'The part of bleach that actually kills things — and only while it keeps its proton.' },
+        { id: 'hydrocyanic-acid', f: 'HCN', n: 'Hydrocyanic acid', kind: 'acid', zFull: 0, pKa: [9.21] },
+        { id: 'boric-acid', f: 'H3BO3', n: 'Boric acid', kind: 'acid', zFull: 0, pKa: [9.24],
+          note: 'Mild enough for eyewash.' },
+        { id: 'phenol', f: 'C6H6O', n: 'Phenol', kind: 'acid', zFull: 0, pKa: [9.99],
+          note: 'An alcohol acidic enough to be called an acid, because the ring shares out the charge left behind.' },
+      ],
+    },
+    {
+      name: 'Strong bases',
+      note: 'Soluble metal hydroxides. They do not make hydroxide by reacting with water — they simply contain it, and dissolving sets it free.',
+      items: [
+        { id: 'lithium-hydroxide', f: 'LiOH', n: 'Lithium hydroxide', kind: 'base', strong: true, zFull: 1, pKa: [] },
+        { id: 'sodium-hydroxide', f: 'NaOH', n: 'Sodium hydroxide', kind: 'base', strong: true, zFull: 1, pKa: [],
+          note: 'Drain cleaner, and the base every textbook problem uses.' },
+        { id: 'potassium-hydroxide', f: 'KOH', n: 'Potassium hydroxide', kind: 'base', strong: true, zFull: 1, pKa: [] },
+        { id: 'rubidium-hydroxide', f: 'RbOH', n: 'Rubidium hydroxide', kind: 'base', strong: true, zFull: 1, pKa: [] },
+        { id: 'caesium-hydroxide', f: 'CsOH', n: 'Caesium hydroxide', kind: 'base', strong: true, zFull: 1, pKa: [] },
+        { id: 'calcium-hydroxide', f: 'Ca(OH)2', n: 'Calcium hydroxide', kind: 'base', strong: true, zFull: 2, pKa: [],
+          note: 'Two hydroxides per formula, so it neutralises twice as much acid per mole. Barely soluble though — saturated limewater is only about 0.02 M.' },
+        { id: 'strontium-hydroxide', f: 'Sr(OH)2', n: 'Strontium hydroxide', kind: 'base', strong: true, zFull: 2, pKa: [] },
+        { id: 'barium-hydroxide', f: 'Ba(OH)2', n: 'Barium hydroxide', kind: 'base', strong: true, zFull: 2, pKa: [] },
+      ],
+    },
+    {
+      name: 'Weak bases',
+      note: 'These have no hydroxide of their own. They make it by taking a proton off water and leaving the OH⁻ behind. The pKa shown is the conjugate acid’s; pKb = 14 − pKa.',
+      items: [
+        { id: 'aniline', f: 'C6H5NH2', n: 'Aniline', kind: 'base', zFull: 1, pKa: [4.63],
+          note: 'Barely a base at all: the ring pulls the nitrogen’s lone pair away from the job.' },
+        { id: 'pyridine', f: 'C5H5N', n: 'Pyridine', kind: 'base', zFull: 1, pKa: [5.23] },
+        { id: 'hydroxylamine', f: 'NH2OH', n: 'Hydroxylamine', kind: 'base', zFull: 1, pKa: [5.96] },
+        { id: 'hydrazine', f: 'N2H4', n: 'Hydrazine', kind: 'base', zFull: 1, pKa: [8.10] },
+        { id: 'ammonia', f: 'NH3', n: 'Ammonia', kind: 'base', zFull: 1, pKa: [9.25],
+          note: 'Household cleaner, and the weak base every course uses as its example.' },
+        { id: 'ethanolamine', f: 'C2H7NO', n: 'Ethanolamine', kind: 'base', zFull: 1, pKa: [9.50] },
+        { id: 'trimethylamine', f: 'C3H9N', n: 'Trimethylamine', kind: 'base', zFull: 1, pKa: [9.80],
+          note: 'The smell of old fish.' },
+        { id: 'methylamine', f: 'CH3NH2', n: 'Methylamine', kind: 'base', zFull: 1, pKa: [10.64] },
+        { id: 'ethylamine', f: 'C2H5NH2', n: 'Ethylamine', kind: 'base', zFull: 1, pKa: [10.75] },
+        { id: 'dimethylamine', f: '(CH3)2NH', n: 'Dimethylamine', kind: 'base', zFull: 1, pKa: [10.73] },
+      ],
+    },
+    {
+      name: 'Neither',
+      note: 'For diluting something, or for seeing what a given pH does when it meets something else.',
+      items: [
+        { id: 'water', f: 'H2O', n: 'Water, nothing in it', kind: 'neutral', zFull: 0, pKa: [],
+          note: 'Water is not a bystander — it is the source of every H⁺ and OH⁻ in the sum — but it adds no solute of its own.' },
+        { id: 'ph', f: '', n: 'A pH I will type', kind: 'ph', zFull: 0, pKa: [],
+          note: 'Treated as a strong acid or base at that pH, because a pH on its own cannot tell you whether there is a reservoir of undissociated acid waiting behind it.' },
+      ],
+    },
+  ];
+
+  /* Rough pH of things a reader has actually held. Ranges in real life \u2014
+   * lemons differ, stomachs differ \u2014 so these are the middle of the usual
+   * range and are only ever used to say "about as acidic as", never as data. */
+  const EVERYDAY_PH = [
+    [0.5, 'battery acid'], [1.5, 'stomach acid'], [2.3, 'lemon juice'],
+    [2.5, 'cola'], [2.9, 'vinegar'], [3.5, 'orange juice'], [4.3, 'tomato juice'],
+    [5.0, 'black coffee'], [5.5, 'rainwater'], [6.6, 'milk'], [7.0, 'pure water'],
+    [7.4, 'blood'], [8.1, 'seawater'], [8.4, 'baking soda in water'],
+    [9.5, 'hand soap'], [11.5, 'household ammonia'], [12.5, 'bleach'],
+    [13.5, 'drain cleaner'],
+  ];
+
+  const ACID_BASE = {
+    source: 'pKa values at 25 \u00b0C. Literature data \u2014 pKa appears in PubChem only as unstructured text, so unlike the ion table these cannot be checked against a free machine-readable source, and are stated as learned rather than verified.',
+    groups: ACID_BASE_GROUPS,
+    /* Flat lookup, built once on first use. Nothing here needs the formula
+     * parser, but keeping to the same lazy pattern as the formation table
+     * costs nothing and removes one more way for build order to bite. */
+    byId: null,
+    get(id) {
+      if (!ACID_BASE.byId) {
+        ACID_BASE.byId = {};
+        ACID_BASE_GROUPS.forEach((g) => g.items.forEach((it) => {
+          ACID_BASE.byId[it.id] = it;
+        }));
+      }
+      return ACID_BASE.byId[id] || null;
+    },
+    all() {
+      return ACID_BASE_GROUPS.reduce((out, g) => out.concat(g.items), []);
+    },
+    everyday: EVERYDAY_PH,
+    /* The closest everyday thing, but only when it is genuinely close. A
+     * comparison half a pH unit out is a factor of three in acidity, which
+     * is not a comparison, it is a wrong statement. */
+    nearest(pH) {
+      let best = null;
+      EVERYDAY_PH.forEach((row) => {
+        if (!best || Math.abs(row[0] - pH) < Math.abs(best[0] - pH)) best = row;
+      });
+      return best && Math.abs(best[0] - pH) <= 0.35 ? best[1] : null;
+    },
   };
 
   /* ------------------------------------- LITERATURE: specific heats */
@@ -3222,7 +3413,7 @@ window.ME = window.ME || {};
   ME.ref = {
     setIons, get ions() { return IONS; }, ionByName, ionByFormula,
     typicalCharge, ideName, IDE_STEM, LATIN, FIXED_D_BLOCK,
-    SOLUBILITY, ACTIVITY, moreReactive, STRONG_ACIDS, STRONG_BASES,
+    SOLUBILITY, ACTIVITY, moreReactive, STRONG_ACIDS, STRONG_BASES, ACID_BASE,
     SPECIFIC_HEAT, LATENT, COLLIGATIVE, ORGANIC_BP, boilingPoint, FORMATION, PREFIXES,
     elementName, elementNameLower, SPELLING,
   };
@@ -6528,6 +6719,305 @@ window.ME = window.ME || {};
   }
 
   ME.thermo = { reactionEnthalpy, energyFor, compare, times, over };
+})();
+
+
+/* ================= 23-calc-ph.js ================= */
+/* pH of a mixture.
+ *
+ * The temptation here is a formula per case: one for strong + strong, one for
+ * strong acid with weak base, one for a buffer, one for an equivalence point.
+ * That is how textbooks teach it, and it is how a calculator ends up quietly
+ * wrong at the seams — the buffer formula does not know what to do when the
+ * base runs out, and the equivalence-point formula does not know it is one
+ * drop early.
+ *
+ * So there are no cases here. There is one equation, and it is the one
+ * physics actually enforces: a beaker has no net charge.
+ *
+ *   [H⁺] − [OH⁻] + Σ (what each dissolved thing contributes) = 0
+ *
+ * Every substance is described the same way — the charge of its fully
+ * protonated form, and a pKa for each proton it can lose — so its average
+ * charge is a function of [H⁺] alone. Chloride is a −1 that never changes.
+ * Acetic acid is a 0 that becomes −1 as the pH climbs past 4.76. Ammonium is
+ * a +1 that becomes 0 past 9.25. Put the terms in, and the left-hand side
+ * rises monotonically with [H⁺]: below the answer it is negative, above it is
+ * positive, so bisection finds the one root it has and cannot miss it.
+ *
+ * Buffers, equivalence points, half-equivalence, the second proton of
+ * sulfuric acid, 10⁻⁸ M hydrochloric acid — none of those is a case in this
+ * file. They are all the same equation with different numbers in it, which is
+ * the honest reason they behave the way they do.
+ *
+ * Assumptions, stated because they are real: 25 °C, so Kw = 1.0 × 10⁻¹⁴ and
+ * neutral is 7.00; and ideal behaviour, meaning ions are treated as not
+ * noticing each other. Above about 0.1 M that second one starts to show, and
+ * the tool says so rather than printing four figures it has not earned.
+ */
+(function () {
+  'use strict';
+  const ME = window.ME;
+  const Kw = ME.fmt.CONST.Kw;
+
+  /* The average charge one mole of a species carries at this [H⁺].
+   *
+   * β values are the running products of the Ka's, so the fraction in the
+   * form that has lost k protons is (βk / hᵏ) over the sum of all of them.
+   * With no pKa at all the sum is just 1 and the charge is a constant, which
+   * is how a spectator ion falls out of the same expression as a triprotic
+   * acid rather than needing its own branch. */
+  function averageCharge(species, h) {
+    const pKa = species.pKa || [];
+    if (!pKa.length) return species.zFull;
+    let beta = 1, denom = 1, weighted = 0;
+    for (let k = 1; k <= pKa.length; k++) {
+      beta *= Math.pow(10, -pKa[k - 1]);
+      const term = beta / Math.pow(h, k);
+      denom += term;
+      weighted += k * term;
+    }
+    return species.zFull - weighted / denom;
+  }
+
+  /* Net charge per litre. Zero at the true pH, negative below it, positive
+   * above — strictly increasing in h, which is what makes bisection safe. */
+  function netCharge(mix, h) {
+    let q = h - Kw / h;
+    mix.forEach((s) => { q += s.C * averageCharge(s, h); });
+    return q;
+  }
+
+  /* pH from a list of { C, zFull, pKa }. Bisection over pH rather than over
+   * [H⁺], because pH is the scale the answer lives on: 60 halvings of a
+   * 20-unit window land far past any precision the chemistry supports. */
+  function solve(mix) {
+    let lo = -2, hi = 16;
+    for (let i = 0; i < 80; i++) {
+      const mid = (lo + hi) / 2;
+      /* Net charge falls as pH rises, so the sign test is the other way up. */
+      if (netCharge(mix, Math.pow(10, -mid)) > 0) lo = mid; else hi = mid;
+    }
+    const pH = (lo + hi) / 2;
+    const h = Math.pow(10, -pH);
+    return { pH: pH, H: h, OH: Kw / h, pOH: 14 - pH };
+  }
+
+  /* --------------------------------------------------------- the solutions */
+  /* One beaker before mixing: a substance from the table at a molarity, or a
+   * pH typed straight in. */
+  function solution(spec) {
+    const litres = spec.litres;
+    /* Zero is allowed. "Add nothing to it" is a real question, and it is how
+     * a reader asks this tool for the pH of a single solution. */
+    if (!(litres >= 0)) return { ok: false, error: 'A volume cannot be negative.' };
+
+    if (spec.id === 'water') return { ok: true, litres: litres, species: [], label: 'water' };
+
+    if (spec.id === 'ph') {
+      if (spec.pH === null || spec.pH === undefined || !isFinite(spec.pH)) {
+        return { ok: false, error: 'Give a pH for the solution you said you would type one for.' };
+      }
+      const h = Math.pow(10, -spec.pH);
+      /* The concentration of strong acid (or base) that would sit at exactly
+       * this pH, read straight off the same charge balance. At pH 7 it comes
+       * out as zero, which is right: that is water. */
+      const excess = h - Kw / h;
+      const species = Math.abs(excess) < 1e-18 ? []
+        : [{ C: Math.abs(excess), zFull: excess > 0 ? -1 : 1, pKa: [],
+            name: excess > 0 ? 'strong acid' : 'strong base' }];
+      return { ok: true, litres: litres, species: species, assumedStrong: true,
+        label: 'something at pH ' + ME.fmt.fmt(spec.pH, 3) };
+    }
+
+    const sub = ME.ref.ACID_BASE.get(spec.id);
+    if (!sub) return { ok: false, error: 'I do not know a substance called ' + spec.id + '.' };
+    if (!(spec.molarity > 0)) {
+      return { ok: false, error: 'Give ' + sub.n + ' a molarity greater than zero.' };
+    }
+    return { ok: true, litres: litres, substance: sub, label: sub.n,
+      species: [{ C: spec.molarity, zFull: sub.zFull, pKa: sub.pKa, name: sub.n }] };
+  }
+
+  /* ------------------------------------------------------------- the mixing */
+  function mix(specA, specB) {
+    const a = solution(specA), b = solution(specB);
+    if (!a.ok) return a;
+    if (!b.ok) return b;
+
+    const total = a.litres + b.litres;
+    if (!(total > 0)) return { ok: false, error: 'One of the two volumes has to be more than zero.' };
+    /* Mixing dilutes everything by the same factor it always did; the pH is
+     * what changes unevenly, not the amounts. */
+    const mixed = [];
+    [a, b].forEach((sol) => sol.species.forEach((s) => {
+      mixed.push({ C: s.C * sol.litres / total, zFull: s.zFull, pKa: s.pKa,
+        name: s.name, moles: s.C * sol.litres });
+    }));
+
+    const before = { a: a.species.length ? solve(a.species) : solve([]),
+      b: b.species.length ? solve(b.species) : solve([]) };
+    const after = solve(mixed);
+
+    return { ok: true, a: a, b: b, total: total, mixed: mixed,
+      pHa: before.a.pH, pHb: before.b.pH,
+      pH: after.pH, H: after.H, OH: after.OH, pOH: after.pOH };
+  }
+
+  /* --------------------------------------------------------- what is in there */
+  /* How much of a weak species is in each protonation state at the answer.
+   * This is where a reader sees that a buffer is not a special substance, it
+   * is just an acid caught halfway. */
+  function speciation(species, h) {
+    const pKa = species.pKa || [];
+    if (!pKa.length) return null;
+    let beta = 1;
+    const terms = [1];
+    for (let k = 1; k <= pKa.length; k++) {
+      beta *= Math.pow(10, -pKa[k - 1]);
+      terms.push(beta / Math.pow(h, k));
+    }
+    const sum = terms.reduce((x, y) => x + y, 0);
+    return terms.map((t, k) => ({ lost: k, fraction: t / sum }));
+  }
+
+  /* ------------------------------------------------------- saying why */
+  /* Everything below decides what the reader is TOLD. None of it decides the
+   * answer — that came out of the charge balance before any of this ran. A
+   * classifier that steers the arithmetic is a classifier that can be wrong
+   * about the arithmetic; this one can only be wrong about the wording, and
+   * the wording is checked against the number it is describing. */
+
+  /* How many protons this substance can hand over, and how many it can take.
+   * Both fall out of the same two fields: a chloride cannot be protonated,
+   * ammonia can take exactly one, sulfuric acid can give two. */
+  function protonsGiven(s) { return Math.max(0, -s.zFull + (s.pKa || []).length); }
+  function protonsTaken(s) { return Math.max(0, s.zFull); }
+
+  const f = (x, n) => ME.fmt.fmt(x, n || 4);
+  /* pH always gets two decimal places, never significant figures. The digits
+   * in front of the point are the exponent of a concentration, not a measured
+   * quantity — pH 2.00 is two significant figures, not three — so trimming a
+   * trailing zero off pH 7.00 would be throwing away the part that counts. */
+  const pHText = (x) => (Math.abs(x) < 0.005 ? 0 : x).toFixed(2);
+  /* Concentrations here run from molar down to 10⁻⁹, so small ones need
+   * scientific notation — with a real superscript, because "10^-6" in the
+   * middle of a sentence reads as source code rather than as a number. */
+  const conc = (x) => (x !== 0 && Math.abs(x) < 1e-3 ? ME.fmt.sciUnicode(x, 4) : f(x, 4));
+
+  function describe(r) {
+    const steps = [];
+    const acidMmol = r.mixed.reduce((t, s) => t + s.moles * protonsGiven(s), 0) * 1000;
+    const baseMmol = r.mixed.reduce((t, s) => t + s.moles * protonsTaken(s), 0) * 1000;
+    const weak = r.mixed.filter((s) => (s.pKa || []).length);
+    const strongOnly = !weak.length;
+
+    steps.push({ text: 'Start with what is in each beaker, in moles rather than in pH. '
+      + 'Moles are the thing that survives mixing — pH is not, because pH is a concentration '
+      + 'and both concentrations are about to change.' });
+
+    const lines = [];
+    [r.a, r.b].forEach((sol, i) => {
+      const tag = i === 0 ? 'A' : 'B';
+      sol.species.forEach((s) => {
+        lines.push(tag + ': ' + conc(s.C) + ' mol/L × ' + f(sol.litres * 1000, 4) + ' mL = '
+          + conc(s.C * sol.litres * 1000) + ' mmol of ' + s.name);
+      });
+      if (!sol.species.length) lines.push(tag + ': ' + f(sol.litres * 1000, 4) + ' mL of water, nothing dissolved');
+    });
+    steps.push({ text: 'On its own, A sits at pH ' + pHText(r.pHa) + ' and B at pH ' + pHText(r.pHb) + '.',
+      maths: lines.join('\n') });
+
+    steps.push({ text: 'Mixing gives ' + f(r.total * 1000, 4) + ' mL in total, so every one of those '
+      + 'amounts is now spread through a bigger volume. That dilution alone moves the pH, before '
+      + 'anything has reacted with anything.' });
+
+    if (acidMmol > 0 && baseMmol > 0) {
+      const short = Math.min(acidMmol, baseMmol);
+      const left = Math.abs(acidMmol - baseMmol);
+      steps.push({ text: 'There is acid on one side and base on the other, so the first thing that '
+        + 'happens is neutralisation: H⁺ meets OH⁻ and becomes water. The acid here can supply '
+        + f(acidMmol, 4) + ' mmol of protons in total and the base can absorb ' + f(baseMmol, 4) + ' mmol, '
+        + (left < 1e-9 * Math.max(acidMmol, 1)
+          ? 'which is a dead heat — they cancel exactly.'
+          : 'so ' + f(short, 4) + ' mmol cancels and ' + f(left, 4) + ' mmol of '
+            + (acidMmol > baseMmol ? 'acid' : 'base') + ' is left over.') });
+    } else if (r.mixed.length) {
+      const both = acidMmol > 0 ? 'acids' : baseMmol > 0 ? 'bases' : null;
+      steps.push({ text: both
+        ? 'These are both ' + both + ', so there is nothing here for a neutralisation to do. '
+          + 'The two just pool, and each one is diluted by the other — which is why the answer comes '
+          + 'out close to the stronger of the two rather than between them.'
+        : 'Nothing in here is an acid or a base, so the pH is water\u2019s own.' });
+    }
+
+    /* Is there a buffer? Not asked as "did a weak acid meet a strong base",
+     * which would miss half the ways one can arise, but read off the answer:
+     * a buffer is simply a weak acid caught with a real amount of both its
+     * forms present at once. */
+    let buffer = null;
+    weak.forEach((s) => {
+      const sp = speciation(s, r.H);
+      for (let k = 0; k + 1 < sp.length; k++) {
+        if (sp[k].fraction > 0.1 && sp[k + 1].fraction > 0.1) {
+          buffer = { name: s.name, pKa: s.pKa[k], acid: sp[k].fraction, base: sp[k + 1].fraction };
+        }
+      }
+    });
+
+    if (buffer) {
+      const ratio = buffer.base / buffer.acid;
+      steps.push({ text: 'What is left is a buffer, and it is worth seeing why rather than being '
+        + 'told. ' + buffer.name + ' is sitting ' + (buffer.acid * 100).toFixed(1) + '% in its acid form and '
+        + (buffer.base * 100).toFixed(1) + '% in its conjugate base form at once. Add acid and the base form '
+        + 'mops it up; add base and the acid form does. That is the whole mechanism.',
+        maths: 'pH = pKa + log([base]/[acid]) = ' + f(buffer.pKa, 4) + ' + log(' + f(ratio, 3) + ') = '
+          + pHText(buffer.pKa + Math.log10(ratio)) });
+      steps.push({ text: 'That is Henderson–Hasselbalch, and it is not a separate rule — it is the '
+        + 'same equilibrium rearranged. Which is also why a half-neutralised weak acid lands exactly '
+        + 'on its pKa: half and half makes the log term zero.' });
+    }
+
+    steps.push({ text: strongOnly
+      ? 'With only strong acids and bases in the beaker there is nothing holding protons in reserve, '
+        + 'so the leftover amount divided by the total volume is the hydrogen ion concentration, and '
+        + 'the pH is its logarithm.'
+      : 'A weak acid or base does not hand over a fixed number of protons — how many it gives up '
+        + 'depends on the pH, and the pH depends on how many it gives up. So the answer is the pH at '
+        + 'which the beaker comes out electrically neutral, with every species holding the share of '
+        + 'protons its pKa says it should at that pH.' });
+
+    steps.push({ text: 'Solving that gives [H⁺] = ' + ME.fmt.sciUnicode(r.H, 4) + ' mol/L, and pH = −log[H⁺] = '
+      + pHText(r.pH) + '.',
+      maths: 'pH ' + pHText(r.pH) + '   pOH ' + pHText(r.pOH) + '   [H⁺] ' + ME.fmt.sciUnicode(r.H, 3)
+        + ' M   [OH⁻] ' + ME.fmt.sciUnicode(r.OH, 3) + ' M' });
+
+    /* The one thing most worth saying out loud, and only where it applies. */
+    const avg = (r.pHa + r.pHb) / 2;
+    if (Math.abs(avg - r.pH) > 0.25 && isFinite(avg)) {
+      steps.push({ text: 'Notice the answer is not halfway between pH ' + pHText(r.pHa) + ' and pH '
+        + pHText(r.pHb) + ', which would be ' + pHText(avg) + '. ' + (acidMmol > 0 && baseMmol > 0
+          ? 'Averaging two pH values is never the move, and here it is not even close to the move: '
+            + 'these two did not blend, they destroyed each other. What sets the answer is whatever '
+            + 'survived that, which is why the result can sit nowhere near either starting point.'
+          : 'You cannot average pH, because pH is a logarithm — what mixes is the concentrations, and '
+            + 'one pH unit is a factor of ten in those. Mix something ten times stronger with '
+            + 'something weaker and the strong one barely notices.') });
+    }
+
+    return { steps: steps, acidMmol: acidMmol, baseMmol: baseMmol, buffer: buffer,
+      strongOnly: strongOnly, weak: weak };
+  }
+
+  /* Acidic, basic, or the narrow band where neither word is worth saying. */
+  function verdict(pH) {
+    if (pH < 6.95) return 'acidic';
+    if (pH > 7.05) return 'basic';
+    return 'essentially neutral';
+  }
+
+  ME.ph = { solve, mix, solution, pHText, averageCharge, netCharge, speciation, describe,
+    verdict, protonsGiven, protonsTaken, Kw: Kw };
 })();
 
 
@@ -12583,6 +13073,173 @@ window.ME = window.ME || {};
       },
     },
     {
+      key: 'mix-ph', name: 'Mix two solutions',
+      blurb: 'The pH you get when two solutions meet — acids, bases, or one of each.',
+      templates: [
+        { group: 'A titration, point by point',
+          label: 'Strong + strong, halfway there',
+          values: { a: 'hydrochloric-acid', am: '0.1', av: '50', b: 'sodium-hydroxide', bm: '0.1', bv: '25' } },
+        { group: 'A titration, point by point',
+          label: 'Strong + strong, dead level',
+          values: { a: 'hydrochloric-acid', am: '0.1', av: '25', b: 'sodium-hydroxide', bm: '0.1', bv: '25' } },
+        { group: 'A titration, point by point',
+          label: 'Strong + strong, one drop past',
+          values: { a: 'hydrochloric-acid', am: '0.1', av: '25', b: 'sodium-hydroxide', bm: '0.1', bv: '25.05' } },
+        { group: 'A titration, point by point',
+          label: 'Weak acid, halfway (a buffer)',
+          values: { a: 'acetic-acid', am: '0.1', av: '50', b: 'sodium-hydroxide', bm: '0.1', bv: '25' } },
+        { group: 'A titration, point by point',
+          label: 'Weak acid, level — and not 7',
+          values: { a: 'acetic-acid', am: '0.1', av: '25', b: 'sodium-hydroxide', bm: '0.1', bv: '25' } },
+        { group: 'A titration, point by point',
+          label: 'Weak base, level — and not 7 either',
+          values: { a: 'ammonia', am: '0.1', av: '25', b: 'hydrochloric-acid', bm: '0.1', bv: '25' } },
+
+        { group: 'Buffers',
+          label: 'Acetate buffer, 1:1',
+          values: { a: 'acetic-acid', am: '0.2', av: '50', b: 'sodium-hydroxide', bm: '0.2', bv: '25' } },
+        { group: 'Buffers',
+          label: 'Acetate buffer, 3:1',
+          values: { a: 'acetic-acid', am: '0.2', av: '50', b: 'sodium-hydroxide', bm: '0.1', bv: '25' } },
+        { group: 'Buffers',
+          label: 'Ammonia buffer, 1:1',
+          values: { a: 'ammonia', am: '0.2', av: '50', b: 'hydrochloric-acid', bm: '0.2', bv: '25' } },
+        { group: 'Buffers',
+          label: 'Phosphate buffer, near blood pH',
+          values: { a: 'phosphoric-acid', am: '0.1', av: '50', b: 'sodium-hydroxide', bm: '0.1', bv: '80' } },
+
+        { group: 'Two acids',
+          label: 'Strong + weak: who wins',
+          values: { a: 'hydrochloric-acid', am: '0.01', av: '50', b: 'acetic-acid', bm: '0.01', bv: '50' } },
+        { group: 'Two acids',
+          label: 'Vinegar + lemon juice',
+          values: { a: 'acetic-acid', am: '0.8', av: '50', b: 'citric-acid', bm: '0.3', bv: '50' } },
+        { group: 'Two acids',
+          label: 'pH 3 + pH 5 — not pH 4',
+          values: { a: 'ph', aph: '3', av: '50', b: 'ph', bph: '5', bv: '50' } },
+        { group: 'Two acids',
+          label: 'Equal pH, equal volumes',
+          values: { a: 'ph', aph: '3', av: '50', b: 'ph', bph: '3', bv: '50' } },
+
+        { group: 'Two bases',
+          label: 'Caustic soda + ammonia',
+          values: { a: 'sodium-hydroxide', am: '0.05', av: '50', b: 'ammonia', bm: '0.05', bv: '50' } },
+        { group: 'Two bases',
+          label: 'Limewater + caustic soda',
+          values: { a: 'calcium-hydroxide', am: '0.02', av: '50', b: 'sodium-hydroxide', bm: '0.02', bv: '50' } },
+        { group: 'Two bases',
+          label: 'pH 11 + pH 13',
+          values: { a: 'ph', aph: '11', av: '50', b: 'ph', bph: '13', bv: '50' } },
+
+        { group: 'Around the house',
+          label: 'Vinegar meets ammonia cleaner',
+          values: { a: 'acetic-acid', am: '0.8', av: '50', b: 'ammonia', bm: '0.5', bv: '50' } },
+        { group: 'Around the house',
+          label: 'Lemon juice in hard water',
+          values: { a: 'citric-acid', am: '0.3', av: '20', b: 'calcium-hydroxide', bm: '0.002', bv: '200' } },
+        { group: 'Around the house',
+          label: 'Fizzy water meets soap',
+          values: { a: 'carbonic-acid', am: '0.03', av: '100', b: 'ammonia', bm: '0.01', bv: '20' } },
+        { group: 'Around the house',
+          label: 'Bleach in dilute acid',
+          values: { a: 'hypochlorous-acid', am: '0.05', av: '100', b: 'hydrochloric-acid', bm: '0.01', bv: '10' } },
+
+        { group: 'Things that surprise people',
+          label: 'Acid so dilute it can’t beat water',
+          values: { a: 'hydrochloric-acid', am: '0.00000002', av: '50', b: 'water', bm: '0', bv: '50' } },
+        { group: 'Things that surprise people',
+          label: 'Sulfuric acid’s second proton',
+          values: { a: 'sulfuric-acid', am: '0.1', av: '50', b: 'water', bm: '0', bv: '0' } },
+        { group: 'Things that surprise people',
+          label: 'Strong acid, ten times weaker',
+          values: { a: 'hydrochloric-acid', am: '0.1', av: '10', b: 'water', bm: '0', bv: '90' } },
+        { group: 'Things that surprise people',
+          label: 'Concentrated weak beats dilute strong',
+          values: { a: 'acetic-acid', am: '1', av: '50', b: 'water', bm: '0', bv: '50' } },
+        { group: 'Things that surprise people',
+          label: 'Barium hydroxide gives two',
+          values: { a: 'barium-hydroxide', am: '0.05', av: '50', b: 'hydrochloric-acid', bm: '0.05', bv: '50' } },
+      ],
+      fields: [
+        { k: 'a', label: 'Solution A', type: 'select', options: [] },
+        { k: 'am', label: 'A: molarity (mol/L)', placeholder: '0.1' },
+        { k: 'aph', label: 'A: or its pH', placeholder: '', keepCase: true },
+        { k: 'av', label: 'A: volume', placeholder: '50', unit: 'volume', unitDefault: 'mL' },
+        { k: 'b', label: 'Solution B', type: 'select', options: [] },
+        { k: 'bm', label: 'B: molarity (mol/L)', placeholder: '0.1' },
+        { k: 'bph', label: 'B: or its pH', placeholder: '', keepCase: true },
+        { k: 'bv', label: 'B: volume', placeholder: '25', unit: 'volume', unitDefault: 'mL' },
+      ],
+      run(v) {
+        const litres = (val, unit) => {
+          const x = num(val);
+          return x === null ? null : ME.fmt.convert(x, unit || 'mL', 'L');
+        };
+        const spec = (id, M, pH, vol, unit) => ({
+          id: id || 'water', molarity: num(M), pH: num(pH), litres: litres(vol, unit),
+        });
+        const A = spec(v.a, v.am, v.aph, v.av, v.av_unit);
+        const B = spec(v.b, v.bm, v.bph, v.bv, v.bv_unit);
+        if (A.litres === null || B.litres === null) return { error: 'Both volumes, please.' };
+
+        const r = ME.ph.mix(A, B);
+        if (!r.ok) return { error: r.error };
+        const d = ME.ph.describe(r);
+
+        const verdict = ME.ph.verdict(r.pH);
+        const like = ME.ref.ACID_BASE.nearest(r.pH);
+        /* "About as acidic as pure water" is not a sentence worth printing.
+         * Inside the neutral band the comparison is a likeness, not a ranking. */
+        const likeText = !like ? '' : verdict === 'essentially neutral'
+          ? '  ·  about the same as ' + like
+          : '  ·  about as ' + (r.pH < 7 ? 'acidic' : 'alkaline') + ' as ' + like;
+        const rows = [
+          ['Solution A alone', 'pH ' + ME.ph.pHText(r.pHa), r.a.label],
+          ['Solution B alone', 'pH ' + ME.ph.pHText(r.pHb), r.b.label],
+          ['Mixed', 'pH ' + ME.ph.pHText(r.pH), ME.fmt.fmt(r.total * 1000, 4) + ' mL, ' + verdict],
+          ['[H⁺]', ME.fmt.sciUnicode(r.H, 4) + ' M', 'pOH ' + ME.ph.pHText(r.pOH)],
+          ['[OH⁻]', ME.fmt.sciUnicode(r.OH, 4) + ' M', ''],
+        ];
+
+        /* Things the reader deserves to be told rather than left to discover,
+         * each one a real limit of the calculation rather than a disclaimer. */
+        const warnings = [];
+        if (r.a.assumedStrong || r.b.assumedStrong) {
+          warnings.push('A pH you type is treated as a strong acid or base at that pH. It has to be: '
+            + 'pH 3 vinegar and pH 3 hydrochloric acid behave completely differently once something '
+            + 'starts neutralising them, because the vinegar has a reservoir of undissociated acid '
+            + 'waiting behind the number, and a pH on its own cannot tell you about a reservoir.');
+        }
+        const strongest = r.mixed.reduce((m, s) => Math.max(m, s.C), 0);
+        if (strongest > 0.5) {
+          warnings.push('Above about 0.5 mol/L the ions start noticing each other, and the real pH '
+            + 'drifts from this one by a tenth of a unit or more. The arithmetic here treats them as '
+            + 'ignoring each other, which is the usual school assumption.');
+        }
+        [r.a, r.b].forEach((sol) => {
+          const sub = sol.substance;
+          if (sub && sub.id === 'calcium-hydroxide' && sol.species[0] && sol.species[0].C > 0.025) {
+            warnings.push('Calcium hydroxide is barely soluble — about 0.02 mol/L is as strong as '
+              + 'limewater gets. The number above is what you would get if that much dissolved.');
+          }
+        });
+
+        return {
+          headline: 'pH ' + ME.ph.pHText(r.pH) + '  ·  ' + verdict,
+          sub: (r.b.litres === 0 || r.a.litres === 0
+            ? ME.fmt.fmt(Math.max(r.a.litres, r.b.litres) * 1000, 4) + ' mL of '
+              + (r.a.litres === 0 ? r.b.label : r.a.label) + ' on its own'
+            : ME.fmt.fmt(r.a.litres * 1000, 4) + ' mL of ' + r.a.label + ' + '
+              + ME.fmt.fmt(r.b.litres * 1000, 4) + ' mL of ' + r.b.label)
+            + (d.buffer ? '  ·  a buffer' : '') + likeText,
+          table: { head: ['', '', ''], rows: rows },
+          steps: d.steps,
+          notes: warnings,
+          source: ME.ref.ACID_BASE.source,
+        };
+      },
+    },
+    {
       key: 'heat', name: 'Heat: q = mcΔT', blurb: 'Energy in or out of something whose temperature changed.',
       fields: [
         { k: 'm', label: 'Mass (g)', placeholder: '250' },
@@ -12934,7 +13591,7 @@ window.ME = window.ME || {};
 
     tool.fields.forEach((f) => {
       const holder = el('div', { class: 'tl-field' + (f.wide ? ' wide' : '') });
-      holder.appendChild(el('label', { text: f.label }));
+      holder.appendChild(el('label', { class: f.keepCase ? 'keep-case' : '', text: f.label }));
       let node;
       if (f.type === 'select') {
         node = el('select', { class: 'tl-select' });
@@ -13014,6 +13671,14 @@ window.ME = window.ME || {};
         .map((g) => ({ group: g.name, items: g.items.map((it) => [it[0], it[0]]) }))
         .concat([{ group: 'Not listed', items: [['custom', 'something else — type c']] }]);
     }
+    if (tool.key === 'mix-ph' && (f.k === 'a' || f.k === 'b')) {
+      /* Grouped, because a flat list of forty-odd substances hides the one
+       * distinction that matters most: strong against weak. */
+      return ME.ref.ACID_BASE.groups.map((g) => ({
+        group: g.name,
+        items: g.items.map((it) => [it.id, it.n]),
+      }));
+    }
     if (tool.key === 'units') {
       if (f.k === 'dim') return Object.keys(ME.fmt.UNITS).map((d) => [d, d]);
       return ME.fmt.unitsFor('pressure').map((u) => [u, ME.fmt.unitLabel(u)]);
@@ -13050,6 +13715,16 @@ window.ME = window.ME || {};
     if (r.sub) out.appendChild(el('div', { class: 'tl-sub', html: ME.chemHTML(r.sub) }));
     if (r.roadmap) out.appendChild(roadmap(r.roadmap));
     if (r.table) out.appendChild(table(r.table));
+    /* Caveats that belong to this particular answer, rather than to the tool
+     * in general. They go above the working, because a reader who stops
+     * reading at the number should still have met them. */
+    if (r.notes && r.notes.length) {
+      r.notes.forEach((n) => {
+        const box = el('div', { class: 'callout' });
+        box.appendChild(el('div', { text: n }));
+        out.appendChild(box);
+      });
+    }
     if (r.steps) out.appendChild(stepList(r.steps));
     if (r.source) out.appendChild(el('p', { class: 'note tl-src', text: r.source }));
     if (r.link) {
@@ -13187,6 +13862,7 @@ window.ME = window.ME || {};
     { key: 'prefixes', name: 'SI prefixes', render: prefixes },
     { key: 'heats', name: 'Specific heats', render: heats },
     { key: 'formation', name: 'Formation enthalpies', render: formation },
+    { key: 'pka', name: 'Acid and base strengths', render: pkaTable },
     { key: 'colligative', name: 'Freezing and boiling constants', render: colligative },
     { key: 'organic-bp', name: 'Boiling points of small isomers', render: organicBP },
     { key: 'glossary', name: 'Glossary', render: glossary },
@@ -13281,6 +13957,68 @@ window.ME = window.ME || {};
     go.addEventListener('click', () => ME.router.go('#/tools/reaction-energy'));
     body.appendChild(go);
     return card('Formation enthalpies', T.source, body);
+  }
+
+  /* pKa values. One number per substance is enough to work out the pH of that
+   * acid at any concentration, mixed with anything else here, at any point in
+   * a titration — which is why this table is short and the tool built on it
+   * is not. Literature data, and it says so. */
+  function pkaTable() {
+    const T = ME.ref.ACID_BASE;
+    const body = el('div');
+    body.appendChild(el('div', { class: 'callout' },
+      'A pKa is not a fact about one solution. It is the equilibrium constant behind every solution '
+      + 'that substance can make, which is why a single number per acid is enough to answer an '
+      + 'unlimited number of questions about it. Low pKa means the proton leaves easily: every unit '
+      + 'down is ten times more willing to let go.'));
+    body.appendChild(el('p', { class: 'note rf-groupnote' },
+      'For a base the number shown is the pKa of its conjugate acid — what you get once it has taken '
+      + 'a proton. Subtract from 14 for the pKb you may be used to. Strong acids and strong bases '
+      + 'have no pKa at all, because there is no equilibrium left to describe.'));
+
+    T.groups.forEach((g) => {
+      if (g.name === 'Neither') return;
+      body.appendChild(el('h3', { class: 'section-head', text: g.name }));
+      if (g.note) body.appendChild(el('p', { class: 'note rf-groupnote', text: g.note }));
+      const t = el('table', { class: 'rf-table rf-heats' });
+      const head = el('tr');
+      ['Substance', 'Formula', 'pKa', ''].forEach((h, i) =>
+        head.appendChild(el('th', { class: i === 2 ? 'rf-unit' : '', text: h })));
+      t.appendChild(head);
+      g.items.forEach((it) => {
+        const tr = el('tr');
+        tr.appendChild(el('td', { text: it.n }));
+        tr.appendChild(el('td', { html: ME.formulaHTML(it.f) }));
+        tr.appendChild(el('td', { class: 'mono num',
+          text: it.pKa.length ? it.pKa.map((k) => String(k)).join(', ')
+            : (it.kind === 'base' ? 'strong, ' + it.zFull + ' OH⁻ each' : 'strong') }));
+        tr.appendChild(el('td', { class: 'note', text: it.note || '' }));
+        t.appendChild(tr);
+      });
+      body.appendChild(t);
+    });
+
+    body.appendChild(el('h3', { class: 'section-head', text: 'Things you have held' }));
+    body.appendChild(el('p', { class: 'note rf-groupnote' },
+      'Middle of the usual range, and only ever used by the tools to say "about as acidic as". '
+      + 'Real lemons differ.'));
+    const e = el('table', { class: 'rf-table rf-heats' });
+    const eh = el('tr');
+    ['Roughly', 'pH'].forEach((h, i) => eh.appendChild(el('th', { class: i === 1 ? 'rf-unit' : '', text: h })));
+    e.appendChild(eh);
+    T.everyday.forEach(([pH, what]) => {
+      const tr = el('tr');
+      tr.appendChild(el('td', { text: what }));
+      tr.appendChild(el('td', { class: 'mono num', text: pH.toFixed(1) }));
+      e.appendChild(tr);
+    });
+    body.appendChild(e);
+
+    body.appendChild(el('p', { class: 'note rf-src', text: T.source }));
+    const go = el('button', { class: 'btn btn-sm', style: { marginTop: '10px' }, text: 'Open the mixing tool' });
+    go.addEventListener('click', () => ME.router.go('#/tools/mix-ph'));
+    body.appendChild(go);
+    return card('Acid and base strengths', T.source, body);
   }
 
   const St = { built: false, host: null, panel: null };

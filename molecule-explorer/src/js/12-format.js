@@ -244,6 +244,16 @@
     const p = sciParts(x, sig);
     return p.mantText + ' × 10^' + p.exp;
   }
+  /* The same thing with the exponent in real superscript characters, for
+   * places that take plain text but are read by a person \u2014 a table cell,
+   * a label \u2014 where "10^-5" looks like source code rather than a number. */
+  const SUPER = { '-': '\u207b', '0': '\u2070', '1': '\u00b9', '2': '\u00b2', '3': '\u00b3',
+    '4': '\u2074', '5': '\u2075', '6': '\u2076', '7': '\u2077', '8': '\u2078', '9': '\u2079' };
+  function sciUnicode(x, sig) {
+    const p = sciParts(x, sig);
+    return p.mantText + ' \u00d7 10' + String(p.exp).split('').map((c) => SUPER[c] || c).join('');
+  }
+
   /* The same thing with a real superscript, for anywhere HTML is allowed. */
   function sciHTML(x, sig) {
     const p = sciParts(x, sig);
@@ -350,6 +360,7 @@
   }
 
   ME.fmt = {
+    sciUnicode,
     CONST, UNITS, convert, canonicalUnit, dimensionOf, unitsFor, unitLabel,
     sigFigs, sigFigsAmbiguous, roundSig,
     fmt, fmtSigned, sciParts, sciText, sciHTML, withUnit, parseQuantity, checkAnswer,

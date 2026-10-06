@@ -337,6 +337,173 @@
       },
     },
     {
+      key: 'mix-ph', name: 'Mix two solutions',
+      blurb: 'The pH you get when two solutions meet — acids, bases, or one of each.',
+      templates: [
+        { group: 'A titration, point by point',
+          label: 'Strong + strong, halfway there',
+          values: { a: 'hydrochloric-acid', am: '0.1', av: '50', b: 'sodium-hydroxide', bm: '0.1', bv: '25' } },
+        { group: 'A titration, point by point',
+          label: 'Strong + strong, dead level',
+          values: { a: 'hydrochloric-acid', am: '0.1', av: '25', b: 'sodium-hydroxide', bm: '0.1', bv: '25' } },
+        { group: 'A titration, point by point',
+          label: 'Strong + strong, one drop past',
+          values: { a: 'hydrochloric-acid', am: '0.1', av: '25', b: 'sodium-hydroxide', bm: '0.1', bv: '25.05' } },
+        { group: 'A titration, point by point',
+          label: 'Weak acid, halfway (a buffer)',
+          values: { a: 'acetic-acid', am: '0.1', av: '50', b: 'sodium-hydroxide', bm: '0.1', bv: '25' } },
+        { group: 'A titration, point by point',
+          label: 'Weak acid, level — and not 7',
+          values: { a: 'acetic-acid', am: '0.1', av: '25', b: 'sodium-hydroxide', bm: '0.1', bv: '25' } },
+        { group: 'A titration, point by point',
+          label: 'Weak base, level — and not 7 either',
+          values: { a: 'ammonia', am: '0.1', av: '25', b: 'hydrochloric-acid', bm: '0.1', bv: '25' } },
+
+        { group: 'Buffers',
+          label: 'Acetate buffer, 1:1',
+          values: { a: 'acetic-acid', am: '0.2', av: '50', b: 'sodium-hydroxide', bm: '0.2', bv: '25' } },
+        { group: 'Buffers',
+          label: 'Acetate buffer, 3:1',
+          values: { a: 'acetic-acid', am: '0.2', av: '50', b: 'sodium-hydroxide', bm: '0.1', bv: '25' } },
+        { group: 'Buffers',
+          label: 'Ammonia buffer, 1:1',
+          values: { a: 'ammonia', am: '0.2', av: '50', b: 'hydrochloric-acid', bm: '0.2', bv: '25' } },
+        { group: 'Buffers',
+          label: 'Phosphate buffer, near blood pH',
+          values: { a: 'phosphoric-acid', am: '0.1', av: '50', b: 'sodium-hydroxide', bm: '0.1', bv: '80' } },
+
+        { group: 'Two acids',
+          label: 'Strong + weak: who wins',
+          values: { a: 'hydrochloric-acid', am: '0.01', av: '50', b: 'acetic-acid', bm: '0.01', bv: '50' } },
+        { group: 'Two acids',
+          label: 'Vinegar + lemon juice',
+          values: { a: 'acetic-acid', am: '0.8', av: '50', b: 'citric-acid', bm: '0.3', bv: '50' } },
+        { group: 'Two acids',
+          label: 'pH 3 + pH 5 — not pH 4',
+          values: { a: 'ph', aph: '3', av: '50', b: 'ph', bph: '5', bv: '50' } },
+        { group: 'Two acids',
+          label: 'Equal pH, equal volumes',
+          values: { a: 'ph', aph: '3', av: '50', b: 'ph', bph: '3', bv: '50' } },
+
+        { group: 'Two bases',
+          label: 'Caustic soda + ammonia',
+          values: { a: 'sodium-hydroxide', am: '0.05', av: '50', b: 'ammonia', bm: '0.05', bv: '50' } },
+        { group: 'Two bases',
+          label: 'Limewater + caustic soda',
+          values: { a: 'calcium-hydroxide', am: '0.02', av: '50', b: 'sodium-hydroxide', bm: '0.02', bv: '50' } },
+        { group: 'Two bases',
+          label: 'pH 11 + pH 13',
+          values: { a: 'ph', aph: '11', av: '50', b: 'ph', bph: '13', bv: '50' } },
+
+        { group: 'Around the house',
+          label: 'Vinegar meets ammonia cleaner',
+          values: { a: 'acetic-acid', am: '0.8', av: '50', b: 'ammonia', bm: '0.5', bv: '50' } },
+        { group: 'Around the house',
+          label: 'Lemon juice in hard water',
+          values: { a: 'citric-acid', am: '0.3', av: '20', b: 'calcium-hydroxide', bm: '0.002', bv: '200' } },
+        { group: 'Around the house',
+          label: 'Fizzy water meets soap',
+          values: { a: 'carbonic-acid', am: '0.03', av: '100', b: 'ammonia', bm: '0.01', bv: '20' } },
+        { group: 'Around the house',
+          label: 'Bleach in dilute acid',
+          values: { a: 'hypochlorous-acid', am: '0.05', av: '100', b: 'hydrochloric-acid', bm: '0.01', bv: '10' } },
+
+        { group: 'Things that surprise people',
+          label: 'Acid so dilute it can’t beat water',
+          values: { a: 'hydrochloric-acid', am: '0.00000002', av: '50', b: 'water', bm: '0', bv: '50' } },
+        { group: 'Things that surprise people',
+          label: 'Sulfuric acid’s second proton',
+          values: { a: 'sulfuric-acid', am: '0.1', av: '50', b: 'water', bm: '0', bv: '0' } },
+        { group: 'Things that surprise people',
+          label: 'Strong acid, ten times weaker',
+          values: { a: 'hydrochloric-acid', am: '0.1', av: '10', b: 'water', bm: '0', bv: '90' } },
+        { group: 'Things that surprise people',
+          label: 'Concentrated weak beats dilute strong',
+          values: { a: 'acetic-acid', am: '1', av: '50', b: 'water', bm: '0', bv: '50' } },
+        { group: 'Things that surprise people',
+          label: 'Barium hydroxide gives two',
+          values: { a: 'barium-hydroxide', am: '0.05', av: '50', b: 'hydrochloric-acid', bm: '0.05', bv: '50' } },
+      ],
+      fields: [
+        { k: 'a', label: 'Solution A', type: 'select', options: [] },
+        { k: 'am', label: 'A: molarity (mol/L)', placeholder: '0.1' },
+        { k: 'aph', label: 'A: or its pH', placeholder: '', keepCase: true },
+        { k: 'av', label: 'A: volume', placeholder: '50', unit: 'volume', unitDefault: 'mL' },
+        { k: 'b', label: 'Solution B', type: 'select', options: [] },
+        { k: 'bm', label: 'B: molarity (mol/L)', placeholder: '0.1' },
+        { k: 'bph', label: 'B: or its pH', placeholder: '', keepCase: true },
+        { k: 'bv', label: 'B: volume', placeholder: '25', unit: 'volume', unitDefault: 'mL' },
+      ],
+      run(v) {
+        const litres = (val, unit) => {
+          const x = num(val);
+          return x === null ? null : ME.fmt.convert(x, unit || 'mL', 'L');
+        };
+        const spec = (id, M, pH, vol, unit) => ({
+          id: id || 'water', molarity: num(M), pH: num(pH), litres: litres(vol, unit),
+        });
+        const A = spec(v.a, v.am, v.aph, v.av, v.av_unit);
+        const B = spec(v.b, v.bm, v.bph, v.bv, v.bv_unit);
+        if (A.litres === null || B.litres === null) return { error: 'Both volumes, please.' };
+
+        const r = ME.ph.mix(A, B);
+        if (!r.ok) return { error: r.error };
+        const d = ME.ph.describe(r);
+
+        const verdict = ME.ph.verdict(r.pH);
+        const like = ME.ref.ACID_BASE.nearest(r.pH);
+        /* "About as acidic as pure water" is not a sentence worth printing.
+         * Inside the neutral band the comparison is a likeness, not a ranking. */
+        const likeText = !like ? '' : verdict === 'essentially neutral'
+          ? '  ·  about the same as ' + like
+          : '  ·  about as ' + (r.pH < 7 ? 'acidic' : 'alkaline') + ' as ' + like;
+        const rows = [
+          ['Solution A alone', 'pH ' + ME.ph.pHText(r.pHa), r.a.label],
+          ['Solution B alone', 'pH ' + ME.ph.pHText(r.pHb), r.b.label],
+          ['Mixed', 'pH ' + ME.ph.pHText(r.pH), ME.fmt.fmt(r.total * 1000, 4) + ' mL, ' + verdict],
+          ['[H⁺]', ME.fmt.sciUnicode(r.H, 4) + ' M', 'pOH ' + ME.ph.pHText(r.pOH)],
+          ['[OH⁻]', ME.fmt.sciUnicode(r.OH, 4) + ' M', ''],
+        ];
+
+        /* Things the reader deserves to be told rather than left to discover,
+         * each one a real limit of the calculation rather than a disclaimer. */
+        const warnings = [];
+        if (r.a.assumedStrong || r.b.assumedStrong) {
+          warnings.push('A pH you type is treated as a strong acid or base at that pH. It has to be: '
+            + 'pH 3 vinegar and pH 3 hydrochloric acid behave completely differently once something '
+            + 'starts neutralising them, because the vinegar has a reservoir of undissociated acid '
+            + 'waiting behind the number, and a pH on its own cannot tell you about a reservoir.');
+        }
+        const strongest = r.mixed.reduce((m, s) => Math.max(m, s.C), 0);
+        if (strongest > 0.5) {
+          warnings.push('Above about 0.5 mol/L the ions start noticing each other, and the real pH '
+            + 'drifts from this one by a tenth of a unit or more. The arithmetic here treats them as '
+            + 'ignoring each other, which is the usual school assumption.');
+        }
+        [r.a, r.b].forEach((sol) => {
+          const sub = sol.substance;
+          if (sub && sub.id === 'calcium-hydroxide' && sol.species[0] && sol.species[0].C > 0.025) {
+            warnings.push('Calcium hydroxide is barely soluble — about 0.02 mol/L is as strong as '
+              + 'limewater gets. The number above is what you would get if that much dissolved.');
+          }
+        });
+
+        return {
+          headline: 'pH ' + ME.ph.pHText(r.pH) + '  ·  ' + verdict,
+          sub: (r.b.litres === 0 || r.a.litres === 0
+            ? ME.fmt.fmt(Math.max(r.a.litres, r.b.litres) * 1000, 4) + ' mL of '
+              + (r.a.litres === 0 ? r.b.label : r.a.label) + ' on its own'
+            : ME.fmt.fmt(r.a.litres * 1000, 4) + ' mL of ' + r.a.label + ' + '
+              + ME.fmt.fmt(r.b.litres * 1000, 4) + ' mL of ' + r.b.label)
+            + (d.buffer ? '  ·  a buffer' : '') + likeText,
+          table: { head: ['', '', ''], rows: rows },
+          steps: d.steps,
+          notes: warnings,
+          source: ME.ref.ACID_BASE.source,
+        };
+      },
+    },
+    {
       key: 'heat', name: 'Heat: q = mcΔT', blurb: 'Energy in or out of something whose temperature changed.',
       fields: [
         { k: 'm', label: 'Mass (g)', placeholder: '250' },
@@ -688,7 +855,7 @@
 
     tool.fields.forEach((f) => {
       const holder = el('div', { class: 'tl-field' + (f.wide ? ' wide' : '') });
-      holder.appendChild(el('label', { text: f.label }));
+      holder.appendChild(el('label', { class: f.keepCase ? 'keep-case' : '', text: f.label }));
       let node;
       if (f.type === 'select') {
         node = el('select', { class: 'tl-select' });
@@ -768,6 +935,14 @@
         .map((g) => ({ group: g.name, items: g.items.map((it) => [it[0], it[0]]) }))
         .concat([{ group: 'Not listed', items: [['custom', 'something else — type c']] }]);
     }
+    if (tool.key === 'mix-ph' && (f.k === 'a' || f.k === 'b')) {
+      /* Grouped, because a flat list of forty-odd substances hides the one
+       * distinction that matters most: strong against weak. */
+      return ME.ref.ACID_BASE.groups.map((g) => ({
+        group: g.name,
+        items: g.items.map((it) => [it.id, it.n]),
+      }));
+    }
     if (tool.key === 'units') {
       if (f.k === 'dim') return Object.keys(ME.fmt.UNITS).map((d) => [d, d]);
       return ME.fmt.unitsFor('pressure').map((u) => [u, ME.fmt.unitLabel(u)]);
@@ -804,6 +979,16 @@
     if (r.sub) out.appendChild(el('div', { class: 'tl-sub', html: ME.chemHTML(r.sub) }));
     if (r.roadmap) out.appendChild(roadmap(r.roadmap));
     if (r.table) out.appendChild(table(r.table));
+    /* Caveats that belong to this particular answer, rather than to the tool
+     * in general. They go above the working, because a reader who stops
+     * reading at the number should still have met them. */
+    if (r.notes && r.notes.length) {
+      r.notes.forEach((n) => {
+        const box = el('div', { class: 'callout' });
+        box.appendChild(el('div', { text: n }));
+        out.appendChild(box);
+      });
+    }
     if (r.steps) out.appendChild(stepList(r.steps));
     if (r.source) out.appendChild(el('p', { class: 'note tl-src', text: r.source }));
     if (r.link) {

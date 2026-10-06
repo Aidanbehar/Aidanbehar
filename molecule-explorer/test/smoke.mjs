@@ -495,6 +495,50 @@ await page.screenshot({ path: path.join(SHOTS, '11b-reaction-energy.png'), fullP
 
 
 
+/* Mixing two solutions. The engine tests pin the pH values against textbook
+ * answers; these check that a reader clicking through the page gets them. */
+await page.locator('.tl-navbtn', { hasText: 'Mix two solutions' }).click();
+await page.waitForTimeout(450);
+const mixGroups = await page.locator('#view-tools optgroup').count();
+check('the substance pickers are grouped by strong and weak',
+  mixGroups >= 8, mixGroups + ' optgroups across the two pickers');
+check('and the mixing tool has templates of its own',
+  (await page.locator('.tl-template').count()) >= 20);
+
+await page.locator('.tl-template', { hasText: 'Weak acid, halfway' }).click();
+await page.waitForTimeout(500);
+let mixHead = await page.locator('.tl-headline').innerText();
+let mixSub = await page.locator('.tl-sub, .tl-out').first().innerText();
+check('a half-neutralised weak acid comes out on its pKa',
+  /pH 4\.76/.test(mixHead), mixHead);
+check('and is named as a buffer', /buffer/i.test(mixSub), mixSub.slice(0, 120));
+check('the working shows Henderson-Hasselbalch rather than asserting it',
+  /Henderson/.test(await page.locator('.tl-steps').innerText()));
+
+await page.locator('.tl-template', { hasText: 'dead level' }).click();
+await page.waitForTimeout(500);
+check('strong acid and strong base at the equivalence point give exactly 7.00',
+  /pH 7\.00/.test(await page.locator('.tl-headline').innerText()),
+  await page.locator('.tl-headline').innerText());
+
+await page.locator('.tl-template', { hasText: 'not 7' }).first().click();
+await page.waitForTimeout(500);
+const notSeven = await page.locator('.tl-headline').innerText();
+check('a weak acid at its equivalence point does NOT give 7',
+  /pH 8\.73/.test(notSeven), notSeven);
+
+await page.locator('.tl-template', { hasText: 'not pH 4' }).click();
+await page.waitForTimeout(500);
+const notFour = await page.locator('.tl-out').innerText();
+check('mixing pH 3 and pH 5 gives 3.30, and says why it is not 4',
+  /pH 3\.30/.test(notFour) && /not halfway/.test(notFour), notFour.slice(0, 160));
+check('and warns that a typed pH is treated as a strong acid',
+  /reservoir/.test(notFour), 'no warning about what a bare pH cannot tell you');
+check('concentrations print with real superscripts, not 10^-4',
+  /10[\u207b\u2070\u00b9\u00b2\u00b3\u2074-\u2079]/.test(notFour) && !/10\^/.test(notFour),
+  notFour.slice(0, 200));
+await page.screenshot({ path: path.join(SHOTS, '11c-mix-ph.png'), fullPage: true });
+
 /* Clicking a tool in the side list swaps the panel out from under the reader.
  * The list is long enough to scroll past, so a reader picking something from
  * the bottom of it was left looking at the middle of a tool they had not
@@ -553,6 +597,17 @@ check('reference sections are listed', await page.locator('.rf-navbtn').count() 
 check('the ion table says where it came from',
   /PubChem/.test(await page.locator('.rf-prov').innerText()),
   await page.locator('.rf-prov').innerText());
+await page.locator('.rf-navbtn', { hasText: 'Acid and base strengths' }).click();
+await page.waitForTimeout(400);
+const pkaText = await page.locator('#view-reference').innerText();
+check('the pKa table is listed with its values',
+  /4\.76/.test(pkaText) && /9\.25/.test(pkaText) && /2\.15, 7\.2, 12\.35/.test(pkaText),
+  pkaText.slice(0, 200));
+check('and says a strong acid has no pKa at all',
+  /strong/i.test(pkaText) && /no equilibrium left/.test(pkaText));
+check('and says where the numbers came from',
+  /Literature data/.test(pkaText));
+
 const clickSection = (name) => page.evaluate((n) => {
   Array.from(document.querySelectorAll('.rf-navbtn'))
     .filter((x) => x.innerText.indexOf(n) === 0)[0].click();

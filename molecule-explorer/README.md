@@ -20,8 +20,8 @@ What is in it:
 | **Elements** | All 118 elements with shells, orbital diagrams, 3D orbital shapes and properties. |
 | **Balancer** | Balances any equation in exact arithmetic, with the working, an atom tally, a by-hand walkthrough and a try-it-yourself mode. |
 | **Gas Simulator** | Particles with a draggable piston, PV = nRT computed live in whatever units you pick, four graphs and a real-gas comparison. |
-| **Tools** | 19 calculators, every one showing its working, several with worked templates to start from. |
-| **Reference** | 12 tables, each stating where its data came from, and a 49-word glossary. |
+| **Tools** | 20 calculators, every one showing its working, several with worked templates to start from. |
+| **Reference** | 13 tables, each stating where its data came from, and a 49-word glossary. |
 | **Gallery** | 688 molecules grouped by what they are for. |
 | **Search** | Molecules by name, nickname, formula or SMILES — and lessons, calculators, tables and glossary words. |
 
@@ -319,7 +319,7 @@ A gas has three degrees of freedom, not four, so one variable is always
 recomputed from the other three — including at startup, which is how the first
 version came to violate PV = nRT by 1.4% on its opening frame.
 
-**Tools.** 19 calculators, all sharing the engine the lessons and the graders
+**Tools.** 20 calculators, all sharing the engine the lessons and the graders
 use, so an answer here and an answer there can never disagree. Each one shows
 its working in the same voice as the lessons.
 
@@ -339,18 +339,46 @@ happened to name. The answer comes with something to picture it against: how
 long a 2 kW kettle would have to run, and how much water that would bring to
 the boil.
 
+The **Mix two solutions** tool takes two beakers — a substance and a molarity
+each, or a pH typed straight in — and says what the pH is once they meet. It is
+built the same way the energy tool is: not a formula per case, but one equation
+that covers every case. The textbook approach needs a different formula for
+strong + strong, for a buffer, for an equivalence point, and those formulas
+disagree at the seams — the buffer one does not know what to do when the base
+runs out, and the equivalence-point one does not know it is one drop early.
+What this solves instead is the thing physics actually enforces, that a beaker
+has no net charge:
+
+    [H⁺] − [OH⁻] + Σ (what each dissolved thing contributes) = 0
+
+Every substance is written the same way — the charge of its fully protonated
+form, and a pKa for each proton it can lose — so its average charge is a
+function of [H⁺] alone, and the left-hand side rises monotonically with [H⁺].
+Chloride is a −1 that never changes; acetic acid is a 0 that becomes −1 as the
+pH climbs past 4.76; ammonium is a +1 that becomes 0 past 9.25. Bisection then
+finds the one root the equation has and cannot miss it.
+
+Buffers, half-equivalence sitting exactly on the pKa, a weak acid landing at
+8.73 rather than 7, sulfuric acid's second proton, 10⁻⁸ M hydrochloric acid
+coming out at 6.98 rather than 8 — none of those is a special case in the code.
+They are the same equation with different numbers in it, which is the honest
+reason they behave the way they do. A classifier does run afterwards, but only
+to decide what the reader is *told*: it can be wrong about the wording, never
+about the number.
+
 Both Reaction energy and Stoichiometry open with a row of templates — 24 and
 20 of them, grouped by what the reaction is for — so the first thing a reader
 sees is the tool doing something real, rather than an empty box and a question
 mark. A test clicks every one of them and fails if any produces an error, a
 blank or a NaN.
 
-**Reference.** 12 tables, and each one states its provenance, because that
+**Reference.** 13 tables, and each one states its provenance, because that
 genuinely differs: the polyatomic ions are re-verified against PubChem on every
 build, the monatomic ion charges are *derived* from the periodic table so they
 cannot contradict it, and the solubility rules, activity series, specific
-heats, colligative constants, formation enthalpies and organic boiling points
-are literature values with no free machine-readable source — so they say so. Plus a 49-word glossary,
+heats, colligative constants, formation enthalpies, pKa values and organic
+boiling points are literature values with no free machine-readable source — so
+they say so. Plus a 49-word glossary,
 searchable, and linkable to a single word from the search bar.
 
 The specific-heat table is the largest of these: 96 substances in eight groups
@@ -369,6 +397,17 @@ The formation-enthalpy table is the one that does the most work for its size:
 reaction between them. It is also where the point of the whole scale shows up
 most plainly — every element in its standard state is zero by definition, which
 is why ozone and diamond, single elements both, are not.
+
+The pKa table is the one whose numbers cannot be verified at all: pKa appears
+in PubChem only as unstructured text, so there is nothing free and
+machine-readable to check against. What *can* be checked is the arithmetic
+built on them, so the engine tests pin twenty-two textbook answers — 0.1 M
+acetic acid at 2.88, 0.1 M ammonia at 11.12, a half-neutralised weak acid
+landing exactly on its pKa — along with structural facts a typo would break:
+successive protons must come off harder than the one before, an acid must come
+out acidic, two acids mixed must never produce a base. A transposed digit in a
+pKa and a polyprotic acid listed out of order were both introduced deliberately
+to confirm the tests catch them.
 
 ## Notes on the chemistry
 

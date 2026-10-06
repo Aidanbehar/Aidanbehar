@@ -26,6 +26,9 @@
   font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
   color: var(--text-faint); font-weight: 700;
 }
+/* Some labels cannot be shouted. pH means something specific and PH does not,
+ * so a field that names it opts out of the uppercasing the rest get. */
+.tl-field label.keep-case { text-transform: none; letter-spacing: .03em; font-size: .75rem; }
 .tl-inline { display: flex; gap: 5px; }
 .tl-input, .tl-select, .tl-area {
   font: inherit; font-size: .95rem; padding: 7px 10px; border-radius: var(--r-sm);
@@ -62,6 +65,8 @@
 .tl-steps li::marker { color: var(--accent); font-weight: 700; }
 .tl-maths {
   margin-top: 5px; font-family: var(--font-mono); font-size: .88rem;
+  /* A step may lay several lines of working out one under the other. */
+  white-space: pre-line;
   background: var(--surface-2); padding: 7px 10px; border-radius: var(--r-sm);
   display: inline-block;
 }

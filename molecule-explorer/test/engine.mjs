@@ -1533,6 +1533,215 @@ describe('reaction energy from formation enthalpies', () => {
   });
 });
 
+/* --------------------------------------------------------------- mixing pH */
+describe('pH of a mixture', () => {
+  /* Every value below is a settled textbook answer, worked by hand with the
+   * usual approximations. They matter more here than in most of this suite,
+   * because the pKa values behind them cannot be checked against any free
+   * machine-readable source — so what can be checked is that the arithmetic
+   * built on them reproduces the answers a chemistry course expects. */
+  const ONE = [
+    ['hydrochloric-acid', 0.1, 1.00, 'strong acid, 0.1 M'],
+    ['hydrochloric-acid', 1.0, 0.00, 'strong acid, 1 M'],
+    ['hydrochloric-acid', 1e-8, 6.98, 'strong acid so dilute that water wins'],
+    ['sodium-hydroxide', 0.1, 13.00, 'strong base'],
+    ['barium-hydroxide', 0.1, 13.30, 'two hydroxides per formula'],
+    ['sulfuric-acid', 0.1, 0.96, 'strong first proton, weak second'],
+    ['acetic-acid', 0.1, 2.88, 'the textbook weak acid'],
+    ['acetic-acid', 0.01, 3.39, 'the same acid, ten times weaker'],
+    ['ammonia', 0.1, 11.12, 'the textbook weak base'],
+    ['hydrofluoric-acid', 0.1, 2.10, 'weak, and still dissolves glass'],
+    ['hydrocyanic-acid', 0.1, 5.11, 'barely an acid at all'],
+    ['phosphoric-acid', 0.1, 1.63, 'three protons, only the first one matters here'],
+    ['water', 0, 7.00, 'nothing dissolved'],
+  ];
+
+  test('one solution on its own matches the settled value', async () => {
+    const got = await run((cases) => cases.map((c) => {
+      const r = window.ME.ph.mix({ id: c[0], molarity: c[1], litres: 0.1 },
+        { id: 'water', molarity: 0, litres: 0 });
+      return r.ok ? r.pH : 'refused: ' + r.error;
+    }), ONE);
+    got.forEach((v, i) => {
+      const [id, M, want, label] = ONE[i];
+      assert.equal(typeof v, 'number', label + ': ' + v);
+      assert.ok(Math.abs(v - want) < 0.02, label + ' (' + id + ' at ' + M + ' M): engine says '
+        + v.toFixed(3) + ', the settled value is ' + want);
+    });
+  });
+
+  const MIX = [
+    ['hydrochloric-acid', 0.1, 25, 'sodium-hydroxide', 0.1, 25, 7.00, 'strong + strong, exactly level'],
+    ['hydrochloric-acid', 0.1, 50, 'sodium-hydroxide', 0.1, 25, 1.48, 'strong acid half neutralised'],
+    ['hydrochloric-acid', 0.1, 25, 'sodium-hydroxide', 0.1, 50, 12.52, 'strong base in excess'],
+    ['acetic-acid', 0.1, 50, 'sodium-hydroxide', 0.1, 25, 4.76, 'weak acid half neutralised sits on its pKa'],
+    ['acetic-acid', 0.1, 25, 'sodium-hydroxide', 0.1, 25, 8.73, 'weak acid at equivalence is NOT 7'],
+    ['ammonia', 0.1, 25, 'hydrochloric-acid', 0.1, 25, 5.28, 'weak base at equivalence is NOT 7'],
+    ['ammonia', 0.1, 50, 'hydrochloric-acid', 0.1, 25, 9.25, 'weak base half neutralised sits on its pKa'],
+    ['barium-hydroxide', 0.05, 50, 'hydrochloric-acid', 0.05, 50, 12.40, 'equal molarity, and still not neutral'],
+    ['hydrochloric-acid', 0.1, 10, 'water', 0, 90, 2.00, 'diluted ten times, one pH unit'],
+  ];
+
+  test('two solutions mixed match the settled value', async () => {
+    const got = await run((cases) => cases.map((c) => {
+      const r = window.ME.ph.mix({ id: c[0], molarity: c[1], litres: c[2] / 1000 },
+        { id: c[3], molarity: c[4], litres: c[5] / 1000 });
+      return r.ok ? r.pH : 'refused: ' + r.error;
+    }), MIX);
+    got.forEach((v, i) => {
+      const want = MIX[i][6], label = MIX[i][7];
+      assert.equal(typeof v, 'number', label + ': ' + v);
+      assert.ok(Math.abs(v - want) < 0.02,
+        label + ': engine says ' + v.toFixed(3) + ', the settled value is ' + want);
+    });
+  });
+
+  test('a half-neutralised weak acid lands exactly on its pKa', async () => {
+    /* Not approximately. This is the identity Henderson–Hasselbalch is built
+     * on, so a solver that drifts off it by more than water's own
+     * contribution is solving the wrong equation. */
+    const got = await run(() => ['acetic-acid', 'formic-acid', 'benzoic-acid', 'hydrofluoric-acid',
+      'hypochlorous-acid', 'ammonia', 'methylamine', 'pyridine'].map((id) => {
+      const sub = window.ME.ref.ACID_BASE.get(id);
+      const partner = sub.kind === 'acid' ? 'sodium-hydroxide' : 'hydrochloric-acid';
+      const r = window.ME.ph.mix({ id: id, molarity: 0.1, litres: 0.05 },
+        { id: partner, molarity: 0.1, litres: 0.025 });
+      return [id, sub.pKa[0], r.pH];
+    }));
+    got.forEach(([id, pKa, pH]) => {
+      assert.ok(Math.abs(pH - pKa) < 0.02, id + ': half neutralised gives pH ' + pH.toFixed(3)
+        + ', its pKa is ' + pKa);
+    });
+  });
+
+  test('mixing two of the same kind never crosses neutral', async () => {
+    /* Two acids cannot make a base. The charge balance has no way to do it,
+     * and this pins that it never finds one. */
+    const got = await run(() => {
+      const acids = ['hydrochloric-acid', 'acetic-acid', 'citric-acid', 'carbonic-acid', 'sulfuric-acid'];
+      const bases = ['sodium-hydroxide', 'ammonia', 'barium-hydroxide', 'pyridine'];
+      const out = [];
+      acids.forEach((a) => acids.forEach((b) => {
+        const r = window.ME.ph.mix({ id: a, molarity: 0.05, litres: 0.05 },
+          { id: b, molarity: 0.05, litres: 0.05 });
+        if (r.pH >= 7) out.push(['acids', a, b, r.pH]);
+      }));
+      bases.forEach((a) => bases.forEach((b) => {
+        const r = window.ME.ph.mix({ id: a, molarity: 0.05, litres: 0.05 },
+          { id: b, molarity: 0.05, litres: 0.05 });
+        if (r.pH <= 7) out.push(['bases', a, b, r.pH]);
+      }));
+      return out;
+    });
+    assert.deepEqual(got, [], JSON.stringify(got));
+  });
+
+  test('the mixed pH always sits between the two it was made from, for acid plus acid', async () => {
+    const got = await run(() => {
+      const out = [];
+      [['hydrochloric-acid', 'acetic-acid'], ['acetic-acid', 'carbonic-acid'],
+        ['sodium-hydroxide', 'ammonia'], ['ammonia', 'pyridine']].forEach(([a, b]) => {
+        const r = window.ME.ph.mix({ id: a, molarity: 0.05, litres: 0.05 },
+          { id: b, molarity: 0.05, litres: 0.05 });
+        const lo = Math.min(r.pHa, r.pHb) - 0.001, hi = Math.max(r.pHa, r.pHb) + 0.001;
+        if (r.pH < lo || r.pH > hi) out.push([a, b, r.pHa, r.pHb, r.pH]);
+      });
+      return out;
+    });
+    assert.deepEqual(got, [], JSON.stringify(got));
+  });
+
+  test('a pH typed in comes back out when nothing is added to it', async () => {
+    const got = await run(() => [0, 1, 2.5, 4, 6.5, 7, 7.5, 9, 11.5, 13, 14].map((pH) => {
+      const r = window.ME.ph.mix({ id: 'ph', pH: pH, litres: 0.05 },
+        { id: 'water', molarity: 0, litres: 0 });
+      return [pH, r.pH];
+    }));
+    got.forEach(([asked, back]) => assert.ok(Math.abs(asked - back) < 0.002,
+      'asked for pH ' + asked + ', got ' + back));
+  });
+
+  test('says what it cannot do rather than guessing', async () => {
+    const got = await run(() => ({
+      noVolume: window.ME.ph.mix({ id: 'hydrochloric-acid', molarity: 0.1, litres: 0 },
+        { id: 'water', molarity: 0, litres: 0 }),
+      negative: window.ME.ph.mix({ id: 'hydrochloric-acid', molarity: 0.1, litres: -1 },
+        { id: 'water', molarity: 0, litres: 0.05 }),
+      noMolarity: window.ME.ph.mix({ id: 'acetic-acid', molarity: 0, litres: 0.05 },
+        { id: 'water', molarity: 0, litres: 0.05 }),
+      noPH: window.ME.ph.mix({ id: 'ph', pH: null, litres: 0.05 },
+        { id: 'water', molarity: 0, litres: 0.05 }),
+      unknown: window.ME.ph.mix({ id: 'unobtainium', molarity: 0.1, litres: 0.05 },
+        { id: 'water', molarity: 0, litres: 0.05 }),
+    }));
+    Object.keys(got).forEach((k) => assert.equal(got[k].ok, false, k + ' should have been refused'));
+    assert.match(got.noMolarity.error, /molarity/i);
+    assert.match(got.noPH.error, /pH/);
+  });
+
+  test('every substance in the table gives a sane pH at a sane concentration', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.ref.ACID_BASE.all().forEach((sub) => {
+        if (sub.id === 'ph') return;
+        const r = window.ME.ph.mix({ id: sub.id, molarity: 0.1, litres: 0.05 },
+          { id: 'water', molarity: 0, litres: 0.05 });
+        if (!r.ok) { out.push([sub.id, 'refused: ' + r.error]); return; }
+        if (!isFinite(r.pH) || r.pH < -1 || r.pH > 15) { out.push([sub.id, r.pH]); return; }
+        /* An acid has to come out acidic and a base basic. If that ever fails
+         * the entry is wrong, whatever the pKa says. */
+        if (sub.kind === 'acid' && r.pH >= 7) out.push([sub.id, 'acid came out at pH ' + r.pH]);
+        if (sub.kind === 'base' && r.pH <= 7) out.push([sub.id, 'base came out at pH ' + r.pH]);
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('the table itself is internally consistent', async () => {
+    const bad = await run(() => {
+      const out = [];
+      window.ME.ref.ACID_BASE.all().forEach((s) => {
+        if (s.id === 'ph' || s.id === 'water') return;
+        /* Successive protons always come off harder than the one before. A
+         * polyprotic acid listed out of order is a typo, and this is the only
+         * way to catch one without a source to check against. */
+        for (let i = 1; i < s.pKa.length; i++) {
+          if (s.pKa[i] <= s.pKa[i - 1]) out.push([s.id, 'pKa values out of order', s.pKa]);
+        }
+        s.pKa.forEach((k) => { if (k < -2 || k > 14) out.push([s.id, 'pKa off the scale', k]); });
+        if (s.strong && s.kind === 'acid' && s.zFull !== -1) out.push([s.id, 'strong acid zFull', s.zFull]);
+        if (s.strong && s.kind === 'base' && s.zFull < 1) out.push([s.id, 'strong base zFull', s.zFull]);
+        if (!s.strong && s.kind === 'acid' && s.pKa.length === 0) out.push([s.id, 'weak acid with no pKa']);
+        if (s.kind === 'base' && !s.strong && s.zFull !== 1) out.push([s.id, 'weak base zFull', s.zFull]);
+      });
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('a buffer is called one only when both forms are really there', async () => {
+    const got = await run(() => {
+      const d = (a, am, av, b, bm, bv) => {
+        const r = window.ME.ph.mix({ id: a, molarity: am, litres: av / 1000 },
+          { id: b, molarity: bm, litres: bv / 1000 });
+        return window.ME.ph.describe(r).buffer;
+      };
+      return {
+        half: d('acetic-acid', 0.1, 50, 'sodium-hydroxide', 0.1, 25),
+        plainAcid: d('acetic-acid', 0.1, 50, 'water', 0, 50),
+        wellPast: d('acetic-acid', 0.1, 25, 'sodium-hydroxide', 0.1, 50),
+        strongOnly: d('hydrochloric-acid', 0.1, 50, 'sodium-hydroxide', 0.1, 25),
+      };
+    });
+    assert.ok(got.half, 'a half-neutralised weak acid is the definition of a buffer');
+    assert.ok(Math.abs(got.half.pKa - 4.76) < 0.001);
+    assert.equal(got.plainAcid, null, 'an acid on its own is not a buffer');
+    assert.equal(got.wellPast, null, 'an acid drowned in base is not a buffer');
+    assert.equal(got.strongOnly, null, 'strong acid and strong base cannot buffer anything');
+  });
+});
+
 /* ------------------------------------------------------------ simulations */
 describe('every simulation builds', () => {
   /* The page-render test covers the sims a lesson embeds, and not the ones

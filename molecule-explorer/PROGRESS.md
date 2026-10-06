@@ -353,6 +353,11 @@ calculators, 11 reference tables and a 49-word glossary.
   is clicked by a test.
 - **Formation enthalpies** added to Reference as its twelfth table, marked
   LITERATURE, with a button through to the tool that uses it.
+- **Mix two solutions.** Two beakers, each a substance at a molarity or a pH
+  typed in, and the pH once they meet. One charge-balance equation rather than
+  a formula per case, so buffers, equivalence points, half-equivalence, the
+  second proton of sulfuric acid and 10⁻⁸ M acid are all the same code. 26
+  templates, and a pKa table in Reference as its thirteenth section.
 
 ### Bugs found and fixed
 - The Balancer's live preview printed `nullH₂ + nullO₂ → nullH₂O` (reported
@@ -382,6 +387,13 @@ calculators, 11 reference tables and a 49-word glossary.
   bar. It only moves the page when the panel top is actually off screen, so
   picking a tool while already at the top is still a no-op, and it follows
   the reader's reduced-motion setting.
+- `pH 7` printed where `pH 7.00` belonged. pH is not a significant-figures
+  quantity — the digits in front of the point are the exponent of a
+  concentration — so trimming the trailing zero threw away the part that
+  counts. pH now always prints to two decimals.
+- A field labelled "or its pH" came out as "OR ITS PH", because every field
+  label is uppercased. pH means something and PH does not, so a label can now
+  opt out.
 - The working said "runs the reaction 1 times over", which is the kind of
   phrase that makes a reader stop and reread. Both counters now say it in
   English.

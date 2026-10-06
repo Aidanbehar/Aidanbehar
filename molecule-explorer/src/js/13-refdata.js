@@ -211,6 +211,181 @@
     why: 'These come apart completely in water and release every hydroxide they have.',
   };
 
+  /* ------------------------------- LITERATURE: acid and base strengths */
+  /* What makes this table worth having is that one number per substance is
+   * enough. Give the solver a pKa and it can work out the pH of that acid at
+   * any concentration, mixed with anything else in the table, at any point in
+   * a titration — because the pKa is not a fact about one solution, it is the
+   * equilibrium constant that governs all of them.
+   *
+   * Every species is written the same way, as something that can hold protons
+   * and let them go:
+   *
+   *   zFull — the charge of the form carrying every proton it can hold
+   *   pKa   — one per proton it can lose, strongest first
+   *
+   * A strong acid has no pKa here at all: hydrochloric acid in water is
+   * chloride, full stop, so chloride is written as a charge of −1 that never
+   * changes. A base is the same idea read backwards — ammonium is a +1 that
+   * can lose a proton at pKa 9.25, and what is left is ammonia. That one
+   * convention means the pH solver needs no cases.
+   *
+   * Values are for 25 °C. They are literature values: pKa data exists in
+   * PubChem only as unstructured text, so unlike the ion table these cannot
+   * be checked against anything free and machine-readable, and the app says
+   * so rather than implying a verification that did not happen.
+   */
+  const ACID_BASE_GROUPS = [
+    {
+      name: 'Strong acids',
+      note: 'Every molecule hands its proton over. There is no equilibrium left to write a pKa about, which is exactly what "strong" means.',
+      items: [
+        { id: 'hydrochloric-acid', f: 'HCl', n: 'Hydrochloric acid', kind: 'acid', strong: true, zFull: -1, pKa: [],
+          note: 'Stomach acid, and the one every textbook problem uses.' },
+        { id: 'nitric-acid', f: 'HNO3', n: 'Nitric acid', kind: 'acid', strong: true, zFull: -1, pKa: [] },
+        { id: 'hydrobromic-acid', f: 'HBr', n: 'Hydrobromic acid', kind: 'acid', strong: true, zFull: -1, pKa: [] },
+        { id: 'hydroiodic-acid', f: 'HI', n: 'Hydroiodic acid', kind: 'acid', strong: true, zFull: -1, pKa: [] },
+        { id: 'perchloric-acid', f: 'HClO4', n: 'Perchloric acid', kind: 'acid', strong: true, zFull: -1, pKa: [] },
+        { id: 'sulfuric-acid', f: 'H2SO4', n: 'Sulfuric acid', kind: 'acid', strong: true, zFull: -1, pKa: [1.92],
+          note: 'Strong for its first proton only. The second comes off with pKa 1.92, which is why 0.1 M sulfuric acid is pH 0.96 and not 0.70.' },
+      ],
+    },
+    {
+      name: 'Weak acids',
+      note: 'Most of the molecules keep their proton. The pKa says how reluctant they are: every unit higher is ten times more reluctant.',
+      items: [
+        { id: 'sulfurous-acid', f: 'H2SO3', n: 'Sulfurous acid', kind: 'acid', zFull: 0, pKa: [1.81, 6.97],
+          note: 'What sulfur dioxide becomes in rain.' },
+        { id: 'oxalic-acid', f: 'H2C2O4', n: 'Oxalic acid', kind: 'acid', zFull: 0, pKa: [1.25, 4.27],
+          note: 'In rhubarb leaves, and why they are poisonous.' },
+        { id: 'phosphoric-acid', f: 'H3PO4', n: 'Phosphoric acid', kind: 'acid', zFull: 0, pKa: [2.15, 7.20, 12.35],
+          note: 'The tang in cola.' },
+        { id: 'chloroacetic-acid', f: 'C2H3ClO2', n: 'Chloroacetic acid', kind: 'acid', zFull: 0, pKa: [2.87],
+          note: 'Acetic acid with one chlorine added — and a hundred times stronger for it.' },
+        { id: 'citric-acid', f: 'C6H8O7', n: 'Citric acid', kind: 'acid', zFull: 0, pKa: [3.13, 4.76, 6.40],
+          note: 'Lemons.' },
+        { id: 'hydrofluoric-acid', f: 'HF', n: 'Hydrofluoric acid', kind: 'acid', zFull: 0, pKa: [3.17],
+          note: 'Weak, and still able to dissolve glass. Strength and danger are different axes.' },
+        { id: 'nitrous-acid', f: 'HNO2', n: 'Nitrous acid', kind: 'acid', zFull: 0, pKa: [3.35] },
+        { id: 'aspirin', f: 'C9H8O4', n: 'Aspirin', kind: 'acid', zFull: 0, pKa: [3.49],
+          note: 'Acetylsalicylic acid — the "acid" in the name is this proton.' },
+        { id: 'formic-acid', f: 'HCOOH', n: 'Formic acid', kind: 'acid', zFull: 0, pKa: [3.75],
+          note: 'What an ant sting injects.' },
+        { id: 'lactic-acid', f: 'C3H6O3', n: 'Lactic acid', kind: 'acid', zFull: 0, pKa: [3.86],
+          note: 'Sour milk, and aching muscles.' },
+        { id: 'benzoic-acid', f: 'C7H6O2', n: 'Benzoic acid', kind: 'acid', zFull: 0, pKa: [4.20],
+          note: 'A food preservative, because mould cannot cope with it.' },
+        { id: 'ascorbic-acid', f: 'C6H8O6', n: 'Ascorbic acid', kind: 'acid', zFull: 0, pKa: [4.17, 11.6],
+          note: 'Vitamin C.' },
+        { id: 'acetic-acid', f: 'CH3COOH', n: 'Acetic acid', kind: 'acid', zFull: 0, pKa: [4.76],
+          note: 'Vinegar is about 0.8 M of this. The pKa every course uses as its example.' },
+        { id: 'propanoic-acid', f: 'C3H6O2', n: 'Propanoic acid', kind: 'acid', zFull: 0, pKa: [4.87] },
+        { id: 'butanoic-acid', f: 'C4H8O2', n: 'Butanoic acid', kind: 'acid', zFull: 0, pKa: [4.82],
+          note: 'Rancid butter, and parmesan.' },
+        { id: 'carbonic-acid', f: 'H2CO3', n: 'Carbonic acid', kind: 'acid', zFull: 0, pKa: [6.35, 10.33],
+          note: 'Dissolved CO₂. It is why fizzy drinks and rainwater are both mildly acidic.' },
+        { id: 'hydrosulfuric-acid', f: 'H2S', n: 'Hydrosulfuric acid', kind: 'acid', zFull: 0, pKa: [7.05, 12.9],
+          note: 'The second pKa is poorly pinned down; sources put it anywhere from 12 to 19.' },
+        { id: 'hypochlorous-acid', f: 'HOCl', n: 'Hypochlorous acid', kind: 'acid', zFull: 0, pKa: [7.53],
+          note: 'The part of bleach that actually kills things — and only while it keeps its proton.' },
+        { id: 'hydrocyanic-acid', f: 'HCN', n: 'Hydrocyanic acid', kind: 'acid', zFull: 0, pKa: [9.21] },
+        { id: 'boric-acid', f: 'H3BO3', n: 'Boric acid', kind: 'acid', zFull: 0, pKa: [9.24],
+          note: 'Mild enough for eyewash.' },
+        { id: 'phenol', f: 'C6H6O', n: 'Phenol', kind: 'acid', zFull: 0, pKa: [9.99],
+          note: 'An alcohol acidic enough to be called an acid, because the ring shares out the charge left behind.' },
+      ],
+    },
+    {
+      name: 'Strong bases',
+      note: 'Soluble metal hydroxides. They do not make hydroxide by reacting with water — they simply contain it, and dissolving sets it free.',
+      items: [
+        { id: 'lithium-hydroxide', f: 'LiOH', n: 'Lithium hydroxide', kind: 'base', strong: true, zFull: 1, pKa: [] },
+        { id: 'sodium-hydroxide', f: 'NaOH', n: 'Sodium hydroxide', kind: 'base', strong: true, zFull: 1, pKa: [],
+          note: 'Drain cleaner, and the base every textbook problem uses.' },
+        { id: 'potassium-hydroxide', f: 'KOH', n: 'Potassium hydroxide', kind: 'base', strong: true, zFull: 1, pKa: [] },
+        { id: 'rubidium-hydroxide', f: 'RbOH', n: 'Rubidium hydroxide', kind: 'base', strong: true, zFull: 1, pKa: [] },
+        { id: 'caesium-hydroxide', f: 'CsOH', n: 'Caesium hydroxide', kind: 'base', strong: true, zFull: 1, pKa: [] },
+        { id: 'calcium-hydroxide', f: 'Ca(OH)2', n: 'Calcium hydroxide', kind: 'base', strong: true, zFull: 2, pKa: [],
+          note: 'Two hydroxides per formula, so it neutralises twice as much acid per mole. Barely soluble though — saturated limewater is only about 0.02 M.' },
+        { id: 'strontium-hydroxide', f: 'Sr(OH)2', n: 'Strontium hydroxide', kind: 'base', strong: true, zFull: 2, pKa: [] },
+        { id: 'barium-hydroxide', f: 'Ba(OH)2', n: 'Barium hydroxide', kind: 'base', strong: true, zFull: 2, pKa: [] },
+      ],
+    },
+    {
+      name: 'Weak bases',
+      note: 'These have no hydroxide of their own. They make it by taking a proton off water and leaving the OH⁻ behind. The pKa shown is the conjugate acid’s; pKb = 14 − pKa.',
+      items: [
+        { id: 'aniline', f: 'C6H5NH2', n: 'Aniline', kind: 'base', zFull: 1, pKa: [4.63],
+          note: 'Barely a base at all: the ring pulls the nitrogen’s lone pair away from the job.' },
+        { id: 'pyridine', f: 'C5H5N', n: 'Pyridine', kind: 'base', zFull: 1, pKa: [5.23] },
+        { id: 'hydroxylamine', f: 'NH2OH', n: 'Hydroxylamine', kind: 'base', zFull: 1, pKa: [5.96] },
+        { id: 'hydrazine', f: 'N2H4', n: 'Hydrazine', kind: 'base', zFull: 1, pKa: [8.10] },
+        { id: 'ammonia', f: 'NH3', n: 'Ammonia', kind: 'base', zFull: 1, pKa: [9.25],
+          note: 'Household cleaner, and the weak base every course uses as its example.' },
+        { id: 'ethanolamine', f: 'C2H7NO', n: 'Ethanolamine', kind: 'base', zFull: 1, pKa: [9.50] },
+        { id: 'trimethylamine', f: 'C3H9N', n: 'Trimethylamine', kind: 'base', zFull: 1, pKa: [9.80],
+          note: 'The smell of old fish.' },
+        { id: 'methylamine', f: 'CH3NH2', n: 'Methylamine', kind: 'base', zFull: 1, pKa: [10.64] },
+        { id: 'ethylamine', f: 'C2H5NH2', n: 'Ethylamine', kind: 'base', zFull: 1, pKa: [10.75] },
+        { id: 'dimethylamine', f: '(CH3)2NH', n: 'Dimethylamine', kind: 'base', zFull: 1, pKa: [10.73] },
+      ],
+    },
+    {
+      name: 'Neither',
+      note: 'For diluting something, or for seeing what a given pH does when it meets something else.',
+      items: [
+        { id: 'water', f: 'H2O', n: 'Water, nothing in it', kind: 'neutral', zFull: 0, pKa: [],
+          note: 'Water is not a bystander — it is the source of every H⁺ and OH⁻ in the sum — but it adds no solute of its own.' },
+        { id: 'ph', f: '', n: 'A pH I will type', kind: 'ph', zFull: 0, pKa: [],
+          note: 'Treated as a strong acid or base at that pH, because a pH on its own cannot tell you whether there is a reservoir of undissociated acid waiting behind it.' },
+      ],
+    },
+  ];
+
+  /* Rough pH of things a reader has actually held. Ranges in real life \u2014
+   * lemons differ, stomachs differ \u2014 so these are the middle of the usual
+   * range and are only ever used to say "about as acidic as", never as data. */
+  const EVERYDAY_PH = [
+    [0.5, 'battery acid'], [1.5, 'stomach acid'], [2.3, 'lemon juice'],
+    [2.5, 'cola'], [2.9, 'vinegar'], [3.5, 'orange juice'], [4.3, 'tomato juice'],
+    [5.0, 'black coffee'], [5.5, 'rainwater'], [6.6, 'milk'], [7.0, 'pure water'],
+    [7.4, 'blood'], [8.1, 'seawater'], [8.4, 'baking soda in water'],
+    [9.5, 'hand soap'], [11.5, 'household ammonia'], [12.5, 'bleach'],
+    [13.5, 'drain cleaner'],
+  ];
+
+  const ACID_BASE = {
+    source: 'pKa values at 25 \u00b0C. Literature data \u2014 pKa appears in PubChem only as unstructured text, so unlike the ion table these cannot be checked against a free machine-readable source, and are stated as learned rather than verified.',
+    groups: ACID_BASE_GROUPS,
+    /* Flat lookup, built once on first use. Nothing here needs the formula
+     * parser, but keeping to the same lazy pattern as the formation table
+     * costs nothing and removes one more way for build order to bite. */
+    byId: null,
+    get(id) {
+      if (!ACID_BASE.byId) {
+        ACID_BASE.byId = {};
+        ACID_BASE_GROUPS.forEach((g) => g.items.forEach((it) => {
+          ACID_BASE.byId[it.id] = it;
+        }));
+      }
+      return ACID_BASE.byId[id] || null;
+    },
+    all() {
+      return ACID_BASE_GROUPS.reduce((out, g) => out.concat(g.items), []);
+    },
+    everyday: EVERYDAY_PH,
+    /* The closest everyday thing, but only when it is genuinely close. A
+     * comparison half a pH unit out is a factor of three in acidity, which
+     * is not a comparison, it is a wrong statement. */
+    nearest(pH) {
+      let best = null;
+      EVERYDAY_PH.forEach((row) => {
+        if (!best || Math.abs(row[0] - pH) < Math.abs(best[0] - pH)) best = row;
+      });
+      return best && Math.abs(best[0] - pH) <= 0.35 ? best[1] : null;
+    },
+  };
+
   /* ------------------------------------- LITERATURE: specific heats */
   /* In J per gram per kelvin, at around room temperature. */
   /* Specific heats, in J g⁻¹ K⁻¹, grouped so the table can be read rather
@@ -683,7 +858,7 @@
   ME.ref = {
     setIons, get ions() { return IONS; }, ionByName, ionByFormula,
     typicalCharge, ideName, IDE_STEM, LATIN, FIXED_D_BLOCK,
-    SOLUBILITY, ACTIVITY, moreReactive, STRONG_ACIDS, STRONG_BASES,
+    SOLUBILITY, ACTIVITY, moreReactive, STRONG_ACIDS, STRONG_BASES, ACID_BASE,
     SPECIFIC_HEAT, LATENT, COLLIGATIVE, ORGANIC_BP, boilingPoint, FORMATION, PREFIXES,
     elementName, elementNameLower, SPELLING,
   };
