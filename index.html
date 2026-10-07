@@ -738,6 +738,20 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 .hl-pick:hover{color:var(--text)}
 .hl-pick.sel{color:var(--text); border-bottom-style:solid}
 .hl-pick.sel::after{content:' \2713'; color:var(--accent)}
+/* the two averages, side by side so the gap between them is the message */
+.avg-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+@media (max-width:620px){.avg-grid{grid-template-columns:1fr}}
+.avg-box{
+  display:grid; gap:3px; padding:12px 13px; border-radius:var(--r-md);
+  background:var(--surface-2); border:1px solid var(--border);
+}
+.avg-k{font-size:.72rem; letter-spacing:.09em; text-transform:uppercase; color:var(--text-faint)}
+.avg-v{font:700 2.1rem/1 var(--font); letter-spacing:-.03em}
+.avg-v small{font-size:.95rem; font-weight:600; opacity:.8; margin-left:2px}
+.avg-l{font-size:.84rem; font-weight:650; color:var(--text-dim)}
+.avg-box .bar{height:7px; border-radius:99px; background:var(--track); overflow:hidden; margin-top:5px}
+.avg-box .bar .fill{display:block; height:100%; border-radius:99px; transition:width .6s cubic-bezier(.22,.68,.36,1)}
+.avg-n{font-size:.76rem; color:var(--text-faint); margin-top:3px}
 .sw-dot{
   display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:7px;
   vertical-align:-1px; border:1px solid var(--border-strong);
@@ -1314,6 +1328,12 @@ body.scrubbing .view.active{animation:none}
     <div class="chart-legend" id="alc-chart-legend"></div>
   </div>
 
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="sigma"></span><h3>Average intensity</h3></div>
+    <p class="card-note">The integral of the curve above, divided by how long it ran. Two windows: only while it was doing something, and the whole episode including the wait before it started.</p>
+    <div id="alc-avg"></div>
+  </div>
+
   <div class="grid g2" style="margin-bottom:18px">
     <!-- ---------------- timeline ---------------- -->
     <div class="card">
@@ -1455,6 +1475,12 @@ body.scrubbing .view.active{animation:none}
     <div class="stat-row" id="d9-stats"></div>
   </div>
 
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="sigma"></span><h3>Average intensity</h3></div>
+    <p class="card-note">The integral of the curve above, divided by how long it ran. Two windows: only while it was doing something, and the whole episode including the wait before it started.</p>
+    <div id="d9-avg"></div>
+  </div>
+
   <div class="grid g2" style="margin-bottom:18px">
     <div class="card">
       <div class="card-title"><span class="ico" data-icon="clock"></span><h3>Phases</h3></div>
@@ -1591,6 +1617,12 @@ body.scrubbing .view.active{animation:none}
     <div class="stat-row" id="d8-stats"></div>
   </div>
 
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="sigma"></span><h3>Average intensity</h3></div>
+    <p class="card-note">The integral of the curve above, divided by how long it ran. Two windows: only while it was doing something, and the whole episode including the wait before it started.</p>
+    <div id="d8-avg"></div>
+  </div>
+
   <div class="grid g2" style="margin-bottom:18px">
     <div class="card">
       <div class="card-title"><span class="ico" data-icon="clock"></span><h3>Phases</h3></div>
@@ -1725,6 +1757,12 @@ body.scrubbing .view.active{animation:none}
     <div class="chart-host" id="sm-chart"></div>
     <div class="chart-legend" id="sm-chart-legend"></div>
     <div class="stat-row" id="sm-stats"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="sigma"></span><h3>Average intensity</h3></div>
+    <p class="card-note">The integral of the curve above, divided by how long it ran. Two windows: only while it was doing something, and the whole episode including the wait before it started.</p>
+    <div id="sm-avg"></div>
   </div>
 
   <div class="grid g2" style="margin-bottom:18px">
@@ -1877,6 +1915,12 @@ body.scrubbing .view.active{animation:none}
     <div class="chart-legend" id="caf-legend-fx"></div>
   </div>
 
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="sigma"></span><h3>Average intensity</h3></div>
+    <p class="card-note">The integral of the curve above, divided by how long it ran. Two windows: only while it was doing something, and the whole episode including the wait before it started.</p>
+    <div id="caf-avg"></div>
+  </div>
+
   <div class="grid g2" style="margin-bottom:18px">
     <div class="card">
       <div class="card-title"><span class="ico" data-icon="clock"></span><h3>Sleep</h3></div>
@@ -2004,6 +2048,12 @@ body.scrubbing .view.active{animation:none}
     <p class="card-note">The same curve mapped onto the app's shared six-step scale, weighted towards the two effects people actually use nicotine for. It is flat on top because craving relief saturates almost immediately — which is exactly why smokers titrate in puffs rather than in cigarettes.<br><span class="scrub-hint"><span class="ico" data-icon="swipe"></span>Drag the dot along the curve — or focus the chart and use the arrow keys — to move “now”. Everything on the page follows it.</span></p>
     <div class="chart-host" id="nic-chart-fx"></div>
     <div class="chart-legend" id="nic-legend-fx"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="ico" data-icon="sigma"></span><h3>Average intensity</h3></div>
+    <p class="card-note">The integral of the curve above, divided by how long it ran. Two windows: only while it was doing something, and the whole episode including the wait before it started.</p>
+    <div id="nic-avg"></div>
   </div>
 
   <div class="card" style="margin-bottom:18px">
@@ -2611,6 +2661,8 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
       <div class="formula" data-live="scale-bands">computing…</div>
       <p>That consistency is deliberate. If "Moderate" meant one thing on the Delta-9 table and something slightly different on the Delta-8 table, the two tables could not be compared, which is the only reason to have both. The label is produced by a single function that every section calls, so the vocabulary cannot drift.</p>
       <p><strong>Alcohol is the exception that proves the point.</strong> BAC is a real physical concentration, so the app reports it directly and never dresses it up as a percentage of anything. To place it on the shared scale for the gauge it applies an explicitly declared display mapping, spelled out in <a href="#" data-article="art-formula">Step 7 of the formula article</a>. The BAC figure itself is untransformed.</p>
+      <p><strong>Averaging one of these numbers over time is legitimate; averaging it over dose is not.</strong> Each intensity chart carries an average-intensity card underneath it, and what it does is integrate the curve and divide by its own length — area under the curve, in percent-hours, over the width of the window in hours. That is an honest time-weighted mean of the plotted quantity: it answers "if the whole episode had sat at one flat level, what level would it have been?" and it is the reason a long gentle curve and a short sharp one can read the same. Two windows are reported because two different questions are being asked. The one that starts at the first dose includes the absorption lag, so a two-hour wait for an edible drags the mean down — that is the honest answer to "what was the evening like". The one that starts at onset begins only once the curve first crosses the floor on the way up, so it describes the episode itself without the waiting — the honest answer to "how strong was it while it lasted". The gap between them is exactly the cost of the wait, which is why it is wide for edibles and essentially zero for anything smoked, vaped or drunk.</p>
+      <p>Two caveats carry real weight. The window has to end somewhere, and an exponential tail never actually ends, so the app declares the episode over at <span class="tuned">1&nbsp;%</span> of the scale; a higher cut-off would end the window sooner and report a higher average. And because the percentage is a position on a saturating curve, percent-hours are not proportional to milligrams or to plasma exposure. Doubling the dose does not double the figure, and this number must never be compared against a published AUC, which measures concentration over time in entirely different units.</p>
       <p>Finally, the ceiling is a modelling artifact, not a limit on experience. "Extremely Strong — 96&nbsp;%" does not mean the strongest possible experience; it means the curve has flattened so completely that the model can no longer tell doses apart. Beyond that point more milligrams still make things worse — just not in the direction the gauge is measuring.</p>
     </div>
   </div>
@@ -2891,7 +2943,9 @@ const PROVENANCE = [
   {v:'1.0 / 1.25 / 1.6 / 2.1', k:'CAFFEINE_TOLERANCE', where:'Caffeine effective dose', type:'tuned',
    why:'Tolerance to the alertness effect develops within days and is real but modest compared with cannabis. The multipliers are mine.'},
   {v:'bands at 10 / 30 / 50 / 70 / 85', k:'INTENSITY_BANDS', where:'Every gauge, bar and table', type:'tuned',
-   why:'The six-step vocabulary boundaries. Arbitrary but applied identically everywhere, which is the only property that matters for comparison.'}
+   why:'The six-step vocabulary boundaries. Arbitrary but applied identically everywhere, which is the only property that matters for comparison.'},
+  {v:'floor 1 % of the scale', k:'INTENSITY_FLOOR_PCT', where:'Average-intensity cards in all six sections', type:'tuned',
+   why:'Where I declared the episode over, so that dividing the area by the length gives a finite average instead of one that creeps towards zero forever. An exponential tail never reaches nothing, so some cut-off has to be chosen and this one is mine. It moves the average: a higher floor ends the window sooner and raises the mean. The onset window starts at the same 1 % crossing on the way up, which is why it is the number that defines both edges.'}
 ];
 
 /* ---------------------------------------------------------------------------
@@ -3351,6 +3405,109 @@ function resampleOn(pts, f){
   for (let i = 0; i < pts.length; i++) out.push([pts[i][0], f(pts[i][0])]);
   return out;
 }
+/* ---------------------------------------------------------------------------
+   Average intensity: the area under an intensity curve divided by how long it
+   lasted. Two windows, because they answer different questions.
+
+     whole   — from t = 0, which includes the time spent waiting for it to
+               arrive. This is "what was the average of the whole episode".
+     active  — from the moment the curve first rises above the floor, which
+               is the only part where anything was happening. This is "what
+               was it like while it lasted".
+
+   For an edible the gap between the two is nearly an hour of nothing, and
+   dividing by it drags the whole-episode mean well under the active one. For
+   something inhaled they are almost identical, because there is no wait. That
+   difference is the point of reporting both.
+
+   A total area is not an average: dividing by the width is what makes it one,
+   and the width has to end somewhere, because an exponential tail never
+   reaches zero. The floor below is where this app calls it over. */
+const INTENSITY_FLOOR_PCT = 1;     // HAND-TUNED: "extremely low" on the shared 0-100 scale
+function integrateIntensity(f, hardCapMin, opts){
+  const o = opts || {};
+  const floor = o.floor != null ? o.floor : INTENSITY_FLOOR_PCT;
+  const cap0 = Math.max(hardCapMin || 0, 1);
+
+  /* A coarse pass first, to find where the curve actually lives. Running the
+     fine pass across seven days when the whole thing is over in four hours
+     would put the resolution in the wrong place. */
+  const C = 600, hc = cap0 / C;
+  let lastAbove = -1, peak = 0, peakAt = 0;
+  for (let i = 0; i <= C; i++){
+    const t = i * hc, y = Math.max(0, f(t));
+    if (y > peak){ peak = y; peakAt = t; }
+    if (y >= floor) lastAbove = i;
+  }
+  if (!(peak >= floor) || lastAbove < 0)
+    return {ok:false, floor:floor, peak:peak, peakAt:peakAt};
+
+  const cap = Math.min(cap0, (lastAbove + 1.5) * hc);
+  const N = o.steps || 1400, h = cap / N;
+  const ys = new Array(N + 1);
+  peak = 0; peakAt = 0;
+  for (let i = 0; i <= N; i++){
+    const y = Math.max(0, f(i * h));
+    ys[i] = y;
+    if (y > peak){ peak = y; peakAt = i * h; }
+  }
+
+  /* Bisect the two crossings so the window does not depend on where the
+     sample grid happened to land. */
+  const cross = (a, b) => {
+    let lo = a, hi = b;
+    const sLo = f(lo) >= floor;
+    for (let k = 0; k < 42; k++){
+      const m = (lo + hi) / 2;
+      if ((f(m) >= floor) === sLo) lo = m; else hi = m;
+    }
+    return (lo + hi) / 2;
+  };
+  let iUp = 0;  while (iUp <= N && ys[iUp] < floor) iUp++;
+  let iDn = N;  while (iDn >= 0 && ys[iDn] < floor) iDn--;
+  const onset = iUp === 0 ? 0 : cross((iUp - 1) * h, iUp * h);
+  const end   = iDn >= N ? cap : cross(iDn * h, (iDn + 1) * h);
+
+  /* Trapezoid on a grid that starts and ends exactly on the window, so the
+     two integrals share their right-hand endpoint and differ only on the left. */
+  const trap = (a, b) => {
+    if (!(b > a)) return 0;
+    const m = o.intSteps || 1200, st = (b - a) / m;
+    let sum = 0;
+    for (let i = 0; i <= m; i++){
+      const y = Math.max(0, f(a + i * st));
+      sum += (i === 0 || i === m) ? y / 2 : y;
+    }
+    return sum * st;
+  };
+  const aucAll = trap(0, end), aucActive = trap(onset, end);
+  const halfPeak = peak / 2;
+  let aboveHalf = 0;
+  for (let i = 0; i < N; i++) if ((ys[i] + ys[i + 1]) / 2 >= halfPeak) aboveHalf += h;
+
+  return {
+    ok:true, floor:floor, peak:peak, peakAt:peakAt,
+    onset:onset, end:end,
+    spanAll:end, spanActive:Math.max(end - onset, 0),
+    aucAll:aucAll, aucActive:aucActive,
+    avgAll:end > 0 ? aucAll / end : 0,
+    avgActive:(end - onset) > 0 ? aucActive / (end - onset) : 0,
+    aboveHalf:aboveHalf
+  };
+}
+/* Linear interpolation into an already-computed [t, y] series, for curves
+   that are integrated rather than evaluated (the alcohol model is a run, not
+   a formula). */
+function seriesAt(pts, t){
+  if (!pts || !pts.length) return 0;
+  if (t <= pts[0][0]) return pts[0][1];
+  const last = pts[pts.length - 1];
+  if (t >= last[0]) return last[1];
+  let lo = 0, hi = pts.length - 1;
+  while (hi - lo > 1){ const m = (lo + hi) >> 1; if (pts[m][0] <= t) lo = m; else hi = m; }
+  const a = pts[lo], b = pts[hi], w = (t - a[0]) / Math.max(b[0] - a[0], 1e-9);
+  return a[1] + (b[1] - a[1]) * w;
+}
 function niceTicks(max, target){
   const raw = max / Math.max(target, 2);
   const mag = Math.pow(10, Math.floor(Math.log10(raw)));
@@ -3668,6 +3825,51 @@ function renderTimeline(host, cfg){
 }
 
 /* --- 5d. Effect breakdown bars (width animates on update) ------------------ */
+/* One renderer for all six sections, so the two averages mean exactly the
+   same thing wherever they appear. `noun` names the thing being averaged;
+   `unit` is what the area is measured in once divided by time. */
+function renderIntensityAverage(host, sum, opts){
+  const o = opts || {};
+  if (!sum || !sum.ok){
+    host.innerHTML = '<div class="empty-note">The modelled curve never rises above ' +
+      (sum ? round(sum.floor, 2) : INTENSITY_FLOOR_PCT) + '\u00a0% on the shared scale, so there is no session to average over.' +
+      (sum && sum.peak > 0 ? ' It peaks at ' + round(sum.peak, 2) + '\u00a0%.' : '') + '</div>';
+    return;
+  }
+  const bar = (title, value, span, note) =>
+    '<div class="avg-box">' +
+      '<span class="avg-k">' + title + '</span>' +
+      '<span class="avg-v" style="color:' + severityColor(value) + '">' + Math.round(value) + '<small> %</small></span>' +
+      '<span class="avg-l">' + esc(intensityLabel(value)) + '</span>' +
+      '<span class="bar"><span class="fill" style="width:' + clamp(value, 0, 100) + '%;background:linear-gradient(90deg,' +
+        severityColor(value * 0.55) + ',' + severityColor(value) + ')"></span></span>' +
+      '<span class="avg-n">over ' + fmtDuration(span) + ' \u2014 ' + note + '</span>' +
+    '</div>';
+
+  host.innerHTML =
+    '<div class="avg-grid">' +
+      bar('While it lasted', sum.avgActive, sum.spanActive, 'from onset to the end') +
+      bar('Including the wait', sum.avgAll, sum.spanAll, 'from the moment you took it') +
+    '</div>' +
+    '<dl class="map-stat" style="margin-top:14px">' +
+      '<dt>Onset</dt><dd>' + (sum.onset <= 0.01 ? 'immediate' : fmtDuration(sum.onset) + ' in') + '</dd>' +
+      '<dt>Over by</dt><dd>' + fmtDuration(sum.end) + ' in</dd>' +
+      '<dt>Peak</dt><dd>' + Math.round(sum.peak) + '\u00a0% \u00b7 ' + esc(intensityLabel(sum.peak)) +
+        ', at ' + fmtDuration(sum.peakAt) + '</dd>' +
+      '<dt>Average as a share of peak</dt><dd>' + Math.round(100 * sum.avgActive / Math.max(sum.peak, 0.001)) +
+        '\u00a0% \u2014 how flat the curve is</dd>' +
+      '<dt>Time at half the peak or more</dt><dd>' + fmtDuration(sum.aboveHalf) + '</dd>' +
+      '<dt>Total exposure</dt><dd>' + round(sum.aucAll / 60, 1) + ' <abbr title="percent-hours: the area under the intensity curve">%\u00b7h</abbr>' +
+        ' \u2014 the area itself, before dividing</dd>' +
+    '</dl>' +
+    '<p class="card-note" style="margin-top:10px">' +
+    'The area under the curve divided by how wide the window is. The session is counted as over once the modelled intensity drops below <strong>' +
+    round(sum.floor, 2) + '\u00a0%</strong> on the shared scale \u2014 an exponential tail never actually reaches zero, so the width has to be ended somewhere, and that cut-off is my choice rather than a measurement. <span class="tuned">hand-tuned</span>' +
+    (Math.round(sum.avgActive) === Math.round(sum.avgAll)
+      ? ' The two figures agree here because there is almost nothing to wait through \u2014 the curve is already climbing by the time the window opens.'
+      : '') +
+    (o.note ? ' ' + o.note : '') + '</p>';
+}
 function renderEffectBars(host, effects){
   /* Replacing the rows made every bar restart from zero width on each redraw,
      so a keystroke collapsed the whole panel and grew it back. When the rows
@@ -4369,6 +4571,13 @@ function renderAlcohol(){
     accent:'var(--accent)', drag:{key:'alc'},
     ariaLabel:'Blood alcohol concentration over time, currently ' + fmtBac(nowBac) + ' percent'
   });
+  /* Alcohol's intensity is its position on the shared scale, so the same
+     integral applies — run over the model's own minute-by-minute output
+     rather than over a formula, because there is no closed form for it. */
+  renderIntensityAverage(document.getElementById('alc-avg'),
+    integrateIntensity(t => alcoholScalePosition(seriesAt(run.points, t)),
+      Math.max(run.points.length - 1, 60)),
+    {note:'Alcohol has no half-life, so the curve ends abruptly instead of trailing off: the straight-line tail hits zero and the window closes. That keeps the average high — around 56 % of the peak here, against barely a third for caffeine and nicotine, whose exponential tails spend hours adding length without adding much area.'});
   renderLegend(document.getElementById('alc-chart-legend'), [
     {label:'Modelled BAC (' + (s.model === 'pk' ? 'pharmacokinetic' : 'Widmark') + ')', color:'var(--accent)'},
     {label:'0.08 % — common legal driving limit', color:'var(--danger)', dash:true},
@@ -4763,6 +4972,9 @@ function renderTHC(){
     accent:'var(--accent)', drag:{key:'d9'},
     ariaLabel:'Delta-9 edible intensity over time, currently ' + Math.round(nowPct) + ' percent'
   });
+  renderIntensityAverage(document.getElementById('d9-avg'),
+    integrateIntensity(t => peakPct * asymmetricCurve(t, timing.onset, timing.peak, timing.end), timing.end * 1.05),
+    {note:'An edible spends most of its first hour doing nothing, which is why these two numbers differ at all — for anything inhaled, drunk or absorbed quickly they come out identical.'});
   renderLegend(document.getElementById('d9-chart-legend'), [
     {label:'Modelled intensity', color:'var(--accent)'},
     {label:'Onset', color:'var(--text-faint)', dash:true},
@@ -5032,6 +5244,9 @@ function renderD8(){
     accent:'var(--accent)', drag:{key:'d8'},
     ariaLabel:'Delta-8 edible intensity over time, currently ' + Math.round(nowPct) + ' percent'
   });
+  renderIntensityAverage(document.getElementById('d8-avg'),
+    integrateIntensity(t => peakPct * asymmetricCurve(t, timing.onset, timing.peak, timing.end), timing.end * 1.05),
+    {note:'Same curve shape as Delta-9 and the same wait before it starts; only the height differs.'});
   renderLegend(document.getElementById('d8-chart-legend'), [
     {label:'Modelled intensity', color:'var(--accent)'},
     {label:'Onset', color:'var(--text-faint)', dash:true},
@@ -5275,6 +5490,9 @@ function renderSmoked(){
     accent:'var(--accent)', drag:{key:'sm'},
     ariaLabel:'Inhaled cannabis intensity over time in minutes, currently ' + Math.round(nowPct) + ' percent'
   });
+  renderIntensityAverage(document.getElementById('sm-avg'),
+    integrateIntensity(t => peakPct * asymmetricCurve(t, timing.onset, timing.peak, timing.end), timing.end * 1.05),
+    {note:'Inhaled, the two numbers are nearly the same \u2014 there is almost no wait to average over.'});
   renderLegend(document.getElementById('sm-chart-legend'), [
     {label:'Modelled intensity', color:'var(--accent)'},
     {label:'Modelled peak', color:'var(--accent-2)', dash:true},
@@ -5783,6 +6001,9 @@ function renderCaffeine(){
     accent:'var(--accent-2)', drag:{key:'caf', maxMin:endMin},
     ariaLabel:'Caffeine effect intensity over time, currently ' + Math.round(nowPct) + ' percent'
   });
+  renderIntensityAverage(document.getElementById('caf-avg'),
+    integrateIntensity(t => caffeineIntensity(caffeineConcAt(items, t, vdL, ke), s.tol), 10080),
+    {note:'Caffeine lands near a third of its peak, the lowest ratio of anything here apart from nicotine, because the window keeps running for hours while the curve sits just above the floor. An afternoon coffee raises both the peak and the average and pushes the far end of the window further out still.'});
   renderLegend(document.getElementById('caf-legend-fx'), [
     {label:'Stimulant intensity (shared scale)', color:'var(--accent-2)'},
     {label:'Modelled peak', color:'var(--accent-2)', dash:true}
@@ -6447,6 +6668,9 @@ function renderNicotine(){
     accent:'var(--accent-2)', drag:{key:'nic', maxMin:endMin},
     ariaLabel:'Nicotine effect intensity over time, currently ' + Math.round(nowPct) + ' percent'
   });
+  renderIntensityAverage(document.getElementById('nic-avg'),
+    integrateIntensity(t => nicotineIntensity(nicotineNgMl(nicotineAmountAt(items, t, ke), vdL), s.tol), 10080),
+    {note:'A whole day of smoking averages around two-thirds of its own peak, because the gaps between cigarettes are shorter than the half-life and the curve never gets far down between them. One cigarette on its own manages barely a third \u2014 almost all of its window is tail.'});
   renderLegend(document.getElementById('nic-legend-fx'), [
     {label:'Nicotine intensity (shared scale)', color:'var(--accent-2)'},
     {label:'Modelled peak', color:'var(--accent-2)', dash:true}
