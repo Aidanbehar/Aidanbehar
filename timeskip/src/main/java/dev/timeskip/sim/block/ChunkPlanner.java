@@ -1,6 +1,7 @@
 package dev.timeskip.sim.block;
 
 import dev.timeskip.sim.SimContext;
+import dev.timeskip.sim.enderman.EndermanPlanner;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.PalettedContainer;
 
@@ -31,6 +32,11 @@ public final class ChunkPlanner {
                     }
                 }
             }
+        }
+        // Endermen act last, after the chunk's own changes (grass spreading or dying, copper...).
+        scope.finishAggregates();
+        if (sim.config.simulateEndermen) {
+            EndermanPlanner.plan(scope);
         }
         return scope.finish();
     }

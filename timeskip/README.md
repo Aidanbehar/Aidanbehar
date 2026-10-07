@@ -14,7 +14,7 @@ Works in singleplayer and on servers. Players joining a server do **not** need t
 1. **Install Fabric.** Go to <https://fabricmc.net/use/installer/>, download the installer,
    open it, pick Minecraft **26.3** and click *Install*. (On a server, choose the *Server* tab
    instead.)
-2. **Add the mod.** Put `timeskip-1.0.0.jar` into your `mods` folder. In the Minecraft launcher, open
+2. **Add the mod.** Put `timeskip-1.1.0.jar` into your `mods` folder. In the Minecraft launcher, open
    *Installations*, hover over *fabric-loader-26.3*, click the folder icon, and open `mods`
    (create it if it isn't there). On a server it is the `mods` folder next to the server jar.
 3. **Play.** Start Minecraft with the *fabric-loader-26.3* profile, open a world with cheats on
@@ -82,6 +82,15 @@ from Minecraft's own rules and probabilities, instead of running billions of tic
   allow, and keep the XP for you. Brewing stands brew, campfires finish cooking, composters
   finish, and hoppers move items along simple chains (for example a chest → hopper → furnace →
   hopper → chest auto-smelter).
+* **Endermen:** endermen pick up grass, dirt, sand, gravel, flowers, mushrooms, pumpkins, melons
+  and the other blocks they can hold, and put them down again, at the rate they would have in
+  normal play. Like in vanilla this only happens where monsters spawn near players (dark spots
+  24-128 blocks away: caves, open ground at night, the Nether and the End), and not at all if the
+  `mob_griefing` or `spawn_mobs` game rule is off or the game is on peaceful. Most endermen put a
+  block down close to where they took it; some teleport into the shade first. Very long skips don't
+  scramble the landscape: the share of moved blocks levels off (see
+  `enderman_max_disturbed_percent`), also across many skips in a row. An enderman that was holding
+  a block when the skip started puts it down before it despawns, so no block disappears with it.
 * **Creatures and items:** babies grow up, breeding cooldowns reset, tadpoles become frogs,
   zombie villagers being cured finish curing, villagers with a job site restock, and dropped items,
   XP orbs and stuck arrows despawn. Mobs that would normally despawn are removed so the world
@@ -98,9 +107,10 @@ exactly how full a cauldron gets, can differ.)
 * Only **loaded chunks age**: the area around players and any force-loaded chunks. That matches
   vanilla, where unloaded chunks never change. You can set `extra_chunk_radius` in the config to
   age a ring of extra chunks around each player.
-* Calculated skips **don't run redstone, mob farms, flowing water or lava**, and mob spawning is
-  handled as "the world refills normally afterwards", not simulated for millions of years. Use a
-  skip of 3 days or less when you want contraptions to really run.
+* Calculated skips **don't run redstone, mob farms, flowing water or lava**, and mobs are handled
+  as "the world refills normally afterwards" rather than simulated one by one (only what endermen
+  do to blocks is worked out). Use a skip of 3 days or less when you want contraptions to really
+  run.
 * Blocks added by other mods that grow with random ticks get their own growth code run a limited
   number of times, so most modded crops grow too.
 * Players can't take damage while a skip is running.
@@ -122,6 +132,8 @@ file, and nobody needs to change anything. Highlights:
 | `real_tick_max_seconds` | 90 | ...if the server can do it within this many seconds |
 | `tick_budget_ms` | 30 | Milliseconds per server tick the skip may use |
 | `extra_chunk_radius` | 0 | Extra chunks to load and age around players |
+| `simulate_endermen` | true | Endermen move blocks during calculated skips |
+| `enderman_max_disturbed_percent` | 10 | At most this % of the blocks endermen can reach end up moved |
 | `mob_equilibrium` | despawn | `despawn` or `keep` |
 | `freeze_world_during_skip` | true | Pause mobs and machines during calculated skips |
 | `protect_players_during_skip` | true | No player damage during skips |
@@ -138,7 +150,7 @@ You need Java 25. From the `timeskip` folder run:
 ./gradlew build
 ```
 
-On Windows, run `gradlew.bat build`. The mod appears in `build/libs/timeskip-1.0.0.jar`.
+On Windows, run `gradlew.bat build`. The mod appears in `build/libs/timeskip-1.1.0.jar`.
 This also runs the unit tests, which check the probability maths against brute-force,
 tick-by-tick simulations of Minecraft's random ticks.
 

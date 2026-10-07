@@ -2,6 +2,7 @@ package dev.timeskip.sim;
 
 import dev.timeskip.math.DaylightModel;
 import dev.timeskip.math.RandomTickMath;
+import dev.timeskip.sim.enderman.EndermanPopulation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.gamerules.GameRules;
@@ -30,8 +31,10 @@ public final class LevelInfo {
     public final int maxSnowHeight;
     public final int seaLevel;
     public final boolean canHaveWeather;
+    /** Enderman population model for this dimension (inactive if disabled or mobGriefing is off). */
+    public final EndermanPopulation endermen;
 
-    public LevelInfo(ServerLevel level, long ticks, long endTimeOfDay, long rainTicks) {
+    public LevelInfo(ServerLevel level, long ticks, long endTimeOfDay, long rainTicks, boolean simulateEndermen) {
         this.level = level;
         this.ticks = ticks;
         this.randomTickSpeed = Math.max(0, level.getGameRules().get(GameRules.RANDOM_TICK_SPEED));
@@ -46,6 +49,7 @@ public final class LevelInfo {
         this.rainTicks = canHaveWeather ? rainTicks : 0;
         this.maxSnowHeight = level.getGameRules().get(GameRules.MAX_SNOW_ACCUMULATION_HEIGHT);
         this.seaLevel = level.getSeaLevel();
+        this.endermen = new EndermanPopulation(level, simulateEndermen, dayCycle);
     }
 
     /** Fraction of the day a block passes a "max local raw brightness >= threshold" check. */

@@ -4,6 +4,8 @@ import dev.timeskip.core.SkipStats;
 import dev.timeskip.sim.LevelInfo;
 import dev.timeskip.sim.SimContext;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
+import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Block;
@@ -57,7 +59,24 @@ public final class ApplyContext {
      * a chunk edge check this first so they never force a synchronous chunk load.
      */
     public boolean areaLoaded(BlockPos pos, int radius) {
-        return level.hasChunksAt(pos.getX() - radius, pos.getZ() - radius, pos.getX() + radius, pos.getZ() + radius);
+        return chunksLoaded(level, pos.getX() - radius, pos.getZ() - radius, pos.getX() + radius, pos.getZ() + radius);
+    }
+
+    /**
+     * True if every chunk overlapping the block range is fully loaded right now (main thread).
+     * {@code Level.hasChunksAt} only checks ticket levels, so a chunk that is ticketed but still
+     * loading would pass it and then block the server thread on the first {@code getBlockState}.
+     */
+    public static boolean chunksLoaded(ServerLevel level, int minX, int minZ, int maxX, int maxZ) {
+        ServerChunkCache cache = level.getChunkSource();
+        for (int cx = SectionPos.blockToSectionCoord(minX); cx <= SectionPos.blockToSectionCoord(maxX); cx++) {
+            for (int cz = SectionPos.blockToSectionCoord(minZ); cz <= SectionPos.blockToSectionCoord(maxZ); cz++) {
+                if (cache.getChunkNow(cx, cz) == null) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     public void markChanged() {

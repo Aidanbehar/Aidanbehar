@@ -64,6 +64,22 @@ test {
     }
 }
 
+// Test-only helper mod (a fake player for headless server tests). Built separately with
+// `./gradlew testmodJar`; it is NOT part of the Time Skip release jar.
+sourceSets {
+    testmod {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+
+tasks.register('testmodJar', Jar) {
+    from sourceSets.testmod.output
+    archiveBaseName = 'timeskip-testplayer'
+    archiveVersion = ''
+    destinationDirectory = layout.buildDirectory.dir('testmod')
+}
+
 jar {
     from('LICENSE') {
         rename { "${it}_${project.archives_base_name}" }

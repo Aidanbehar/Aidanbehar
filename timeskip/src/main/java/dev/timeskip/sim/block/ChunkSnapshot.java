@@ -34,6 +34,12 @@ public final class ChunkSnapshot implements BlockGetter {
     public final ChunkPos pos;
     public final int minX;
     public final int minZ;
+    /** True if vanilla's spawner runs in this chunk and monsters can spawn here (endermen active). */
+    public final boolean monstersSpawn;
+    /** Enderman share of this chunk's monster spawns (0 if none spawn or endermen are inactive). */
+    public final double endermanShare;
+    /** Inhabited time before the skip: how long players have already been near this chunk. */
+    public final long inhabitedTime;
     private final int minY;
     private final int height;
     private final int minSection;
@@ -48,6 +54,9 @@ public final class ChunkSnapshot implements BlockGetter {
         this.pos = chunk.getPos();
         this.minX = pos.getMinBlockX();
         this.minZ = pos.getMinBlockZ();
+        this.monstersSpawn = info.endermen.monstersSpawn(chunk);
+        this.endermanShare = monstersSpawn ? info.endermen.endermanShare(chunk) : 0.0;
+        this.inhabitedTime = chunk.getInhabitedTime();
         this.minY = chunk.getMinY();
         this.height = chunk.getHeight();
         this.minSection = chunk.getMinSectionY();

@@ -43,6 +43,7 @@ public final class TimeSkipConfig {
     public boolean simulateEntities = true;
     public boolean simulateWeather = true;
     public boolean growTrees = true;
+    public boolean simulateEndermen = true;
     public MobEquilibrium mobEquilibrium = MobEquilibrium.DESPAWN;
     public boolean addInhabitedTime = true;
 
@@ -51,6 +52,7 @@ public final class TimeSkipConfig {
     public int vanillaReplayMaxRandomTicks = 64;
     public int treeGrowthAttempts = 4;
     public int hopperPasses = 3;
+    public int endermanMaxDisturbedPercent = 10;
     public long seedSalt = 0;
 
     /** Ticks in one configured year. */
@@ -94,6 +96,7 @@ public final class TimeSkipConfig {
         vanillaReplayMaxRandomTicks = clamp(vanillaReplayMaxRandomTicks, 0, 4096);
         treeGrowthAttempts = clamp(treeGrowthAttempts, 1, 64);
         hopperPasses = clamp(hopperPasses, 0, 16);
+        endermanMaxDisturbedPercent = clamp(endermanMaxDisturbedPercent, 0, 100);
     }
 
     private static int clamp(int v, int min, int max) {
@@ -178,6 +181,12 @@ public final class TimeSkipConfig {
                         c -> Boolean.toString(c.simulateWeather), (c, v) -> c.simulateWeather = parseBool(v)),
                 entry("grow_trees", "Let saplings grow into full trees.",
                         c -> Boolean.toString(c.growTrees), (c, v) -> c.growTrees = parseBool(v)),
+                entry("simulate_endermen", "Endermen pick up and put down blocks (grass, dirt, sand, flowers, pumpkins...) like\n"
+                                + "they would have over the skipped time. As in vanilla it only happens where monsters spawn\n"
+                                + "near players (dark spots, 24-128 blocks away), and not at all if the mob_griefing or\n"
+                                + "spawn_mobs game rule is off, or on peaceful. Only for calculated skips (short skips run the\n"
+                                + "real game).",
+                        c -> Boolean.toString(c.simulateEndermen), (c, v) -> c.simulateEndermen = parseBool(v)),
                 entry("mob_equilibrium", "despawn = mobs that could despawn are removed and the normal spawner refills the world\n"
                                 + "afterwards (named, tamed, leashed and persistent mobs always stay). keep = leave all mobs.",
                         c -> c.mobEquilibrium.name().toLowerCase(Locale.ROOT),
@@ -197,6 +206,11 @@ public final class TimeSkipConfig {
                         c -> Integer.toString(c.treeGrowthAttempts), (c, v) -> c.treeGrowthAttempts = Integer.parseInt(v)),
                 entry("hopper_passes", "Rounds of hopper -> furnace -> hopper item movement to settle simple item chains.",
                         c -> Integer.toString(c.hopperPasses), (c, v) -> c.hopperPasses = Integer.parseInt(v)),
+                entry("enderman_max_disturbed_percent", "However long the skip (and however many skips), endermen end up moving at most about\n"
+                                + "this percentage of the blocks they can reach in each chunk: moved blocks get picked up\n"
+                                + "again, so the amount settles instead of growing forever. Time players already spent near a\n"
+                                + "chunk counts towards it. Keeps very long skips looking natural. 0-100.",
+                        c -> Integer.toString(c.endermanMaxDisturbedPercent), (c, v) -> c.endermanMaxDisturbedPercent = Integer.parseInt(v)),
                 entry("seed_salt", "Change to get a different (but still repeatable) random outcome for the same world and skip.",
                         c -> Long.toString(c.seedSalt), (c, v) -> c.seedSalt = Long.parseLong(v))
         )));

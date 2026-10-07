@@ -43,12 +43,15 @@ core/                        SkipManager (one session per server), SkipSession (
 scheduler/                   TickBudget, WorkerPool, OrderedResults (deterministic apply order)
 math/                        Rng (SplitMix64 + per-block seed derivation), Binomial (inversion +
                              BTPE), Geometric, RandomTickMath (successes, stage chains,
-                             saturation), DaylightModel, WeatherMath (renewal process)
+                             saturation), DaylightModel, WeatherMath (renewal process),
+                             EndermanMath (goal rates, offset tables, Poisson, saturation)
 sim/block/                   ChunkSnapshot, ChunkPlanner (worker), ChunkPlan, BlockHandler,
                              BlockHandlers (registry), PlanContext, handlers/*
 sim/blockentity/             BlockEntitySimulator, FurnaceSim, BrewingStandSim, CampfireSim,
                              ComposterSim, HopperSim
 sim/entity/                  EntitySimulator
+sim/enderman/                EndermanPopulation (expected endermen per chunk), EndermanPlanner
+                             (worker), EndermanMove + EndermanPlacement (main thread)
 sim/world/                   WorldStateSimulator (clocks, game time, weather, trader, raids)
 tier1/                       RealTickRunner
 mixin/                       player damage guard + @Accessor/@Invoker interfaces
@@ -65,6 +68,7 @@ mixin/                       player damage guard + @Accessor/@Invoker interfaces
  extra clock+level ticks inside the                      COLLECT  loaded chunks (+radius, async)
  per-tick budget until N ticks ran                       PLAN     snapshot on main ─► workers plan
                                                          APPLY    ordered, budgeted, verified
+                                                         ENDERMEN blocks picked up and put down
                                                          BLOCK_ENTITIES  hopper/furnace passes
                                                          ENTITIES aging, despawn, restock
                                                          WORLD    clocks, time, weather, timers
@@ -192,6 +196,66 @@ correct "where it would end" distribution. Wandering-trader delay/chance advance
 stop, chunks near players gain inhabited time. Pending scheduled ticks become due and run
 normally after the skip.
 
+### 6.7 Endermen (`simulate_endermen`, calculated skips only)
+Based on the 26.3 `EndermanTakeBlockGoal` / `EndermanLeaveBlockGoal`, `GoalSelector`,
+`NaturalSpawner`, `Mob.checkDespawn` and `Enderman.customServerAiStep`. Workers plan each chunk
+(`EndermanPlanner`); after the BLOCKS phase a main-thread ENDERMEN phase (`EndermanPhase`)
+decides the counts and applies the moves.
+
+* **Goal rates.** The goal selector updates every other tick. The take goal's `canUse` is
+  `nextInt(10) == 0`; after a failed attempt the goal is still running, so the next update first
+  re-rolls `canContinueToUse` and, if that fails, may restart it — `2q − q²` instead of `q`. The
+  two-state chain gives `q·p / (p + (1 − p)(1 − q + q²))` successful pickups per update, ≈ `p/18.2`
+  per tick (`EndermanMath.successPerTick`; the leave goal is the same with `q = 1/1000`).
+* **Pickup geometry.** `floor(x − 2 + 4u)` per horizontal axis (offsets −2…+2, weights
+  ⅛ ¼ ¼ ¼ ⅛), `floor(y + 3u)` vertically (0, 1, 2 above the feet), only `#enderman_holdable`, and
+  only if vanilla's ray cast (`ClipContext` OUTLINE from the column centre at the target's
+  height) reaches it; the same `BlockGetter.clip` runs on the snapshot.
+* **Where endermen are.** Spawning chunks: entity-ticking, centre within 128 blocks of a
+  non-spectator player; nothing unless `spawn_mobs`, `spawn_monsters` and `mob_griefing` are on and
+  difficulty isn't peaceful. Standing spots: `isValidSpawn` ground + three blocks without
+  collision or fluid, more than 24 and at most 128 blocks (3D) from the nearest player. Spot weight
+  = chance `Monster.isDarkEnoughToSpawn` passes for its sky/block light (day-averaged if time moves;
+  dimension light test read at runtime; Overworld open ground ≈ 0.10, dark caves 1.0, any block
+  light 0) ÷ column height (vanilla picks y uniformly). A chunk's spawn weight = sum of its spots.
+* **How many.** The monster cap is `70 × spawnableChunks / 289` (spawnable = within 8 chunks of a
+  player), i.e. 70 per player, and near players it is full. Vanilla fills it wherever spawn
+  attempts succeed, so chunk `c` holds `cap × spawnWeight_c / Σ spawnWeight` monsters, of which
+  `share_c` are endermen. `share` = `Σ weight·meanGroup` for endermen / for all monsters in the
+  spawn list vanilla reads there (`EnvironmentAttributes.NATURAL_MOB_SPAWNS`, so datapacks work;
+  surface and mid-depth averaged): ≈1.2 % in most Overworld biomes, 100 % in The End and warped
+  forests, 0 in mushroom fields and the deep dark; spawn costs (warped forest, soul sand valley)
+  add the potential limit `budget / charge² × 128` per player. Carriers leave the cap and never
+  despawn, so moves follow the free population: pickups `M ~ Poisson(free × ticks × successPerTick(p̄))`,
+  `p̄` = weighted mean pickup success over the chunk's spots.
+* **Saturation, cumulative.** Placed blocks can be picked up again (as in vanilla), so the
+  displaced count levels off: `D(m) = Dmax(1 − e^(−m/Dmax))`, `Dmax` =
+  `enderman_max_disturbed_percent` of the holdable blocks reachable from the chunk's spots. A skip
+  adds `D(M₀ + M) − D(M₀)` where `M₀` is the expected pickups from the chunk's inhabited time
+  before the skip (vanilla increments it in exactly the spawning chunks, and the mod adds skipped
+  time to it), so the cap holds across many skips and real play.
+* **Which blocks.** The planner pre-draws up to `Dmax` distinct targets (spot ∝ weight × success,
+  target ∝ offset probability); the phase takes the first `D`. Snapshots are all taken before any
+  enderman moves, so results don't depend on thread timing.
+* **Where they go** (`EndermanPlacement.Wander`). More than 32 blocks from every player a mob's
+  `noActionTime` never resets and `RandomStrollGoal` stops after 100 ticks, so the carrier stays put
+  and places right there (`STAY`). Under open sky in daylight it teleports (±32 blocks, down to an
+  `#entities_can_teleport_to` block, room and no liquid) until it is out of the sun: a third of
+  open-sky carriers are still carrying at dawn (`SKY`; frozen time: all or none). Within 32 blocks
+  of a player it keeps strolling (`STROLL`, 2D Gaussian drift σ 12, ≤ 28). The placement itself:
+  offsets −1…+1 (¼ ½ ¼), 0…1 up, tried in probability order until the exact `canPlaceBlock` rule
+  passes (air; below not air, not bedrock, full collision shape; the neighbour-updated
+  `defaultBlockState()` can survive; no entities). A plant whose neighbour update turns it into
+  air is lost, as in vanilla.
+* **Transactional.** The live block may differ from the snapshot (the chunk's own changes ran
+  first); any holdable block is taken. No spot → the block stays. Spots on the block's own hole
+  or resting on it are never chosen; if removing it still invalidates the spot it is put back.
+  Like vanilla, `removeBlock` pops off plants standing on it.
+* **Real carriers.** An enderman holding a block at skip start puts it down (same rules) before
+  the mob-equilibrium check; if it can't (or `mob_griefing` is off) it keeps the block and, being
+  persistent while carrying, stays. No block disappears with a despawned enderman.
+* Diagnostics: `-Dtimeskip.debugEndermen=true` logs every move and a per-chunk summary.
+
 ## 7. Lag control summary
 Budgeted main-thread work in every phase; planning on `worker_threads` daemon threads using
 copies only; per-block packets suppressed, full-chunk resends spread across ticks; light work
@@ -207,16 +271,29 @@ released afterwards.
 | Main-thread time during the 529-chunk skip | avg 22–28 ms per tick (budget 30 ms), worst ≈ 37 ms (the final world save, given its own tick) |
 | Worker planning | 0.5–1.2 ms per chunk |
 | Tier 1, 2 days (48,000 real ticks), small world | 3.2 s |
+| Endermen, flower forest, 225 chunks, one player: 100 or 10,000 years | 2.5 s with endermen vs 1.1 s without; worker planning 7–11 vs 3–4 ms per chunk; ENDERMEN phase ≈ 0.3 ms per move, budget checked before every move |
 
 ## 9. Tests
 Pure-Java JUnit 5 (no Minecraft bootstrap):
 binomial vs exact pmf (chi-square), stage chain vs brute-force per-tick simulation of a crop
 (stage distribution after N ticks), saturation shortcut, weather stationary distribution vs
 brute force, daylight fraction, deterministic seeding, unit conversion/validation.
-Plus an end-to-end smoke test on a dedicated server (scripted console commands).
+Enderman model: pickup/placement offset tables vs the vanilla formulas, the cap-limited
+population and single-enderman cycle vs brute-force replays of the goal code, saturation curve,
+Poisson sampler moments, spawn-light weights vs `Monster.isDarkEnoughToSpawn`.
+Plus an end-to-end smoke test on a dedicated server (scripted console commands). Vanilla only
+spawns mobs near players, so the enderman tests use a test-only `/fakeplayer` mod
+(`src/testmod`, built with `./gradlew testmodJar`, never shipped) and compare each skip against
+the same skip with `simulate_endermen = false`.
 
 ## 10. Known limitations (documented)
 Only ticking chunks (+ optional radius) age; unloaded chunks stay as they were, just like in
 vanilla. Results are reproducible except where vanilla code we call draws from the level's own
 shared random source (e.g. cauldron fill chance). Tier 2 does not run redstone, mob farms or fluid flow. Mob spawning is an equilibrium,
 not a simulation. Grass-spread seams can appear at chunk borders for short skips.
+Endermen: all monster types treated as ground spawners when sharing the cap; biome sampled at two
+heights; thunderstorm spawning and spawn-rule failures of other mobs ignored in the share; the
+cap assumed full; endermen are where they spawned (lit areas and the 24-block bubble around a
+player see no pickups, although real ones can wander in); a pickup box is cut off at the chunk
+border; the dawn-teleport chance is one fixed estimate; with `add_inhabited_time` off, repeated
+skips don't count towards the cap.

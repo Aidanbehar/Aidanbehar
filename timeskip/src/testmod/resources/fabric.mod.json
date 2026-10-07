@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "timeskip_testplayer",
+  "version": "1.0.0",
+  "name": "Time Skip test helper (fake player)",
+  "description": "TEST ONLY. Adds /fakeplayer <name> so server-side tests have a player. Not part of the Time Skip release.",
+  "environment": "server",
+  "entrypoints": { "main": ["dev.timeskip.testmod.FakePlayerMod"] },
+  "depends": { "fabricloader": "*", "minecraft": "*" }
+}

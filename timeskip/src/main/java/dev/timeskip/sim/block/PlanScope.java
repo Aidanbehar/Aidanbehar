@@ -8,6 +8,7 @@ import dev.timeskip.sim.LevelInfo;
 import dev.timeskip.sim.SimContext;
 import dev.timeskip.sim.block.handlers.CopperCluster;
 import dev.timeskip.sim.block.handlers.GrassSpread;
+import dev.timeskip.sim.enderman.EndermanChunk;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -22,6 +23,7 @@ public final class PlanScope {
     private final BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
     private CopperCluster copper;
     private GrassSpread grass;
+    private EndermanChunk endermen;
 
     public PlanScope(SimContext sim, ChunkSnapshot snapshot) {
         this.sim = sim;
@@ -77,14 +79,26 @@ public final class PlanScope {
         return grass;
     }
 
-    /** Runs chunk-wide aggregations (copper clusters, grass spread) and returns the plan. */
-    public ChunkPlan finish() {
+    /** Hands the enderman planner's result to the main thread with the plan. */
+    public void setEndermen(EndermanChunk endermen) {
+        this.endermen = endermen;
+    }
+
+    /** Runs chunk-wide aggregations (copper clusters, grass spread). */
+    public void finishAggregates() {
         if (copper != null) {
             copper.finish();
+            copper = null;
         }
         if (grass != null) {
             grass.finish();
+            grass = null;
         }
-        return builder.build(snapshot);
+    }
+
+    /** Runs any pending aggregations and returns the plan. */
+    public ChunkPlan finish() {
+        finishAggregates();
+        return builder.build(snapshot, endermen);
     }
 }

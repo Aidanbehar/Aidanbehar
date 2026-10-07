@@ -11,6 +11,7 @@ import dev.timeskip.scheduler.WorkerPool;
 import dev.timeskip.sim.LevelInfo;
 import dev.timeskip.sim.SimContext;
 import dev.timeskip.sim.block.ApplyContext;
+import dev.timeskip.sim.enderman.EndermanPhase;
 import dev.timeskip.sim.block.ChunkPlan;
 import dev.timeskip.sim.block.ChunkPlanner;
 import dev.timeskip.sim.block.ChunkSnapshot;
@@ -40,7 +41,7 @@ import org.slf4j.LoggerFactory;
  * Tier 2: the analytical fast-forward. A resumable state machine driven from the server tick:
  *
  * <pre>
- * COLLECT -> LOAD_EXTRA -> BLOCKS -> BLOCK_ENTITIES -> ENTITIES -> WORLD -> RESEND -> SAVE -> DONE
+ * COLLECT -> LOAD_EXTRA -> BLOCKS -> ENDERMEN -> BLOCK_ENTITIES -> ENTITIES -> WORLD -> RESEND -> SAVE -> DONE
  * </pre>
  *
  * In BLOCKS the main thread snapshots chunks and hands them to worker threads, which plan the
@@ -57,6 +58,7 @@ public final class AnalyticalSkip implements SkipJob {
         COLLECT("Finding chunks"),
         LOAD_EXTRA("Loading nearby chunks"),
         BLOCKS("Aging blocks"),
+        ENDERMEN("Endermen moving blocks"),
         BLOCK_ENTITIES("Running furnaces, hoppers and brewing stands"),
         ENTITIES("Aging animals, items and villagers"),
         WORLD("Moving the sun, moon and weather"),
@@ -102,6 +104,7 @@ public final class AnalyticalSkip implements SkipJob {
     private final Set<ChunkRef> touched = new LinkedHashSet<>();
     private final BlockEntitySimulator blockEntities;
     private final EntitySimulator entities;
+    private final EndermanPhase endermen;
     private List<ChunkRef> resendList;
     private List<java.util.concurrent.CompletableFuture<?>> lightReady;
     private int resendCursor;
@@ -120,7 +123,7 @@ public final class AnalyticalSkip implements SkipJob {
         Map<ResourceKey<Level>, LevelInfo> levels = new LinkedHashMap<>();
         for (ServerLevel level : server.getAllLevels()) {
             levels.put(level.dimension(), new LevelInfo(level, ticks,
-                    WorldStateSimulator.endTimeOfDay(level, ticks), weather.rainingTicks()));
+                    WorldStateSimulator.endTimeOfDay(level, ticks), weather.rainingTicks(), config.simulateEndermen));
         }
         this.sim = new SimContext(config, stats, ticks, seedBase, weather, levels);
         int threads = config.effectiveWorkerThreads();
@@ -128,6 +131,7 @@ public final class AnalyticalSkip implements SkipJob {
         this.maxInFlight = Math.max(32, threads * 16);
         this.blockEntities = new BlockEntitySimulator(sim);
         this.entities = new EntitySimulator(sim);
+        this.endermen = new EndermanPhase(sim);
 
         boolean alreadyFrozen = server.tickRateManager().isFrozen();
         if (config.freezeWorldDuringSkip && !alreadyFrozen) {
@@ -155,6 +159,13 @@ public final class AnalyticalSkip implements SkipJob {
                 case COLLECT -> collect();
                 case LOAD_EXTRA -> loadExtra();
                 case BLOCKS -> blocks(budget);
+                case ENDERMEN -> {
+                    if (cancelRequested) {
+                        skipToResend();
+                    } else if (!config.simulateEndermen || endermen.step(budget)) {
+                        phase = Phase.BLOCK_ENTITIES;
+                    }
+                }
                 case BLOCK_ENTITIES -> {
                     if (cancelRequested) {
                         skipToResend();
@@ -334,7 +345,7 @@ public final class AnalyticalSkip implements SkipJob {
                 cancelled = true;
                 phase = Phase.RESEND;
             } else {
-                phase = Phase.BLOCK_ENTITIES;
+                phase = Phase.ENDERMEN;
             }
         }
     }
@@ -379,6 +390,9 @@ public final class AnalyticalSkip implements SkipJob {
         if (config.simulateBlockEntities) {
             blockEntities.collect(ctx.info, chunk);
         }
+        if (plan.endermen != null) {
+            endermen.add(plan.endermen);
+        }
         applied++;
         stats.inc(Stat.CHUNKS_AGED);
     }
@@ -391,7 +405,7 @@ public final class AnalyticalSkip implements SkipJob {
     private static boolean neighboursLoaded(ServerLevel level, ChunkPos pos) {
         int minX = pos.getMinBlockX();
         int minZ = pos.getMinBlockZ();
-        return level.hasChunksAt(minX - 16, minZ - 16, minX + 31, minZ + 31);
+        return ApplyContext.chunksLoaded(level, minX - 16, minZ - 16, minX + 31, minZ + 31);
     }
 
     /** Finishes the chunk being applied so a cancel never leaves one half-aged. */
@@ -487,7 +501,8 @@ public final class AnalyticalSkip implements SkipJob {
     public float progress() {
         return switch (phase) {
             case COLLECT, LOAD_EXTRA -> 0.02F;
-            case BLOCKS -> 0.03F + 0.72F * (chunks.isEmpty() ? 1.0F : (float) applied / chunks.size());
+            case BLOCKS -> 0.03F + 0.67F * (chunks.isEmpty() ? 1.0F : (float) applied / chunks.size());
+            case ENDERMEN -> 0.70F + 0.05F * fraction(endermen.done(), endermen.total());
             case BLOCK_ENTITIES -> 0.75F + 0.08F * fraction(blockEntities.done(), blockEntities.total());
             case ENTITIES -> 0.83F + 0.08F * fraction(entities.done(), entities.total());
             case WORLD -> 0.92F;

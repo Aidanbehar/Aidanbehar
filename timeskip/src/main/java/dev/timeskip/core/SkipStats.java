@@ -24,6 +24,7 @@ public final class SkipStats {
         CAULDRONS_FILLED("cauldron fill steps"),
         EGGS_HATCHED("eggs hatched"),
         FIRES_OUT("fires burned out"),
+        ENDERMAN_MOVES("blocks moved by endermen"),
         OTHER_BLOCKS("other blocks changed"),
         ITEMS_SMELTED("items smelted"),
         POTIONS_BREWED("potions brewed"),

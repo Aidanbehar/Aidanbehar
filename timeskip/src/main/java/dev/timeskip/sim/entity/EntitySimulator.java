@@ -12,9 +12,13 @@ import dev.timeskip.mixin.ZombieVillagerInvoker;
 import dev.timeskip.scheduler.TickBudget;
 import dev.timeskip.sim.LevelInfo;
 import dev.timeskip.sim.SimContext;
+import dev.timeskip.sim.enderman.EndermanPlacement;
+import dev.timeskip.sim.enderman.EndermanPopulation;
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.Entity;
@@ -25,10 +29,13 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.animal.frog.Tadpole;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.Enderman;
 import net.minecraft.world.entity.monster.zombie.ZombieVillager;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.gamerules.GameRules;
 
 /**
  * Ages every loaded entity by the skipped time.
@@ -51,6 +58,7 @@ public final class EntitySimulator {
     private static final int MAX_GOSSIP_DECAYS = 30;
     /** "Very far from every player" for vanilla's removeWhenFarAway check. */
     private static final double FAR_AWAY_SQR = 1.0e12;
+    private static final long CARRIED_SALT = 0x43415252L;
 
     private final SimContext sim;
     private final List<Entry> entities = new ArrayList<>();
@@ -142,6 +150,9 @@ public final class EntitySimulator {
 
     private void ageMob(LevelInfo info, Mob mob, long ticks, int clamped) {
         ServerLevel level = info.level;
+        if (mob instanceof Enderman enderman) {
+            putDownCarriedBlock(info, enderman);
+        }
         if (sim.config.mobEquilibrium == TimeSkipConfig.MobEquilibrium.DESPAWN && isDespawnable(level, mob)) {
             mob.discard();
             sim.stats.inc(Stat.MOBS_DESPAWNED);
@@ -188,6 +199,40 @@ public final class EntitySimulator {
             for (long i = 0; i < decays; i++) {
                 ((VillagerAccessor) villager).timeskip$getGossips().decay();
             }
+        }
+    }
+
+    /**
+     * A real enderman holding a block when the skip started would have put it down long before the
+     * skip ends (one placement attempt per ~2000 ticks), so place it — with the same vanilla
+     * placement and wandering rules as simulated moves — before the despawn check runs. Vanilla
+     * never despawns an enderman while it carries a block, so if there is nowhere to put it (or
+     * mobGriefing is off and it may not place blocks), it simply keeps carrying it and stays.
+     */
+    private void putDownCarriedBlock(LevelInfo info, Enderman enderman) {
+        BlockState carried = enderman.getCarriedBlock();
+        if (carried == null || !sim.config.simulateEndermen || !info.level.getGameRules().get(GameRules.MOB_GRIEFING)) {
+            return;
+        }
+        BlockPos at = enderman.blockPosition();
+        EndermanPopulation population = info.endermen;
+        EndermanPlacement.Wander wander;
+        if (population.nearPlayer(at.getX(), at.getY(), at.getZ())) {
+            wander = EndermanPlacement.Wander.STROLL;
+        } else if (population.teleportChance() > 0 && info.level.canSeeSky(at)) {
+            wander = EndermanPlacement.Wander.SKY;
+        } else {
+            wander = EndermanPlacement.Wander.STAY;
+        }
+        RandomSource random = RandomSource.create(sim.seed(info, at.getX(), at.getY(), at.getZ(), CARRIED_SALT));
+        BlockPos target = EndermanPlacement.findSpot(info.level, at, carried, random, null, wander, population.teleportChance());
+        if (target != null) {
+            boolean kept = EndermanPlacement.place(info.level, target, carried);
+            enderman.setCarriedBlock(null);
+            if (kept) {
+                sim.stats.inc(Stat.ENDERMAN_MOVES);
+            }
+            EndermanPlacement.debugLog(info.level, at, target, carried, kept ? "put down held" : "lost held (it can't live there, as in vanilla)");
         }
     }
 
