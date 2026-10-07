@@ -14,7 +14,11 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.attribute.EnvironmentAttributes;
+import net.minecraft.tags.BiomeTags;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.MobSpawnSettings;
+import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.gamerules.GameRules;
@@ -69,16 +73,24 @@ public final class EndermanPopulation {
      * dawn and teleport away from the sun ({@code Enderman.customServerAiStep}).
      */
     private static final double DAWN_TELEPORT_CHANCE = 1.0 / 3.0;
+    /** {@code Ghast.checkGhastSpawnRules}: {@code nextInt(20) == 0}, and packs of one, not four. */
+    private static final double GHAST_PASS = 1.0 / 20.0 / 4.0;
+    /** Surface slimes also need {@code getMaxLocalRawBrightness <= nextInt(8)}: about a quarter of a day. */
+    private static final double DARK_ENOUGH_FOR_SURFACE_SLIMES = 0.25;
 
     private final ServerLevel level;
     private final boolean active;
     private final double totalCap;
     private final double[] players;
     private final double teleportChance;
+    private final double rainFraction;
     private final double[][] lightWeight = new double[16][16];
-    private final Map<MobSpawnSettings, double[]> shareBySettings = new IdentityHashMap<>();
+    private final Map<MobSpawnSettings, double[]> spawnsBySettings = new IdentityHashMap<>();
 
-    public EndermanPopulation(ServerLevel level, boolean enabled, boolean dayCycle) {
+    /**
+     * @param rainFraction share of the skip it rains (endermen under open sky teleport out of rain)
+     */
+    public EndermanPopulation(ServerLevel level, boolean enabled, boolean dayCycle, double rainFraction) {
         this.level = level;
         boolean griefing = level.getGameRules().get(GameRules.MOB_GRIEFING);
         boolean spawning = level.isSpawningMonsters();
@@ -102,6 +114,7 @@ public final class EndermanPopulation {
         this.totalCap = (double) MobCategory.MONSTER.getMaxInstancesPerChunk() * capChunks.size() / CAP_CHUNK_AREA;
         boolean timeMoves = dayCycle && level.getServer().getGlobalGameRules().get(GameRules.ADVANCE_TIME);
         this.teleportChance = timeMoves ? DAWN_TELEPORT_CHANCE : (dayCycle && level.isBrightOutside() ? 1.0 : 0.0);
+        this.rainFraction = Math.max(0.0, Math.min(1.0, rainFraction));
         buildLightTable(level.dimensionType(), timeMoves, level.getSkyDarken());
         if (EndermanPlacement.DEBUG) {
             EndermanPlacement.LOGGER.info("[Time Skip] endermen in {}: active={} (enabled={}, mobGriefing={}, spawning monsters={}, peaceful={}, players={}), monster cap {}",
@@ -118,19 +131,35 @@ public final class EndermanPopulation {
         return totalCap;
     }
 
-    /** Chance that a carrier picked up under open sky teleports away from daylight before placing. */
-    public double teleportChance() {
-        return teleportChance;
+    /**
+     * Chance that a carrier picked up under open sky teleports away before placing: from daylight
+     * at dawn, or from rain ({@code isSensitiveToWater}: rain hurts it and it teleports) where it rains.
+     */
+    public double teleportChance(boolean rainsHere) {
+        double rain = rainsHere ? rainFraction : 0.0;
+        return 1.0 - (1.0 - teleportChance) * (1.0 - rain);
+    }
+
+    /** Share of the time open-sky spots are free of endermen because it is raining there. */
+    public double rainFraction() {
+        return rainFraction;
+    }
+
+    /** True if it rains (rather than snows or stays dry) at this position's biome (main thread). */
+    public boolean rainsAt(BlockPos pos) {
+        return level.canHaveWeather()
+                && level.getBiome(pos).value().getPrecipitationAt(pos, level.getSeaLevel()) == Biome.Precipitation.RAIN;
     }
 
     /**
-     * Enderman share of the monsters spawning in this chunk (main thread): 0 if nothing spawns here;
-     * NaN-free. Averages the spawn lists at the surface and halfway down (caves).
+     * Enderman share of the monsters that actually spawn in this chunk (main thread). Averages the
+     * spawn lists at the surface and halfway down (caves). Entries whose spawn rule usually fails
+     * fill none of the cap, so they count only as often as they pass: slimes only in slime chunks
+     * (1 in 10 attempts, below y 40) or in swamp-like biomes near the surface, ghasts 1 in 20 (and one
+     * per pack instead of four).
      */
     public double endermanShare(LevelChunk chunk) {
-        double[] surface = shares(chunk, true);
-        double[] middle = shares(chunk, false);
-        return 0.5 * (surface[0] + middle[0]);
+        return 0.5 * (share(chunk, true) + share(chunk, false));
     }
 
     /** True if vanilla's spawner would run in this chunk and some monster can spawn in it (main thread). */
@@ -138,7 +167,7 @@ public final class EndermanPopulation {
         if (!active || !isSpawningChunk(chunk.getPos())) {
             return false;
         }
-        return shares(chunk, true)[1] > 0 || shares(chunk, false)[1] > 0;
+        return spawns(chunk, true)[TOTAL] > 0 || spawns(chunk, false)[TOTAL] > 0;
     }
 
     private boolean isSpawningChunk(ChunkPos pos) {
@@ -156,37 +185,73 @@ public final class EndermanPopulation {
         return near && level.isPositionEntityTicking(new BlockPos((int) cx, level.getSeaLevel(), (int) cz));
     }
 
-    /** {share, monsters can spawn ? 1 : 0} for the spawn list at the surface or halfway down. */
-    private double[] shares(LevelChunk chunk, boolean surface) {
+    private static final int ENDER = 0;
+    private static final int SLIME = 1;
+    private static final int GHAST = 2;
+    private static final int OTHER = 3;
+    private static final int TOTAL = 4;
+    private static final int ENDER_COST_LIMIT = 5;
+
+    private double share(LevelChunk chunk, boolean surface) {
+        double[] spawns = spawns(chunk, surface);
+        if (spawns[ENDER] <= 0) {
+            return 0.0;
+        }
+        ChunkPos pos = chunk.getPos();
+        int top = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8) + 1;
+        int minY = level.getMinY();
+        double column = Math.max(1, top + 1 - minY);
+        double slime = 0.0;
+        if (spawns[SLIME] > 0) {
+            boolean slimeChunk = WorldgenRandom.seedSlimeChunk(pos.x(), pos.z(), level.getSeed(), 987234911L).nextInt(10) == 0;
+            if (slimeChunk) {
+                slime += 0.1 * Math.max(0, Math.min(40, top + 1) - minY) / column;
+            }
+            BlockPos at = new BlockPos(pos.getMiddleBlockX(), top, pos.getMiddleBlockZ());
+            if (level.getBiome(at).is(BiomeTags.ALLOWS_SURFACE_SLIME_SPAWNS)) {
+                double chance = level.environmentAttributes().getValue(EnvironmentAttributes.SURFACE_SLIME_SPAWN_CHANCE, at);
+                double inBand = Math.max(0, Math.min(70, top + 1) - Math.max(51, minY)) / column;
+                slime += chance * DARK_ENOUGH_FOR_SURFACE_SLIMES * inBand;
+            }
+        }
+        double effective = spawns[ENDER] + spawns[OTHER] + spawns[GHAST] * GHAST_PASS + spawns[SLIME] * Math.min(1.0, slime);
+        double share = spawns[ENDER] / effective;
+        return Math.min(share, spawns[ENDER_COST_LIMIT] * share);
+    }
+
+    /** Spawn-list components at the surface or halfway down (cached per spawn list). */
+    private double[] spawns(LevelChunk chunk, boolean surface) {
         ChunkPos pos = chunk.getPos();
         int top = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8) + 1;
         int y = surface ? top : (level.getMinY() + top) / 2;
         MobSpawnSettings settings = level.environmentAttributes().getValue(EnvironmentAttributes.NATURAL_MOB_SPAWNS,
                 new BlockPos(pos.getMiddleBlockX(), y, pos.getMiddleBlockZ()));
-        return shareBySettings.computeIfAbsent(settings, EndermanPopulation::shareFor);
+        return spawnsBySettings.computeIfAbsent(settings, EndermanPopulation::spawnsFor);
     }
 
-    /** Spawn share of endermen, limited by the spawn-cost rule, plus whether any monster spawns. */
-    static double[] shareFor(MobSpawnSettings settings) {
-        double ender = 0;
-        double total = 0;
+    /**
+     * {@code Σ weight·meanGroupSize} for endermen, slimes, ghasts and every other monster, their
+     * total, and the factor (≤ 1) vanilla's spawn-potential rule allows for endermen.
+     */
+    static double[] spawnsFor(MobSpawnSettings settings) {
+        double[] out = new double[6];
         for (Weighted<MobSpawnSettings.SpawnerData> entry : settings.getMobsToSpawn(MobCategory.MONSTER).unwrap()) {
             IntProvider count = entry.value().count();
             double individuals = entry.weight() * (count.minInclusive() + count.maxInclusive()) / 2.0;
-            total += individuals;
-            if (entry.value().type() == EntityTypes.ENDERMAN) {
-                ender += individuals;
-            }
+            EntityType<?> type = entry.value().type();
+            int slot = type == EntityTypes.ENDERMAN ? ENDER : type == EntityTypes.SLIME ? SLIME : type == EntityTypes.GHAST ? GHAST : OTHER;
+            out[slot] += individuals;
+            out[TOTAL] += individuals;
         }
-        double share = total <= 0 ? 0.0 : ender / total;
+        out[ENDER_COST_LIMIT] = 1.0;
         MobSpawnSettings.MobSpawnCost cost = settings.getMobSpawnCost(EntityTypes.ENDERMAN);
-        if (share > 0 && cost != null && cost.charge() > 0) {
+        if (cost != null && cost.charge() > 0) {
             // NaturalSpawner's potential rule caps costed mobs at about budget/charge² × range per
             // player, out of the 70 the cap would otherwise allow.
             double allowed = cost.energyBudget() / (cost.charge() * cost.charge()) * SPAWN_RANGE;
-            share = Math.min(share, share * allowed / MobCategory.MONSTER.getMaxInstancesPerChunk());
+            out[ENDER_COST_LIMIT] = Math.min(1.0, allowed / MobCategory.MONSTER.getMaxInstancesPerChunk());
         }
-        return new double[] {share, total > 0 ? 1.0 : 0.0};
+        return out;
     }
 
     /** True if a monster may spawn at this spot: more than 24 and at most 128 blocks from the nearest player. */

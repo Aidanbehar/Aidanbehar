@@ -49,7 +49,7 @@ public final class LevelInfo {
         this.rainTicks = canHaveWeather ? rainTicks : 0;
         this.maxSnowHeight = level.getGameRules().get(GameRules.MAX_SNOW_ACCUMULATION_HEIGHT);
         this.seaLevel = level.getSeaLevel();
-        this.endermen = new EndermanPopulation(level, simulateEndermen, dayCycle);
+        this.endermen = new EndermanPopulation(level, simulateEndermen, dayCycle, ticks > 0 ? (double) this.rainTicks / ticks : 0.0);
     }
 
     /** Fraction of the day a block passes a "max local raw brightness >= threshold" check. */

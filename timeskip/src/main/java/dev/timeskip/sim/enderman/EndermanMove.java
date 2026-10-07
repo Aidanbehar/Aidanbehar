@@ -37,12 +37,12 @@ public final class EndermanMove {
         }
         BlockState carried = current.getBlock().defaultBlockState();
         RandomSource random = ctx.random(from, SALT);
-        BlockPos target = EndermanPlacement.findSpot(level, BlockPos.of(feet), carried, random, from, wander, teleportChance);
+        BlockPos target = EndermanPlacement.findSpot(level, BlockPos.of(feet), carried, random, from, wander, teleportChance, null);
         if (target == null) {
             return false; // nowhere to put it: the enderman would still be carrying it, so leave it be
         }
         level.removeBlock(from, false);
-        if (!EndermanPlacement.canPlace(level, target, carried)) {
+        if (!EndermanPlacement.canPlace(level, target, carried, null)) {
             level.setBlockAndUpdate(from, current);
             return false;
         }

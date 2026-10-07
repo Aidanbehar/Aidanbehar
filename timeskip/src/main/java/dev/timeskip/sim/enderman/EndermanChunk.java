@@ -12,18 +12,18 @@ import net.minecraft.world.level.ChunkPos;
  * @param share         enderman share of the monsters spawning here
  * @param meanPick      pickup success per attempt, averaged over the spots by weight
  * @param reachable     holdable blocks some spot can reach
- * @param inhabitedTime the chunk's inhabited time before the skip (earlier exposure to endermen)
+ * @param teleportChance chance an open-sky carrier here teleports before placing (dawn or rain)
  * @param targets       candidate pickups in random order (distinct; take a prefix)
  * @param feet          where the enderman stood for each candidate
  * @param wander        how that enderman moves before placing ({@link EndermanPlacement.Wander} ordinal)
  */
 public record EndermanChunk(LevelInfo info, ChunkPos pos, double spawnWeight, double share, double meanPick,
-                            int reachable, long inhabitedTime, long[] targets, long[] feet, byte[] wander) {
+                            int reachable, double teleportChance, long[] targets, long[] feet, byte[] wander) {
     static final long[] NO_LONGS = new long[0];
     static final byte[] NO_BYTES = new byte[0];
 
     /** A chunk where monsters spawn (so it takes part of the cap) but endermen can't move anything. */
     static EndermanChunk spawnOnly(LevelInfo info, ChunkPos pos, double spawnWeight) {
-        return new EndermanChunk(info, pos, spawnWeight, 0.0, 0.0, 0, 0L, NO_LONGS, NO_LONGS, NO_BYTES);
+        return new EndermanChunk(info, pos, spawnWeight, 0.0, 0.0, 0, 0.0, NO_LONGS, NO_LONGS, NO_BYTES);
     }
 }

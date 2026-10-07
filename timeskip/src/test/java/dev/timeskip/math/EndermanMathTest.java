@@ -183,6 +183,24 @@ class EndermanMathTest {
         assertEquals(EndermanMath.carryingFraction(pPick, pPlace), carryingTicks / (double) ticks, 0.01);
     }
 
+    /** Border targets, compensated, get picked as often as interior ones (uniform terrain). */
+    @Test
+    void borderCompensationEvensOutPickRates() {
+        for (int target = 0; target < 16; target++) {
+            double fromInside = 0;
+            for (int standing = 0; standing < 16; standing++) {
+                int d = target - standing;
+                if (d >= -2 && d <= 2) {
+                    fromInside += EndermanMath.PICKUP_XZ[d + 2];
+                }
+            }
+            double compensated = fromInside * Math.sqrt(EndermanMath.borderCompensation(target, target));
+            assertEquals(1.0, compensated, 1e-12, "target at " + target);
+        }
+        assertEquals(1.0 / (0.625 * 0.625), EndermanMath.borderCompensation(0, 15), 1e-12);
+        assertEquals(1.0, EndermanMath.borderCompensation(7, 2), 1e-12);
+    }
+
     /** Many short skips add up to the same displacement as one long one. */
     @Test
     void displacementIsCumulativeAcrossSkips() {

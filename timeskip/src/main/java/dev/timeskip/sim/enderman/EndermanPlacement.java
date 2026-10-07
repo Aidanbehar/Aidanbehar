@@ -75,14 +75,16 @@ public final class EndermanPlacement {
      * Finds a valid placement spot for {@code carried}, or null if the enderman would not have
      * managed to put it down (it would still be carrying it).
      *
-     * @param feet  where the enderman stood when it picked the block up (or stands now)
-     * @param avoid the block's original position (never chosen, nor anything resting on it), or null
+     * @param feet   where the enderman stood when it picked the block up (or stands now)
+     * @param avoid  the block's original position (never chosen, nor anything resting on it), or null
+     * @param except the real enderman doing the placing (its own body doesn't block it), or null
      */
     public static @Nullable BlockPos findSpot(ServerLevel level, BlockPos feet, BlockState carried, RandomSource random,
-                                              @Nullable BlockPos avoid, Wander wander, double teleportChance) {
+                                              @Nullable BlockPos avoid, Wander wander, double teleportChance,
+                                              @Nullable Entity except) {
         return switch (wander) {
-            case STAY -> placeAround(level, feet, carried, random, avoid);
-            case STROLL -> stroll(level, feet, carried, random, avoid);
+            case STAY -> placeAround(level, feet, carried, random, avoid, except);
+            case STROLL -> stroll(level, feet, carried, random, avoid, except);
             case SKY -> {
                 BlockPos from = feet;
                 if (random.nextDouble() < teleportChance) {
@@ -91,14 +93,14 @@ public final class EndermanPlacement {
                         from = shade;
                     }
                 }
-                yield placeAround(level, from, carried, random, avoid);
+                yield placeAround(level, from, carried, random, avoid, except);
             }
         };
     }
 
     /** A carrier that keeps strolling: one vanilla placement attempt from each drifted standing spot. */
     private static @Nullable BlockPos stroll(ServerLevel level, BlockPos origin, BlockState carried, RandomSource random,
-                                            @Nullable BlockPos avoid) {
+                                            @Nullable BlockPos avoid, @Nullable Entity except) {
         BlockPos.MutableBlockPos feet = new BlockPos.MutableBlockPos();
         for (int attempt = 0; attempt < STROLL_ATTEMPTS; attempt++) {
             int x = origin.getX() + clamp(random.nextGaussian() * STROLL_SIGMA, MAX_STROLL);
@@ -110,11 +112,11 @@ public final class EndermanPlacement {
             BlockPos target = feet.offset(sample(EndermanMath.PLACE_XZ, EndermanMath.PLACE_XZ_MIN, random),
                     sample(EndermanMath.PLACE_Y, 0, random),
                     sample(EndermanMath.PLACE_XZ, EndermanMath.PLACE_XZ_MIN, random));
-            if (allowed(target, avoid) && canPlace(level, target, carried)) {
+            if (allowed(target, avoid) && canPlace(level, target, carried, except)) {
                 return target;
             }
         }
-        return placeAround(level, origin, carried, random, avoid);
+        return placeAround(level, origin, carried, random, avoid, except);
     }
 
     /**
@@ -123,7 +125,7 @@ public final class EndermanPlacement {
      * gets drawn), until one is valid.
      */
     private static @Nullable BlockPos placeAround(ServerLevel level, BlockPos feet, BlockState carried, RandomSource random,
-                                                 @Nullable BlockPos avoid) {
+                                                 @Nullable BlockPos avoid, @Nullable Entity except) {
         if (!ApplyContext.chunksLoaded(level, feet.getX() - 16, feet.getZ() - 16, feet.getX() + 16, feet.getZ() + 16)) {
             return null;
         }
@@ -143,7 +145,7 @@ public final class EndermanPlacement {
             total -= weight[i];
             weight[i] = 0;
             BlockPos target = feet.offset(dx(i), dy(i), dz(i));
-            if (allowed(target, avoid) && canPlace(level, target, carried)) {
+            if (allowed(target, avoid) && canPlace(level, target, carried, except)) {
                 return target;
             }
         }
@@ -223,8 +225,8 @@ public final class EndermanPlacement {
         return true;
     }
 
-    /** Vanilla {@code EndermanLeaveBlockGoal.canPlaceBlock} (the enderman itself is not in the world). */
-    public static boolean canPlace(ServerLevel level, BlockPos target, BlockState carried) {
+    /** Vanilla {@code EndermanLeaveBlockGoal.canPlaceBlock}; {@code except} is the placing enderman, if real. */
+    public static boolean canPlace(ServerLevel level, BlockPos target, BlockState carried, @Nullable Entity except) {
         if (!level.isInsideBuildHeight(target.getY()) || !level.isInsideBuildHeight(target.getY() - 1)) {
             return false;
         }
@@ -236,7 +238,7 @@ public final class EndermanPlacement {
             return false;
         }
         BlockState updated = Block.updateFromNeighbourShapes(carried, level, target);
-        return updated.canSurvive(level, target) && level.getEntities((Entity) null, new AABB(target)).isEmpty();
+        return updated.canSurvive(level, target) && level.getEntities(except, new AABB(target)).isEmpty();
     }
 
     /**

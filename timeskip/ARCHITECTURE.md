@@ -210,30 +210,39 @@ decides the counts and applies the moves.
 * **Pickup geometry.** `floor(x − 2 + 4u)` per horizontal axis (offsets −2…+2, weights
   ⅛ ¼ ¼ ¼ ⅛), `floor(y + 3u)` vertically (0, 1, 2 above the feet), only `#enderman_holdable`, and
   only if vanilla's ray cast (`ClipContext` OUTLINE from the column centre at the target's
-  height) reaches it; the same `BlockGetter.clip` runs on the snapshot.
+  height) reaches it; the same `BlockGetter.clip` runs on the snapshot. A chunk is planned on its
+  own, so a target near its border is weighted by `1 / (in-chunk share of its pickers)` (1.6 at
+  an edge, 2.56 at a corner) to stand in for endermen in the neighbouring chunk.
 * **Where endermen are.** Spawning chunks: entity-ticking, centre within 128 blocks of a
   non-spectator player; nothing unless `spawn_mobs`, `spawn_monsters` and `mob_griefing` are on and
   difficulty isn't peaceful. Standing spots: `isValidSpawn` ground + three blocks without
   collision or fluid, more than 24 and at most 128 blocks (3D) from the nearest player. Spot weight
   = chance `Monster.isDarkEnoughToSpawn` passes for its sky/block light (day-averaged if time moves;
   dimension light test read at runtime; Overworld open ground ≈ 0.10, dark caves 1.0, any block
-  light 0) ÷ column height (vanilla picks y uniformly). A chunk's spawn weight = sum of its spots.
+  light 0) ÷ column height (vanilla picks y uniformly) × share of non-conductor blocks within 4
+  blocks at that height (vanilla drops an attempt whose start block `isRedstoneConductor`, then
+  spreads the pack sideways at the start's height — narrow tunnels get far fewer spawns than open
+  ground) × the dry share of the time for open-sky spots where it rains. A chunk's spawn weight =
+  sum of its spots.
 * **How many.** The monster cap is `70 × spawnableChunks / 289` (spawnable = within 8 chunks of a
   player), i.e. 70 per player, and near players it is full. Vanilla fills it wherever spawn
   attempts succeed, so chunk `c` holds `cap × spawnWeight_c / Σ spawnWeight` monsters, of which
-  `share_c` are endermen. `share` = `Σ weight·meanGroup` for endermen / for all monsters in the
-  spawn list vanilla reads there (`EnvironmentAttributes.NATURAL_MOB_SPAWNS`, so datapacks work;
-  surface and mid-depth averaged): ≈1.2 % in most Overworld biomes, 100 % in The End and warped
-  forests, 0 in mushroom fields and the deep dark; spawn costs (warped forest, soul sand valley)
-  add the potential limit `budget / charge² × 128` per player. Carriers leave the cap and never
+  `share_c` are endermen. `share` = `Σ weight·meanGroup` for endermen / for all monsters that
+  actually spawn, from the spawn list vanilla reads there (`EnvironmentAttributes.NATURAL_MOB_SPAWNS`,
+  so datapacks work; surface and mid-depth averaged). Entries whose spawn rule usually fails don't
+  fill the cap: slimes count only in slime chunks (1 in 10, below y 40) or swamp-like biomes near
+  the surface, ghasts 1/20 and one per pack. ≈1.5 % in most Overworld biomes, 100 % in The End and
+  warped forests, 0 in mushroom fields and the deep dark; spawn costs (warped forest, soul sand
+  valley) add the potential limit `budget / charge² × 128` per player. Carriers leave the cap and never
   despawn, so moves follow the free population: pickups `M ~ Poisson(free × ticks × successPerTick(p̄))`,
   `p̄` = weighted mean pickup success over the chunk's spots.
 * **Saturation, cumulative.** Placed blocks can be picked up again (as in vanilla), so the
   displaced count levels off: `D(m) = Dmax(1 − e^(−m/Dmax))`, `Dmax` =
   `enderman_max_disturbed_percent` of the holdable blocks reachable from the chunk's spots. A skip
-  adds `D(M₀ + M) − D(M₀)` where `M₀` is the expected pickups from the chunk's inhabited time
-  before the skip (vanilla increments it in exactly the spawning chunks, and the mod adds skipped
-  time to it), so the cap holds across many skips and real play.
+  adds `D(M₀ + M) − D(M₀)` where `M₀` is the pickups the chunk already had in earlier skips,
+  kept per dimension and chunk in `<world>/data/timeskip_endermen.dat` (`EndermanHistory`; only
+  skips in which endermen were active add to it, recorded as each chunk is decided, saved when
+  the skip ends or is cancelled). Ten 10,000-year skips end up like one 100,000-year skip.
 * **Which blocks.** The planner pre-draws up to `Dmax` distinct targets (spot ∝ weight × success,
   target ∝ offset probability); the phase takes the first `D`. Snapshots are all taken before any
   enderman moves, so results don't depend on thread timing.
@@ -241,7 +250,8 @@ decides the counts and applies the moves.
   `noActionTime` never resets and `RandomStrollGoal` stops after 100 ticks, so the carrier stays put
   and places right there (`STAY`). Under open sky in daylight it teleports (±32 blocks, down to an
   `#entities_can_teleport_to` block, room and no liquid) until it is out of the sun: a third of
-  open-sky carriers are still carrying at dawn (`SKY`; frozen time: all or none). Within 32 blocks
+  open-sky carriers are still carrying at dawn (frozen time: all or none), and where it rains, rain
+  hurts it and it teleports too (`SKY`: `1 − (1 − dawn)(1 − rain share)`). Within 32 blocks
   of a player it keeps strolling (`STROLL`, 2D Gaussian drift σ 12, ≤ 28). The placement itself:
   offsets −1…+1 (¼ ½ ¼), 0…1 up, tried in probability order until the exact `canPlaceBlock` rule
   passes (air; below not air, not bedrock, full collision shape; the neighbour-updated
@@ -251,9 +261,11 @@ decides the counts and applies the moves.
   first); any holdable block is taken. No spot → the block stays. Spots on the block's own hole
   or resting on it are never chosen; if removing it still invalidates the spot it is put back.
   Like vanilla, `removeBlock` pops off plants standing on it.
-* **Real carriers.** An enderman holding a block at skip start puts it down (same rules) before
-  the mob-equilibrium check; if it can't (or `mob_griefing` is off) it keeps the block and, being
-  persistent while carrying, stays. No block disappears with a despawned enderman.
+* **Real carriers.** An enderman holding a block at skip start puts it down (same rules, its own
+  body excluded from the entity check as in vanilla) before the mob-equilibrium check, if its goals
+  would run at all (it has AI and its chunk ticks entities). If it can't (or `mob_griefing` is
+  off) it keeps the block and, being persistent while carrying, stays. No block disappears with a
+  despawned enderman.
 * Diagnostics: `-Dtimeskip.debugEndermen=true` logs every move and a per-chunk summary.
 
 ## 7. Lag control summary
@@ -292,8 +304,8 @@ vanilla. Results are reproducible except where vanilla code we call draws from t
 shared random source (e.g. cauldron fill chance). Tier 2 does not run redstone, mob farms or fluid flow. Mob spawning is an equilibrium,
 not a simulation. Grass-spread seams can appear at chunk borders for short skips.
 Endermen: all monster types treated as ground spawners when sharing the cap; biome sampled at two
-heights; thunderstorm spawning and spawn-rule failures of other mobs ignored in the share; the
-cap assumed full; endermen are where they spawned (lit areas and the 24-block bubble around a
-player see no pickups, although real ones can wander in); a pickup box is cut off at the chunk
-border; the dawn-teleport chance is one fixed estimate; with `add_inhabited_time` off, repeated
-skips don't count towards the cap.
+heights; only slimes' and ghasts' spawn-rule failures are modelled in the share; the cap assumed
+full; endermen are where they spawned (lit areas and the 24-block bubble around a player see no
+pickups, although real ones can wander in); the pack-jitter kernel is a ±4 box and chunk borders
+are compensated statistically rather than read across; the dawn-teleport chance is one fixed
+estimate; real play time doesn't count towards the cap.

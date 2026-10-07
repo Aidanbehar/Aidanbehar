@@ -65,6 +65,29 @@ public final class EndermanMath {
         return at(PLACE_XZ, dx - PLACE_XZ_MIN) * at(PLACE_Y, dy) * at(PLACE_XZ, dz - PLACE_XZ_MIN);
     }
 
+    /**
+     * Compensation for planning one chunk at a time: a pickup target near the chunk border is also
+     * picked by endermen standing in the neighbouring chunk, which the planner of this chunk can't
+     * see. With similar terrain on both sides, multiplying the target's probability by this factor
+     * restores its vanilla pick rate (and the chunk's total pickup rate). {@code localX/localZ} are
+     * the target's coordinates inside its chunk (0-15).
+     */
+    public static double borderCompensation(int localX, int localZ) {
+        return 1.0 / (inChunkPickerMass(localX) * inChunkPickerMass(localZ));
+    }
+
+    /** Share of a target's pickers (offsets -2..+2 away) that stand inside the same chunk, per axis. */
+    static double inChunkPickerMass(int local) {
+        double mass = 0;
+        for (int i = 0; i < PICKUP_XZ.length; i++) {
+            int standing = local - (PICKUP_XZ_MIN + i);
+            if (standing >= 0 && standing < 16) {
+                mass += PICKUP_XZ[i];
+            }
+        }
+        return mass;
+    }
+
     private static double at(double[] table, int index) {
         return index < 0 || index >= table.length ? 0.0 : table[index];
     }

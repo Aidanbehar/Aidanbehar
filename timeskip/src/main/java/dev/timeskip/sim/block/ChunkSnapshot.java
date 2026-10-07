@@ -14,6 +14,7 @@ import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.lighting.LayerLightEventListener;
 import net.minecraft.world.level.material.FluidState;
 import org.jspecify.annotations.Nullable;
@@ -38,8 +39,8 @@ public final class ChunkSnapshot implements BlockGetter {
     public final boolean monstersSpawn;
     /** Enderman share of this chunk's monster spawns (0 if none spawn or endermen are inactive). */
     public final double endermanShare;
-    /** Inhabited time before the skip: how long players have already been near this chunk. */
-    public final long inhabitedTime;
+    /** True if it rains (not snows) here: endermen leave open sky while it rains. */
+    public final boolean rainsHere;
     private final int minY;
     private final int height;
     private final int minSection;
@@ -56,7 +57,8 @@ public final class ChunkSnapshot implements BlockGetter {
         this.minZ = pos.getMinBlockZ();
         this.monstersSpawn = info.endermen.monstersSpawn(chunk);
         this.endermanShare = monstersSpawn ? info.endermen.endermanShare(chunk) : 0.0;
-        this.inhabitedTime = chunk.getInhabitedTime();
+        this.rainsHere = monstersSpawn && info.endermen.rainsAt(new BlockPos(pos.getMiddleBlockX(),
+                chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8) + 1, pos.getMiddleBlockZ()));
         this.minY = chunk.getMinY();
         this.height = chunk.getHeight();
         this.minSection = chunk.getMinSectionY();

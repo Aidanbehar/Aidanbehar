@@ -215,17 +215,22 @@ public final class EntitySimulator {
             return;
         }
         BlockPos at = enderman.blockPosition();
+        // Its goals only run if it has AI and its chunk ticks entities (vanilla never moves the others).
+        if (enderman.isNoAi() || !info.level.isPositionEntityTicking(at)) {
+            return;
+        }
         EndermanPopulation population = info.endermen;
+        double teleportChance = population.teleportChance(population.rainsAt(at));
         EndermanPlacement.Wander wander;
         if (population.nearPlayer(at.getX(), at.getY(), at.getZ())) {
             wander = EndermanPlacement.Wander.STROLL;
-        } else if (population.teleportChance() > 0 && info.level.canSeeSky(at)) {
+        } else if (teleportChance > 0 && info.level.canSeeSky(at)) {
             wander = EndermanPlacement.Wander.SKY;
         } else {
             wander = EndermanPlacement.Wander.STAY;
         }
         RandomSource random = RandomSource.create(sim.seed(info, at.getX(), at.getY(), at.getZ(), CARRIED_SALT));
-        BlockPos target = EndermanPlacement.findSpot(info.level, at, carried, random, null, wander, population.teleportChance());
+        BlockPos target = EndermanPlacement.findSpot(info.level, at, carried, random, null, wander, teleportChance, enderman);
         if (target != null) {
             boolean kept = EndermanPlacement.place(info.level, target, carried);
             enderman.setCarriedBlock(null);

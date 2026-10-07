@@ -23,9 +23,8 @@ import java.util.Map;
  * <p>Per chunk: pickups {@code M ~ Poisson(freeEndermanTicks × successPerTick)}; displaced blocks
  * {@code D(M₀ + M) − D(M₀)} with {@code D(m) = Dmax(1 − e^(−m/Dmax))}, {@code Dmax} =
  * {@code enderman_max_disturbed_percent} of the reachable holdables, and {@code M₀} the pickups the
- * chunk has already had from the time players spent near it (its inhabited time, which also grows
- * with every skip) — so the cap holds across many skips, not just within one. Moves are applied in
- * chunk order within the tick budget.
+ * chunk already had in earlier skips ({@link EndermanHistory}) — so the cap holds across many skips,
+ * not just within one. Moves are applied in chunk order within the tick budget.
  */
 public final class EndermanPhase {
     private static final long SALT = 0x454E4450L;
@@ -33,6 +32,7 @@ public final class EndermanPhase {
     private final SimContext sim;
     private final List<EndermanChunk> chunks = new ArrayList<>();
     private Map<LevelInfo, Double> weightSum;
+    private EndermanHistory history;
     private int chunkCursor;
     private int moveCursor;
     /** Moves decided for the chunk at {@link #chunkCursor}, or -1 if not decided yet. */
@@ -59,6 +59,7 @@ public final class EndermanPhase {
     /** Runs within the budget; true when finished. */
     public boolean step(TickBudget budget) {
         if (weightSum == null) {
+            history = chunks.isEmpty() ? null : EndermanHistory.load(chunks.get(0).info().level.getServer());
             weightSum = new IdentityHashMap<>();
             for (EndermanChunk chunk : chunks) {
                 weightSum.merge(chunk.info(), chunk.spawnWeight(), Double::sum);
@@ -84,9 +85,17 @@ public final class EndermanPhase {
             }
             int i = moveCursor++;
             EndermanMove.apply(ctx, chunk.targets()[i], chunk.feet()[i], EndermanPlacement.Wander.of(chunk.wander()[i]),
-                    chunk.info().endermen.teleportChance());
+                    chunk.teleportChance());
         }
+        save();
         return true;
+    }
+
+    /** Writes the enderman history for the chunks decided so far (also after a cancel). */
+    public void save() {
+        if (history != null) {
+            history.save();
+        }
     }
 
     /** How many of this chunk's candidates actually get moved. */
@@ -99,8 +108,10 @@ public final class EndermanPhase {
         double free = info.endermen.totalCap() * chunk.share() * chunk.spawnWeight() / weightSum.get(info);
         double perTick = EndermanMath.successPerTick(EndermanMath.TAKE_GOAL_CHANCE, chunk.meanPick());
         Rng rng = sim.rng(info, chunk.pos().getMinBlockX(), 3, chunk.pos().getMinBlockZ(), SALT);
-        double earlier = free * perTick * Math.max(0L, chunk.inhabitedTime());
+        String dimension = info.level.dimension().identifier().toString();
+        double earlier = history.earlierPickups(dimension, chunk.pos());
         long pickups = EndermanMath.poisson(free * perTick * info.ticks, rng);
+        history.addPickups(dimension, chunk.pos(), pickups);
         double equilibrium = chunk.reachable() * percent / 100.0;
         long displaced = EndermanMath.randomRound(EndermanMath.displacedIncrement(earlier, pickups, equilibrium), rng);
         int moves = (int) Math.min(chunk.targets().length, displaced);

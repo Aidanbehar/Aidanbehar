@@ -6,6 +6,7 @@ import dev.timeskip.sim.block.ChunkSnapshot;
 import dev.timeskip.sim.block.PlanScope;
 import it.unimi.dsi.fastutil.bytes.ByteArrayList;
 import it.unimi.dsi.fastutil.doubles.DoubleArrayList;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.objects.Reference2ByteOpenHashMap;
@@ -30,12 +31,16 @@ import net.minecraft.world.phys.shapes.CollisionContext;
  *       (2.9 blocks tall, avoids water), more than 24 and at most 128 blocks from the nearest
  *       player. Weight = the day-averaged chance vanilla's darkness test passes there
  *       ({@link EndermanPopulation#spotWeight}) ÷ the column height (vanilla picks the spawn
- *       height uniformly in the column). Their sum is the chunk's spawn weight.</li>
+ *       height uniformly in the column) × the share of open blocks around it at that height
+ *       (an attempt whose start block is solid is thrown away; {@link StartBlocks}) × the dry
+ *       share of the time for open-sky spots where it rains. Their sum is the chunk's spawn
+ *       weight.</li>
  *   <li><b>Pickup success per attempt</b> at every spot: the exact vanilla target distribution
  *       ({@link EndermanMath#pickupOffsetProbability}) over the 5×3×5 box, counting targets in
  *       {@code #enderman_holdable} that vanilla's own ray cast ({@code BlockGetter.clip} with
- *       {@code OUTLINE}, run on the snapshot) reaches. Gives the weighted mean success and the
- *       holdable blocks any spot can reach.</li>
+ *       {@code OUTLINE}, run on the snapshot) reaches. Targets near the chunk border are weighted
+ *       up by {@link EndermanMath#borderCompensation} for the endermen standing in the neighbouring
+ *       chunk. Gives the weighted mean success and the holdable blocks any spot can reach.</li>
  *   <li><b>Candidates:</b> up to {@code enderman_max_disturbed_percent} of the reachable blocks,
  *       distinct, drawn spot ∝ weight × success and target ∝ its offset probability, each with
  *       how its enderman wanders before placing ({@link EndermanPlacement.Wander}).</li>
@@ -46,6 +51,9 @@ public final class EndermanPlanner {
     private static final byte PASSABLE = 1;
     private static final byte FULL_TOP = 2;
     private static final byte HOLDABLE = 4;
+    private static final byte CONDUCTOR = 8;
+    /** Pack members land within a few blocks of the attempt's start (steps of nextInt(6) - nextInt(6)). */
+    private static final int START_RADIUS = 4;
 
     private EndermanPlanner() {
     }
@@ -102,6 +110,7 @@ public final class EndermanPlanner {
         // 3) Candidates, in random order: spot ∝ weight × success, then target ∝ its offset probability.
         int limit = (int) Math.min(reachable, Math.ceil(reachable * percent / 100.0));
         Rng rng = scope.rng(snap.minX, 2, snap.minZ, SALT);
+        double teleportChance = population.teleportChance(snap.rainsHere);
         LongOpenHashSet chosen = new LongOpenHashSet();
         LongArrayList targets = new LongArrayList();
         LongArrayList feet = new LongArrayList();
@@ -127,7 +136,7 @@ public final class EndermanPlanner {
             EndermanPlacement.Wander how;
             if (population.nearPlayer(fx, fy, fz)) {
                 how = EndermanPlacement.Wander.STROLL;
-            } else if (population.teleportChance() > 0 && snap.skyLight(fx, fy, fz) >= 15) {
+            } else if (teleportChance > 0 && snap.skyLight(fx, fy, fz) >= 15) {
                 how = EndermanPlacement.Wander.SKY;
             } else {
                 how = EndermanPlacement.Wander.STAY;
@@ -137,7 +146,7 @@ public final class EndermanPlanner {
             wander.add((byte) how.ordinal());
         }
         scope.setEndermen(new EndermanChunk(scope.info, snap.pos, spawnWeight, snap.endermanShare,
-                weightedPick / spawnWeight, reachable, snap.inhabitedTime,
+                weightedPick / spawnWeight, reachable, teleportChance,
                 targets.toLongArray(), feet.toLongArray(), wander.toByteArray()));
     }
 
@@ -147,6 +156,8 @@ public final class EndermanPlanner {
     private static void findSpots(PlanScope scope, ChunkSnapshot snap, Classifier cls,
                                   LongArrayList spots, DoubleArrayList weights) {
         EndermanPopulation population = scope.info.endermen;
+        StartBlocks starts = new StartBlocks(snap, cls);
+        double openSkyInRain = snap.rainsHere ? 1.0 - population.rainFraction() : 1.0;
         int minY = snap.getMinY();
         int maxY = minY + snap.getHeight() - 1;
         for (int lz = 0; lz < 16; lz++) {
@@ -166,9 +177,12 @@ public final class EndermanPlanner {
                         passRun++;
                         if (passRun == 3 && fullAt == y - 3) {
                             int feet = y - 2;
-                            double w = population.inSpawnRange(x, feet, z)
-                                    ? population.spotWeight(snap.skyLight(x, feet, z), snap.blockLight(x, feet, z)) * columnNorm
-                                    : 0.0;
+                            double w = 0.0;
+                            if (population.inSpawnRange(x, feet, z)) {
+                                int sky = snap.skyLight(x, feet, z);
+                                w = population.spotWeight(sky, snap.blockLight(x, feet, z)) * columnNorm
+                                        * starts.fraction(lx, feet, lz) * (sky >= 15 ? openSkyInRain : 1.0);
+                            }
                             if (w > 0) {
                                 long packed = BlockPos.asLong(x, feet, z);
                                 spots.add(packed);
@@ -217,7 +231,7 @@ public final class EndermanPlanner {
                     if ((cls.flags(tx, ty, tz) & HOLDABLE) == 0 || !reachable(snap, fx, fz, tx, ty, tz)) {
                         continue;
                     }
-                    double p = EndermanMath.pickupOffsetProbability(dx, dy, dz);
+                    double p = EndermanMath.pickupOffsetProbability(dx, dy, dz) * EndermanMath.borderCompensation(tx & 15, tz & 15);
                     pPick += p;
                     targets.add(BlockPos.asLong(tx, ty, tz));
                     probabilities.add(p);
@@ -253,6 +267,46 @@ public final class EndermanPlanner {
         return lo;
     }
 
+    /**
+     * {@code NaturalSpawner.spawnCategoryForPosition} throws an attempt away if its random start
+     * block is a redstone conductor (stone, dirt...), then spreads the pack a few blocks sideways at
+     * the start's height. So a spot gets spawns in proportion to the open (non-conductor) blocks
+     * around it at its own height: a narrow tunnel far fewer than open ground.
+     */
+    private static final class StartBlocks {
+        private static final int SIDE = 17;
+        private final ChunkSnapshot snap;
+        private final Classifier cls;
+        private final Int2ObjectOpenHashMap<int[]> prefixByY = new Int2ObjectOpenHashMap<>();
+
+        StartBlocks(ChunkSnapshot snap, Classifier cls) {
+            this.snap = snap;
+            this.cls = cls;
+        }
+
+        /** Share of open blocks at height {@code y} within {@link #START_RADIUS} of local (lx, lz). */
+        double fraction(int lx, int y, int lz) {
+            int[] p = prefixByY.computeIfAbsent(y, this::build);
+            int x0 = Math.max(0, lx - START_RADIUS);
+            int x1 = Math.min(15, lx + START_RADIUS);
+            int z0 = Math.max(0, lz - START_RADIUS);
+            int z1 = Math.min(15, lz + START_RADIUS);
+            int open = p[(z1 + 1) * SIDE + x1 + 1] - p[z0 * SIDE + x1 + 1] - p[(z1 + 1) * SIDE + x0] + p[z0 * SIDE + x0];
+            return open / (double) ((x1 - x0 + 1) * (z1 - z0 + 1));
+        }
+
+        private int[] build(int y) {
+            int[] p = new int[SIDE * SIDE];
+            for (int z = 0; z < 16; z++) {
+                for (int x = 0; x < 16; x++) {
+                    int open = (cls.flags(snap.minX + x, y, snap.minZ + z) & CONDUCTOR) == 0 ? 1 : 0;
+                    p[(z + 1) * SIDE + x + 1] = open + p[z * SIDE + x + 1] + p[(z + 1) * SIDE + x] - p[z * SIDE + x];
+                }
+            }
+            return p;
+        }
+    }
+
     /** Per-state flags, cached (a chunk has a few dozen distinct states). */
     private static final class Classifier {
         private final ChunkSnapshot snap;
@@ -282,6 +336,9 @@ public final class EndermanPlanner {
                 }
                 if (state.is(BlockTags.ENDERMAN_HOLDABLE)) {
                     flags |= HOLDABLE;
+                }
+                if (state.isRedstoneConductor(snap, pos)) {
+                    flags |= CONDUCTOR;
                 }
             }
             cache.put(state, flags);

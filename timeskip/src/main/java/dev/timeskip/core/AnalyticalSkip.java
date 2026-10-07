@@ -552,6 +552,7 @@ public final class AnalyticalSkip implements SkipJob {
 
     @Override
     public void close() {
+        endermen.save();
         if (closed) {
             return;
         }

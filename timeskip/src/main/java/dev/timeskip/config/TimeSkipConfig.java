@@ -208,8 +208,8 @@ public final class TimeSkipConfig {
                         c -> Integer.toString(c.hopperPasses), (c, v) -> c.hopperPasses = Integer.parseInt(v)),
                 entry("enderman_max_disturbed_percent", "However long the skip (and however many skips), endermen end up moving at most about\n"
                                 + "this percentage of the blocks they can reach in each chunk: moved blocks get picked up\n"
-                                + "again, so the amount settles instead of growing forever. Time players already spent near a\n"
-                                + "chunk counts towards it. Keeps very long skips looking natural. 0-100.",
+                                + "again, so the amount settles instead of growing forever. Earlier skips count towards it\n"
+                                + "(kept in data/timeskip_endermen.dat). Keeps very long skips looking natural. 0-100.",
                         c -> Integer.toString(c.endermanMaxDisturbedPercent), (c, v) -> c.endermanMaxDisturbedPercent = Integer.parseInt(v)),
                 entry("seed_salt", "Change to get a different (but still repeatable) random outcome for the same world and skip.",
                         c -> Long.toString(c.seedSalt), (c, v) -> c.seedSalt = Long.parseLong(v))
