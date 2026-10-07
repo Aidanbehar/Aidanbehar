@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "timeskip",
+  "version": "${version}",
+  "name": "Time Skip",
+  "description": "Skip from one day up to 100 million years with /timeskip. Crops grow, trees sprout, copper oxidizes, furnaces finish smelting, babies grow up, and the world clock and weather land where they would have. Server-side only.",
+  "authors": ["Time Skip contributors"],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/timeskip/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.timeskip.TimeSkipMod"]
+  },
+  "mixins": ["timeskip.mixins.json"],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=25"
+  }
+}
