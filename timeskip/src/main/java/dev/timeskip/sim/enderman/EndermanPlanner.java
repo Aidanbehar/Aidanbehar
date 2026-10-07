@@ -83,7 +83,7 @@ public final class EndermanPlanner {
         }
         int percent = scope.config.endermanMaxDisturbedPercent;
         if (snap.endermanShare <= 0 || percent <= 0) {
-            scope.setEndermen(EndermanChunk.spawnOnly(scope.info, snap.pos, spawnWeight));
+            scope.setEndermen(EndermanChunk.spawnOnly(scope.info, snap.pos, spawnWeight, snap.spawnPlayers));
             return;
         }
 
@@ -103,7 +103,7 @@ public final class EndermanPlanner {
         }
         int reachable = reachableSet.size();
         if (weightedPick <= 0 || reachable == 0) {
-            scope.setEndermen(EndermanChunk.spawnOnly(scope.info, snap.pos, spawnWeight));
+            scope.setEndermen(EndermanChunk.spawnOnly(scope.info, snap.pos, spawnWeight, snap.spawnPlayers));
             return;
         }
 
@@ -145,7 +145,7 @@ public final class EndermanPlanner {
             feet.add(sample.feet);
             wander.add((byte) how.ordinal());
         }
-        scope.setEndermen(new EndermanChunk(scope.info, snap.pos, spawnWeight, snap.endermanShare,
+        scope.setEndermen(new EndermanChunk(scope.info, snap.pos, spawnWeight, snap.spawnPlayers, snap.endermanShare,
                 weightedPick / spawnWeight, reachable, teleportChance,
                 targets.toLongArray(), feet.toLongArray(), wander.toByteArray()));
     }
@@ -156,19 +156,24 @@ public final class EndermanPlanner {
     private static void findSpots(PlanScope scope, ChunkSnapshot snap, Classifier cls,
                                   LongArrayList spots, DoubleArrayList weights) {
         EndermanPopulation population = scope.info.endermen;
-        StartBlocks starts = new StartBlocks(snap, cls);
         double openSkyInRain = snap.rainsHere ? 1.0 - population.rainFraction() : 1.0;
         int minY = snap.getMinY();
         int maxY = minY + snap.getHeight() - 1;
+        int[] tops = new int[256];
+        for (int lz = 0; lz < 16; lz++) {
+            for (int lx = 0; lx < 16; lx++) {
+                tops[lz * 16 + lx] = topNonAir(snap, snap.minX + lx, snap.minZ + lz, minY, maxY);
+            }
+        }
+        StartBlocks starts = new StartBlocks(snap, cls, tops);
         for (int lz = 0; lz < 16; lz++) {
             for (int lx = 0; lx < 16; lx++) {
                 int x = snap.minX + lx;
                 int z = snap.minZ + lz;
-                int top = topNonAir(snap, x, z, minY, maxY);
+                int top = tops[lz * 16 + lx];
                 if (top < minY) {
                     continue;
                 }
-                double columnNorm = 1.0 / (top + 2 - minY); // vanilla picks y in [minY, top + 1]
                 int passRun = 0;
                 int fullAt = Integer.MIN_VALUE;
                 for (int y = minY; y <= Math.min(maxY, top + 3); y++) {
@@ -180,8 +185,8 @@ public final class EndermanPlanner {
                             double w = 0.0;
                             if (population.inSpawnRange(x, feet, z)) {
                                 int sky = snap.skyLight(x, feet, z);
-                                w = population.spotWeight(sky, snap.blockLight(x, feet, z)) * columnNorm
-                                        * starts.fraction(lx, feet, lz) * (sky >= 15 ? openSkyInRain : 1.0);
+                                w = population.spotWeight(sky, snap.blockLight(x, feet, z))
+                                        * starts.weight(lx, feet, lz) * (sky >= 15 ? openSkyInRain : 1.0);
                             }
                             if (w > 0) {
                                 long packed = BlockPos.asLong(x, feet, z);
@@ -268,39 +273,48 @@ public final class EndermanPlanner {
     }
 
     /**
-     * {@code NaturalSpawner.spawnCategoryForPosition} throws an attempt away if its random start
-     * block is a redstone conductor (stone, dirt...), then spreads the pack a few blocks sideways at
-     * the start's height. So a spot gets spawns in proportion to the open (non-conductor) blocks
-     * around it at its own height: a narrow tunnel far fewer than open ground.
+     * How often vanilla's spawn attempts land on a spot. {@code NaturalSpawner} picks a start column
+     * uniformly, a start height uniformly in {@code [minY, surface + 1]} of that column, throws the
+     * attempt away if the start block is a redstone conductor (stone, dirt...), then spreads the pack
+     * a few blocks sideways at the start's height. So a spot gets spawns from the open,
+     * low-enough starts around it at its own height, each weighted by 1 / its column's height: a
+     * narrow tunnel gets far fewer than open ground, a pillar top far fewer than a field.
      */
     private static final class StartBlocks {
         private static final int SIDE = 17;
         private final ChunkSnapshot snap;
         private final Classifier cls;
-        private final Int2ObjectOpenHashMap<int[]> prefixByY = new Int2ObjectOpenHashMap<>();
+        private final int[] tops;
+        private final Int2ObjectOpenHashMap<double[]> prefixByY = new Int2ObjectOpenHashMap<>();
 
-        StartBlocks(ChunkSnapshot snap, Classifier cls) {
+        StartBlocks(ChunkSnapshot snap, Classifier cls, int[] tops) {
             this.snap = snap;
             this.cls = cls;
+            this.tops = tops;
         }
 
-        /** Share of open blocks at height {@code y} within {@link #START_RADIUS} of local (lx, lz). */
-        double fraction(int lx, int y, int lz) {
-            int[] p = prefixByY.computeIfAbsent(y, this::build);
+        /** Mean start weight at height {@code y} within {@link #START_RADIUS} of local (lx, lz). */
+        double weight(int lx, int y, int lz) {
+            double[] p = prefixByY.computeIfAbsent(y, this::build);
             int x0 = Math.max(0, lx - START_RADIUS);
             int x1 = Math.min(15, lx + START_RADIUS);
             int z0 = Math.max(0, lz - START_RADIUS);
             int z1 = Math.min(15, lz + START_RADIUS);
-            int open = p[(z1 + 1) * SIDE + x1 + 1] - p[z0 * SIDE + x1 + 1] - p[(z1 + 1) * SIDE + x0] + p[z0 * SIDE + x0];
-            return open / (double) ((x1 - x0 + 1) * (z1 - z0 + 1));
+            double sum = p[(z1 + 1) * SIDE + x1 + 1] - p[z0 * SIDE + x1 + 1] - p[(z1 + 1) * SIDE + x0] + p[z0 * SIDE + x0];
+            return sum / ((x1 - x0 + 1) * (z1 - z0 + 1));
         }
 
-        private int[] build(int y) {
-            int[] p = new int[SIDE * SIDE];
+        private double[] build(int y) {
+            double[] p = new double[SIDE * SIDE];
+            int minY = snap.getMinY();
             for (int z = 0; z < 16; z++) {
                 for (int x = 0; x < 16; x++) {
-                    int open = (cls.flags(snap.minX + x, y, snap.minZ + z) & CONDUCTOR) == 0 ? 1 : 0;
-                    p[(z + 1) * SIDE + x + 1] = open + p[z * SIDE + x + 1] + p[(z + 1) * SIDE + x] - p[z * SIDE + x];
+                    int top = tops[z * 16 + x];
+                    double start = 0.0;
+                    if (y <= top + 1 && (cls.flags(snap.minX + x, y, snap.minZ + z) & CONDUCTOR) == 0) {
+                        start = 1.0 / (Math.max(top, minY - 1) + 2 - minY);
+                    }
+                    p[(z + 1) * SIDE + x + 1] = start + p[z * SIDE + x + 1] + p[(z + 1) * SIDE + x] - p[z * SIDE + x];
                 }
             }
             return p;

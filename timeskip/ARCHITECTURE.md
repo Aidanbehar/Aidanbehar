@@ -219,14 +219,18 @@ decides the counts and applies the moves.
   collision or fluid, more than 24 and at most 128 blocks (3D) from the nearest player. Spot weight
   = chance `Monster.isDarkEnoughToSpawn` passes for its sky/block light (day-averaged if time moves;
   dimension light test read at runtime; Overworld open ground ≈ 0.10, dark caves 1.0, any block
-  light 0) ÷ column height (vanilla picks y uniformly) × share of non-conductor blocks within 4
-  blocks at that height (vanilla drops an attempt whose start block `isRedstoneConductor`, then
-  spreads the pack sideways at the start's height — narrow tunnels get far fewer spawns than open
-  ground) × the dry share of the time for open-sky spots where it rains. A chunk's spawn weight =
+  light 0) × the mean start weight within 4 blocks at that height: vanilla picks a start column,
+  a height uniform in `[minY, surface + 1]` of that column (weight 1 / column height, 0 above it),
+  drops the attempt if the start block `isRedstoneConductor`, then spreads the pack sideways at the
+  start's height — narrow tunnels and pillar tops get far fewer spawns than open ground — × the
+  dry share of the time for open-sky spots where it rains. Spots within 24 blocks of the world
+  spawn get none. A chunk's spawn weight =
   sum of its spots.
-* **How many.** The monster cap is `70 × spawnableChunks / 289` (spawnable = within 8 chunks of a
-  player), i.e. 70 per player, and near players it is full. Vanilla fills it wherever spawn
-  attempts succeed, so chunk `c` holds `cap × spawnWeight_c / Σ spawnWeight` monsters, of which
+* **How many.** Each player's surroundings hold at most 70 monsters (`LocalMobCapCalculator`),
+  level-wide at most `70 × spawnableChunks / 289` (spawnable = within 8 chunks of a player), and
+  near players the cap is full. Vanilla fills it wherever spawn attempts succeed, so each player's
+  70 go to the spawning chunks near them ∝ spawn weight (a chunk near several players splits its
+  weight; the total is scaled down to the global cap where ranges overlap), of which
   `share_c` are endermen. `share` = `Σ weight·meanGroup` for endermen / for all monsters that
   actually spawn, from the spawn list vanilla reads there (`EnvironmentAttributes.NATURAL_MOB_SPAWNS`,
   so datapacks work; surface and mid-depth averaged). Entries whose spawn rule usually fails don't
@@ -239,10 +243,11 @@ decides the counts and applies the moves.
 * **Saturation, cumulative.** Placed blocks can be picked up again (as in vanilla), so the
   displaced count levels off: `D(m) = Dmax(1 − e^(−m/Dmax))`, `Dmax` =
   `enderman_max_disturbed_percent` of the holdable blocks reachable from the chunk's spots. A skip
-  adds `D(M₀ + M) − D(M₀)` where `M₀` is the pickups the chunk already had in earlier skips,
-  kept per dimension and chunk in `<world>/data/timeskip_endermen.dat` (`EndermanHistory`; only
-  skips in which endermen were active add to it, recorded as each chunk is decided, saved when
-  the skip ends or is cancelled). Ten 10,000-year skips end up like one 100,000-year skip.
+  adds `(Dmax − D₀)(1 − e^(−M/Dmax))` where `D₀` is the blocks already displaced there in earlier
+  skips, kept per dimension and chunk in `<world>/data/timeskip_endermen.dat` (`EndermanHistory`;
+  only moves that happened count, saved when the skip ends or is cancelled). Ten 10,000-year skips
+  end up like one 100,000-year skip, and a cap that grows later (player moved closer, higher
+  percentage) still leaves room.
 * **Which blocks.** The planner pre-draws up to `Dmax` distinct targets (spot ∝ weight × success,
   target ∝ offset probability); the phase takes the first `D`. Snapshots are all taken before any
   enderman moves, so results don't depend on thread timing.

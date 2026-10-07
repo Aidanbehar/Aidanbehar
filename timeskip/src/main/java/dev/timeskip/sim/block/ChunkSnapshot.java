@@ -39,6 +39,8 @@ public final class ChunkSnapshot implements BlockGetter {
     public final boolean monstersSpawn;
     /** Enderman share of this chunk's monster spawns (0 if none spawn or endermen are inactive). */
     public final double endermanShare;
+    /** Players whose local monster cap counts this chunk (empty unless monsters spawn here). */
+    public final int[] spawnPlayers;
     /** True if it rains (not snows) here: endermen leave open sky while it rains. */
     public final boolean rainsHere;
     private final int minY;
@@ -57,6 +59,7 @@ public final class ChunkSnapshot implements BlockGetter {
         this.minZ = pos.getMinBlockZ();
         this.monstersSpawn = info.endermen.monstersSpawn(chunk);
         this.endermanShare = monstersSpawn ? info.endermen.endermanShare(chunk) : 0.0;
+        this.spawnPlayers = monstersSpawn ? info.endermen.playersNear(pos) : new int[0];
         this.rainsHere = monstersSpawn && info.endermen.rainsAt(new BlockPos(pos.getMiddleBlockX(),
                 chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8) + 1, pos.getMiddleBlockZ()));
         this.minY = chunk.getMinY();

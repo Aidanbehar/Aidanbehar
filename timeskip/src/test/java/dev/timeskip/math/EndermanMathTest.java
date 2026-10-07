@@ -205,16 +205,18 @@ class EndermanMathTest {
     @Test
     void displacementIsCumulativeAcrossSkips() {
         double eq = 40;
-        double total = 0;
-        double earlier = 0;
+        double displaced = 0;
+        double moves = 0;
         for (int skip = 0; skip < 50; skip++) {
             double added = 3.7;
-            total += EndermanMath.displacedIncrement(earlier, added, eq);
-            earlier += added;
+            displaced += EndermanMath.displacedIncrement(displaced, added, eq);
+            moves += added;
         }
-        assertEquals(EndermanMath.displacedBlocks(earlier, eq), total, 1e-9);
-        assertEquals(0.0, EndermanMath.displacedIncrement(1e12, 1e6, eq), 1e-9, "already saturated");
+        assertEquals(EndermanMath.displacedBlocks(moves, eq), displaced, 1e-9);
+        assertEquals(0.0, EndermanMath.displacedIncrement(40, 1e6, eq), 1e-9, "already saturated");
         assertEquals(EndermanMath.displacedBlocks(5, eq), EndermanMath.displacedIncrement(0, 5, eq), 1e-12);
+        // A cap that grows later (player moved closer) leaves room for more.
+        assertEquals(60.0, EndermanMath.displacedIncrement(40, 1e9, 100), 1e-9);
     }
 
     @Test

@@ -17,9 +17,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * How many enderman pickups each chunk has already had in earlier skips, so the disturbance cap is
- * cumulative: ten 10,000-year skips end up like one 100,000-year skip instead of scrambling ten
- * times as much. Only skips in which endermen were actually active add to it.
+ * How many blocks endermen have already displaced in each chunk in earlier skips, so the
+ * disturbance cap is cumulative: ten 10,000-year skips end up like one 100,000-year skip instead of
+ * scrambling ten times as much. Only moves that actually happened are counted (so a cancelled skip
+ * counts what it did), and a cap that grows later (player moved closer, higher percentage) still
+ * leaves room for more.
  *
  * <p>Kept in {@code <world>/data/timeskip_endermen.dat} (gzipped NBT, one entry per chunk and
  * dimension). Main thread only. If the file is missing or unreadable every chunk starts fresh,
@@ -47,7 +49,7 @@ public final class EndermanHistory {
             for (String dimension : root.keySet()) {
                 CompoundTag tag = root.getCompoundOrEmpty(dimension);
                 long[] chunks = tag.getLongArray("chunks").orElse(new long[0]);
-                long[] pickups = tag.getLongArray("pickups").orElse(new long[0]);
+                long[] pickups = tag.getLongArray("displaced").orElse(new long[0]);
                 Long2DoubleOpenHashMap map = history.map(dimension);
                 for (int i = 0; i < Math.min(chunks.length, pickups.length); i++) {
                     map.put(chunks[i], Double.longBitsToDouble(pickups[i]));
@@ -59,15 +61,15 @@ public final class EndermanHistory {
         return history;
     }
 
-    /** Pickups this chunk has had in earlier skips. */
-    public double earlierPickups(String dimension, ChunkPos pos) {
+    /** Blocks endermen displaced in this chunk in earlier skips. */
+    public double earlierDisplaced(String dimension, ChunkPos pos) {
         Long2DoubleOpenHashMap map = byDimension.get(dimension);
         return map == null ? 0.0 : map.get(pos.pack());
     }
 
-    public void addPickups(String dimension, ChunkPos pos, double pickups) {
-        if (pickups > 0) {
-            map(dimension).addTo(pos.pack(), pickups);
+    public void addDisplaced(String dimension, ChunkPos pos, double blocks) {
+        if (blocks > 0) {
+            map(dimension).addTo(pos.pack(), blocks);
             dirty = true;
         }
     }
@@ -89,7 +91,7 @@ public final class EndermanHistory {
             }
             CompoundTag tag = new CompoundTag();
             tag.putLongArray("chunks", chunks);
-            tag.putLongArray("pickups", pickups);
+            tag.putLongArray("displaced", pickups);
             root.put(entry.getKey(), tag);
         }
         try {

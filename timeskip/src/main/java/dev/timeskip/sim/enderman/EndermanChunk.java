@@ -9,6 +9,7 @@ import net.minecraft.world.level.ChunkPos;
  *
  * @param spawnWeight   summed spawn weight of the chunk's standing spots within spawn range of a
  *                      player: how often a monster spawn attempt succeeds here, relative to other chunks
+ * @param players       players whose local monster cap counts this chunk
  * @param share         enderman share of the monsters spawning here
  * @param meanPick      pickup success per attempt, averaged over the spots by weight
  * @param reachable     holdable blocks some spot can reach
@@ -17,13 +18,13 @@ import net.minecraft.world.level.ChunkPos;
  * @param feet          where the enderman stood for each candidate
  * @param wander        how that enderman moves before placing ({@link EndermanPlacement.Wander} ordinal)
  */
-public record EndermanChunk(LevelInfo info, ChunkPos pos, double spawnWeight, double share, double meanPick,
+public record EndermanChunk(LevelInfo info, ChunkPos pos, double spawnWeight, int[] players, double share, double meanPick,
                             int reachable, double teleportChance, long[] targets, long[] feet, byte[] wander) {
     static final long[] NO_LONGS = new long[0];
     static final byte[] NO_BYTES = new byte[0];
 
     /** A chunk where monsters spawn (so it takes part of the cap) but endermen can't move anything. */
-    static EndermanChunk spawnOnly(LevelInfo info, ChunkPos pos, double spawnWeight) {
-        return new EndermanChunk(info, pos, spawnWeight, 0.0, 0.0, 0, 0.0, NO_LONGS, NO_LONGS, NO_BYTES);
+    static EndermanChunk spawnOnly(LevelInfo info, ChunkPos pos, double spawnWeight, int[] players) {
+        return new EndermanChunk(info, pos, spawnWeight, players, 0.0, 0.0, 0, 0.0, NO_LONGS, NO_LONGS, NO_BYTES);
     }
 }

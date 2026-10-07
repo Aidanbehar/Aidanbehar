@@ -173,16 +173,17 @@ public final class EndermanMath {
     }
 
     /**
-     * New displacements from {@code addedMoves} more moves in a place that has already seen
-     * {@code earlierMoves} (from earlier skips or play): {@code D(earlier + added) - D(earlier)}.
-     * Keeps the cap cumulative, so many short skips end up like one long one.
+     * New displacements from {@code addedMoves} more moves in a place where {@code earlierDisplaced}
+     * blocks are already out of place: {@code (Dmax − D₀)(1 − e^(−M/Dmax))}, i.e. continuing the
+     * saturation curve from where earlier skips left it. Keeps the cap cumulative, so many short
+     * skips end up like one long one, and a larger cap later still leaves room.
      */
-    public static double displacedIncrement(double earlierMoves, double addedMoves, double equilibrium) {
+    public static double displacedIncrement(double earlierDisplaced, double addedMoves, double equilibrium) {
         if (addedMoves <= 0 || equilibrium <= 0) {
             return 0.0;
         }
-        double earlier = Math.max(0.0, earlierMoves);
-        return equilibrium * Math.exp(-earlier / equilibrium) * -Math.expm1(-addedMoves / equilibrium);
+        double room = Math.max(0.0, equilibrium - Math.max(0.0, earlierDisplaced));
+        return room * -Math.expm1(-addedMoves / equilibrium);
     }
 
     /** Draws a Poisson(lambda) count (via an exact binomial with huge n and tiny p). */

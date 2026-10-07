@@ -19,6 +19,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.MobSpawnSettings;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.gamerules.GameRules;
@@ -37,10 +38,10 @@ import net.minecraft.util.random.Weighted;
  *       blocks (horizontally) of a player ({@code ChunkMap.collectSpawningChunks}).</li>
  *   <li><b>How many monsters:</b> near players the monster category sits at its cap almost all the
  *       time. The cap is {@code 70 × spawnableChunks / 289} ({@code NaturalSpawner.SpawnState}),
- *       where spawnable chunks are those within 8 chunks of a player — 70 per player. Those
- *       monsters are shared among the spawning chunks in proportion to how often a spawn attempt
- *       succeeds there (the chunk's summed spot weight), which the enderman phase does once every
- *       chunk has been planned.</li>
+ *       where spawnable chunks are those within 8 chunks of a player, and each player's surroundings
+ *       hold at most 70 ({@code LocalMobCapCalculator}). Each player's 70 are shared among the
+ *       spawning chunks near them in proportion to how often a spawn attempt succeeds there (the
+ *       chunk's summed spot weight), which the enderman phase does once every chunk is planned.</li>
  *   <li><b>How many of them are endermen:</b> the monster spawn list vanilla reads at that spot
  *       ({@code EnvironmentAttributes.NATURAL_MOB_SPAWNS}, so datapack and modded biomes work):
  *       the enderman share of expected individuals, {@code Σ weight·meanGroupSize} for endermen
@@ -51,7 +52,7 @@ import net.minecraft.util.random.Weighted;
  *   <li><b>Where inside a chunk:</b> {@link #spotWeight} — the chance that vanilla's
  *       {@code Monster.isDarkEnoughToSpawn} passes for a spot's sky/block light, averaged over a
  *       day if time moves — times {@link #inSpawnRange}: more than 24 and at most 128 blocks (3D)
- *       from the nearest player, as {@code NaturalSpawner} requires. The planner divides by the
+ *       from the nearest player and more than 24 from the world spawn, as {@code NaturalSpawner} requires. The planner divides by the
  *       column height because vanilla picks the spawn height uniformly in the column.</li>
  * </ul>
  */
@@ -85,6 +86,8 @@ public final class EndermanPopulation {
     private final double teleportChance;
     private final double rainFraction;
     private final double[][] lightWeight = new double[16][16];
+    /** The world spawn point, if it is in this dimension (nothing spawns within 24 blocks of it). */
+    private final BlockPos respawn;
     private final Map<MobSpawnSettings, double[]> spawnsBySettings = new IdentityHashMap<>();
 
     /**
@@ -115,6 +118,8 @@ public final class EndermanPopulation {
         boolean timeMoves = dayCycle && level.getServer().getGlobalGameRules().get(GameRules.ADVANCE_TIME);
         this.teleportChance = timeMoves ? DAWN_TELEPORT_CHANCE : (dayCycle && level.isBrightOutside() ? 1.0 : 0.0);
         this.rainFraction = Math.max(0.0, Math.min(1.0, rainFraction));
+        LevelData.RespawnData respawnData = level.getRespawnData();
+        this.respawn = respawnData.dimension() == level.dimension() ? respawnData.pos() : null;
         buildLightTable(level.dimensionType(), timeMoves, level.getSkyDarken());
         if (EndermanPlacement.DEBUG) {
             EndermanPlacement.LOGGER.info("[Time Skip] endermen in {}: active={} (enabled={}, mobGriefing={}, spawning monsters={}, peaceful={}, players={}), monster cap {}",
@@ -171,18 +176,32 @@ public final class EndermanPopulation {
     }
 
     private boolean isSpawningChunk(ChunkPos pos) {
+        return playersNear(pos).length > 0
+                && level.isPositionEntityTicking(new BlockPos(pos.getMiddleBlockX(), level.getSeaLevel(), pos.getMiddleBlockZ()));
+    }
+
+    /** Number of (non-spectator) players this level's caps are counted for. */
+    public int playerCount() {
+        return players.length / 3;
+    }
+
+    /**
+     * Indices of the players whose spawning range holds this chunk (centre within 128 blocks,
+     * {@code ChunkMap.playerIsCloseEnoughForSpawning}): their local caps count its monsters.
+     */
+    public int[] playersNear(ChunkPos pos) {
         double cx = pos.getMiddleBlockX();
         double cz = pos.getMiddleBlockZ();
-        boolean near = false;
+        int[] near = new int[playerCount()];
+        int n = 0;
         for (int i = 0; i < players.length; i += 3) {
             double dx = players[i] - cx;
             double dz = players[i + 2] - cz;
-            if (dx * dx + dz * dz <= SPAWN_RANGE_SQR) {
-                near = true;
-                break;
+            if (dx * dx + dz * dz < SPAWN_RANGE_SQR) {
+                near[n++] = i / 3;
             }
         }
-        return near && level.isPositionEntityTicking(new BlockPos((int) cx, level.getSeaLevel(), (int) cz));
+        return java.util.Arrays.copyOf(near, n);
     }
 
     private static final int ENDER = 0;
@@ -257,7 +276,16 @@ public final class EndermanPopulation {
     /** True if a monster may spawn at this spot: more than 24 and at most 128 blocks from the nearest player. */
     public boolean inSpawnRange(int x, int feetY, int z) {
         double nearest = nearestPlayerSqr(x, feetY, z);
-        return nearest > MIN_SPAWN_DISTANCE_SQR && nearest <= SPAWN_RANGE_SQR;
+        if (nearest <= MIN_SPAWN_DISTANCE_SQR || nearest > SPAWN_RANGE_SQR) {
+            return false;
+        }
+        if (respawn != null) {
+            double dx = respawn.getX() + 0.5 - (x + 0.5);
+            double dy = respawn.getY() + 0.5 - feetY;
+            double dz = respawn.getZ() + 0.5 - (z + 0.5);
+            return dx * dx + dy * dy + dz * dz >= MIN_SPAWN_DISTANCE_SQR;
+        }
+        return true;
     }
 
     /** True if a player is within 32 blocks, so mobs here keep strolling ({@code noActionTime} resets). */
