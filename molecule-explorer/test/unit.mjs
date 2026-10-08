@@ -467,6 +467,69 @@ describe('presentation helpers', () => {
     assert.equal(out.co2, false);
   });
 
+  test('the molecules added in the latest expansion are all reachable', async () => {
+    /* A spot check across every category the expansion touched. Each of these
+       went through the same PubChem verification as the rest, so what this
+       pins is that they survived into the shipped file and can be found by
+       the names a reader would type. */
+    const WANT = [
+      ['magnetite', 'Magnetite'], ['pyrite', 'Pyrite'], ['borax', 'Borax'],
+      ['gold', 'Gold'], ['tungsten', 'Tungsten'], ['silicon', 'Silicon'],
+      ['phosgene', 'Phosgene'], ['galena', 'Galena'],
+      ['thalidomide', 'Thalidomide'], ['propofol', 'Propofol'],
+      ['ciclosporin', 'Ciclosporin'], ['amphotericin B', 'Amphotericin B'],
+      ['leaf alcohol', 'cis-3-Hexen-1-ol'], ['eucalyptol', 'Eucalyptol'],
+      ['nootkatone', 'Nootkatone'], ['erythritol', 'Erythritol'],
+      ['piperidine', 'Piperidine'], ['ferrocene', 'Ferrocene'],
+      ['18-crown-6', '18-Crown-6'], ['PFOA', 'PFOA'],
+      ['SAM', 'SAM'], ['NADH', 'NADH'], ['carnosine', 'Carnosine'],
+      ['hexadecane', 'Hexadecane'], ['cumene', 'Cumene'],
+    ];
+    const bad = await run((want) => {
+      const out = [];
+      want.forEach(([query, name]) => {
+        const r = window.ME.search.search(query, 8);
+        const names = (r.results || []).map((hit) => hit.m.n);
+        if (names.indexOf(name) < 0) {
+          out.push([query, 'wanted ' + name + ', got ' + JSON.stringify(names.slice(0, 4))]);
+        }
+      });
+      return out;
+    }, WANT);
+    assert.deepEqual(bad, [], JSON.stringify(bad, null, 1));
+  });
+
+  test('every molecule in the database renders a structure and a 2D drawing', async () => {
+    /* With a thousand entries, one bad SMILES would be easy to miss. This
+       reads every one back through the shipped library and draws it. */
+    const bad = await run(() => {
+      const out = [];
+      window.ME.search.all().forEach((m) => {
+        let mol;
+        try { mol = window.ME.chem.fromSmiles(m.m); }
+        catch (e) { out.push([m.n, 'SMILES threw: ' + e.message]); return; }
+        if (!mol || !mol.getAllAtoms()) { out.push([m.n, 'no atoms']); return; }
+        const parsed = window.ME.formula.parse(m.f);
+        if (!parsed.ok) { out.push([m.n, 'formula ' + m.f + ' will not parse']); return; }
+        /* The formula the app shows and the structure it draws have to hold the
+           same atoms, every time. Compared as element counts rather than as
+           text, because the displayed formula carries the ion's charge and
+           OpenChemLib's does not. */
+        const fromStructure = window.ME.formula.parse(mol.getMolecularFormula().formula);
+        if (!fromStructure.ok) { out.push([m.n, 'structure formula will not parse']); return; }
+        const keys = Object.keys(parsed.counts);
+        const same = keys.length === Object.keys(fromStructure.counts).length
+          && keys.every((k) => fromStructure.counts[k] === parsed.counts[k]);
+        if (!same) {
+          out.push([m.n, 'formula ' + m.f + ' but the structure holds '
+            + mol.getMolecularFormula().formula]);
+        }
+      });
+      return out;
+    });
+    assert.deepEqual(bad.slice(0, 8), [], JSON.stringify(bad.slice(0, 8), null, 1));
+  });
+
   test('the database is complete and internally consistent', async () => {
     const out = await run(() => {
       const all = window.ME.search.all();
@@ -483,13 +546,15 @@ describe('presentation helpers', () => {
         elements: window.ME.chem.elements.length,
       };
     });
-    assert.ok(out.total >= 500, `only ${out.total} molecules`);
-    assert.ok(out.gallery >= 60, `only ${out.gallery} gallery molecules`);
+    /* Floors rather than exact counts, so adding molecules does not break the
+       suite — but high enough that losing a chunk of the database would. */
+    assert.ok(out.total >= 1000, `only ${out.total} molecules`);
+    assert.ok(out.gallery >= 700, `only ${out.gallery} gallery molecules`);
     assert.equal(out.withSmiles, out.total, 'every entry needs a structure');
     assert.equal(out.withFact, out.total, 'every entry needs its one-line fact');
     assert.equal(out.withId, out.total, 'every entry needs a canonical id for recognition');
-    assert.ok(out.with3d > 400, `only ${out.with3d} entries carry 3D coordinates`);
-    assert.ok(out.inorganic > 50, `only ${out.inorganic} inorganic entries`);
+    assert.ok(out.with3d > 700, `only ${out.with3d} entries carry 3D coordinates`);
+    assert.ok(out.inorganic > 90, `only ${out.inorganic} inorganic entries`);
     assert.equal(out.duplicateNames, 0);
     assert.equal(out.elements, 118);
   });

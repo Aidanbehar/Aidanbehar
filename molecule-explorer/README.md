@@ -7,7 +7,7 @@ file** that works with the internet unplugged.
   Copy it anywhere, double-click it, and it opens in a browser.
 
 Everything is inlined: the styles, the JavaScript, the chemistry libraries, the
-icons, and a database of 688 molecules verified against PubChem. There are no
+icons, and a database of 1007 molecules verified against PubChem. There are no
 CDN links, no external fonts, no asset folders, no server, and no Node needed
 to *run* it. Nothing in it costs money and nothing needs an account.
 
@@ -23,7 +23,7 @@ What is in it:
 | **Reactions** | 22 reactions animated atom by atom, with a scrubber to stop on the frame where the bonds break. |
 | **Tools** | 20 calculators, every one showing its working, several with worked templates to start from. |
 | **Reference** | 13 tables, each stating where its data came from, and a 49-word glossary. |
-| **Gallery** | 688 molecules grouped by what they are for. |
+| **Gallery** | 729 molecules grouped by what they are for, out of 1007 in the database. |
 | **Search** | Molecules by name, nickname, formula or SMILES — and lessons, calculators, tables and glossary words. |
 | **Quantum** | Twelve pages on the Schrödinger equation: what ψ is, the TDSE and where the TISE comes from, the particle in a box derived by hand, tunnelling, the finite well, vibrations, the hydrogen atom, eight worked examples and fifteen kinds of generated problem. |
 
@@ -43,7 +43,7 @@ You only need this if you want to change the app. To *use* it, just open
 ```bash
 cd molecule-explorer
 npm install          # OpenChemLib, 3Dmol.js, esbuild, Playwright
-npm run build-db     # needs internet: verifies all 688 molecules against PubChem
+npm run build-db     # needs internet: verifies every molecule against PubChem
 npm run build        # writes dist/molecule-explorer.html
 npm test             # unit tests + a real-browser run with the network off
 ```
@@ -484,6 +484,31 @@ successive protons must come off harder than the one before, an acid must come
 out acidic, two acids mixed must never produce a base. A transposed digit in a
 pKa and a polyprotic acid listed out of order were both introduced deliberately
 to confirm the tests catch them.
+
+**The database.** 1007 molecules, and not one structure is hand-written. Each
+seed entry supplies only a PubChem query, a display name, a category, a
+one-line "where you've met this", and an expected molecular formula used as a
+tripwire; the build resolves every entry against PubChem and takes the SMILES,
+formula, InChIKey, IUPAC name and 3D conformer from there. If PubChem's formula
+disagrees with the tripwire, or the structure read back through the shipped
+copy of OpenChemLib does not hold the atoms PubChem claims, the build fails
+loudly and writes nothing.
+
+That is not a theoretical safeguard. The expansion from 688 to 1007 was
+submitted in one batch of 341 entries and 34 of them were rejected, every
+rejection useful: ammonium phosphate resolved to the diammonium salt rather
+than the triammonium one I had assumed; my formulas for thiamine pyrophosphate
+and S-adenosylmethionine were each one hydrogen out; "glycogen" came back as a
+four-glucose fragment and "fibrin" as something that was not fibrin at all;
+elemental aluminium's own SMILES reads back through OpenChemLib as AlH₃. The
+polymers and proteins were dropped rather than renamed, because PubChem has no
+honest single-molecule record for them and shipping a monomer under the label
+"polyethylene" is the sort of quiet fiction this project exists not to do — the
+monomers that matter are already in the seed on their own terms.
+
+A test reads all 1007 structures back through the library and checks that each
+one holds exactly the atoms its displayed formula claims, compared as element
+counts rather than text so that an ion's charge does not confuse it.
 
 ## Notes on the chemistry
 

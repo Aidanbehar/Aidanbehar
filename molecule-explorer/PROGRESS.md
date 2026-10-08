@@ -372,6 +372,10 @@ calculators, 11 reference tables and a 49-word glossary.
   fifteen kinds of generated problem. Every number derives from the defined
   constants — there is no 13.6 typed anywhere.
 
+- **The database grew from 688 molecules to 1007**, and from 466 gallery
+  entries to 729. 341 entries went in; 34 were rejected by the build's own
+  tripwires and fixed or dropped. Nothing structural was hand-written.
+
 ### Bugs found and fixed
 - The Balancer's live preview printed `nullH₂ + nullO₂ → nullH₂O` (reported
   with a screenshot). A species parsed from an equation with no leading number
@@ -434,6 +438,14 @@ calculators, 11 reference tables and a 49-word glossary.
   which reads as a layout mistake rather than a tight fit. The search box gives
   up the width instead, and the test now checks the whole bar rather than just
   the search box.
+- Things the database tripwires caught in the 341 new entries, all of them my
+  memory rather than the code: ammonium phosphate is the diammonium salt in
+  PubChem, not the triammonium one; thiamine pyrophosphate and
+  S-adenosylmethionine were each one hydrogen out; "glycogen" resolves to a
+  four-glucose fragment and "fibrin" to something that is not fibrin; elemental
+  aluminium's SMILES reads back as AlH₃ through OpenChemLib, the same valence
+  trap the reaction player hit with iron. Polymers and proteins were dropped
+  rather than relabelled.
 - `pH 7` printed where `pH 7.00` belonged. pH is not a significant-figures
   quantity — the digits in front of the point are the exponent of a
   concentration — so trimming the trailing zero threw away the part that
