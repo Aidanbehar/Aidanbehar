@@ -19,8 +19,10 @@
   const frag = (...kids) => K.frag(kids.flat());
 
   /* ======================================================== the pages ==== */
-  const PAGES = [];
-  const page = (id, name, blurb, build) => PAGES.push({ id, name, blurb, build });
+  const page = (id, name, blurb, build) => ME.quantumPage('The Schrödinger equation', id, name, blurb, build);
+  /* Read at build time, not at load time: content files after this one are
+   * still registering pages while this module is being defined. */
+  const PAGES = () => ME.quantumPages;
 
   page('why', 'Why there is an equation', 'The problem it was invented to solve', () => frag(
     p('By 1925 everybody could see that something was quantised. Heat a gas and it glows at ',
@@ -598,39 +600,6 @@
     );
   });
 
-  page('problems', 'Problems', 'Fifteen kinds, endlessly regenerated', () => {
-    const wrap = el('div');
-    wrap.appendChild(p('Each of these is generated fresh, and the answer is computed by the engine '
-      + 'rather than stored — so the number you are marked against is the number the worked '
-      + 'examples would give. Press for new ones as often as you like.'));
-
-    const GROUPS = [
-      ['Reading the equation', ['qm-which-equation', 'qm-psi-meaning']],
-      ['The box', ['qm-box-energy', 'qm-box-jump', 'qm-box-probability', 'qm-box-nodes', 'qm-box-thinking']],
-      ['Light', ['qm-photon', 'qm-hydrogen-line', 'qm-hydrogen-series', 'qm-hydrogen-level']],
-      ['Bonds and barriers', ['qm-oscillator', 'qm-tunnel', 'qm-tunnel-thinking', 'qm-uncertainty']],
-    ];
-
-    GROUPS.forEach(([name, keys]) => {
-      wrap.appendChild(h3(name));
-      const holder = el('div', { class: 'qm-problems' });
-      let seed = (Math.random() * 1e9) | 0;
-      const fill = () => {
-        ME.clear(holder);
-        keys.forEach((k, i) => {
-          const q = ME.practice.generate(k, seed + i * 7919);
-          if (q) holder.appendChild(ME.quiz.buildQuestion(q, i, keys.length, false, null));
-        });
-      };
-      const again = el('button', { class: 'btn btn-sm', text: 'New set' });
-      again.addEventListener('click', () => { seed = (Math.random() * 1e9) | 0; fill(); });
-      wrap.appendChild(holder);
-      wrap.appendChild(again);
-      fill();
-    });
-    return wrap;
-  });
-
   /* ===================================================== the tab shell === */
   const St = { built: false, host: null, panel: null, nav: null, current: null, raf: null,
     last: 0, running: false };
@@ -638,15 +607,26 @@
   function build(host) {
     St.host = host;
     const wrap = el('div', { class: 'wrap' });
-    wrap.appendChild(el('h1', { text: 'The Schrödinger equation' }));
+    wrap.appendChild(el('h1', { text: 'Quantum physics' }));
     wrap.appendChild(el('p', { class: 'note' },
-      'Twelve pages on one equation, from the problem it was invented to solve through to doing it by '
-      + 'hand. Separate from the course on purpose: nothing here is required for anything else, '
-      + 'and it goes deeper than a first chemistry class needs.'));
+      'Forty-three pages, in the order the reasoning actually goes: the experiments that broke '
+      + 'classical physics, the equation that replaced it, the rules underneath, and then what '
+      + 'those rules build \u2014 spin, the periodic table, the covalent bond, colour, lasers, '
+      + 'semiconductors, and the handful of results nobody has managed to make comfortable. '
+      + 'Separate from the course on purpose: nothing here is required for anything else, and it '
+      + 'goes deeper than a first chemistry class needs.'));
 
     const layout = el('div', { class: 'qm-layout' });
     St.nav = el('nav', { class: 'qm-nav', 'aria-label': 'Pages' });
-    PAGES.forEach((pg, i) => {
+    /* Grouped, because forty-odd pages in one list is a wall. The groups are
+     * the shape of the subject: where it came from, the equation, the rules,
+     * then what the rules build. */
+    let lastGroup = null;
+    PAGES().forEach((pg, i) => {
+      if (pg.group !== lastGroup) {
+        lastGroup = pg.group;
+        St.nav.appendChild(el('div', { class: 'qm-navgroup', text: pg.group }));
+      }
       const btn = el('button', { class: 'qm-navbtn', 'data-page': pg.id });
       btn.appendChild(el('span', { class: 'qm-navnum', text: String(i + 1) }));
       const txt = el('span', { class: 'qm-navtext' });
@@ -662,11 +642,12 @@
     wrap.appendChild(layout);
     host.appendChild(wrap);
     St.built = true;
-    show(PAGES[0].id);
+    show(PAGES()[0].id);
   }
 
   function show(id) {
-    const pg = PAGES.filter((x) => x.id === id)[0] || PAGES[0];
+    const list = PAGES();
+    const pg = list.filter((x) => x.id === id)[0] || list[0];
     St.current = pg;
     /* Figures from the page being left stop being painted. */
     ME.quantumInternals.LIVE.length = 0;
@@ -679,16 +660,16 @@
 
     /* Previous and next, because ten pages in an order is a sequence even if
      * it is not a course. */
-    const i = PAGES.indexOf(pg);
+    const i = list.indexOf(pg);
     const nav = el('div', { class: 'qm-pagenav' });
     if (i > 0) {
-      const prev = el('button', { class: 'btn btn-sm', text: '← ' + PAGES[i - 1].name });
-      prev.addEventListener('click', () => { show(PAGES[i - 1].id); ME.revealTop(St.panel, 0); });
+      const prev = el('button', { class: 'btn btn-sm', text: '← ' + list[i - 1].name });
+      prev.addEventListener('click', () => { show(list[i - 1].id); ME.revealTop(St.panel, 0); });
       nav.appendChild(prev);
     }
-    if (i < PAGES.length - 1) {
-      const next = el('button', { class: 'btn btn-sm btn-primary', text: PAGES[i + 1].name + ' →' });
-      next.addEventListener('click', () => { show(PAGES[i + 1].id); ME.revealTop(St.panel, 0); });
+    if (i < list.length - 1) {
+      const next = el('button', { class: 'btn btn-sm btn-primary', text: list[i + 1].name + ' →' });
+      next.addEventListener('click', () => { show(list[i + 1].id); ME.revealTop(St.panel, 0); });
       nav.appendChild(next);
     }
     card.appendChild(nav);
@@ -736,6 +717,6 @@
 
   window.addEventListener('resize', ME.debounce(() => { if (St.built) paintAll(); }, 150));
 
-  ME.quantumview = { ensureBuilt, show, resume, pause, PAGES,
+  ME.quantumview = { ensureBuilt, show, resume, pause, get PAGES() { return PAGES(); },
     get state() { return St; } };
 })();

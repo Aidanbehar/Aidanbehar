@@ -696,9 +696,16 @@ await page.waitForTimeout(400);
 /* Quantum */
 await page.locator('.tab[data-view=quantum]').click();
 await page.waitForTimeout(700);
-check('the Schrödinger tab lists its pages',
-  (await page.locator('.qm-navbtn').count()) >= 10,
-  (await page.locator('.qm-navbtn').count()) + ' pages');
+check('the quantum tab lists its pages, in groups',
+  (await page.locator('.qm-navbtn').count()) >= 40
+    && (await page.locator('.qm-navgroup').count()) >= 9,
+  (await page.locator('.qm-navbtn').count()) + ' pages in '
+    + (await page.locator('.qm-navgroup').count()) + ' groups');
+const qmGroups = (await page.locator('.qm-navgroup').allInnerTexts()).join('|').toLowerCase();
+check('and the groups cover the subject rather than one equation',
+  /came from/.test(qmGroups) && /schr/.test(qmGroups) && /rules/.test(qmGroups)
+    && /spin/.test(qmGroups) && /molecules/.test(qmGroups) && /strange/.test(qmGroups),
+  qmGroups);
 
 /* Every page, rendered for real. The engine tests check the prose has no
  * gaps; this checks the page actually goes on screen. */
@@ -706,11 +713,51 @@ const qmPages = await page.locator('.qm-navname').allInnerTexts();
 const qmBad = [];
 for (let i = 0; i < qmPages.length; i++) {
   await page.locator('.qm-navbtn').nth(i).click();
+  await page.waitForTimeout(170);
+  const t = await page.locator('.qm-page').innerText();
+  if (t.length < 700 || /NaN|\[object/.test(t)) qmBad.push(qmPages[i] + ': ' + t.length);
+}
+check('every one of the ' + qmPages.length + ' pages renders with real content',
+  qmBad.length === 0, qmBad.join(' | '));
+
+/* A sample of the new groups, each checked for the thing that page exists to say. */
+const qmSay = async (pageName, re, what) => {
+  await page.locator('.qm-navbtn', { hasText: pageName }).first().click();
   await page.waitForTimeout(260);
   const t = await page.locator('.qm-page').innerText();
-  if (t.length < 700 || /undefined|NaN/.test(t)) qmBad.push(qmPages[i] + ': ' + t.slice(0, 60));
-}
-check('every page renders with real content', qmBad.length === 0, qmBad.join(' | '));
+  check(what, re.test(t), t.slice(0, 110));
+};
+await qmSay('ultraviolet catastrophe', /ultraviolet catastrophe/i,
+  'the blackbody page names the catastrophe');
+await qmSay('Light arrives in lumps', /threshold/i,
+  'the photoelectric page leads with the threshold');
+await qmSay('Everything has a wavelength', /cricket ball/i,
+  'the de Broglie page shows why nobody noticed');
+await qmSay('The exclusion principle', /sign/i,
+  'the Pauli page traces it to the sign flip rather than a rule');
+await qmSay('Why the table is that shape', /2, 6, 10, 14|2 \+ 6 \+ 10 \+ 14/,
+  'the periodic table page explains the block widths');
+await qmSay('Entanglement', /2\u221a2|2.828/,
+  'the entanglement page gives the Bell number');
+await qmSay('Quantum computing', /cancel/i,
+  'the computing page says the advantage is cancellation, not parallelism');
+
+/* The new figures have to be painting, not sitting blank. */
+await page.locator('.qm-navbtn', { hasText: 'ultraviolet catastrophe' }).first().click();
+await page.waitForTimeout(500);
+const bbPainted = await page.evaluate(() => {
+  const c = document.querySelector('.qm-canvas');
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  let n = 0;
+  for (let i = 3; i < d.length; i += 4 * 11) if (d[i] > 12) n++;
+  return n;
+});
+check('the blackbody figure draws its curves', bbPainted > 200, String(bbPainted));
+await page.locator('.qm-slider input[type=range]').first().fill('9000');
+await page.waitForTimeout(400);
+check('and the temperature slider moves the peak',
+  /peak at (2|3)\d\d nm/.test(await page.locator('.qm-pill').first().innerText()),
+  await page.locator('.qm-pill').first().innerText());
 
 await page.locator('.qm-navbtn', { hasText: 'TDSE and TISE' }).click();
 await page.waitForTimeout(600);
@@ -753,7 +800,7 @@ check('and the energy readout followed it',
 await page.locator('.qm-navbtn', { hasText: 'Problems' }).click();
 await page.waitForTimeout(700);
 check('the problems page generates a set',
-  (await page.locator('.qm-problems .quiz-item').count()) >= 12,
+  (await page.locator('.qm-problems .quiz-item').count()) >= 30,
   (await page.locator('.qm-problems .quiz-item').count()) + ' problems');
 /* Answer one wrongly and one rightly, through the same grader the course uses. */
 const firstNumeric = page.locator('.qm-problems .quiz-numinput').first();

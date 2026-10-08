@@ -79,6 +79,18 @@
       });
     }
 
+    /* Each quantum page is its own destination, because "photoelectric" or
+     * "Bell" or "band gap" is exactly what somebody would type. */
+    if (ME.quantumPages && ME.quantumPages.length) {
+      ME.quantumPages.forEach((pg) => {
+        out.push({
+          kind: 'quantum', title: pg.name, hash: '#/quantum/' + pg.id,
+          sub: pg.group + ' \u2014 ' + pg.blurb,
+          terms: [pg.name, pg.blurb, pg.group, pg.id.replace(/-/g, ' ')].join(' '),
+        });
+      });
+    }
+
     /* The reaction animations are findable by what they are about: typing
      * "thermite" should reach the one that plays it, not only the molecules. */
     if (ME.reactionsim && ME.reactionsim.REACTIONS) {
@@ -180,7 +192,7 @@
 
   const LABEL = {
     lesson: 'Lesson', unit: 'Unit', tool: 'Tool',
-    reference: 'Reference', glossary: 'Glossary',
+    reference: 'Reference', glossary: 'Glossary', quantum: 'Quantum',
   };
 
   ME.siteIndex = { search, all, label: (k) => LABEL[k] || '', norm: norm };

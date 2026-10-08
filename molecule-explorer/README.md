@@ -25,7 +25,7 @@ What is in it:
 | **Reference** | 13 tables, each stating where its data came from, and a 49-word glossary. |
 | **Gallery** | 729 molecules grouped by what they are for, out of 1007 in the database. |
 | **Search** | Molecules by name, nickname, formula or SMILES — and lessons, calculators, tables and glossary words. |
-| **Quantum** | Twelve pages on the Schrödinger equation: what ψ is, the TDSE and where the TISE comes from, the particle in a box derived by hand, tunnelling, the finite well, vibrations, the hydrogen atom, eight worked examples and fifteen kinds of generated problem. |
+| **Quantum** | 43 pages across ten groups: the experiments that broke classical physics, the Schrödinger equation in full, the rules underneath it, spin and angular momentum, atoms and the periodic table, bonding, light and matter, many-particle statistics and solids, and the strange part — with sixteen live figures and 34 kinds of generated problem. |
 
 19 interactive simulations are embedded in the lessons that need them.
 
@@ -322,51 +322,55 @@ recomputed from the other three — including at startup, which is how the first
 version came to violate PV = nRT by 1.4% on its opening frame.
 
 **Quantum.** Deliberately not part of the course — the course is a path with a
-next button, and this is one topic taken as far as it will go. It sits at the
+next button, and this is one subject taken as far as it will go. It sits at the
 far right of the bar for that reason.
 
-The order is the order the reasoning actually goes, which is not the order a
-textbook uses. A textbook states the equation and then explains the terms; this
-starts from the problem the equation was invented to solve (spectra are lines,
-not smears, and Bohr's rule produced the right numbers for no reason), gets to
-quantisation as what happens when you make a wave fit a boundary, and only then
-writes the equation down. The kinetic energy term is introduced as *curvature*,
-because once that substitution lands the reader can rank states by energy off a
-graph without calculating anything.
+Ten groups, in the order the reasoning actually goes rather than the order a
+syllabus uses:
 
-The TDSE/TISE page does the separation of variables in five lines rather than
-asserting the result, because the payoff is the definition of an orbital: f(t)
-turns out to be e^(−iEt/ℏ), whose magnitude is 1, so |ψ|² does not change with
-time at all. There is a live figure of exactly that — the real and imaginary
-parts of ψ spinning into each other while |ψ|² sits frozen — next to a mixture
-of two states where the same figure sloshes, because motion built out of two
-things that individually never move is the honest way to show what the mixture
-buys you. Then a table of which equation to reach for, with the rule of thumb
-that a question containing the word "when" needs the time-dependent one.
+| Group | Pages |
+| --- | --- |
+| Where it came from | The ultraviolet catastrophe, the photoelectric effect, Compton scattering, line spectra and Bohr, de Broglie, the two-slit experiment |
+| The Schrödinger equation | Why an equation was needed, what ψ is, the equation term by term, TDSE vs TISE, the box by hand, what the box teaches, tunnelling, the finite well, the oscillator, hydrogen, worked examples |
+| The rules | The four postulates, measurement and averages, uncertainty from commutators, superposition, correspondence and decoherence |
+| Spin and angular momentum | √(ℓ(ℓ+1)) and the cone, Stern–Gerlach, the exclusion principle, Zeeman and fine structure |
+| Atoms and the table | Beyond hydrogen, why the table is that shape, Moseley |
+| Molecules | Where a covalent bond comes from, hybridisation, why things are coloured |
+| Light and matter | Absorption and selection rules, lasers, reading a spectrum |
+| Many particles | Fermi–Dirac and Bose–Einstein, band theory, doping and LEDs |
+| The strange part | Entanglement and Bell, quantum computing, radioactivity, interpretations |
 
-The particle in a box is derived completely: write down V, solve where V = 0,
-apply the boundary conditions (which is where quantisation comes from and
-nowhere else), read off E = n²h²/8mL², normalise to get √(2/L). Then tunnelling,
-and then the finite well — which is in there specifically because it has *no*
-closed-form answer. Its energies come out of a bisection, and the page says so:
-the particle in a box is the unusual case, hydrogen is the only atom with an
-exact solution, and every molecular orbital anyone has seen came out of a
-computer doing approximately this a few million times.
+The ordering choice matters. A textbook states the equation and then explains
+its terms; this starts with six experiments that classical physics got not
+approximately but spectacularly wrong — a theory that predicts infinity for a
+warm object, a threshold colour that no amount of brightness can beat, a photon
+that comes back a different colour. A reader who has seen the damage understands
+why anybody would tear up mechanics and start again.
 
-Nothing is typed. There is no 13.6 anywhere in the app: the hydrogen ground
-state is mₑe⁴/8ε₀²h² evaluated from the defined constants, the Bohr radius and
-hc = 1239.84 eV·nm likewise. Hydrogen uses the reduced mass rather than the
-electron mass — a 0.05% correction, and the difference between 13.606 eV and the
-measured 13.598, so leaving it out would have made the tab disagree with a data
-table for no reason. The engine tests pin Balmer α at 656.47 nm (vacuum; tables
-quote 656.28 because they measure in air, and the worked example explains that
-rather than looking wrong), the HCl stretch at 2990 cm⁻¹, the H/D ratio at
-1.3943, the tunnelling cliff across four thicknesses, and that a shallow well
-still binds exactly one state.
+Three threads run through the whole tab and are worth naming, because each one
+converts a list of rules into a single idea. **Kinetic energy is curvature** —
+so you can rank states by energy off a graph without calculating anything, and
+nodes become a counting argument. **Quantisation is a boundary condition** — the
+guitar string, which is why the box, the Bohr orbit and the ring of a benzene
+molecule are all the same sentence. And **interference needs indistinguishable
+paths, not small objects** — which is what the two-slit, the bond, the laser and
+decoherence all turn out to be about.
 
-The fifteen problem generators register in the same registry the course uses, so
-the existing self-test covers them, and a separate test parses each generated
-question back out of its own text and re-derives the answer independently.
+Nothing is typed. There is no 13.6 anywhere in the app, no 5.67 × 10⁻⁸, no
+0.0529: the hydrogen ground state is mμe⁴/8ε₀²h², Stefan–Boltzmann is
+2π⁵k⁴/15h³c², the Wien constant needs a transcendental equation solved at load
+time, the Bohr magneton is eℏ/2mₑ and the fine-structure constant is
+e²/4πε₀ℏc — which comes out as 1/137.035999, and the test says so. Hydrogen uses
+the reduced mass of electron and proton rather than the electron mass alone,
+which is the difference between 13.606 eV and the measured 13.598.
+
+The engine tests pin all of it against measured values: the Sun peaking at 502
+nm by two independent routes, the photoelectric slope being h/e for four
+different metals, Compton's shift being the same 2.426 pm at 90° whatever you
+start with, every Bohr orbit holding exactly n de Broglie wavelengths, Moseley
+within 5% for five elements, Fermi–Dirac being exactly ½ at the chemical
+potential, the CHSH scan over 20736 angle choices never exceeding 2√2 and
+reaching it, and decay being memoryless to twelve figures.
 
 **Reactions.** Pick one of 22 reactions and watch the atoms rearrange. Nothing
 here is hand-choreographed, because hand-choreographing twenty reactions means

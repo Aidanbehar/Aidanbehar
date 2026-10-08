@@ -366,11 +366,18 @@ calculators, 11 reference tables and a 49-word glossary.
   structures, formation enthalpies for the flash — and findable from the
   search bar by name.
 
-- **Quantum**, an eleventh tab at the far right and separate from the course:
-  twelve pages on the Schrödinger equation, from why it exists to doing the
-  particle in a box by hand, with six live figures, eight worked examples and
-  fifteen kinds of generated problem. Every number derives from the defined
-  constants — there is no 13.6 typed anywhere.
+- **Quantum**, an eleventh tab at the far right and separate from the course.
+  Began as twelve pages on the Schrödinger equation and was then generalised to
+  the subject: **43 pages in ten groups**, from the experiments that broke
+  classical physics through the equation, the rules underneath it, spin, atoms,
+  molecules, light, many-particle statistics and solids, to entanglement and
+  what any of it means. Sixteen live figures, 34 kinds of generated problem.
+  Every number derives from the defined constants — there is no 13.6, no
+  5.67 × 10⁻⁸ and no 0.0529 typed anywhere.
+  - The page list lives in a shared registry (`ME.quantumPage`) that content
+    files push to as they load, so the pages are split across six files and
+    none of them knows about the others. Reading order is registration order,
+    which is filename order.
 
 - **The database grew from 688 molecules to 1007**, and from 466 gallery
   entries to 729. 341 entries went in; 34 were rejected by the build's own
@@ -446,6 +453,19 @@ calculators, 11 reference tables and a 49-word glossary.
   aluminium's SMILES reads back as AlH₃ through OpenChemLib, the same valence
   trap the reaction player hit with iron. Polymers and proteins were dropped
   rather than relabelled.
+- Things the render test caught in the 31 new quantum pages, all of them mine:
+  a DOM node concatenated into a string with `+` instead of `,`, which printed
+  `[object HTMLElement]` mid-sentence; raw numbers passed as table cells, which
+  the lesson kit's `table()` tries to `appendChild` and throws on; and the
+  literal word "undefined" in prose, twice, which the same test flags because
+  it cannot tell that case from a failed interpolation. The first two were
+  bugs; for the third I reworded the prose rather than weakening the test.
+- The first LCAO implementation put the antibonding level *below* the bonding
+  one, because I tried to get absolute energies out of a two-parameter model.
+  Rewritten as a splitting about the atomic level, which is what an MO diagram
+  shows anyway, with a test that asserts the direction.
+- Gallium nitride was classified as an insulator, because the semiconductor
+  cutoff was at 3 eV. Every blue LED is made of it.
 - `pH 7` printed where `pH 7.00` belonged. pH is not a significant-figures
   quantity — the digits in front of the point are the exponent of a
   concentration — so trimming the trailing zero threw away the part that

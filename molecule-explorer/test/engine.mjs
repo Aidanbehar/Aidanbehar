@@ -2268,6 +2268,446 @@ describe('quantum mechanics', () => {
   });
 });
 
+/* ------------------------------------------- the rest of quantum physics */
+describe('quantum physics beyond the equation', () => {
+  test('the second batch of derived constants matches the measured values', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        wienB: Q.WIEN_B, wienX: Q.WIEN_X, stefan: Q.STEFAN,
+        magneton: Q.BOHR_MAGNETON, compton: Q.COMPTON,
+        alpha: Q.FINE_STRUCTURE, invAlpha: 1 / Q.FINE_STRUCTURE,
+      };
+    });
+    /* Not one of these is typed into the app. The Wien constant needs a
+     * transcendental equation solved, Stefan–Boltzmann is 2π⁵k⁴/15h³c², the
+     * magneton is eℏ/2mₑ, and α is e²/4πε₀ℏc. */
+    assert.ok(Math.abs(got.wienX - 4.965114) < 1e-5, 'Wien root: ' + got.wienX);
+    assert.ok(Math.abs(got.wienB - 2.897772e-3) / 2.897772e-3 < 1e-5, 'Wien b: ' + got.wienB);
+    assert.ok(Math.abs(got.stefan - 5.670374e-8) / 5.670374e-8 < 1e-5, 'Stefan: ' + got.stefan);
+    assert.ok(Math.abs(got.magneton - 9.2740100e-24) / 9.274e-24 < 1e-6, 'magneton: ' + got.magneton);
+    assert.ok(Math.abs(got.compton - 2.42631023e-12) / 2.426e-12 < 1e-6, 'Compton: ' + got.compton);
+    /* The famous one. */
+    assert.ok(Math.abs(got.invAlpha - 137.035999) < 0.0001, '1/alpha = ' + got.invAlpha);
+  });
+
+  test('hot objects peak where they are measured to peak', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      /* Find the peak of the Planck curve by brute force and check it lands
+       * on the Wien prediction — two independent routes to the same number. */
+      const brute = (T) => {
+        let best = 0, at = 0;
+        for (let nm = 20; nm < 40000; nm += 1) {
+          const v = Q.planck(nm, T).quantum;
+          if (v > best) { best = v; at = nm; }
+        }
+        return at;
+      };
+      return {
+        sun: Q.wienPeak(5772).lambdaNM, sunBrute: brute(5772),
+        body: Q.wienPeak(310).lambdaNM, bodyBrute: brute(310),
+        sunRegion: Q.wienPeak(5772).region,
+        bodyRegion: Q.wienPeak(310).region,
+        /* The catastrophe: at short wavelengths the classical answer runs away. */
+        catastrophe: Q.planck(100, 5772).classical / Q.planck(100, 5772).quantum,
+        agreeLong: Q.planck(30000, 5772).classical / Q.planck(30000, 5772).quantum,
+        power: Q.stefanBoltzmann(5772),
+      };
+    });
+    assert.ok(Math.abs(got.sun - 502) < 1, 'the Sun peaks at ' + got.sun + ' nm');
+    assert.ok(Math.abs(got.sun - got.sunBrute) < 2, 'Wien and the curve disagree: '
+      + got.sun + ' against ' + got.sunBrute);
+    assert.ok(Math.abs(got.body - got.bodyBrute) < 20, 'body heat: ' + got.body + ' / ' + got.bodyBrute);
+    assert.equal(got.sunRegion, 'green');
+    assert.equal(got.bodyRegion, 'infrared');
+    /* Classical physics is wrong by a factor of billions in the ultraviolet
+     * and right to a per cent in the far infrared, which is exactly the shape
+     * of the failure Planck was fixing. */
+    assert.ok(got.catastrophe > 1e8, 'the catastrophe is not steep enough: ' + got.catastrophe);
+    assert.ok(Math.abs(got.agreeLong - 1) < 0.05, 'the two should agree at long wavelengths: '
+      + got.agreeLong);
+    /* The Sun's surface radiates about 63 MW per square metre. */
+    assert.ok(Math.abs(got.power - 6.29e7) / 6.29e7 < 0.01, 'solar flux: ' + got.power);
+  });
+
+  test('the photoelectric effect has a threshold, and brightness never beats it', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        sodium400: Q.photoelectric(400, 2.28),
+        sodium600: Q.photoelectric(600, 2.28),
+        threshold: Q.photoelectric(400, 2.28).thresholdNM,
+        /* The slope of KE against frequency has to be h, whatever the metal. */
+        /* Both wavelengths must clear the threshold for every metal here, or
+         * the clamp at zero flattens the line and the slope is meaningless —
+         * which is exactly what platinum did on the first attempt. */
+        slopes: [2.1, 2.28, 4.3, 5.6].map((phi) => {
+          const a = Q.photoelectric(120, phi), b = Q.photoelectric(150, phi);
+          const hOverE = window.ME.fmt.CONST.h / window.ME.fmt.CONST.e;
+          const f1 = window.ME.quantum.photonFromNM(120).eV / hOverE;
+          const f2 = window.ME.quantum.photonFromNM(150).eV / hOverE;
+          return (a.kineticEV - b.kineticEV) / (f1 - f2);
+        }),
+        /* And the clamp itself is right: below threshold it is zero, not negative. */
+        belowThreshold: Q.photoelectric(700, 5.6).kineticEV,
+      };
+    });
+    assert.ok(Math.abs(got.sodium400.kineticEV - 0.8196) < 0.001, got.sodium400.kineticEV);
+    /* Below threshold the answer is exactly zero, not a small number. */
+    assert.equal(got.sodium600.emits, false);
+    assert.equal(got.sodium600.kineticEV, 0);
+    assert.ok(Math.abs(got.threshold - 543.8) < 0.5, 'threshold: ' + got.threshold);
+    /* Every metal gives the same slope, in eV per hertz, and that slope is
+     * Planck's constant: h/e = 4.1357 × 10⁻¹⁵ eV·s. Four different work
+     * functions, one slope — which is what made the experiment decisive. */
+    got.slopes.forEach((s, i) => assert.ok(Math.abs(s / 4.135667696e-15 - 1) < 1e-9,
+      'slope ' + i + ' should be h/e: ' + s));
+    assert.equal(got.belowThreshold, 0, 'below threshold the answer is zero, never negative');
+  });
+
+  test('Compton shifts by the same amount whatever you start with', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        at90: [0.01, 0.0709, 0.5].map((nm) => Q.compton(nm, 90).shiftNM * 1000),
+        at180: Q.compton(0.0709, 180).shiftNM * 1000,
+        at0: Q.compton(0.0709, 0).shiftNM,
+        electronGains: Q.compton(0.0709, 90).electronEV,
+      };
+    });
+    /* The whole point of the formula: the starting wavelength is not in it. */
+    got.at90.forEach((s) => assert.ok(Math.abs(s - 2.42631) < 1e-4,
+      '90° shift should always be the Compton wavelength: ' + s));
+    assert.ok(Math.abs(got.at180 - 4.85262) < 1e-3, 'backscatter is twice: ' + got.at180);
+    assert.ok(Math.abs(got.at0) < 1e-15, 'straight through means no shift: ' + got.at0);
+    assert.ok(got.electronGains > 0, 'the electron has to gain what the photon lost');
+  });
+
+  test('de Broglie wavelengths come out at the scales that matter', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        v100: Q.deBroglieFromVolts(100).lambdaNM,
+        v100k: Q.deBroglieFromVolts(100000).lambdaNM,
+        ball: Q.deBroglieFromSpeed(0.145, 40).lambdaNM,
+        /* Doubling the voltage divides the wavelength by root two. */
+        ratio: Q.deBroglieFromVolts(100).lambdaNM / Q.deBroglieFromVolts(400).lambdaNM,
+      };
+    });
+    /* The standard result: 1.226 nm over the square root of the voltage. */
+    assert.ok(Math.abs(got.v100 - 0.12264) < 1e-5, '100 V electron: ' + got.v100);
+    assert.ok(got.v100k < 0.005, 'an electron microscope beats an atom: ' + got.v100k);
+    /* And the reason nobody noticed for three centuries. */
+    assert.ok(got.ball < 1e-24, 'a cricket ball: ' + got.ball + ' nm');
+    assert.ok(Math.abs(got.ratio - 2) < 1e-9, 'four times the volts is half the wavelength: ' + got.ratio);
+  });
+
+  test('Bohr orbits hold a whole number of de Broglie wavelengths', async () => {
+    /* This is the identity that turned Bohr's unexplained rule into a
+     * standing wave, so it had better be exact rather than close. */
+    const bad = await run(() => {
+      const Q = window.ME.quantum, out = [];
+      for (let n = 1; n <= 8; n++) {
+        const b = Q.bohr(n);
+        const waves = b.circumferenceNM / b.deBroglieNM;
+        if (Math.abs(waves - n) > 1e-9) out.push([n, waves]);
+        /* Relative, not absolute: the engine derives a₀ from the constants and
+         * the literal 0.0529177 is rounded, which at n = 8 is a bigger gap
+         * than an absolute tolerance should forgive. */
+        const want = n * n * (window.ME.fmt.CONST.bohrRadius * 1e9);
+        if (Math.abs(b.radiusNM / want - 1) > 1e-12) out.push([n, 'radius ' + b.radiusNM]);
+      }
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('angular momentum is longer than its own biggest component', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return [0, 1, 2, 3].map((l) => {
+        const a = Q.angularMomentum(l);
+        return { l: l, mag: a.magnitude, count: a.count, minAngle: a.minAngleDeg, label: a.label };
+      });
+    });
+    assert.deepEqual(got.map((x) => x.count), [1, 3, 5, 7]);
+    assert.deepEqual(got.map((x) => x.label), ['s', 'p', 'd', 'f']);
+    got.forEach((x) => {
+      if (x.l === 0) { assert.equal(x.minAngle, null); return; }
+      /* √(ℓ(ℓ+1)) is always more than ℓ, which is why it can never lie along
+       * the axis — the whole content of the cone picture. */
+      assert.ok(x.mag > x.l, 'l=' + x.l + ': ' + x.mag);
+      assert.ok(x.minAngle > 0, 'l=' + x.l + ' should never reach the axis');
+    });
+    assert.ok(Math.abs(got[1].mag - Math.SQRT2) < 1e-12);
+    assert.ok(Math.abs(got[2].minAngle - 35.264) < 0.01, 'd orbital tilt: ' + got[2].minAngle);
+  });
+
+  test('shells, the filling order and the shape of the table', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        capacities: [1, 2, 3, 4, 5].map((n) => Q.shellCapacity(n).total),
+        order: Q.aufbauOrder(14).map((x) => x.label).join(' '),
+        blocks: [0, 1, 2, 3].map((l) => Q.angularMomentum(l).count * 2),
+      };
+    });
+    assert.deepEqual(got.capacities, [2, 8, 18, 32, 50], '2n²');
+    /* 4s before 3d, 5s before 4d, 6s before 4f — the n+ℓ rule, which is why
+     * the table has the shape it has. */
+    assert.equal(got.order, '1s 2s 2p 3s 3p 4s 3d 4p 5s 4d 5p 6s 4f 5d');
+    assert.deepEqual(got.blocks, [2, 6, 10, 14], 'the widths of the s, p, d and f blocks');
+  });
+
+  test('Moseley gets the X-ray lines close enough to order the elements', async () => {
+    const got = await run(() => [20, 26, 29, 42, 47].map((Z) => window.ME.quantum.moseley(Z).energyEV));
+    /* Measured Kα: Ca 3.69, Fe 6.40, Cu 8.05, Mo 17.48, Ag 22.16 keV. A
+     * one-parameter formula from 1913, within a couple of per cent. */
+    [[3690, 20], [6400, 26], [8050, 29], [17480, 42], [22160, 47]].forEach(([want, Z], i) => {
+      const err = Math.abs(got[i] - want) / want;
+      assert.ok(err < 0.05, 'Z=' + Z + ': ' + Math.round(got[i]) + ' eV against ' + want);
+    });
+    /* And the ordering is strictly monotonic, which is the point of it. */
+    for (let i = 1; i < got.length; i++) assert.ok(got[i] > got[i - 1]);
+  });
+
+  test('a bond is a wave added, and four electrons undo it', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      const r = Q.lcao(-13.6, 2.5);
+      return {
+        bonding: r.bondingEV, anti: r.antibondingEV, atomic: r.atomicEV,
+        asymmetry: r.asymmetry, four: r.fourElectronsEV,
+        orders: [Q.bondOrder(2, 0), Q.bondOrder(2, 2), Q.bondOrder(4, 2), Q.bondOrder(2, 1)],
+      };
+    });
+    /* Bonding below, antibonding above — the first version of this had them
+     * the wrong way round, which is why the test checks the direction. */
+    assert.ok(got.bonding < got.atomic, 'bonding must sit below the atomic level');
+    assert.ok(got.anti > got.atomic, 'antibonding must sit above it');
+    /* And the rise beats the drop, which is the whole explanation of He₂. */
+    assert.ok(got.asymmetry > 1, 'the antibonding level must rise by more: ' + got.asymmetry);
+    assert.ok(got.four > 0, 'four electrons must come out net repulsive: ' + got.four);
+    assert.deepEqual(got.orders, [1, 0, 1, 0.5]);
+  });
+
+  test('the box predicts butadiene, and admits where it drifts', async () => {
+    const got = await run(() => [2, 3, 4, 5].map((k) => window.ME.quantum.conjugatedBox(k).lambdaNM));
+    /* Butadiene really absorbs at 217 nm, and the free-electron model gets
+     * within five per cent with no chemistry in it at all. */
+    assert.ok(Math.abs(got[0] - 217) / 217 < 0.06, 'butadiene: ' + got[0] + ' nm');
+    /* And it drifts steadily too red for longer chains, because a real chain
+     * is not a flat box. The page says so rather than hiding it. */
+    assert.ok(got[3] > 334, 'the model should over-predict for longer chains: ' + got[3]);
+    for (let i = 1; i < got.length; i++) {
+      assert.ok(got[i] > got[i - 1], 'longer conjugation must absorb redder');
+    }
+  });
+
+  test('band gaps map onto the colours the LEDs actually are', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return [['Si', 1.12], ['GaAs', 1.42], ['GaP', 2.26], ['GaN', 3.4], ['diamond', 5.5]]
+        .map(([n, g]) => [n, Q.bandGap(g).lambdaNM, Q.bandGap(g).region, Q.bandGap(g).kind]);
+    });
+    const by = {};
+    got.forEach(([n, nm, region, kind]) => { by[n] = { nm: nm, region: region, kind: kind }; });
+    /* Silicon's gap puts its light in the infrared, which is exactly why
+     * there is no silicon LED. */
+    assert.equal(by.Si.region, 'infrared');
+    assert.ok(Math.abs(by.Si.nm - 1107) < 2, 'silicon: ' + by.Si.nm);
+    assert.equal(by.GaP.region, 'green');
+    assert.equal(by.GaN.region, 'ultraviolet');
+    /* Gallium nitride is a wide-gap semiconductor, not an insulator — an
+     * earlier threshold in this code called it one. */
+    assert.equal(by.GaN.kind, 'semiconductor');
+    assert.equal(by.diamond.kind, 'insulator');
+  });
+
+  test('the two statistics behave the way their rules demand', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        atMu: Q.occupancy(0, 0, 300).fermiDirac,
+        wayBelow: Q.occupancy(-1, 0, 300).fermiDirac,
+        wayAbove: Q.occupancy(1, 0, 300).fermiDirac,
+        cold: Q.occupancy(0.05, 0, 5).fermiDirac,
+        warm: Q.occupancy(0.05, 0, 2000).fermiDirac,
+        boseBig: Q.occupancy(0.0005, 0, 300).boseEinstein,
+        /* Far from the chemical potential the two quantum curves and the
+         * classical one all agree, which is why classical statistics works
+         * for a thin gas. */
+        fdFar: Q.occupancy(0.5, 0, 300).fermiDirac,
+        mbFar: Q.occupancy(0.5, 0, 300).boltzmann,
+      };
+    });
+    /* Fermi–Dirac is exactly a half at the chemical potential, at any
+     * temperature. That is what the chemical potential means. */
+    assert.ok(Math.abs(got.atMu - 0.5) < 1e-12, 'f(μ) should be 0.5: ' + got.atMu);
+    assert.ok(got.wayBelow > 0.999, 'states well below should be full');
+    assert.ok(got.wayAbove < 0.001, 'states well above should be empty');
+    /* Cold makes the edge a cliff, warm softens it. */
+    assert.ok(got.cold < 1e-40, 'at 5 K the cliff should be absolute: ' + got.cold);
+    assert.ok(got.warm > 0.3, 'at 2000 K it should be well smeared: ' + got.warm);
+    /* Bosons pile up without limit; fermions never exceed one. */
+    assert.ok(got.boseBig > 10, 'bosons should crowd in: ' + got.boseBig);
+    assert.ok(Math.abs(got.fdFar - got.mbFar) / got.mbFar < 0.01,
+      'far from μ the quantum and classical answers must agree');
+  });
+
+  test('a laser cannot run on thermal populations', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        visible: Q.boltzmannRatio(2.2, 298).ratio,
+        ir: Q.boltzmannRatio(0.025, 298).ratio,
+        thermalEV: Q.boltzmannRatio(1, 298).thermalEV,
+        hot: Q.boltzmannRatio(2.2, 5000).ratio,
+      };
+    });
+    /* One in 10³⁷ for a visible transition at room temperature, which is zero
+     * in any real sample — hence pumping. */
+    assert.ok(got.visible < 1e-35, 'visible upper state fraction: ' + got.visible);
+    assert.ok(got.ir > 0.1, 'an infrared gap is comparable with kT: ' + got.ir);
+    assert.ok(Math.abs(got.thermalEV - 0.02568) < 0.0005, 'kT at 298 K: ' + got.thermalEV);
+    /* Even at 5000 K it never reaches one, which is why no temperature gives
+     * an inversion. */
+    assert.ok(got.hot < 1, 'a thermal population can never invert: ' + got.hot);
+  });
+
+  test('Bell: the quantum prediction beats anything decided in advance', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        optimal: Q.bell(0, 90, 45, 135),
+        aligned: Q.bell(0, 0, 0, 0),
+        /* Scan a lot of angle choices: nothing may ever exceed 2√2, and
+         * plenty of ordinary choices do not violate the classical bound at
+         * all — the violation is not automatic, it has to be arranged. */
+        scanMax: (() => {
+          let worst = 0, belowTwo = 0, n = 0;
+          for (let a = 0; a < 180; a += 15) {
+            for (let ap = 0; ap < 180; ap += 15) {
+              for (let bb = 0; bb < 180; bb += 15) {
+                for (let bp = 0; bp < 180; bp += 15) {
+                  const m = Q.bell(a, ap, bb, bp).magnitude;
+                  worst = Math.max(worst, m);
+                  if (m <= 2 + 1e-9) belowTwo++;
+                  n++;
+                }
+              }
+            }
+          }
+          return { worst: worst, belowTwo: belowTwo, n: n };
+        })(),
+      };
+    });
+    assert.ok(Math.abs(got.optimal.magnitude - 2 * Math.SQRT2) < 1e-9,
+      'the optimal angles should give exactly 2√2: ' + got.optimal.magnitude);
+    assert.equal(got.optimal.beatsClassical, true);
+    assert.ok(Math.abs(got.aligned.magnitude - 2) < 1e-9,
+      'aligned detectors should sit exactly on the classical bound: ' + got.aligned.magnitude);
+    /* Tsirelson's bound: quantum mechanics beats the classical limit but has
+     * a ceiling of its own, and nothing in a scan of 20736 angle choices may
+     * exceed it. */
+    assert.ok(got.scanMax.worst <= 2 * Math.SQRT2 + 1e-9,
+      'something exceeded 2√2: ' + got.scanMax.worst);
+    assert.ok(Math.abs(got.scanMax.worst - 2 * Math.SQRT2) < 1e-9,
+      'the scan should find the maximum: ' + got.scanMax.worst);
+    /* And most choices do not violate anything, which is why Bell tests need
+     * their angles chosen deliberately. */
+    assert.ok(got.scanMax.belowTwo > got.scanMax.n * 0.4,
+      'only ' + got.scanMax.belowTwo + ' of ' + got.scanMax.n + ' choices stay classical');
+  });
+
+  test('decay is memoryless, and halves on schedule', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        halves: [0, 1, 2, 3, 10].map((k) => Q.decay(1, k).fraction),
+        /* Memoryless: surviving three half-lives and then one more is the
+         * same as one more from the start. */
+        conditional: Q.decay(1, 4).fraction / Q.decay(1, 3).fraction,
+        meanVsHalf: Q.decay(1, 1).meanLife,
+      };
+    });
+    [1, 0.5, 0.25, 0.125, Math.pow(0.5, 10)].forEach((want, i) => {
+      assert.ok(Math.abs(got.halves[i] - want) < 1e-12, 'half-life ' + i + ': ' + got.halves[i]);
+    });
+    assert.ok(Math.abs(got.conditional - 0.5) < 1e-12,
+      'an old atom must be exactly as likely to go as a new one: ' + got.conditional);
+    /* The mean life is 1/ln2 of the half-life, which surprises people. */
+    assert.ok(Math.abs(got.meanVsHalf - 1 / Math.LN2) < 1e-12, 'mean life: ' + got.meanVsHalf);
+  });
+
+  test('uncertainty computed from the box is never below the limit', async () => {
+    const bad = await run(() => {
+      const out = [];
+      for (let n = 1; n <= 30; n++) {
+        const s = window.ME.quantum.boxStats(n, 1);
+        if (s.timesTheLimit < 1) out.push([n, s.timesTheLimit]);
+        if (Math.abs(s.meanXNM - 0.5) > 1e-12) out.push([n, 'mean position ' + s.meanXNM]);
+      }
+      /* The ground state is the closest any state gets to the limit. */
+      const ground = window.ME.quantum.boxStats(1, 1).timesTheLimit;
+      for (let n = 2; n <= 30; n++) {
+        if (window.ME.quantum.boxStats(n, 1).timesTheLimit < ground) out.push([n, 'below the ground state']);
+      }
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+
+  test('every page in the tab builds, in every group', async () => {
+    const got = await run(() => {
+      const out = { groups: {}, bad: [], ids: {} };
+      window.ME.quantumPages.forEach((pg) => {
+        out.groups[pg.group] = (out.groups[pg.group] || 0) + 1;
+        if (out.ids[pg.id]) out.bad.push([pg.id, 'duplicate id']);
+        out.ids[pg.id] = true;
+        let node;
+        try { node = pg.build(); } catch (e) { out.bad.push([pg.id, 'threw: ' + e.message]); return; }
+        const holder = document.createElement('div');
+        holder.appendChild(node);
+        const text = holder.textContent;
+        if (text.length < 900) out.bad.push([pg.id, 'only ' + text.length + ' characters']);
+        if (/undefined|NaN|\[object/.test(text)) {
+          out.bad.push([pg.id, (text.match(/.{0,50}(undefined|NaN|\[object).{0,50}/) || [''])[0]]);
+        }
+      });
+      return out;
+    });
+    assert.deepEqual(got.bad, [], JSON.stringify(got.bad, null, 1));
+    /* The tab is meant to cover the subject, not one equation. */
+    assert.ok(Object.keys(got.groups).length >= 9,
+      'only ' + Object.keys(got.groups).length + ' groups');
+    const total = Object.values(got.groups).reduce((a, x) => a + x, 0);
+    assert.ok(total >= 40, 'only ' + total + ' pages');
+  });
+
+  test('every quantum generator produces a gradeable question', async () => {
+    const bad = await run(() => {
+      const out = [];
+      const keys = window.ME.practice.keys.filter((k) => k.indexOf('qm-') === 0);
+      if (keys.length < 30) out.push(['only ' + keys.length + ' quantum generators']);
+      keys.forEach((k) => {
+        for (let i = 1; i <= 40; i++) {
+          const q = window.ME.practice.generate(k, i * 7919);
+          if (!q) { out.push([k, 'nothing', i]); break; }
+          if (q.kind === 'numeric' && !isFinite(q.answer)) out.push([k, 'answer ' + q.answer, i]);
+          if (q.kind === 'choice' && q.options.filter((o) => o.ok).length !== 1) {
+            out.push([k, 'not exactly one right option', i]);
+          }
+          if (/undefined|NaN/.test(q.q)) out.push([k, 'question text: ' + q.q.slice(0, 60), i]);
+        }
+      });
+      return out;
+    });
+    assert.deepEqual(bad.slice(0, 6), [], JSON.stringify(bad.slice(0, 6)));
+  });
+});
+
 /* ------------------------------------------------------------ simulations */
 describe('every simulation builds', () => {
   /* The page-render test covers the sims a lesson embeds, and not the ones
@@ -2355,6 +2795,7 @@ describe('the search bar finds more than molecules', () => {
         sections: window.ME.reference.SECTIONS.length,
         glossary: window.ME.reference.GLOSSARY.length,
         units: window.ME.course.units.length,
+        quantumPages: window.ME.quantumPages.length,
       };
     });
     /* Nothing may be missing: every lesson, tool, section and word is indexed. */
@@ -2363,6 +2804,9 @@ describe('the search bar finds more than molecules', () => {
     assert.equal(got.kinds.reference, got.sections);
     assert.equal(got.kinds.glossary, got.glossary);
     assert.ok(got.kinds.tool >= got.tools, 'tools indexed: ' + got.kinds.tool + ' vs ' + got.tools);
+    /* The quantum tab has its own kind, because a page about Bell's theorem is
+       not a chemistry lesson and should not be counted as one. */
+    assert.equal(got.kinds.quantum, got.quantumPages, 'quantum pages indexed');
   });
 
   /* The top three, rather than the first place. Several of these queries have
@@ -2381,7 +2825,7 @@ describe('the search bar finds more than molecules', () => {
     const bad = await run(() => {
       const out = [];
       const views = ['learn', 'draw', 'elements', 'balancer', 'gas', 'reactions', 'tools',
-        'reference', 'gallery', 'search'];
+        'reference', 'gallery', 'search', 'quantum'];
       window.ME.siteIndex.all().forEach((e) => {
         const parts = e.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
         if (!parts.length || views.indexOf(parts[0]) < 0) { out.push([e.title, e.hash]); return; }
@@ -2389,6 +2833,7 @@ describe('the search bar finds more than molecules', () => {
         if (parts[0] === 'tools' && parts[1] && !window.ME.tools.TOOLS.some((t) => t.key === parts[1])) out.push([e.title, e.hash, 'no such tool']);
         if (parts[0] === 'reference' && parts[1] && !window.ME.reference.SECTIONS.some((x) => x.key === parts[1])) out.push([e.title, e.hash, 'no such section']);
         if (parts[0] === 'reactions' && parts[1] && !window.ME.reactionsim.REACTIONS.some((x) => x.id === parts[1])) out.push([e.title, e.hash, 'no such reaction']);
+        if (parts[0] === 'quantum' && parts[1] && !window.ME.quantumPages.some((x) => x.id === parts[1])) out.push([e.title, e.hash, 'no such quantum page']);
       });
       return out;
     });

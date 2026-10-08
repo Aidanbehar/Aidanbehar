@@ -626,6 +626,15 @@
     return '#92400e';
   }
 
+  /* The page registry. Content files call ME.quantumPage() as they load and
+   * the shell reads the list when it first builds, so the pages can be split
+   * across as many files as the subject needs without any of them knowing
+   * about the others. Order of registration is reading order. */
+  ME.quantumPages = [];
+  ME.quantumPage = function (group, id, name, blurb, build) {
+    ME.quantumPages.push({ group: group, id: id, name: name, blurb: blurb, build: build });
+  };
+
   ME.quantumFigures = { boxFigure, stationaryFigure, tunnelFigure, wellFigure,
     oscillatorFigure, hydrogenFigure };
   ME.quantumInternals = { LIVE, canvasFigure, slider, qeq, h3 };
