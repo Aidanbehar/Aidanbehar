@@ -193,7 +193,14 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
 
 .nav-spacer { flex: 1 1 auto; }
 
-.searchbox { position: relative; flex: 1 1 200px; min-width: 150px; max-width: 360px; }
+.searchbox { position: relative; flex: 1 1 200px; min-width: 130px; max-width: 360px; }
+/* Eleven tabs plus a search box plus the theme button is a tight fit on a
+   1280-wide laptop, and the browser's instinct is to wrap the theme button
+   onto a row of its own, which looks like a mistake. The search box gives up
+   the width instead; it is a placeholder and an icon, and it loses nothing by
+   being narrower. */
+@media (max-width: 1430px) { .searchbox { max-width: 210px; } }
+@media (max-width: 1330px) { .searchbox { max-width: 165px; } }
 .searchbox svg.mag {
   position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
   width: 16px; height: 16px; color: var(--text-faint); pointer-events: none;
@@ -1892,6 +1899,74 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
   :root:not([data-theme="light"]) .rx-badge.cold { background: #1e3a8a; color: #bfdbfe; }
 }
 
+
+/* ---- 13-quantum.css ---- */
+/* -------------------------------------------------------------- quantum */
+.qm-layout { display: grid; gap: 20px; grid-template-columns: minmax(210px, 260px) minmax(0, 1fr); }
+@media (max-width: 900px) { .qm-layout { grid-template-columns: 1fr; } }
+
+.qm-nav { display: grid; gap: 2px; align-content: start; }
+.qm-navbtn {
+  display: grid; grid-template-columns: auto 1fr; gap: 9px; align-items: start;
+  text-align: left; cursor: pointer; font: inherit; color: inherit;
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+.qm-navbtn:hover { background: var(--surface-2); }
+.qm-navbtn.on {
+  background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent-strong);
+}
+.qm-navnum {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; margin-top: 1px;
+  border-radius: 999px; background: var(--surface-2); color: var(--text-faint);
+  font-size: .7rem; font-weight: 700;
+}
+.qm-navbtn.on .qm-navnum { background: var(--accent); color: #fff; }
+.qm-navtext { display: grid; gap: 1px; }
+.qm-navname { font-size: .9rem; font-weight: 600; }
+.qm-navtext .note { font-size: .76rem; }
+
+.qm-page { max-width: 760px; }
+.qm-page h2 { margin-bottom: 14px; }
+.qm-page p { line-height: 1.68; margin: 0 0 14px; }
+.qm-h {
+  font-size: 1.02rem; font-weight: 650; margin: 26px 0 10px;
+  padding-bottom: 5px; border-bottom: 1px solid var(--border);
+}
+
+/* Equations sit on their own line, centred, in the mono face, and are allowed
+   to scroll sideways on a narrow screen rather than wrapping into nonsense. */
+.qm-eq {
+  font-family: var(--font-mono); font-size: 1rem; text-align: center;
+  background: var(--surface-2); border-radius: var(--r-sm);
+  padding: 12px 14px; margin: 0 0 14px; overflow-x: auto; white-space: nowrap;
+}
+
+.qm-canvaswrap {
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface-2); overflow: hidden;
+}
+.qm-canvas { display: block; width: 100%; }
+
+.qm-controls { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.qm-slider { display: flex; gap: 7px; align-items: center; font-size: .82rem; }
+.qm-slider label { color: var(--text-faint); font-weight: 600; }
+.qm-slider input[type=range] { width: 108px; accent-color: var(--accent); }
+.qm-sliderval { font-family: var(--font-mono); font-size: .8rem; min-width: 52px; }
+.qm-seg.on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent-strong); }
+
+.qm-readout { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-top: 9px; }
+.qm-readout .note { flex: 1 1 260px; margin: 0; }
+.qm-pill {
+  display: inline-block; padding: 3px 11px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-strong);
+  font-weight: 650; font-size: .84rem; font-family: var(--font-mono);
+}
+
+.qm-problems { display: grid; gap: 10px; margin-bottom: 12px; }
+.qm-pagenav { display: flex; gap: 10px; justify-content: space-between; margin-top: 28px;
+  padding-top: 16px; border-top: 1px solid var(--border); }
+
 </style>
 </head>
 <body>
@@ -2252,7 +2327,37 @@ window.ME = window.ME || {};
   const ATM_IN_PA = 101325;                /* exact by definition */
   const ZERO_C = 273.15;                   /* exact by definition */
 
+  /* Quantum constants. Three of these are exact by definition in the SI, and
+   * the two that are not are measured to a precision no school problem will
+   * ever reach. Everything the Schrodinger tab computes is built from them
+   * rather than from a remembered 13.6 or 0.529 \u2014 those two numbers are
+   * derived below, so they cannot disagree with the constants they come from. */
+  const PLANCK = 6.62607015e-34;           /* J s,   exact by definition */
+  const ELEMENTARY = 1.602176634e-19;      /* C,     exact by definition */
+  const LIGHT = 299792458;                 /* m/s,   exact by definition */
+  const ELECTRON_MASS = 9.1093837015e-31;  /* kg,    measured */
+  const VACUUM_PERMITTIVITY = 8.8541878128e-12; /* F/m, measured */
+  const AMU = 1.66053906660e-27;           /* kg,    measured */
+  const PROTON_MASS = 1.67262192369e-27;   /* kg,    measured */
+  const HBAR = PLANCK / (2 * Math.PI);
+  /* The hydrogen ground state, from first principles: it is what you get when
+   * you solve the Schrodinger equation for one electron and one proton. */
+  const RYDBERG_ENERGY = ELECTRON_MASS * Math.pow(ELEMENTARY, 4)
+    / (8 * VACUUM_PERMITTIVITY * VACUUM_PERMITTIVITY * PLANCK * PLANCK);
+  const BOHR_RADIUS = VACUUM_PERMITTIVITY * PLANCK * PLANCK
+    / (Math.PI * ELECTRON_MASS * ELEMENTARY * ELEMENTARY);
+
   const CONST = {
+    h: PLANCK,
+    hbar: HBAR,
+    e: ELEMENTARY,
+    c: LIGHT,
+    me: ELECTRON_MASS,
+    eps0: VACUUM_PERMITTIVITY,
+    amu: AMU,
+    mp: PROTON_MASS,
+    rydbergEnergy: RYDBERG_ENERGY,
+    bohrRadius: BOHR_RADIUS,
     NA: AVOGADRO,
     kB: BOLTZMANN,
     R: R_SI,
@@ -7073,6 +7178,280 @@ window.ME = window.ME || {};
 
   ME.ph = { solve, mix, solution, pHText, averageCharge, netCharge, speciation, describe,
     verdict, protonsGiven, protonsTaken, Kw: Kw };
+})();
+
+
+/* ================= 24-calc-quantum.js ================= */
+/* The Schrödinger equation, solved.
+ *
+ * Every number the quantum tab prints comes out of here, and nothing in here
+ * is a remembered result. The hydrogen ground state is not −13.6 eV because
+ * somebody typed −13.6; it is what mₑe⁴/(8ε₀²h²) evaluates to, which is the
+ * answer the equation gives when you solve it for one proton and one electron.
+ * Same for the Bohr radius, same for hc = 1239.84 eV·nm. If a constant
+ * changes, every page changes with it.
+ *
+ * The exception is the finite well, which has no closed-form answer at all —
+ * its energies come out of a numerical root-find. That is not a shortcoming to
+ * hide; it is the honest situation for almost every real potential, and the
+ * tab says so.
+ *
+ * Units: joules and metres inside, electronvolts and nanometres at the edges,
+ * because eV and nm are the units these numbers are human-sized in. A
+ * conversion that happens in one place cannot disagree with itself.
+ */
+(function () {
+  'use strict';
+  const ME = window.ME;
+  const C = ME.fmt.CONST;
+  const { h, hbar, e, c, me, amu, mp, rydbergEnergy, bohrRadius } = C;
+
+  /* eV and nm conversions, in one place each. */
+  const toEV = (joules) => joules / e;
+  const toJ = (eV) => eV * e;
+  const NM = 1e-9;
+
+  /* hc, in the units that make photon arithmetic a one-liner: λ in nm times
+   * energy in eV is always 1239.84. Worth knowing by heart, and worth
+   * deriving rather than memorising. */
+  const HC_EV_NM = (h * c / e) / NM;
+
+  /* ------------------------------------------------- a particle in a box */
+  /* The one problem you can do entirely by hand, start to finish, and the
+   * reason it is in every course: the algebra is short enough to follow and
+   * the result — that confinement forces energy to come in steps — is the
+   * whole point of quantum mechanics.
+   *
+   *   E_n = n²h² / (8mL²)
+   *
+   * Mass is in electron masses, because every example here is an electron. */
+  function boxEnergy(n, lengthNM, massInElectrons) {
+    const m = me * (massInElectrons || 1);
+    const L = lengthNM * NM;
+    if (!(n >= 1) || !(L > 0)) return null;
+    const joules = (n * n * h * h) / (8 * m * L * L);
+    return { n: n, joules: joules, eV: toEV(joules), L: lengthNM, mass: massInElectrons || 1 };
+  }
+
+  function boxLevels(lengthNM, massInElectrons, count) {
+    const out = [];
+    for (let n = 1; n <= (count || 5); n++) out.push(boxEnergy(n, lengthNM, massInElectrons));
+    return out;
+  }
+
+  /* ψ_n(x) = √(2/L) sin(nπx/L), which is the only shape that is zero at both
+   * walls and solves the equation in between. */
+  function boxPsi(n, lengthNM, xNM) {
+    const L = lengthNM * NM, x = xNM * NM;
+    if (x < 0 || x > L) return 0;
+    return Math.sqrt(2 / L) * Math.sin((n * Math.PI * x) / L);
+  }
+
+  /* The chance of finding it between a and b.
+   *
+   * ∫ sin²  has a closed form, so this is exact rather than a sum of slices:
+   *   P = (b−a)/L − [sin(2πnb/L) − sin(2πna/L)] / (2πn)
+   * A tab that drew a curve and then numerically integrated its own picture
+   * would be checking the picture, not the physics. */
+  function boxProbability(n, lengthNM, aNM, bNM) {
+    const L = lengthNM, a = Math.max(0, Math.min(aNM, bNM)), b = Math.min(L, Math.max(aNM, bNM));
+    if (!(L > 0) || !(n >= 1)) return null;
+    const k = (2 * Math.PI * n) / L;
+    return (b - a) / L - (Math.sin(k * b) - Math.sin(k * a)) / (2 * Math.PI * n);
+  }
+
+  /* Jumping between two levels: the photon carries exactly the difference. */
+  function boxTransition(from, to, lengthNM, massInElectrons) {
+    const a = boxEnergy(from, lengthNM, massInElectrons);
+    const b = boxEnergy(to, lengthNM, massInElectrons);
+    if (!a || !b) return null;
+    const dEeV = Math.abs(b.eV - a.eV);
+    return { from: from, to: to, deltaEV: dEeV, absorbed: b.eV > a.eV,
+      lambdaNM: dEeV > 0 ? HC_EV_NM / dEeV : Infinity,
+      region: dEeV > 0 ? spectralRegion(HC_EV_NM / dEeV) : 'nothing',
+      frequency: dEeV > 0 ? toJ(dEeV) / h : 0 };
+  }
+
+  /* ------------------------------------------------------------- photons */
+  function photonFromEV(eV) {
+    return { eV: eV, lambdaNM: HC_EV_NM / eV, frequency: toJ(eV) / h,
+      region: spectralRegion(HC_EV_NM / eV) };
+  }
+  function photonFromNM(nm) {
+    return { eV: HC_EV_NM / nm, lambdaNM: nm, frequency: c / (nm * NM),
+      region: spectralRegion(nm) };
+  }
+  /* Named so a reader can tell whether the answer is something they could see.
+   * The boundaries are conventions, not physics, and they are approximate on
+   * purpose. */
+  function spectralRegion(nm) {
+    if (nm < 10) return 'X-ray';
+    if (nm < 400) return 'ultraviolet';
+    if (nm < 450) return 'violet';
+    if (nm < 495) return 'blue';
+    if (nm < 570) return 'green';
+    if (nm < 590) return 'yellow';
+    if (nm < 620) return 'orange';
+    if (nm < 750) return 'red';
+    if (nm < 1e6) return 'infrared';
+    return 'microwave or longer';
+  }
+
+  /* ------------------------------------------------------ hydrogen atom */
+  /* E_n = −Ry/n², with Ry derived from the constants rather than typed. This
+   * is the one case where the Schrödinger equation is solved exactly for a
+   * real atom, and it is why the equation was believed in the first place.
+   *
+   * With one correction that matters more than it looks. The electron does not
+   * orbit a fixed point: the nucleus is heavy but not infinitely heavy, so both
+   * of them move about their shared centre. The fix is to replace the electron
+   * mass with the reduced mass μ = mₑM/(mₑ+M) — exactly the same substitution
+   * as two atoms on a spring, for exactly the same reason.
+   *
+   * It is a 0.05% change, and it is the difference between an ionisation energy
+   * of 13.606 eV and the measured 13.598. Leaving it out would make this tab
+   * disagree with a data table for no reason other than laziness. */
+  function hydrogenEnergy(n, Z, nucleusAMU) {
+    const z = Z || 1;
+    const M = (nucleusAMU === undefined ? mp / amu : nucleusAMU) * amu;
+    const reduced = 1 / (1 + me / M);
+    const joules = -(reduced * z * z * rydbergEnergy) / (n * n);
+    return { n: n, Z: z, reduced: reduced, joules: joules, eV: toEV(joules) };
+  }
+
+  const SERIES = [
+    [1, 'Lyman', 'ultraviolet'], [2, 'Balmer', 'visible, mostly'],
+    [3, 'Paschen', 'infrared'], [4, 'Brackett', 'infrared'], [5, 'Pfund', 'far infrared'],
+  ];
+  function hydrogenTransition(from, to, Z, nucleusAMU) {
+    const a = hydrogenEnergy(from, Z, nucleusAMU), b = hydrogenEnergy(to, Z, nucleusAMU);
+    const dEeV = Math.abs(b.eV - a.eV);
+    const lower = Math.min(from, to);
+    const named = SERIES.filter((s) => s[0] === lower)[0];
+    return { from: from, to: to, deltaEV: dEeV, absorbed: b.eV > a.eV,
+      lambdaNM: HC_EV_NM / dEeV, region: spectralRegion(HC_EV_NM / dEeV),
+      series: named ? named[1] : null, seriesWhere: named ? named[2] : null };
+  }
+  /* The energy to tear the electron off entirely: from n up to free. */
+  function ionisationEV(n, Z, nucleusAMU) { return -hydrogenEnergy(n, Z, nucleusAMU).eV; }
+
+  /* ------------------------------------------------ harmonic oscillator */
+  /* A bond as a spring. E_n = (n + ½)ℏω, which has two features worth more
+   * than the formula: the levels are evenly spaced, unlike every other system
+   * here, and the lowest one is not zero. A bond at absolute zero is still
+   * vibrating, and this says by how much.
+   *
+   * Reduced mass in atomic mass units, force constant in N/m. */
+  function oscillator(forceConstant, reducedMassAMU, n) {
+    const mu = reducedMassAMU * amu;
+    const omega = Math.sqrt(forceConstant / mu);
+    const spacing = hbar * omega;
+    const level = (lv) => ({ n: lv, joules: (lv + 0.5) * spacing, eV: toEV((lv + 0.5) * spacing) });
+    return {
+      omega: omega, spacingEV: toEV(spacing), zeroPointEV: toEV(0.5 * spacing),
+      level: level, at: level(n === undefined ? 0 : n),
+      /* Spectroscopists quote vibrations in cm⁻¹, which is a frequency divided
+       * by the speed of light. It is the number an IR spectrum is labelled in. */
+      wavenumber: omega / (2 * Math.PI * c * 100),
+      lambdaNM: HC_EV_NM / toEV(spacing),
+    };
+  }
+  /* Two atoms on one spring behave like one mass of μ = m₁m₂/(m₁+m₂). */
+  function reducedMass(m1AMU, m2AMU) { return (m1AMU * m2AMU) / (m1AMU + m2AMU); }
+
+  /* ----------------------------------------------------------- tunnelling */
+  /* The thing that has no classical version at all: a particle with less
+   * energy than the wall arrives on the other side anyway.
+   *
+   *   T = 1 / (1 + V₀² sinh²(κa) / (4E(V₀−E))),    κ = √(2m(V₀−E))/ℏ
+   *
+   * sinh grows like a doubling exponential, so T falls off a cliff with width.
+   * That steepness is not a quirk — it is why a scanning tunnelling microscope
+   * can see single atoms, and why one extra bond length of insulation stops a
+   * current dead. */
+  function tunnel(energyEV, barrierEV, widthNM, massInElectrons) {
+    const m = me * (massInElectrons || 1);
+    const E = toJ(energyEV), V0 = toJ(barrierEV), a = widthNM * NM;
+    if (!(a > 0) || !(E > 0)) return null;
+    if (energyEV >= barrierEV) {
+      /* Over the top, and still not a certainty — it can reflect off a step it
+       * clears. Same formula with sin in place of sinh. */
+      const k = Math.sqrt(2 * m * (E - V0)) / hbar;
+      const s = Math.sin(k * a);
+      const T = 1 / (1 + (V0 * V0 * s * s) / (4 * E * (E - V0) || 1e-300));
+      return { T: T, over: true, kappa: k, decayLengthNM: Infinity };
+    }
+    const kappa = Math.sqrt(2 * m * (V0 - E)) / hbar;
+    const sh = Math.sinh(kappa * a);
+    const T = 1 / (1 + (V0 * V0 * sh * sh) / (4 * E * (V0 - E)));
+    return { T: T, over: false, kappa: kappa, decayLengthNM: 1 / kappa / NM };
+  }
+
+  /* ---------------------------------------------------- a finite-depth well */
+  /* The same box, but with walls you can climb out of. There is no formula for
+   * the answers: the boundary conditions give
+   *
+   *   even states:  u tan u = √(R² − u²)
+   *   odd  states: −u cot u = √(R² − u²)      u = (L/2)√(2mE)/ℏ,  R = (L/2)√(2mV₀)/ℏ
+   *
+   * and those cannot be rearranged for u. So they are found by bisection,
+   * branch by branch. Worth meeting early: the particle in a box is the
+   * unusual case, not the normal one. */
+  function finiteWell(barrierEV, widthNM, massInElectrons) {
+    const m = me * (massInElectrons || 1);
+    const L = widthNM * NM, V0 = toJ(barrierEV);
+    const R = (L / 2) * Math.sqrt(2 * m * V0) / hbar;
+    const levels = [];
+    /* Each half-π branch of tan holds at most one state, and there is always
+     * at least one bound state however shallow the well. */
+    const branches = Math.ceil(R / (Math.PI / 2));
+    for (let k = 0; k < branches; k++) {
+      const even = k % 2 === 0;
+      const lo = k * (Math.PI / 2) + 1e-9;
+      const hi = Math.min(R - 1e-9, (k + 1) * (Math.PI / 2) - 1e-9);
+      if (hi <= lo) break;
+      const f = (u) => (even ? u * Math.tan(u) : -u / Math.tan(u)) - Math.sqrt(Math.max(0, R * R - u * u));
+      if (f(lo) * f(hi) > 0) continue;
+      let a = lo, b = hi;
+      for (let i = 0; i < 120; i++) {
+        const mid = (a + b) / 2;
+        if (f(a) * f(mid) <= 0) b = mid; else a = mid;
+      }
+      const u = (a + b) / 2;
+      const E = (2 * hbar * hbar * u * u) / (m * L * L);
+      levels.push({ n: levels.length + 1, eV: toEV(E), joules: E, even: even, u: u });
+    }
+    return { R: R, barrierEV: barrierEV, widthNM: widthNM, levels: levels,
+      /* How many fit. A well that is too shallow or too narrow holds exactly
+       * one, and never zero. */
+      count: levels.length };
+  }
+
+  /* ------------------------------------------------------- uncertainty */
+  /* Δx Δp ≥ ℏ/2. Not a statement about clumsy measurement — it is a property
+   * of anything built out of waves, and it is why squeezing a particle into a
+   * small box raises its energy. */
+  function uncertainty(positionNM, massInElectrons) {
+    const m = me * (massInElectrons || 1);
+    const dx = positionNM * NM;
+    const dp = hbar / (2 * dx);
+    return { dx: positionNM, dp: dp, speed: dp / m,
+      energyEV: toEV((dp * dp) / (2 * m)) };
+  }
+
+  /* de Broglie: everything has a wavelength, it is just absurdly small for
+   * anything you can hold. */
+  function deBroglie(massKG, speed) {
+    return { lambda: h / (massKG * speed), lambdaNM: h / (massKG * speed) / NM };
+  }
+
+  ME.quantum = {
+    HC_EV_NM: HC_EV_NM, toEV: toEV, toJ: toJ,
+    boxEnergy, boxLevels, boxPsi, boxProbability, boxTransition,
+    photonFromEV, photonFromNM, spectralRegion,
+    hydrogenEnergy, hydrogenTransition, ionisationEV, SERIES,
+    oscillator, reducedMass, tunnel, finiteWell, uncertainty, deBroglie,
+  };
 })();
 
 
@@ -16631,6 +17010,393 @@ window.ME = window.ME || {};
 })();
 
 
+/* ================= 78b-quantum-problems.js ================= */
+/* Practice problems for the Schrödinger tab.
+ *
+ * These register in the same generator registry the course uses, so
+ * ME.practice.selfTest covers them with everything else: every problem must
+ * have real question text, a finite numeric answer, and exactly one right
+ * option where it is multiple choice.
+ *
+ * The rule the whole project runs on applies here too, and matters most in a
+ * topic where the arithmetic is unfamiliar: pick the numbers first, then ask
+ * the engine for the answer. No generator below ever carries its own answer,
+ * so a problem and its grader cannot disagree.
+ */
+(function () {
+  'use strict';
+  const ME = window.ME;
+  const Q = ME.quantum;
+  const gen = ME.practice.generator;
+
+  const fmt = (x, s) => ME.fmt.fmt(x, s || 4);
+
+  /* ------------------------------------------------------- the box */
+  gen('qm-box-energy', {
+    make(r) {
+      const n = r.int(1, 4);
+      const L = r.pick([0.3, 0.5, 0.8, 1, 1.2, 1.5, 2]);
+      const answer = Q.boxEnergy(n, L).eV;
+      return {
+        kind: 'numeric',
+        q: 'An electron is trapped in a one-dimensional box ' + L + ' nm wide. '
+          + 'What is its energy in level n = ' + n + '? Give the answer in electronvolts.',
+        answer: answer, sig: 3, placeholder: 'eV',
+        note: 'E = n²h²/8mL². Watch the units: L has to be in metres before it goes in.',
+        right: 'Yes — ' + fmt(answer, 4) + ' eV.',
+        wrong: 'E = n²h²/(8mL²), with L = ' + L + ' nm = ' + L + ' × 10⁻⁹ m, and divide by '
+          + '1.602 × 10⁻¹⁹ at the end to get electronvolts.',
+      };
+    },
+  });
+
+  gen('qm-box-jump', {
+    make(r) {
+      const L = r.pick([0.4, 0.6, 1, 1.5, 2]);
+      const from = r.int(1, 3);
+      const to = from + r.int(1, 2);
+      const t = Q.boxTransition(from, to, L);
+      return {
+        kind: 'numeric',
+        q: 'An electron in a ' + L + ' nm box drops from level n = ' + to + ' to n = ' + from
+          + '. What is the wavelength of the photon it emits, in nanometres?',
+        answer: t.lambdaNM, sig: 3, placeholder: 'nm',
+        note: 'Find the energy gap first, then λ = hc/ΔE. In electronvolts and nanometres, hc = 1239.8.',
+        right: 'That is it — ' + fmt(t.lambdaNM, 4) + ' nm, in the ' + Q.spectralRegion(t.lambdaNM) + '.',
+        wrong: 'ΔE = (' + to + '² − ' + from + '²)h²/(8mL²) = ' + fmt(t.deltaEV, 4)
+          + ' eV, and then λ = 1239.8/ΔE with ΔE in eV.',
+      };
+    },
+  });
+
+  gen('qm-box-probability', {
+    make(r) {
+      const n = r.int(1, 3);
+      const L = r.pick([1, 2]);
+      const thirds = r.pick([
+        [0, 1 / 3, 'the left third'], [1 / 3, 2 / 3, 'the middle third'],
+        [0, 1 / 2, 'the left half'], [1 / 4, 3 / 4, 'the middle half'],
+      ]);
+      const a = thirds[0] * L, b = thirds[1] * L;
+      const answer = Q.boxProbability(n, L, a, b);
+      return {
+        kind: 'numeric',
+        q: 'An electron is in level n = ' + n + ' of a ' + L + ' nm box. What is the probability '
+          + 'of finding it in ' + thirds[2] + ' of the box? Give a decimal between 0 and 1.',
+        answer: answer, tol: 0.01, placeholder: '0.00',
+        note: 'Integrate |ψ|² = (2/L)sin²(nπx/L) between the two limits. The sin² integral has a '
+          + 'closed form, so no estimating.',
+        right: 'Yes — ' + fmt(answer, 3) + '.',
+        wrong: 'P = (b−a)/L − [sin(2πnb/L) − sin(2πna/L)]/2πn. For a classical particle it would '
+          + 'just be the fraction of the width; the wave makes it uneven.',
+      };
+    },
+  });
+
+  gen('qm-box-nodes', {
+    make(r) {
+      const n = r.int(2, 7);
+      return {
+        kind: 'count',
+        q: 'How many nodes does the n = ' + n + ' wavefunction of a particle in a box have '
+          + 'strictly inside the box — not counting the two walls?',
+        answer: n - 1,
+        note: 'A node is a place where ψ crosses zero.',
+        right: 'Right — n − 1 = ' + (n - 1) + '. Each step up adds one more wiggle.',
+        wrong: 'ψ = sin(nπx/L) goes through zero n − 1 times between the walls, so the answer is '
+          + (n - 1) + '. The walls themselves are zeros too, but they are not counted as nodes.',
+      };
+    },
+  });
+
+  /* ----------------------------------------------------- which equation */
+  /* The conceptual one, and the one most worth drilling: a reader who can pick
+   * the right equation has understood what separating the variables bought. */
+  gen('qm-which-equation', {
+    make(r) {
+      const cases = [
+        { q: 'You want the energies an electron is allowed to have in a hydrogen atom.', tise: true,
+          why: 'A fixed potential and a question with no "when" in it. Stationary states are exactly what the TISE gives you.' },
+        { q: 'You want to know the shape of a 2p orbital.', tise: true,
+          why: 'An orbital IS a solution of the TISE. Its probability cloud does not change with time, which is why a picture of it makes sense at all.' },
+        { q: 'You want to predict the wavelengths in the emission spectrum of hydrogen.', tise: true,
+          why: 'Spectra are differences between energy levels, and levels come from the TISE. You only need the TDSE if you want the rate at which the jump happens.' },
+        { q: 'A molecule is hit by a short laser pulse and you want to know what happens during it.', tise: false,
+          why: 'The potential itself changes while you watch, so there are no stationary states to find. This is the TDSE’s job.' },
+        { q: 'You want to follow a wave packet as it moves along and spreads out.', tise: false,
+          why: 'Spreading is change, and change in time is what the TDSE describes. A single TISE solution never changes shape.' },
+        { q: 'An electron is in a mixture of the n = 1 and n = 2 states of a box, and you want to know how its probability cloud sloshes about.', tise: false,
+          why: 'Each piece is a TISE solution, but they rotate at different rates, and the interference between them moves. You need the TDSE — though you build its answer out of TISE solutions.' },
+        { q: 'You want the vibrational energy levels of a C=O bond.', tise: true,
+          why: 'Fixed potential, definite energies wanted. The TISE for a harmonic oscillator.' },
+        { q: 'You want the probability that an electron tunnels through a barrier, in steady state.', tise: true,
+          why: 'Steady state is the giveaway: nothing is changing with time, so the TISE with the barrier in V(x) is enough.' },
+      ];
+      const pick = r.pick(cases);
+      return {
+        kind: 'choice',
+        q: pick.q + ' Which equation do you reach for?',
+        options: [
+          { t: 'The time-independent equation, Ĥψ = Eψ', ok: pick.tise },
+          { t: 'The time-dependent equation, iℏ ∂ψ/∂t = Ĥψ', ok: !pick.tise },
+        ],
+        right: pick.why,
+        wrong: pick.why,
+      };
+    },
+  });
+
+  /* --------------------------------------------------------- hydrogen */
+  gen('qm-hydrogen-level', {
+    make(r) {
+      const n = r.int(1, 6);
+      const answer = Q.hydrogenEnergy(n).eV;
+      return {
+        kind: 'numeric',
+        q: 'What is the energy of the n = ' + n + ' level of a hydrogen atom, in electronvolts? '
+          + 'Include the sign.',
+        answer: answer, tol: 0.02, placeholder: 'eV',
+        note: 'E = −13.6/n² eV. The sign is not decoration: it says the electron is bound.',
+        right: 'Yes — ' + fmt(answer, 4) + ' eV.',
+        wrong: 'E = −13.6/' + n + '² = ' + fmt(answer, 4) + ' eV. Negative because zero is set at '
+          + 'the electron being free and infinitely far away; anything bound is below that.',
+      };
+    },
+  });
+
+  gen('qm-hydrogen-line', {
+    make(r) {
+      const to = r.int(1, 3);
+      const from = to + r.int(1, 3);
+      const t = Q.hydrogenTransition(from, to);
+      return {
+        kind: 'numeric',
+        q: 'A hydrogen atom drops from n = ' + from + ' to n = ' + to + '. What wavelength does it '
+          + 'emit, in nanometres?',
+        answer: t.lambdaNM, sig: 3, placeholder: 'nm',
+        note: 'ΔE = 13.6(1/n_f² − 1/n_i²) eV, then λ = 1239.8/ΔE nm.',
+        right: 'That is it — ' + fmt(t.lambdaNM, 4) + ' nm, in the ' + t.region
+          + (t.series ? ', part of the ' + t.series + ' series' : '') + '.',
+        wrong: 'ΔE = ' + fmt(t.deltaEV, 4) + ' eV, so λ = 1239.8/' + fmt(t.deltaEV, 4) + ' = '
+          + fmt(t.lambdaNM, 4) + ' nm.',
+      };
+    },
+  });
+
+  gen('qm-hydrogen-series', {
+    make(r) {
+      const row = r.pick(Q.SERIES.slice(0, 3));
+      const to = row[0];
+      const from = to + r.int(1, 2);
+      const t = Q.hydrogenTransition(from, to);
+      const names = Q.SERIES.slice(0, 4).map((s) => s[1]);
+      return {
+        kind: 'choice',
+        q: 'A hydrogen line at ' + fmt(t.lambdaNM, 4) + ' nm comes from an electron landing on '
+          + 'n = ' + to + '. Which series is it part of?',
+        options: names.map((nm) => ({ t: nm, ok: nm === row[1] })),
+        right: 'Yes. Every line that ends on n = ' + to + ' belongs to the ' + row[1]
+          + ' series, and they all come out in the ' + row[2] + '.',
+        wrong: 'The series is named for where the electron lands, not where it started. Landing on '
+          + 'n = ' + to + ' makes it ' + row[1] + '.',
+      };
+    },
+  });
+
+  /* ------------------------------------------------------- oscillator */
+  gen('qm-oscillator', {
+    make(r) {
+      const bond = r.pick([
+        ['H–Cl', 516, 1.00783, 34.9689], ['H–Br', 412, 1.00783, 78.9183],
+        ['C–O', 1902, 12, 15.9949], ['N–O', 1595, 14.0031, 15.9949],
+        ['C–H', 500, 12, 1.00783], ['H–F', 966, 1.00783, 18.9984],
+      ]);
+      const mu = Q.reducedMass(bond[2], bond[3]);
+      const o = Q.oscillator(bond[1], mu);
+      const ask = r.pick(['wavenumber', 'zero']);
+      if (ask === 'wavenumber') {
+        return {
+          kind: 'numeric',
+          q: 'Treat the ' + bond[0] + ' bond as a spring with force constant ' + bond[1]
+            + ' N/m. Its reduced mass is ' + fmt(mu, 4) + ' u. Where does its vibration appear in '
+            + 'an infrared spectrum, in cm⁻¹?',
+          answer: o.wavenumber, sig: 3, placeholder: 'cm⁻¹',
+          note: 'ω = √(k/μ), and the wavenumber is ω/2πc. Remember μ is in kilograms for that: '
+            + 'multiply by 1.6605 × 10⁻²⁷.',
+          right: 'Yes — about ' + Math.round(o.wavenumber) + ' cm⁻¹.',
+          wrong: 'ω = √(k/μ) = ' + ME.fmt.sciUnicode(o.omega, 4) + ' rad/s, and dividing by 2πc '
+            + '(with c in cm/s) gives ' + Math.round(o.wavenumber) + ' cm⁻¹.',
+        };
+      }
+      return {
+        kind: 'numeric',
+        q: 'The ' + bond[0] + ' bond has a force constant of ' + bond[1] + ' N/m and a reduced mass '
+          + 'of ' + fmt(mu, 4) + ' u. How much vibrational energy does it still have at absolute '
+          + 'zero, in electronvolts?',
+        answer: o.zeroPointEV, sig: 3, placeholder: 'eV',
+        note: 'The lowest level is n = 0, and E = (n + ½)ℏω — so the answer is ½ℏω, not zero.',
+        right: 'Yes — ' + fmt(o.zeroPointEV, 4) + ' eV, and it can never be taken away.',
+        wrong: 'E₀ = ½ℏω with ω = √(k/μ), which comes to ' + fmt(o.zeroPointEV, 4) + ' eV. A bond '
+          + 'cannot be made to hold still; stopping it dead would pin down both position and '
+          + 'momentum at once.',
+      };
+    },
+  });
+
+  /* -------------------------------------------------------- tunnelling */
+  gen('qm-tunnel', {
+    make(r) {
+      const E = r.pick([0.5, 1, 1.5, 2]);
+      const V = E + r.pick([1, 2, 3, 4]);
+      const w = r.pick([0.1, 0.15, 0.2, 0.3]);
+      const t = Q.tunnel(E, V, w);
+      return {
+        kind: 'numeric',
+        q: 'An electron with ' + E + ' eV meets a barrier ' + V + ' eV high and ' + w + ' nm thick. '
+          + 'What fraction of the time does it get through? Give a decimal.',
+        answer: t.T, tol: Math.max(1e-6, t.T * 0.06), placeholder: '0.000',
+        note: 'T = 1/(1 + V₀²sinh²(κa)/4E(V₀−E)), with κ = √(2m(V₀−E))/ℏ. Work out κa first.',
+        right: 'Yes — about ' + fmt(t.T, 3) + '. Classically it would be exactly zero.',
+        wrong: 'κ = √(2m(V₀−E))/ℏ = ' + ME.fmt.sciUnicode(t.kappa, 4) + ' m⁻¹, so κa = '
+          + fmt(t.kappa * w * 1e-9, 4) + ' and T works out at ' + fmt(t.T, 3) + '.',
+      };
+    },
+  });
+
+  gen('qm-tunnel-thinking', {
+    make(r) {
+      const cases = [
+        { t: 'Halve the thickness of the barrier', ok: true },
+        { t: 'Halve the mass of the particle', ok: false },
+        { t: 'Lower the barrier by a tenth of an electronvolt', ok: false },
+        { t: 'Double the number of particles arriving', ok: false },
+      ];
+      return {
+        kind: 'choice',
+        q: 'An electron is tunnelling through a barrier and almost none of it gets through. '
+          + 'Which change would help the most?',
+        options: ME.quiz.shuffle(cases.slice()),
+        right: 'Thickness, every time. T falls off roughly as e^(−2κa), so the width sits in an '
+          + 'exponent while everything else only scales what the exponent multiplies. Halving the '
+          + 'thickness can change the answer by orders of magnitude.',
+        wrong: 'Look at where each quantity appears. Width is inside an exponential — it beats '
+          + 'anything that merely multiplies. Sending twice as many particles does not change the '
+          + 'fraction at all.',
+      };
+    },
+  });
+
+  /* --------------------------------------------------------- photons */
+  gen('qm-photon', {
+    make(r) {
+      const mode = r.pick(['toNM', 'toEV']);
+      if (mode === 'toNM') {
+        const eV = r.round(1 + r.next() * 5, 2);
+        const ph = Q.photonFromEV(eV);
+        return {
+          kind: 'numeric',
+          q: 'A photon carries ' + eV + ' eV. What is its wavelength in nanometres?',
+          answer: ph.lambdaNM, sig: 3, placeholder: 'nm',
+          note: 'λ = hc/E, and in these units hc = 1239.8 eV·nm.',
+          right: 'Yes — ' + fmt(ph.lambdaNM, 4) + ' nm, in the ' + ph.region + '.',
+          wrong: 'λ = 1239.8/' + eV + ' = ' + fmt(ph.lambdaNM, 4) + ' nm.',
+        };
+      }
+      const nm = r.int(200, 800);
+      const ph = Q.photonFromNM(nm);
+      return {
+        kind: 'numeric',
+        q: 'Light of wavelength ' + nm + ' nm arrives. How much energy does one photon carry, in '
+          + 'electronvolts?',
+        answer: ph.eV, sig: 3, placeholder: 'eV',
+        note: 'E = hc/λ = 1239.8/λ with λ in nanometres.',
+        right: 'Yes — ' + fmt(ph.eV, 4) + ' eV.',
+        wrong: 'E = 1239.8/' + nm + ' = ' + fmt(ph.eV, 4) + ' eV.',
+      };
+    },
+  });
+
+  /* ----------------------------------------------------- uncertainty */
+  gen('qm-uncertainty', {
+    make(r) {
+      const dx = r.pick([0.05, 0.1, 0.2, 0.5, 1]);
+      const u = Q.uncertainty(dx);
+      return {
+        kind: 'numeric',
+        q: 'An electron is known to be somewhere within ' + dx + ' nm. What is the smallest '
+          + 'uncertainty in its momentum, in kg·m/s?',
+        answer: u.dp, sig: 3, placeholder: 'kg m/s',
+        note: 'Δx Δp ≥ ℏ/2, so the smallest Δp is ℏ/2Δx.',
+        right: 'Yes — ' + ME.fmt.sciUnicode(u.dp, 4) + ' kg·m/s, which for an electron is a speed '
+          + 'of about ' + Math.round(u.speed / 1000) + ' km/s.',
+        wrong: 'Δp = ℏ/(2Δx) = 1.055 × 10⁻³⁴ / (2 × ' + dx + ' × 10⁻⁹) = '
+          + ME.fmt.sciUnicode(u.dp, 4) + ' kg·m/s.',
+      };
+    },
+  });
+
+  /* ------------------------------------------------------ reading ψ */
+  gen('qm-psi-meaning', {
+    make(r) {
+      const cases = [
+        { q: 'What does |ψ|² tell you at a point?', right: 'The probability per unit volume of finding the particle there',
+          wrongs: ['The particle’s speed there', 'The energy stored at that point', 'How much of the particle is there'],
+          why: 'It is a probability density. Multiply it by a small volume and you get the chance of finding the whole particle in that volume — the particle is never partly anywhere.' },
+        { q: 'Why does ψ get squared before it means anything?', right: 'Because ψ can be negative or complex, and a probability cannot',
+          wrongs: ['Because squaring makes the numbers bigger', 'Because the particle has two states', 'Because energy is always squared'],
+          why: 'The sign is real and it matters — it is what makes two overlapping waves add into a bond or cancel into an antibond — but a chance of finding something cannot be negative. Squaring is what turns an amplitude into odds.' },
+        { q: 'Why must ∫|ψ|² over all space equal 1?', right: 'Because the particle is definitely somewhere',
+          wrongs: ['Because energy is conserved', 'Because the wave has to fit in the box', 'Because probabilities are always 1'],
+          why: 'It is bookkeeping rather than physics: add up the chances of finding it everywhere and you must get certainty. That condition is where the √(2/L) in front of the box wavefunction comes from.' },
+        { q: 'A stationary state is one where', right: 'the probability cloud does not change with time',
+          wrongs: ['the particle is not moving', 'the kinetic energy is zero', 'the wavefunction is completely constant'],
+          why: 'The wave underneath is still turning — it picks up a phase e^(−iEt/ℏ) — but that phase has magnitude one, so |ψ|² is frozen. An electron in an orbital has plenty of kinetic energy and is going nowhere.' },
+        { q: 'In the equation, what does the second derivative of ψ measure?', right: 'Curvature, which is the kinetic energy',
+          wrongs: ['Acceleration of the particle', 'How fast the wave moves', 'The potential energy'],
+          why: 'That is the one substitution that makes the whole equation readable: a tightly wiggling wave is sharply curved, and sharp curvature means high kinetic energy. It is de Broglie’s short-wavelength-means-fast, written so you can differentiate it.' },
+      ];
+      const pick = r.pick(cases);
+      const opts = [{ t: pick.right, ok: true }].concat(pick.wrongs.map((w) => ({ t: w, ok: false })));
+      return {
+        kind: 'choice', q: pick.q, options: ME.quiz.shuffle(opts),
+        right: pick.why, wrong: pick.why,
+      };
+    },
+  });
+
+  /* ------------------------------------------- the box, qualitatively */
+  gen('qm-box-thinking', {
+    make(r) {
+      const cases = [
+        { q: 'You squeeze the box to half its width. What happens to every energy level?',
+          right: 'They all go up by a factor of four', wrongs: ['They all double', 'They all halve', 'They stay the same'],
+          why: 'E goes as 1/L², so halving L multiplies every level by four. This is why confining anything costs energy, and why an electron pinned to the size of an atom has energies measured in electronvolts.' },
+        { q: 'Why can n not be zero?',
+          right: 'ψ would be zero everywhere, which is not a particle', wrongs: ['Zero energy is forbidden by Heisenberg', 'Because n must be positive by convention', 'The box would have to be infinitely wide'],
+          why: 'Put n = 0 into sin(nπx/L) and the wave vanishes at every point, so the chance of finding the particle anywhere is zero. The lowest real state is n = 1, and its energy is not zero — that is zero-point energy, and it falls out of the shape rather than being imposed.' },
+        { q: 'The gaps between levels in a box',
+          right: 'get wider as you go up', wrongs: ['stay the same all the way up', 'get narrower as you go up', 'are random'],
+          why: 'E goes as n², so the gap from n to n+1 grows with n. The harmonic oscillator is the odd one out here: its gaps are all identical, which is why a vibration gives one infrared band rather than a spread of them.' },
+        { q: 'What makes the energy of a particle in a box come in steps at all?',
+          right: 'The wave has to be zero at both walls', wrongs: ['Energy is always quantised', 'The particle bounces at fixed speeds', 'Electrons can only have certain energies'],
+          why: 'It is the boundary condition and nothing else. Only whole numbers of half-waves fit between two fixed ends, exactly like a guitar string — and nobody finds the string mysterious. Remove the walls and the energies become continuous again.' },
+      ];
+      const pick = r.pick(cases);
+      const opts = [{ t: pick.right, ok: true }].concat(pick.wrongs.map((w) => ({ t: w, ok: false })));
+      return {
+        kind: 'choice', q: pick.q, options: ME.quiz.shuffle(opts),
+        right: pick.why, wrong: pick.why,
+      };
+    },
+  });
+
+  ME.quantumProblems = ['qm-which-equation', 'qm-psi-meaning', 'qm-box-energy', 'qm-box-jump',
+    'qm-box-probability', 'qm-box-nodes', 'qm-box-thinking', 'qm-hydrogen-level',
+    'qm-hydrogen-line', 'qm-hydrogen-series', 'qm-oscillator', 'qm-tunnel',
+    'qm-tunnel-thinking', 'qm-photon', 'qm-uncertainty'];
+})();
+
+
 /* ================= 79-lesson-kit.js ================= */
 /* Shared building blocks for lesson content.
  *
@@ -20127,6 +20893,1385 @@ window.ME = window.ME || {};
 })();
 
 
+/* ================= 82-quantum.js ================= */
+/* The Schrödinger tab.
+ *
+ * Deliberately not part of the course. The course is a path with an order and
+ * a next button; this is one topic taken as far as it will go, for someone who
+ * wants to know how the equation actually works rather than where it fits in a
+ * syllabus. It sits at the far right of the bar for the same reason.
+ *
+ * Every number on every page comes from ME.quantum, which derives everything
+ * from the defined constants. There is no 13.6 typed anywhere in this file.
+ */
+(function () {
+  'use strict';
+  const ME = window.ME;
+  const el = ME.el;
+  const K = ME.kit;
+  const Q = ME.quantum;
+  const { p, b, em, callout, figure, table, worked } = K;
+
+  const fmt = (x, s) => ME.fmt.fmt(x, s || 4);
+  /* Maths goes in as plain text, not through chemHTML: an exponent in n²h² is
+   * not a subscript in a formula, and the markup for chemistry would eat it. */
+  const qeq = (text) => el('div', { class: 'qm-eq', text: text });
+  const h3 = (t) => el('h3', { class: 'qm-h', text: t });
+
+  /* --------------------------------------------------------- canvas helper */
+  /* One place that knows about device pixel ratios, resizing and animation, so
+   * seven figures do not each get it slightly wrong. */
+  const LIVE = [];
+  function canvasFigure(heightRatio, draw, opts) {
+    const wrap = el('div', { class: 'qm-canvaswrap' });
+    const canvas = el('canvas', { class: 'qm-canvas' });
+    wrap.appendChild(canvas);
+    const state = { canvas: canvas, draw: draw, t: 0, animated: !!(opts && opts.animated) };
+
+    /* paint() calls state.draw rather than the argument, so a figure can wrap
+     * its own drawing to update a readout alongside it. Closing over the
+     * argument instead made that wrapping silently do nothing. */
+    state.paint = function () {
+      const ratio = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth || 600;
+      const hh = Math.round(w * heightRatio);
+      if (canvas.style.height !== hh + 'px') canvas.style.height = hh + 'px';
+      if (canvas.width !== Math.round(w * ratio)) {
+        canvas.width = Math.round(w * ratio);
+        canvas.height = Math.round(hh * ratio);
+      }
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, w, hh);
+      state.draw(ctx, w, hh, state);
+    };
+    LIVE.push(state);
+    return { node: wrap, state: state, repaint: () => state.paint() };
+  }
+
+  function ink() {
+    const css = getComputedStyle(document.documentElement);
+    return {
+      text: css.getPropertyValue('--text').trim() || '#222',
+      dim: css.getPropertyValue('--text-soft').trim() || '#666',
+      faint: css.getPropertyValue('--border-strong').trim() || '#aaa',
+      line: css.getPropertyValue('--border').trim() || '#ddd',
+      accent: css.getPropertyValue('--accent').trim() || '#2563eb',
+    };
+  }
+
+  /* A labelled slider that reports its value as it moves. */
+  function slider(label, min, max, step, value, onChange, format) {
+    const row = el('div', { class: 'qm-slider' });
+    row.appendChild(el('label', { text: label }));
+    const input = el('input', { type: 'range', min: String(min), max: String(max),
+      step: String(step), value: String(value) });
+    const out = el('span', { class: 'qm-sliderval' });
+    const show = (v) => { out.textContent = format ? format(v) : String(v); };
+    show(value);
+    input.addEventListener('input', () => {
+      const v = Number(input.value);
+      show(v);
+      onChange(v);
+    });
+    row.appendChild(input);
+    row.appendChild(out);
+    return { node: row, set: (v) => { input.value = String(v); show(v); } };
+  }
+
+  /* ===================================================== the figures ===== */
+
+  /* The particle in a box: the wave, its square, and the ladder beside it. */
+  function boxFigure() {
+    const St = { n: 1, L: 1, squared: false };
+    const fig = canvasFigure(0.42, (ctx, W, H) => {
+      const c = ink();
+      const padL = 54, padR = 150, padT = 18, padB = 34;
+      const plotW = W - padL - padR, plotH = H - padT - padB;
+      const midY = padT + plotH / 2;
+
+      /* the walls */
+      ctx.strokeStyle = c.faint;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + plotH);
+      ctx.moveTo(padL + plotW, padT); ctx.lineTo(padL + plotW, padT + plotH);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = c.line;
+      ctx.beginPath(); ctx.moveTo(padL, midY); ctx.lineTo(padL + plotW, midY); ctx.stroke();
+
+      /* the wave */
+      const amp = plotH * 0.42;
+      ctx.beginPath();
+      for (let i = 0; i <= 240; i++) {
+        const frac = i / 240;
+        const psi = Math.sin(St.n * Math.PI * frac);
+        const v = St.squared ? psi * psi : psi;
+        const x = padL + frac * plotW;
+        const y = St.squared ? padT + plotH - v * amp * 1.8 : midY - v * amp;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = c.accent;
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+      if (St.squared) {
+        ctx.lineTo(padL + plotW, padT + plotH);
+        ctx.lineTo(padL, padT + plotH);
+        ctx.closePath();
+        ctx.fillStyle = c.accent + '22';
+        ctx.fill();
+      }
+
+      ctx.fillStyle = c.dim;
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(St.squared ? '|ψ|²' : 'ψ', padL + 6, padT + 12);
+      ctx.textAlign = 'center';
+      ctx.fillText('0', padL, H - 10);
+      ctx.fillText(St.L + ' nm', padL + plotW, H - 10);
+
+      /* the ladder */
+      const levels = Q.boxLevels(St.L, 1, 6);
+      const top = levels[5].eV;
+      const lx = W - padR + 22, lw = padR - 46;
+      levels.forEach((lv) => {
+        const y = padT + plotH - (lv.eV / top) * plotH;
+        const on = lv.n === St.n;
+        ctx.strokeStyle = on ? c.accent : c.line;
+        ctx.lineWidth = on ? 2.6 : 1.2;
+        ctx.beginPath(); ctx.moveTo(lx, y); ctx.lineTo(lx + lw, y); ctx.stroke();
+        ctx.fillStyle = on ? c.accent : c.faint;
+        ctx.font = (on ? '600 ' : '') + '11px system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('n=' + lv.n + '  ' + fmt(lv.eV, 3) + ' eV', lx + 2, y - 4);
+      });
+    });
+
+    const controls = el('div', { class: 'qm-controls' });
+    const nS = slider('level n', 1, 6, 1, 1, (v) => { St.n = v; fig.repaint(); });
+    const lS = slider('width L', 0.2, 3, 0.1, 1, (v) => { St.L = v; fig.repaint(); },
+      (v) => v.toFixed(1) + ' nm');
+    controls.appendChild(nS.node);
+    controls.appendChild(lS.node);
+    const toggle = el('button', { class: 'btn btn-sm', text: 'show |ψ|²' });
+    toggle.addEventListener('click', () => {
+      St.squared = !St.squared;
+      toggle.textContent = St.squared ? 'show ψ' : 'show |ψ|²';
+      fig.repaint();
+    });
+    controls.appendChild(toggle);
+
+    const readout = el('div', { class: 'qm-readout' });
+    const update = () => {
+      const e = Q.boxEnergy(St.n, St.L);
+      const half = Q.boxProbability(St.n, St.L, 0, St.L / 2);
+      ME.clear(readout);
+      readout.appendChild(el('span', { class: 'qm-pill',
+        text: 'E = ' + fmt(e.eV, 4) + ' eV' }));
+      readout.appendChild(el('span', { class: 'note',
+        text: St.n - 1 === 0 ? 'no nodes inside — one smooth hump'
+          : (St.n - 1) + ' node' + (St.n - 1 > 1 ? 's' : '') + ' inside, and '
+            + fmt(half, 3) + ' of the probability in the left half' }));
+    };
+    const wrapDraw = fig.state.draw;
+    fig.state.draw = (ctx, W, H, s) => { wrapDraw(ctx, W, H, s); update(); };
+
+    return figure('Drag the level and the width. The ladder on the right is the real energy scale, '
+      + 'computed from E = n²h²/8mL² — notice how fast it climbs when you narrow the box.',
+      fig.node, controls, readout);
+  }
+
+  /* The one demo this topic really needs: why a stationary state is called
+   * stationary, and what a mixture of two of them does instead. */
+  function stationaryFigure() {
+    const St = { mode: 'one' };
+    const fig = canvasFigure(0.36, (ctx, W, H, s) => {
+      const c = ink();
+      const padL = 20, padR = 20, padT = 24, padB = 26;
+      const plotW = W - padL - padR, plotH = H - padT - padB;
+      const L = 1;
+      /* Phases rotate at e^(-iEt/hbar); what is drawn is the relative rate,
+       * slowed by a constant so a human can watch it. E2/E1 = 4 exactly. */
+      const t = s.t;
+      const ph1 = -t * 1.0, ph2 = -t * 4.0;
+
+      const value = (frac) => {
+        const a = Math.sin(Math.PI * frac);
+        const bb = Math.sin(2 * Math.PI * frac);
+        if (St.mode === 'one') {
+          return { re: a * Math.cos(ph1), im: a * Math.sin(ph1), sq: a * a };
+        }
+        const re = (a * Math.cos(ph1) + bb * Math.cos(ph2)) / Math.SQRT2;
+        const im = (a * Math.sin(ph1) + bb * Math.sin(ph2)) / Math.SQRT2;
+        return { re: re, im: im, sq: re * re + im * im };
+      };
+
+      const amp = plotH * 0.3;
+      const midY = padT + plotH * 0.34;
+      /* real part, imaginary part, then the square underneath */
+      [['re', c.accent, 2.4], ['im', c.faint, 1.6]].forEach(([key, colour, lw]) => {
+        ctx.beginPath();
+        for (let i = 0; i <= 200; i++) {
+          const frac = i / 200;
+          const v = value(frac)[key];
+          const x = padL + frac * plotW;
+          const y = midY - v * amp;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = colour; ctx.lineWidth = lw; ctx.stroke();
+      });
+
+      const baseY = padT + plotH;
+      ctx.beginPath();
+      ctx.moveTo(padL, baseY);
+      for (let i = 0; i <= 200; i++) {
+        const frac = i / 200;
+        const x = padL + frac * plotW;
+        ctx.lineTo(x, baseY - value(frac).sq * amp * 1.05);
+      }
+      ctx.lineTo(padL + plotW, baseY);
+      ctx.closePath();
+      ctx.fillStyle = '#2f9e5f33';
+      ctx.fill();
+      ctx.strokeStyle = '#2f9e5f';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = c.accent;
+      ctx.fillText('real part of ψ', padL, 14);
+      ctx.fillStyle = c.faint;
+      ctx.fillText('imaginary part', padL + 110, 14);
+      ctx.fillStyle = '#2f9e5f';
+      ctx.fillText('|ψ|² — what you could measure', padL + 212, 14);
+    }, { animated: true });
+
+    const controls = el('div', { class: 'qm-controls' });
+    const caption = el('div', { class: 'qm-readout' });
+    const setMode = (m) => {
+      St.mode = m;
+      ME.$$('.qm-seg', controls).forEach((x) => x.classList.toggle('on', x.dataset.mode === m));
+      ME.clear(caption);
+      caption.appendChild(el('span', { class: 'note', text: m === 'one'
+        ? 'One state of definite energy. The wave underneath is spinning — watch the blue and grey '
+          + 'curves trade places — but the green curve never moves. That is what stationary means.'
+        : 'An equal mixture of n = 1 and n = 2. Each piece is still a perfectly good solution, but '
+          + 'they spin at different rates, so the interference between them changes and the green '
+          + 'curve sloshes. Motion, built out of two things that individually never move.' }));
+      fig.repaint();
+    };
+    [['one', 'one state'], ['mix', 'a mixture of two']].forEach(([m, label]) => {
+      const btn = el('button', { class: 'btn btn-sm qm-seg', 'data-mode': m, text: label });
+      btn.addEventListener('click', () => setMode(m));
+      controls.appendChild(btn);
+    });
+    setMode('one');
+
+    return figure(null, fig.node, controls, caption);
+  }
+
+  /* Tunnelling, with the cliff made visible. */
+  function tunnelFigure() {
+    const St = { E: 1, V: 5, w: 0.2 };
+    const fig = canvasFigure(0.38, (ctx, W, H) => {
+      const c = ink();
+      const padL = 16, padR = 16, padT = 20, padB = 30;
+      const plotW = W - padL - padR, plotH = H - padT - padB;
+      const baseY = padT + plotH;
+      const scale = plotH / (Math.max(St.V, St.E) * 1.25);
+
+      /* the barrier */
+      const bw = Math.max(6, (St.w / 1.2) * plotW * 0.45);
+      const bx = padL + plotW * 0.45;
+      ctx.fillStyle = c.line;
+      ctx.fillRect(bx, baseY - St.V * scale, bw, St.V * scale);
+
+      /* the particle's energy */
+      const ey = baseY - St.E * scale;
+      ctx.strokeStyle = c.accent;
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(padL, ey); ctx.lineTo(padL + plotW, ey); ctx.stroke();
+      ctx.setLineDash([]);
+
+      const t = Q.tunnel(St.E, St.V, St.w);
+      /* Incoming wave, exponential decay inside, smaller wave out the far
+       * side — with the far amplitude set by the real transmission, so the
+       * picture cannot flatter the physics. */
+      /* Inside the wall the amplitude falls as e^(-kx) over the real width, so
+       * the drawn decay is the computed one rather than a decorative curve. */
+      const decayOverWall = t.over ? 0 : t.kappa * St.w * 1e-9;
+      const outAmp = Math.sqrt(Math.max(t.T, 1e-12));
+      const wave = plotH * 0.1;
+      ctx.beginPath();
+      for (let x = padL; x <= padL + plotW; x += 1.5) {
+        let y;
+        if (x < bx) {
+          y = ey - Math.sin((x - padL) * 0.22) * wave;
+        } else if (x < bx + bw) {
+          y = ey - wave * Math.exp(-((x - bx) / bw) * decayOverWall);
+        } else {
+          y = ey - Math.sin((x - bx - bw) * 0.22) * wave * outAmp;
+        }
+        if (x === padL) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = c.accent;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = c.dim;
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('barrier ' + St.V + ' eV', bx + bw / 2, baseY - St.V * scale - 7);
+      ctx.textAlign = 'left';
+      ctx.fillText('electron, ' + St.E + ' eV', padL + 2, ey - 8);
+    });
+
+    const controls = el('div', { class: 'qm-controls' });
+    const readout = el('div', { class: 'qm-readout' });
+    const refresh = () => {
+      const t = Q.tunnel(St.E, St.V, St.w);
+      ME.clear(readout);
+      readout.appendChild(el('span', { class: 'qm-pill',
+        text: 'gets through ' + (t.T < 0.001 ? ME.fmt.sciUnicode(t.T, 3) : fmt(t.T * 100, 3) + '%')
+          + (t.T < 0.001 ? ' of the time' : '') }));
+      readout.appendChild(el('span', { class: 'note', text: t.over
+        ? 'Above the barrier now — and still not a certainty. A wave can reflect off a step it '
+          + 'clears, which has no classical version either.'
+        : 'The amplitude dies away inside the wall with a decay length of '
+          + fmt(t.decayLengthNM, 3) + ' nm. Every extra bit of thickness costs another factor.' }));
+      fig.repaint();
+    };
+    controls.appendChild(slider('electron E', 0.2, 8, 0.1, 1,
+      (v) => { St.E = v; refresh(); }, (v) => v.toFixed(1) + ' eV').node);
+    controls.appendChild(slider('barrier V₀', 0.5, 10, 0.5, 5,
+      (v) => { St.V = v; refresh(); }, (v) => v.toFixed(1) + ' eV').node);
+    controls.appendChild(slider('thickness', 0.05, 1.2, 0.05, 0.2,
+      (v) => { St.w = v; refresh(); }, (v) => v.toFixed(2) + ' nm').node);
+    refresh();
+
+    return figure('Thickness is the one to play with. It sits inside an exponential, so dragging it '
+      + 'a little does what dragging the others a lot cannot.', fig.node, controls, readout);
+  }
+
+  /* Levels in a real, finite well against the idealised box. */
+  function wellFigure() {
+    const St = { V: 5, L: 1 };
+    const fig = canvasFigure(0.40, (ctx, W, H) => {
+      const c = ink();
+      const padT = 22, padB = 26;
+      const plotH = H - padT - padB;
+      const w = Q.finiteWell(St.V, St.L);
+      const top = St.V;
+      const scale = plotH / (top * 1.1);
+      const baseY = padT + plotH;
+      const leftX = W * 0.08, wellW = W * 0.4;
+
+      /* the well itself */
+      ctx.strokeStyle = c.faint;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(leftX - 30, baseY - top * scale);
+      ctx.lineTo(leftX, baseY - top * scale);
+      ctx.lineTo(leftX, baseY);
+      ctx.lineTo(leftX + wellW, baseY);
+      ctx.lineTo(leftX + wellW, baseY - top * scale);
+      ctx.lineTo(leftX + wellW + 30, baseY - top * scale);
+      ctx.stroke();
+
+      ctx.font = '11px system-ui, sans-serif';
+      w.levels.forEach((lv) => {
+        const y = baseY - lv.eV * scale;
+        ctx.strokeStyle = c.accent;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(leftX + 4, y); ctx.lineTo(leftX + wellW - 4, y); ctx.stroke();
+        ctx.fillStyle = c.accent;
+        ctx.textAlign = 'left';
+        ctx.fillText(fmt(lv.eV, 3) + ' eV', leftX + wellW + 6, y + 4);
+      });
+
+      /* the infinite box next to it, same width */
+      const bx = W * 0.62, bw = W * 0.3;
+      ctx.strokeStyle = c.faint;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(bx, padT - 4); ctx.lineTo(bx, baseY); ctx.lineTo(bx + bw, baseY);
+      ctx.lineTo(bx + bw, padT - 4);
+      ctx.stroke();
+      Q.boxLevels(St.L, 1, 8).forEach((lv) => {
+        if (lv.eV > top * 1.05) return;
+        const y = baseY - lv.eV * scale;
+        ctx.strokeStyle = c.dim;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(bx + 4, y); ctx.lineTo(bx + bw - 4, y); ctx.stroke();
+        ctx.fillStyle = c.dim;
+        ctx.textAlign = 'left';
+        ctx.fillText(fmt(lv.eV, 3) + ' eV', bx + bw + 6, y + 4);
+      });
+
+      ctx.fillStyle = c.dim;
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('finite well, ' + St.V + ' eV deep', leftX + wellW / 2, H - 8);
+      ctx.fillText('infinite box, same width', bx + bw / 2, H - 8);
+    });
+
+    const controls = el('div', { class: 'qm-controls' });
+    const readout = el('div', { class: 'qm-readout' });
+    const refresh = () => {
+      const w = Q.finiteWell(St.V, St.L);
+      const box1 = Q.boxEnergy(1, St.L).eV;
+      ME.clear(readout);
+      readout.appendChild(el('span', { class: 'qm-pill',
+        text: w.count + ' bound state' + (w.count === 1 ? '' : 's') }));
+      readout.appendChild(el('span', { class: 'note',
+        text: 'Ground state ' + fmt(w.levels[0].eV, 3) + ' eV, against ' + fmt(box1, 3)
+          + ' eV for the perfect box. Always lower, because the wave leaks a little way into the '
+          + 'walls and a wave with more room to spread is a wave with less curvature.' }));
+      fig.repaint();
+    };
+    controls.appendChild(slider('depth V₀', 0.2, 20, 0.2, 5,
+      (v) => { St.V = v; refresh(); }, (v) => v.toFixed(1) + ' eV').node);
+    controls.appendChild(slider('width L', 0.2, 2, 0.1, 1,
+      (v) => { St.L = v; refresh(); }, (v) => v.toFixed(1) + ' nm').node);
+    refresh();
+
+    return figure('Make it shallow enough and only one level survives — but never zero. In one '
+      + 'dimension a well always holds at least one bound state, however feeble.',
+      fig.node, controls, readout);
+  }
+
+  /* The oscillator: a parabola with a ladder of equal rungs. */
+  function oscillatorFigure() {
+    const BONDS = [
+      ['H–Cl', 516, 1.00783, 34.9689, 2886],
+      ['H–F', 966, 1.00783, 18.9984, 3962],
+      ['C–O (in CO)', 1902, 12, 15.9949, 2143],
+      ['C=O (in a ketone)', 1200, 12, 15.9949, 1715],
+      ['C–H', 500, 12, 1.00783, 2950],
+      ['D–Cl', 516, 2.0141, 34.9689, 2091],
+    ];
+    const St = { i: 0 };
+    const fig = canvasFigure(0.4, (ctx, W, H) => {
+      const c = ink();
+      const row = BONDS[St.i];
+      const o = Q.oscillator(row[1], Q.reducedMass(row[2], row[3]));
+      const padT = 18, padB = 28;
+      const plotH = H - padT - padB;
+      const baseY = padT + plotH;
+      const levels = 6;
+      const topE = (levels - 0.5) * o.spacingEV;
+      const scale = plotH / (topE * 1.12);
+      const cx = W / 2;
+      const halfW = Math.min(W * 0.42, 260);
+
+      /* V = ½kx², drawn so the top level just fits */
+      ctx.beginPath();
+      for (let i = -60; i <= 60; i++) {
+        const f = i / 60;
+        const x = cx + f * halfW;
+        const y = baseY - (f * f * topE) * scale;
+        if (i === -60) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = c.faint;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.font = '11px system-ui, sans-serif';
+      for (let n = 0; n < levels; n++) {
+        const E = (n + 0.5) * o.spacingEV;
+        const y = baseY - E * scale;
+        const halfAt = halfW * Math.sqrt(E / topE);
+        ctx.strokeStyle = n === 0 ? c.accent : c.dim;
+        ctx.lineWidth = n === 0 ? 2.4 : 1.4;
+        ctx.beginPath(); ctx.moveTo(cx - halfAt, y); ctx.lineTo(cx + halfAt, y); ctx.stroke();
+        ctx.fillStyle = n === 0 ? c.accent : c.faint;
+        ctx.textAlign = 'left';
+        ctx.fillText('n=' + n, cx + halfAt + 5, y + 4);
+      }
+      ctx.fillStyle = c.accent;
+      ctx.textAlign = 'center';
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.fillText('zero-point energy ' + fmt(o.zeroPointEV, 3) + ' eV — the bottom rung is not the floor',
+        cx, baseY + 18);
+    });
+
+    const controls = el('div', { class: 'qm-controls' });
+    const readout = el('div', { class: 'qm-readout' });
+    const refresh = () => {
+      const row = BONDS[St.i];
+      const o = Q.oscillator(row[1], Q.reducedMass(row[2], row[3]));
+      ME.clear(readout);
+      readout.appendChild(el('span', { class: 'qm-pill',
+        text: Math.round(o.wavenumber) + ' cm⁻¹ predicted' }));
+      readout.appendChild(el('span', { class: 'note',
+        text: 'The band really appears at about ' + row[4] + ' cm⁻¹. The gap between those '
+          + 'two numbers is the spring model failing in the one way it must: a real bond gets '
+          + 'easier to stretch the longer it gets, and eventually breaks. A spring never does.' }));
+      ME.$$('.qm-seg', controls).forEach((x, i) => x.classList.toggle('on', i === St.i));
+      fig.repaint();
+    };
+    BONDS.forEach((row, i) => {
+      const btn = el('button', { class: 'btn btn-sm qm-seg', text: row[0] });
+      btn.addEventListener('click', () => { St.i = i; refresh(); });
+      controls.appendChild(btn);
+    });
+    refresh();
+
+    return figure('Equal rungs all the way up — the only system on this page with that property, '
+      + 'and the reason a vibration gives one infrared band instead of a spread of them.',
+      fig.node, controls, readout);
+  }
+
+  /* Hydrogen's ladder, with the series drawn on it. */
+  function hydrogenFigure() {
+    const St = { to: 2 };
+    const fig = canvasFigure(0.46, (ctx, W, H) => {
+      const c = ink();
+      const padT = 20, padB = 30, padL = 60;
+      const plotH = H - padT - padB;
+      const baseY = padT + plotH;
+      /* Drawn on the real energy scale, which is the point: the levels crowd
+       * together at the top and that is why the series converge. */
+      const lowest = Q.hydrogenEnergy(1).eV;
+      const scale = plotH / (-lowest * 1.04);
+      const yOf = (eV) => baseY + (eV - lowest) * scale - plotH;
+
+      ctx.font = '11px system-ui, sans-serif';
+      for (let n = 1; n <= 8; n++) {
+        const e = Q.hydrogenEnergy(n).eV;
+        const y = yOf(e) + plotH;
+        ctx.strokeStyle = n === St.to ? c.accent : c.line;
+        ctx.lineWidth = n === St.to ? 2.4 : 1.3;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - 18, y); ctx.stroke();
+        ctx.fillStyle = n === St.to ? c.accent : c.faint;
+        ctx.textAlign = 'right';
+        ctx.fillText('n=' + n, padL - 6, y + 4);
+        if (n <= 4 || n === 8) {
+          ctx.textAlign = 'left';
+          ctx.fillText(fmt(e, 4) + ' eV', padL + 6, y - 4);
+        }
+      }
+      /* free electron */
+      const freeY = yOf(0) + plotH;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = c.dim;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(padL, freeY); ctx.lineTo(W - 18, freeY); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = c.dim;
+      ctx.textAlign = 'left';
+      ctx.fillText('0 eV — electron free', padL + 6, freeY + 12);
+
+      /* arrows down to the chosen level */
+      for (let n = St.to + 1; n <= St.to + 4; n++) {
+        const t = Q.hydrogenTransition(n, St.to);
+        const x = padL + 70 + (n - St.to) * ((W - padL - 120) / 5);
+        const y1 = yOf(Q.hydrogenEnergy(n).eV) + plotH;
+        const y2 = yOf(Q.hydrogenEnergy(St.to).eV) + plotH;
+        ctx.strokeStyle = colourFor(t.lambdaNM);
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y2); ctx.lineTo(x - 4, y2 - 7); ctx.lineTo(x + 4, y2 - 7);
+        ctx.closePath();
+        ctx.fillStyle = colourFor(t.lambdaNM);
+        ctx.fill();
+        ctx.save();
+        ctx.translate(x + 4, (y1 + y2) / 2);
+        ctx.textAlign = 'left';
+        ctx.fillStyle = c.dim;
+        ctx.fillText(Math.round(t.lambdaNM) + ' nm', 2, 0);
+        ctx.restore();
+      }
+    });
+
+    const controls = el('div', { class: 'qm-controls' });
+    const readout = el('div', { class: 'qm-readout' });
+    const refresh = () => {
+      const s = Q.SERIES.filter((x) => x[0] === St.to)[0];
+      const limit = Q.hydrogenTransition(1000, St.to);
+      ME.clear(readout);
+      readout.appendChild(el('span', { class: 'qm-pill', text: s ? s[1] + ' series' : 'series' }));
+      readout.appendChild(el('span', { class: 'note',
+        text: 'Every line that lands on n = ' + St.to + ' belongs to this series, and they crowd '
+          + 'towards a limit at ' + fmt(limit.lambdaNM, 4) + ' nm — the shortest wavelength it '
+          + 'can give, which is an electron falling in from infinitely far out.' }));
+      ME.$$('.qm-seg', controls).forEach((x) => x.classList.toggle('on', Number(x.dataset.to) === St.to));
+      fig.repaint();
+    };
+    Q.SERIES.slice(0, 4).forEach((s) => {
+      const btn = el('button', { class: 'btn btn-sm qm-seg', 'data-to': String(s[0]), text: s[1] });
+      btn.addEventListener('click', () => { St.to = s[0]; refresh(); });
+      controls.appendChild(btn);
+    });
+    refresh();
+
+    return figure('Drawn on the real energy scale. The levels pile up as n grows, which is why '
+      + 'every series converges rather than marching on evenly.', fig.node, controls, readout);
+  }
+
+  function colourFor(nm) {
+    if (nm < 400) return '#8b5cf6';
+    if (nm < 490) return '#3b82f6';
+    if (nm < 570) return '#22c55e';
+    if (nm < 590) return '#eab308';
+    if (nm < 750) return '#ef4444';
+    return '#92400e';
+  }
+
+  ME.quantumFigures = { boxFigure, stationaryFigure, tunnelFigure, wellFigure,
+    oscillatorFigure, hydrogenFigure };
+  ME.quantumInternals = { LIVE, canvasFigure, slider, qeq, h3 };
+})();
+
+
+/* ================= 83-quantum-view.js ================= */
+/* The pages of the Schrödinger tab.
+ *
+ * One idea per page, in the order the reasoning actually goes, which is not
+ * the order a textbook uses. A textbook states the equation and then explains
+ * the terms; this starts from the problem the equation was invented to solve,
+ * because a reader who knows what question is being answered can follow the
+ * answer.
+ */
+(function () {
+  'use strict';
+  const ME = window.ME;
+  const el = ME.el;
+  const K = ME.kit;
+  const Q = ME.quantum;
+  const F = ME.quantumFigures;
+  const { p, b, em, callout, figure, table, worked, term } = K;
+  const { qeq, h3 } = ME.quantumInternals;
+  const fmt = (x, s) => ME.fmt.fmt(x, s || 4);
+  const frag = (...kids) => K.frag(kids.flat());
+
+  /* ======================================================== the pages ==== */
+  const PAGES = [];
+  const page = (id, name, blurb, build) => PAGES.push({ id, name, blurb, build });
+
+  page('why', 'Why there is an equation', 'The problem it was invented to solve', () => frag(
+    p('By 1925 everybody could see that something was quantised. Heat a gas and it glows at ',
+      em('particular'), ' wavelengths — sharp lines, with nothing in between. Hydrogen gives a red '
+      + 'line at 656 nm, a blue-green one at 486, and a handful more, always the same ones, in '
+      + 'every star and every discharge tube. If electrons could have any energy they liked, you '
+      + 'would get a smear. You get lines instead, so they cannot.'),
+    p('Bohr had a rule that produced hydrogen’s lines correctly: the electron’s angular '
+      + 'momentum comes in whole multiples of ℏ. It worked, and it explained nothing. Why '
+      + 'whole multiples? Ask that and the answer was "because then the numbers come out right", '
+      + 'which is not an answer. And the moment you tried it on helium it fell apart.'),
+    p('The move that worked was to stop asking ', em('where the electron is'), ' and start asking ',
+      em('what it is doing'), '. Suppose an electron is not a tiny ball on a track but something '
+      + 'spread out, with a wave-like amplitude. Then confining it does what confining any wave '
+      + 'does.'),
+    callout(b('Think of a guitar string. '), 'Clamp it at both ends and it cannot vibrate at just '
+      + 'any frequency. There is a fundamental, then an octave, then a fifth above that — a ladder '
+      + 'of specific notes with nothing in between. Nobody finds that mysterious, and nobody says '
+      + 'the string "chooses" allowed frequencies. The clamps make everything else impossible: any '
+      + 'other wavelength would have to be non-zero at a point that is physically pinned to zero.'),
+    p('That is the whole idea, and it is worth sitting with for a second because everything else '
+      + 'follows from it. ', b('Quantisation is not a rule added on top of physics. It is what you '
+      + 'get when you make a wave fit inside a boundary.'), ' Bohr’s whole numbers were whole '
+      + 'numbers of waves all along.'),
+    p('So the job becomes: find the equation that says how this amplitude behaves, then find which '
+      + 'shapes fit the atom. That equation is Schrödinger’s. The energies come out as the '
+      + 'shapes that fit, and the ones that do not fit simply are not solutions — the same way a '
+      + 'string has no note between the fundamental and the octave.'),
+    callout(b('Honest aside. '), 'Nobody derived this equation from something deeper. '
+      + 'Schrödinger guessed it, guided by the wave equations he already knew and by de '
+      + 'Broglie’s suggestion that matter has a wavelength. It is a postulate, like F = ma. '
+      + 'We keep it because a hundred years of predictions have come out right, not because it was '
+      + 'proved. That is how the deepest laws usually arrive.')
+  ));
+
+  page('psi', 'What ψ actually is', 'An amplitude, not a position and not a cloud', () => frag(
+    p('ψ — psi — is a number attached to every point in space. Feed it a position and it '
+      + 'returns a value, which can be positive, negative, or complex. It is the amplitude of the '
+      + 'wave at that point, in exactly the sense that the height of a water wave is its amplitude.'),
+    p('What you can measure is not ψ but ', b('|ψ|²'), ', and that is a '),
+    p(term('probability density', 'The probability per unit volume of finding a particle at a '
+      + 'point. Multiply it by a small volume to get an actual probability.'),
+      ': multiply it by a small volume and you get the chance of finding the particle in that '
+      + 'volume if you look. Not a fraction of the particle — the whole particle, with that '
+      + 'probability. An electron is never partly anywhere.'),
+    h3('Why squared'),
+    p('Because ψ can be negative, and a probability cannot. That is really all. But the sign '
+      + 'is not a nuisance to be squared away — it is doing essential work:'),
+    callout(b('This is where bonding comes from. '), 'Bring two atoms together and their ψ’s '
+      + 'overlap. Where both are positive, or both negative, they add and the amplitude between '
+      + 'the nuclei grows — more electron density in the middle, which is a bond. Where one is '
+      + 'positive and the other negative, they cancel, leaving a gap between the nuclei: an '
+      + 'antibond. Same two atoms, same two waves, and the only difference is a sign. If '
+      + '|ψ|² were all there was, chemistry would have no way to tell those two apart.'),
+    h3('Why it has to add up to one'),
+    p('The particle is definitely somewhere, so adding up the chance of finding it everywhere has '
+      + 'to give certainty:'),
+    qeq('∫ |ψ|² dV  =  1   over all space'),
+    p('That is bookkeeping rather than physics — but it has a real consequence. It fixes the height '
+      + 'of the wave, which is otherwise undetermined, and it is exactly where the '
+      + '√(2/L) in front of the particle-in-a-box wavefunction comes from. You will derive '
+      + 'that one by hand in a couple of pages.'),
+    h3('The part nobody can tell you'),
+    p('What is ψ, physically? There is no agreed answer. It is not a density of matter, it is '
+      + 'not a field you could put a probe in, and it lives in a space with three dimensions per '
+      + 'particle rather than three dimensions in total. A hundred years of argument has not '
+      + 'settled it, and the argument is philosophy, not chemistry.'),
+    p('Which is genuinely fine, and worth saying plainly rather than hiding. You can do every bit '
+      + 'of chemistry on this basis: ', b('ψ is the amplitude; |ψ|² is the chance; '
+      + 'the sign matters when waves meet.'), ' If that feels like a slightly unsatisfying place to '
+      + 'stand, you are in good company — Feynman said the same, at greater length.')
+  ));
+
+  page('equation', 'The equation, term by term', 'What each piece is doing, and why the i', () => frag(
+    p('Here it is, in one dimension, which is where every idea in it can be seen clearly:'),
+    qeq('iℏ ∂ψ/∂t  =  −(ℏ²/2m) ∂²ψ/∂x²  +  V(x) ψ'),
+    p('Read the right-hand side first. It is the energy.'),
+    h3('The easy term'),
+    p('V(x)ψ is potential energy: the potential at that point, times the amplitude there. '
+      + 'Nothing surprising — it is the same V you would write in any mechanics problem. V is where '
+      + 'you describe the situation: zero inside a box and infinite outside, a parabola for a bond, '
+      + '−e²/4πε₀r for an electron near a proton. ', b('Everything specific '
+      + 'about your problem lives in V.'), ' The rest of the equation never changes.'),
+    h3('The term that makes it all click'),
+    p('−(ℏ²/2m)∂²ψ/∂x² is kinetic energy. And the reason it '
+      + 'is a ', em('second'), ' derivative is the single most useful thing to understand here, '
+      + 'because a second derivative measures ', b('curvature'), ' — how sharply a curve bends.'),
+    callout(b('So the equation says: kinetic energy is curvature. '), 'A wave that wiggles tightly '
+      + 'is sharply curved, and that means a lot of kinetic energy. A gently sloping wave has '
+      + 'little. Once you have that, you can read answers off a graph without calculating '
+      + 'anything: the n = 4 wave in a box wiggles four times in the same width as n = 1 wiggles '
+      + 'once, so it is far more curved, so it has far more energy. That is the whole reason the '
+      + 'levels climb.'),
+    p('And it is not a new idea, just a usable version of an old one. de Broglie said short '
+      + 'wavelength means fast — λ = h/p. Short wavelength is exactly what tight curvature '
+      + 'means. The second derivative is de Broglie written so you can do calculus to it.'),
+    p('The minus sign is there to keep the answer positive. Differentiate sin(kx) twice and you get '
+      + '−k²sin(kx) — curvature comes out negative for a hump — so the minus flips it back.'),
+    h3('The left-hand side, and the i'),
+    p('iℏ ∂ψ/∂t says how fast the amplitude is changing. The i is the strange '
+      + 'part, and it has a specific job.'),
+    p('Without it you would have ℏ∂ψ/∂t = (energy)ψ, which is the shape of '
+      + 'a growth or decay equation — the same shape as heat spreading out or a population '
+      + 'exploding. Solutions grow or shrink exponentially. That would be a disaster: the total '
+      + 'probability would not stay at one, so the particle would gradually stop existing, or '
+      + 'start existing twice.'),
+    callout(b('What the i does is turn growth into rotation. '), 'Multiplying by i is a quarter '
+      + 'turn in the complex plane, so instead of running away, the amplitude goes round in a '
+      + 'circle: e^(−iEt/ℏ) rather than e^(−Et/ℏ). Its size never changes, only '
+      + 'its direction. That is what keeps the total probability pinned at one forever, and it is '
+      + 'why quantum mechanics needs complex numbers rather than merely tolerating them.'),
+    h3('The compact version'),
+    p('Bundle the whole right-hand side into one symbol, Ĥ, called the Hamiltonian — it is '
+      + '"the thing that works out the energy" — and the equation becomes:'),
+    qeq('iℏ ∂ψ/∂t  =  Ĥψ'),
+    p('Which reads: how fast the wave changes is set by its energy. Hold onto that sentence; the '
+      + 'next page is entirely about what happens when you ask for the states where it does not '
+      + 'change at all.')
+  ));
+
+  page('tdse-tise', 'TDSE and TISE', 'Where the second one comes from, and which to use', () => frag(
+    p('These are not two rival equations. One is the law; the other is the law asked a narrower '
+      + 'question. Seeing how the second drops out of the first takes about five lines, and it is '
+      + 'worth every one of them, because the answer explains what an orbital is.'),
+    h3('The question'),
+    p('The time-dependent equation — the ', b('TDSE'), ' — is the real law. It governs everything, '
+      + 'the way F = ma does. But most of chemistry does not want to know how things change. It '
+      + 'wants energies, orbital shapes, spectral lines: things that sit still. So ask the narrow '
+      + 'question: ', em('are there states whose shape never changes?')),
+    h3('The separation, in five lines'),
+    p('Guess that the answer is a fixed shape multiplied by something that depends only on time:'),
+    qeq('ψ(x,t)  =  φ(x) · f(t)'),
+    p('Put that into the TDSE and divide the whole thing by φf:'),
+    qeq('iℏ (1/f) df/dt  =  (1/φ) [ −(ℏ²/2m) d²φ/dx² + Vφ ]'),
+    p('Now look hard at that. The left side depends only on t. The right side depends only on x. '
+      + 'They are equal for every x and every t. The only way a function of time can equal a '
+      + 'function of position everywhere is if neither of them is really a function of anything — '
+      + 'they are both the same constant. Call that constant E, because it is going to turn out to '
+      + 'be the energy.'),
+    p('Split them apart and you have two separate problems. The time half:'),
+    qeq('iℏ df/dt  =  E f        →        f(t)  =  e^(−iEt/ℏ)'),
+    p('and the space half:'),
+    qeq('−(ℏ²/2m) d²φ/dx² + Vφ  =  Eφ        or just        Ĥφ = Eφ'),
+    p('That second one is the ', b('TISE'), ', the time-independent equation. It is the TDSE with '
+      + 'the time taken out, valid for exactly those states that have one definite energy.'),
+    h3('The payoff'),
+    p('Look at what f(t) turned out to be. It is e to the power of an imaginary number, which is a '
+      + 'point going round a circle — and its magnitude is 1, always. So when you square the whole '
+      + 'wavefunction, the time factor contributes nothing at all:'),
+    qeq('|ψ(x,t)|²  =  |φ(x)|² · |e^(−iEt/ℏ)|²  =  |φ(x)|²'),
+    callout(b('That is what "stationary state" means. '), 'The wave underneath is spinning — it has '
+      + 'to be, that is the TDSE — but the probability cloud it produces is completely frozen. '
+      + 'Nothing you could measure about the distribution changes, ever. ',
+      b('An orbital is this. '), 'When you see a picture of a 2p orbital, you are looking at '
+      + '|φ|² for one solution of the TISE, and the reason a still picture is honest is '
+      + 'that the real thing genuinely does not move.'),
+    p('Watch it happen. The blue and grey curves below are the real and imaginary parts of ψ, '
+      + 'spinning into each other; the green curve is |ψ|², which is what an experiment '
+      + 'could see. Then switch to a mixture of two states and watch the green curve come alive:'),
+    F.stationaryFigure(),
+    p('That second case is important and often skipped. A mixture of n = 1 and n = 2 is not a state '
+      + 'of definite energy, so it is not stationary — the two pieces rotate at different rates '
+      + '(E₂ is four times E₁, so it goes round four times as fast), the interference '
+      + 'between them keeps changing, and the cloud sloshes from side to side. ', b('Motion, built '
+      + 'entirely out of two things that individually never move.'), ' That is how anything in '
+      + 'quantum mechanics ever gets anywhere.'),
+    h3('So which one do you use?'),
+    table(['You want', 'Use', 'Because'], [
+      ['Energy levels, orbital shapes, spectral lines, bond geometry', 'TISE',
+        'All of these are properties of states that do not change. This is almost all of chemistry.'],
+      ['A molecule during a laser pulse', 'TDSE',
+        'V itself is changing while you watch, so there are no stationary states to find.'],
+      ['A wave packet travelling and spreading', 'TDSE',
+        'Spreading is change over time, which is the one thing a single TISE solution never does.'],
+      ['How fast a transition happens', 'TDSE',
+        'The TISE gives you the two levels and so the wavelength, but not the rate.'],
+      ['Tunnelling probability in steady state', 'TISE',
+        'Steady state means nothing changes with time. Put the barrier in V and solve.'],
+    ], 'The rule of thumb: if the question contains the word "when", you need the TDSE.'),
+    callout(b('And the two connect. '), 'Any state at all can be written as a sum of TISE '
+      + 'solutions, and in that sum each piece evolves by just picking up its own phase '
+      + 'e^(−iEₙt/ℏ). So solving the TISE once, for all its levels, gives you '
+      + 'everything you need to work out any time evolution you like. That is why chemists solve '
+      + 'the time-independent equation and almost never touch the other one: the hard work is in '
+      + 'the levels, and the time part is free once you have them.')
+  ));
+
+  page('box', 'Doing it by hand', 'The particle in a box, every step', () => frag(
+    p('Here is the whole method, start to finish, on the one problem simple enough to do on paper. '
+      + 'Six lines of algebra and you have derived quantised energy from scratch. Everything '
+      + 'harder than this — real atoms, real molecules — is the same five steps with worse algebra '
+      + 'and usually a computer.'),
+    h3('Step 1: write down V'),
+    p('A particle on a line, free to move between 0 and L, with walls it cannot get through:'),
+    qeq('V = 0 inside (0 < x < L),    V = ∞ outside'),
+    p('Infinite potential outside means the particle cannot be there at all, so ψ = 0 outside. '
+      + 'And ψ has to be continuous — a jump in the amplitude would mean infinite curvature, '
+      + 'which would mean infinite kinetic energy. So:'),
+    qeq('φ(0) = 0    and    φ(L) = 0'),
+    p('Those two conditions are the clamps on the guitar string, and they are the only place '
+      + 'quantisation is going to come from. Nothing else below is quantum-specific.'),
+    h3('Step 2: solve the TISE where V = 0'),
+    p('With V = 0 the equation is just:'),
+    qeq('−(ℏ²/2m) d²φ/dx²  =  Eφ        →        d²φ/dx²  =  −k²φ,   where k² = 2mE/ℏ²'),
+    p('"What function, differentiated twice, gives minus itself?" Sine and cosine. So:'),
+    qeq('φ(x)  =  A sin(kx)  +  B cos(kx)'),
+    h3('Step 3: apply the boundary conditions'),
+    p('At x = 0, sin(0) = 0 but cos(0) = 1, so φ(0) = B. For that to be zero, ',
+      b('B = 0'), ' — the cosine is gone, and we are left with a sine.'),
+    p('At x = L we need sin(kL) = 0, and sine is zero at multiples of π:'),
+    qeq('kL = nπ        →        k = nπ/L,    n = 1, 2, 3, …'),
+    callout(b('That is the quantisation, and that is all it was. '), 'Not a postulate, not a rule '
+      + 'about angular momentum — just the observation that only whole numbers of half-waves fit '
+      + 'between two fixed ends. Note what n = 0 would give: sin(0) = 0 everywhere, so ψ is '
+      + 'zero at every point and there is no particle. That is why the counting starts at one, and '
+      + 'it is why the lowest energy is not zero.'),
+    h3('Step 4: read off the energy'),
+    p('We had k² = 2mE/ℏ², so E = ℏ²k²/2m. Put in k = nπ/L and '
+      + 'tidy up (ℏ = h/2π does the tidying):'),
+    qeq('Eₙ  =  n²h² / 8mL²'),
+    p('Three things worth reading straight off that. The energy goes as n², so the levels get '
+      + 'further apart as you climb. It goes as 1/L², so squeezing the box is expensive. And '
+      + 'it goes as 1/m, so a heavier particle has lower levels — which is why nobody notices '
+      + 'quantum mechanics in everyday objects.'),
+    h3('Step 5: normalise'),
+    p('A is still undetermined, and that is what ∫|ψ|² = 1 is for:'),
+    qeq('∫₀ᶠ A² sin²(nπx/L) dx  =  A² · L/2  =  1        →        A = √(2/L)'),
+    p('The sin² averages to a half over any whole number of half-waves, which is where the L/2 '
+      + 'comes from. So the finished answer, both halves of it:'),
+    qeq('φₙ(x) = √(2/L) sin(nπx/L)        Eₙ = n²h²/8mL²'),
+    F.boxFigure(),
+    h3('With numbers in it'),
+    worked('An electron in a box 1 nm across — roughly the size of a small molecule', [
+      { q: 'Level n = 1', why: 'E₁ = h²/8mL² with L = 1 × 10⁻⁹ m',
+        maths: fmt(Q.boxEnergy(1, 1).eV, 4) + ' eV' },
+      { q: 'Level n = 2', why: 'Four times E₁, because the energy goes as n²',
+        maths: fmt(Q.boxEnergy(2, 1).eV, 4) + ' eV' },
+      { q: 'Level n = 3', why: 'Nine times E₁ — the gaps are widening',
+        maths: fmt(Q.boxEnergy(3, 1).eV, 4) + ' eV' },
+      { q: 'Photon for the 2 → 1 drop', why: 'ΔE = '
+          + fmt(Q.boxTransition(1, 2, 1).deltaEV, 4) + ' eV, then λ = hc/ΔE = 1239.8/ΔE nm',
+        maths: fmt(Q.boxTransition(1, 2, 1).lambdaNM, 4) + ' nm, in the '
+          + Q.boxTransition(1, 2, 1).region },
+      { q: 'Chance of finding it in the middle third, n = 1',
+        why: 'Integrate (2/L)sin²(πx/L) from L/3 to 2L/3',
+        maths: fmt(Q.boxProbability(1, 1, 1 / 3, 2 / 3), 3) },
+    ]),
+    p('That last number deserves a look. A classical particle rattling between two walls spends '
+      + 'equal time everywhere, so it would be in the middle third a third of the time. The '
+      + 'electron in its lowest state is there ', b(fmt(Q.boxProbability(1, 1, 1 / 3, 2 / 3) * 100, 3)
+      + '% of the time'), ' — it strongly prefers the middle, because that is where the one '
+      + 'allowed hump is fattest. Move up to n = 2 and the middle becomes the ',
+      em('least'), ' likely place, because that is where the node is. Same box, opposite habit.')
+  ));
+
+  page('lessons', 'What the box is telling you', 'Four results that generalise', () => frag(
+    h3('1. You cannot make it hold still'),
+    p('The lowest energy is E₁ = h²/8mL², and that is not zero. There is no state of '
+      + 'rest. This is ', term('zero-point energy', 'The energy a confined system still has in its '
+      + 'lowest possible state, which is never zero.'), ', and the reason for it is a shape '
+      + 'argument rather than anything about measurement: a particle at rest would have a flat '
+      + 'wavefunction, and a flat function that is zero at both walls is zero everywhere, which is '
+      + 'no particle at all. ', b('Holding still is not one of the available shapes.')),
+    p('Heisenberg says the same thing from the other direction. Confine it to a width L and its '
+      + 'momentum is uncertain by at least ℏ/2L, so it has at least that much momentum to be '
+      + 'uncertain about, so it has kinetic energy. Two routes, one conclusion.'),
+    h3('2. Confinement is expensive, and quadratically so'),
+    p('E goes as 1/L². Halve the box and every level quadruples. This is the single most '
+      + 'useful number-free fact in the whole topic, because it tells you the energy scale of '
+      + 'anything just from its size:'),
+    table(['Confine an electron to', 'Lowest energy comes out around', 'So you see'], [
+      ['1 nm — a small molecule', fmt(Q.boxEnergy(1, 1).eV, 3) + ' eV',
+        'visible and ultraviolet light; this is chemistry'],
+      ['0.1 nm — one atom', fmt(Q.boxEnergy(1, 0.1).eV, 3) + ' eV',
+        'the tens of electronvolts it takes to ionise an atom'],
+      ['10 nm — a quantum dot', fmt(Q.boxEnergy(1, 10).eV, 3) + ' eV',
+        'colour you can tune by changing the size of the dot, and nothing else'],
+    ], 'Nothing in this table was looked up. It is one formula and three widths.'),
+    p('The quantum dot row is worth a second. Those are nanocrystals used in displays, and the '
+      + 'reason a bigger dot glows redder is exactly this: a bigger box means lower levels, '
+      + 'closer together, so a smaller energy gap and a longer wavelength. Same material '
+      + 'throughout. The colour is the size.'),
+    h3('3. Nodes count the energy'),
+    p('The n-th state has n − 1 nodes inside the box — places where ψ passes through '
+      + 'zero. More nodes means more wiggles in the same width, which means tighter curvature, '
+      + 'which (from the kinetic energy term) means more energy. So you can rank states by energy '
+      + 'just by counting their zero crossings, without evaluating anything.'),
+    p('That trick survives everywhere. It is why 2s sits above 1s, why a π* orbital costs more '
+      + 'than a π, and why you can glance at two molecular orbital diagrams and tell which is '
+      + 'higher.'),
+    h3('4. The spacing pattern is specific to the box'),
+    p('In a box the gaps widen as you go up, because E ∝ n². That is not universal. In a '
+      + 'harmonic oscillator the gaps are all identical; in a hydrogen atom they narrow and pile up '
+      + 'towards a limit. The spacing pattern is a fingerprint of the potential, which means a '
+      + 'spectrum tells you what shape of trap the electron is in.'),
+    callout(b('Which is the real reason spectroscopy works. '), 'You cannot see a molecule. But '
+      + 'you can see which photons it accepts, and the pattern of those is set by the shape of V. '
+      + 'Evenly spaced lines in the infrared say "something is vibrating like a spring". A '
+      + 'converging series says "an electron is being held by a 1/r pull". The spectrum is the '
+      + 'shape of the trap, read out in light.')
+  ));
+
+  page('tunnel', 'Getting through walls', 'What happens when V is finite', () => frag(
+    p('Make the walls finite instead of infinite and something appears that has no classical '
+      + 'version at all. Suppose the particle has energy E and the wall is V₀ high, with '
+      + 'E < V₀. Classically it bounces, every time, full stop. Look at the equation instead:'),
+    qeq('d²φ/dx²  =  +κ²φ,    where κ = √(2m(V₀−E))/ℏ'),
+    p('That plus sign changes everything. Before, inside the box, we had d²φ/dx² = '
+      + '−k²φ and the answer was a sine — something that oscillates. Now it is plus, '
+      + 'and the function that gives back ', em('plus'), ' itself when differentiated twice is an '
+      + 'exponential. Inside the wall the wave does not oscillate and it does not stop. ',
+      b('It decays.')),
+    p('And a decaying exponential never actually reaches zero. So if the wall has a far side, there '
+      + 'is still some amplitude left when you get there — and amplitude means probability. The '
+      + 'particle can be found on the other side of a wall it could never climb.'),
+    qeq('T  =  1 / [ 1 + V₀² sinh²(κk a) / 4E(V₀−E) ]'),
+    p('(a is the thickness.) The shape of that matters more than the formula. sinh grows like a '
+      + 'doubling exponential, so T collapses as the barrier thickens. Drag the thickness slider '
+      + 'and watch how violently:'),
+    F.tunnelFigure(),
+    h3('The cliff, in numbers'),
+    table(['Thickness', 'Chance of getting through', 'Compared with 0.1 nm'], [
+      ['0.1 nm', fmt(Q.tunnel(1, 5, 0.1).T * 100, 3) + '%', '—'],
+      ['0.2 nm', fmt(Q.tunnel(1, 5, 0.2).T * 100, 3) + '%',
+        'about ' + Math.round(Q.tunnel(1, 5, 0.1).T / Q.tunnel(1, 5, 0.2).T) + '× less likely'],
+      ['0.5 nm', ME.fmt.sciUnicode(Q.tunnel(1, 5, 0.5).T, 3),
+        'about ' + ME.fmt.sciUnicode(Q.tunnel(1, 5, 0.1).T / Q.tunnel(1, 5, 0.5).T, 2) + '× less likely'],
+      ['1.0 nm', ME.fmt.sciUnicode(Q.tunnel(1, 5, 1).T, 3),
+        'about ' + ME.fmt.sciUnicode(Q.tunnel(1, 5, 0.1).T / Q.tunnel(1, 5, 1).T, 2) + '× less likely'],
+    ], 'A 1 eV electron against a 5 eV barrier. Ten times the thickness, and the odds fall by a factor of a hundred million.'),
+    p('That steepness is not a mathematical curiosity, it is the useful part. A ',
+      term('scanning tunnelling microscope', 'A microscope that images single atoms by measuring '
+      + 'the tunnelling current between a sharp tip and a surface.'), ' holds a needle above a '
+      + 'surface and measures the tunnelling current across the gap. Because the current depends '
+      + 'so savagely on distance, a change of a tenth of an atom’s width changes the current '
+      + 'measurably — which is how a blunt instrument gets a picture of individual atoms.'),
+    p('It also explains alpha decay, which had been a puzzle: an alpha particle in a nucleus does '
+      + 'not have enough energy to escape over the barrier holding it in, yet uranium decays. It '
+      + 'tunnels. And because the probability is so brutally sensitive to the barrier, tiny '
+      + 'differences between nuclei turn into half-lives ranging from microseconds to billions of '
+      + 'years.')
+  ));
+
+  page('well', 'When there is no formula', 'The finite well, and why computers do this', () => frag(
+    p('Keep the walls finite and ask for the bound states — the ones that stay in. The method is '
+      + 'identical in spirit: sine inside, decaying exponential outside, and then demand that '
+      + 'φ and its slope join up smoothly at each wall. Do the algebra and you arrive at:'),
+    qeq('even states:   u tan u = √(R² − u²)'),
+    qeq('odd  states:  −u cot u = √(R² − u²)'),
+    p('with u set by the energy and R by the depth and width together. And now the trouble: ',
+      b('you cannot rearrange those for u.'), ' There is no formula for the answer. The energies '
+      + 'are real and well defined, and no amount of algebra will produce an expression for them.'),
+    p('So you find them numerically — the app does it by bisection, narrowing in on each crossing '
+      + 'branch by branch. Which is worth meeting now rather than later, because it sets '
+      + 'expectations honestly:'),
+    callout(b('The particle in a box is the unusual case, not the normal one. '), 'Almost no real '
+      + 'potential has a closed-form solution. Hydrogen does, and it is the only atom that does. '
+      + 'Helium — two electrons, one nucleus — has no exact solution and never will, because the '
+      + 'two electrons each depend on where the other one is. Every molecular orbital you have '
+      + 'ever seen came out of a computer doing approximately this, several million times.'),
+    F.wellFigure(),
+    h3('Two things to notice'),
+    p('Every level sits ', em('lower'), ' than the matching level of a perfect box of the same '
+      + 'width. The reason follows from the kinetic-energy-is-curvature idea: the wave leaks a '
+      + 'little way into the walls instead of being cut dead, so it is effectively in a slightly '
+      + 'wider box, so it curves a little less, so it costs a little less. For a '
+      + '5 eV well 1 nm wide the ground state comes out at ',
+      b(fmt(Q.finiteWell(5, 1).levels[0].eV, 3) + ' eV'), ' against ',
+      b(fmt(Q.boxEnergy(1, 1).eV, 3) + ' eV'), ' for the ideal box.'),
+    p('And the ladder stops. Above the top of the well the particle is free and the energies become '
+      + 'continuous, so a finite well holds a finite number of bound states — '
+      + Q.finiteWell(5, 1).count + ' for that same well. Make it shallower and you lose them one '
+      + 'by one, down to exactly one. ', b('Never zero, though:'), ' in one dimension a well '
+      + 'always holds at least one bound state, no matter how feeble. Try to drag the depth down '
+      + 'far enough to empty it and you will find you cannot.')
+  ));
+
+  page('oscillator', 'A bond as a spring', 'Where infrared spectra come from', () => frag(
+    p('Two atoms joined by a bond sit at a comfortable distance. Push them closer and they resist; '
+      + 'pull them apart and they pull back. Near the bottom, any restoring force looks like a '
+      + 'spring — so put a parabola in for V and solve:'),
+    qeq('V = ½ k x²        →        Eₙ = (n + ½) ℏω,    ω = √(k/μ)'),
+    p('The algebra is longer than the box (the solutions involve Hermite polynomials) but the '
+      + 'answer is the simplest on this page, and it has two features worth more than the formula.'),
+    h3('The rungs are evenly spaced'),
+    p('Every gap is ℏω. Not n², not converging — identical, all the way up. That is '
+      + 'why an infrared spectrum shows ', b('one strong band per vibration'), ' rather than a '
+      + 'ladder of them: every jump of one rung costs the same, so they all land on the same '
+      + 'wavelength.'),
+    h3('The bottom rung is not the floor'),
+    p('Put n = 0 in and you get E₀ = ½ℏω, not zero. Cool a molecule to absolute '
+      + 'zero and its bonds are still vibrating, with energy that cannot be removed. Same argument '
+      + 'as the box: a bond held perfectly still would have both a known position and a known '
+      + 'momentum, which is not available.'),
+    F.oscillatorFigure(),
+    h3('Reduced mass, and why deuterium gives it away'),
+    p('μ = m₁m₂/(m₁+m₂) — the two atoms on one spring behave like a single '
+      + 'mass of that size, because what matters is how the separation changes, not how the pair '
+      + 'drifts. It is the same substitution that fixes the hydrogen atom on the next page, for the '
+      + 'same reason.'),
+    p('And it makes a prediction you can check in an afternoon. Swap hydrogen for deuterium in '
+      + 'H–Cl: the bond is chemically identical, the force constant is unchanged, but μ '
+      + 'nearly doubles. ω goes as 1/√μ, so the band should drop by a factor of '
+      + 'about √2:'),
+    table(['Bond', 'Predicted', 'Observed'], [
+      ['H–Cl', Math.round(Q.oscillator(516, Q.reducedMass(1.00783, 34.9689)).wavenumber) + ' cm⁻¹', '2886 cm⁻¹'],
+      ['D–Cl', Math.round(Q.oscillator(516, Q.reducedMass(2.0141, 34.9689)).wavenumber) + ' cm⁻¹', '2091 cm⁻¹'],
+    ], 'Same force constant for both, because it is the same bond. Only the mass changed.'),
+    p('Both predictions sit about 3% above the observed bands, and in the same direction, which is '
+      + 'the model telling you where it breaks. A real bond is not a spring: stretch it far enough '
+      + 'and it gets ', em('easier'), ' to stretch, and eventually it snaps. A spring never snaps. '
+      + 'So the real levels bunch up slightly as you climb instead of staying evenly spaced, and '
+      + 'the first gap is a little smaller than the parabola predicts. That effect is called '
+      + 'anharmonicity, and the ratio of the two numbers is the first thing a spectroscopist '
+      + 'measures to find out how strong the bond really is.')
+  ));
+
+  page('hydrogen', 'The hydrogen atom', 'Where orbitals and quantum numbers come from', () => frag(
+    p('Now the one that mattered. One proton, one electron, and the pull between them:'),
+    qeq('V(r)  =  −e² / 4πε₀ r'),
+    p('This is in three dimensions, so the curvature term has three parts instead of one. The '
+      + 'trick that cracks it is the same one that gave us the TISE: separate the variables. '
+      + 'Because V depends only on the distance r and not on direction, you can write'),
+    qeq('ψ(r,θ,φ)  =  R(r) · Y(θ,φ)'),
+    p('— a radial part and an angular part — and the equation splits into two independent problems, '
+      + 'exactly as before.'),
+    h3('Where the quantum numbers come from'),
+    p('And here is the thing that is usually presented as a list of rules to memorise. The quantum '
+      + 'numbers are not rules. They are ', b('boundary conditions'), ', one per dimension, and '
+      + 'each one is the same kind of statement as "the wave must be zero at the wall":'),
+    table(['Number', 'Comes from', 'What it is counting'], [
+      ['n', 'The radial equation — the wave must die away at large r rather than blowing up',
+        'How many radial wiggles, so mostly the energy'],
+      ['ℓ', 'The polar angle — the wave must be well behaved at the poles',
+        'How much angular structure: 0 is a sphere, 1 has a dumbbell axis, and so on'],
+      ['m', 'Going round the atom — after a full turn the wave must join back up with itself',
+        'Which way the angular structure points'],
+    ], 'Three dimensions, three conditions, three integers. Not a postulate between them.'),
+    p('The m one is the easiest to feel. Walk once around the nucleus and you end up where you '
+      + 'started, so the wave has to meet itself — which means a whole number of wavelengths '
+      + 'around the circuit. That is the same sentence as the guitar string, bent into a circle. '
+      + 'And it is precisely Bohr’s whole-number rule, finally with a reason attached.'),
+    h3('The energies'),
+    qeq('Eₙ  =  −' + fmt(Q.ionisationEV(1), 6) + ' eV / n²'),
+    p('That number is not typed in anywhere in this app — it is mμe⁴/8ε₀²h² '
+      + 'evaluated from the defined constants, which is what the equation gives when you solve it. '
+      + 'The fact that it matches the measured ionisation energy of hydrogen to five figures is '
+      + 'why anybody believed any of this.'),
+    F.hydrogenFigure(),
+    p('Two details about that formula are worth more attention than they usually get. First, the '
+      + 'negative sign: zero is defined as the electron free and infinitely far away, so every '
+      + 'bound state is below it, and the energy ', em('needed to remove'), ' the electron is '
+      + fmt(Q.ionisationEV(1), 5) + ' eV. Second — and this one is a genuine fluke — ',
+      b('the energy depends only on n.'), ' 2s and 2p come out at exactly the same energy. That is '
+      + 'special to the 1/r shape of the potential and it is true of no other atom: add a second '
+      + 'electron and the shielding breaks the tie, 2s drops below 2p, and the whole structure of '
+      + 'the periodic table follows from that split.'),
+    h3('So what is an orbital?'),
+    callout(b('An orbital is one solution of the time-independent Schrödinger equation for one '
+      + 'electron in an atom. '), 'That is the entire definition. The shapes are |ψ|² for '
+      + 'particular n, ℓ and m; the labels s, p, d are just names for ℓ = 0, 1, 2; and '
+      + 'the reason a textbook can print a still picture of a 2p orbital is the result from three '
+      + 'pages back — it is a stationary state, so the cloud genuinely does not move.'),
+    p('Which also settles a question that bothers a lot of people: if the electron is not orbiting, '
+      + 'why does it not fall into the nucleus? Because falling in would mean being localised at a '
+      + 'point, and from the box argument, squeezing something into a tiny space costs enormous '
+      + 'kinetic energy — far more than the potential energy it would gain. The atom’s size is '
+      + 'the compromise between those two, and you can estimate it to within a factor of two with '
+      + 'nothing but ΔxΔp ≥ ℏ/2. The electron is not held up by its motion. It '
+      + 'is held up by not fitting.')
+  ));
+
+  page('examples', 'Worked examples', 'Eight, done the long way', () => {
+    const box = Q.boxEnergy(1, 0.5);
+    const t21 = Q.boxTransition(1, 2, 0.5);
+    const ha = Q.hydrogenTransition(3, 2);
+    const hb = Q.hydrogenTransition(4, 2);
+    const co = Q.oscillator(1902, Q.reducedMass(12, 15.9949));
+    const tun = Q.tunnel(2, 6, 0.25);
+    const unc = Q.uncertainty(0.05);
+    const dot = Q.boxEnergy(1, 6);
+    return frag(
+      p('Every number below is computed by the same code that grades the problems on the next page, '
+        + 'so a worked answer and a marked answer can never disagree.'),
+      worked('1. Energy of an electron in a 0.5 nm box, level 1', [
+        { q: 'What is given', why: 'n = 1, L = 0.5 nm = 5 × 10⁻¹⁰ m, mass of an electron' },
+        { q: 'Formula', why: 'E = n²h²/8mL² — nothing else is needed' },
+        { q: 'Numerator', why: 'h² = (6.626 × 10⁻³⁴)²',
+          maths: ME.fmt.sciUnicode(Math.pow(ME.fmt.CONST.h, 2), 4) + ' J²s²' },
+        { q: 'Denominator', why: '8 × 9.109 × 10⁻³¹ × (5 × 10⁻¹⁰)²',
+          maths: ME.fmt.sciUnicode(8 * ME.fmt.CONST.me * 2.5e-19, 4) },
+        { q: 'Divide', why: 'and convert joules to electronvolts by dividing by 1.602 × 10⁻¹⁹',
+          maths: fmt(box.eV, 5) + ' eV' },
+        { q: 'Sense check', why: 'Half the width of the 1 nm box, so four times the energy of '
+            + fmt(Q.boxEnergy(1, 1).eV, 4) + ' eV. It is.' },
+      ]),
+      worked('2. The photon from a 2 → 1 drop in that box', [
+        { q: 'The gap', why: 'E₂ − E₁ = (4 − 1)E₁ = 3E₁',
+          maths: fmt(t21.deltaEV, 5) + ' eV' },
+        { q: 'Turn energy into wavelength', why: 'λ = hc/ΔE, and in these units hc = '
+            + fmt(Q.HC_EV_NM, 6) + ' eV·nm, so just divide',
+          maths: fmt(t21.lambdaNM, 5) + ' nm' },
+        { q: 'What that is', why: 'Short enough to be ' + t21.region + ' — this box is small enough '
+            + 'to absorb visible light, which is why molecules have colours at all' },
+      ]),
+      worked('3. Where is the electron likely to be? (n = 2, middle half)', [
+        { q: 'Set up', why: 'Integrate |ψ|² = (2/L)sin²(2πx/L) from L/4 to 3L/4' },
+        { q: 'Use the closed form', why: 'P = (b−a)/L − [sin(4πb/L) − sin(4πa/L)]/4π',
+          maths: fmt(Q.boxProbability(2, 1, 0.25, 0.75), 4) },
+        { q: 'Compare with n = 1', why: 'The same region, lowest state',
+          maths: fmt(Q.boxProbability(1, 1, 0.25, 0.75), 4) },
+        { q: 'Why they differ', why: 'n = 2 has its node dead centre, so the middle is where it is '
+            + 'least likely to be found. n = 1 has its peak there. A classical particle would say '
+            + '0.5 for both, and be wrong about both.' },
+      ]),
+      worked('4. Hydrogen’s red line', [
+        { q: 'Which transition', why: 'The brightest visible hydrogen line is n = 3 → 2' },
+        { q: 'The gap', why: '13.598 × (1/2² − 1/3²) = 13.598 × 0.1389',
+          maths: fmt(ha.deltaEV, 5) + ' eV' },
+        { q: 'Wavelength', why: fmt(Q.HC_EV_NM, 6) + ' ÷ ' + fmt(ha.deltaEV, 5),
+          maths: fmt(ha.lambdaNM, 5) + ' nm' },
+        { q: 'Against the real thing', why: 'Tables usually say 656.3 nm, and that is not a '
+            + 'disagreement — tables quote the wavelength in air, and light slows slightly in air. '
+            + 'In vacuum the line really is at ' + fmt(ha.lambdaNM, 5) + ' nm.' },
+      ]),
+      worked('5. And the blue-green one', [
+        { q: 'Transition', why: 'n = 4 → 2, the next line up the Balmer series' },
+        { q: 'Gap and wavelength', why: fmt(hb.deltaEV, 5) + ' eV',
+          maths: fmt(hb.lambdaNM, 5) + ' nm, which is ' + hb.region },
+        { q: 'The pattern', why: 'The lines crowd together as you climb, because the levels do. '
+            + 'They converge on ' + fmt(Q.hydrogenTransition(1000, 2).lambdaNM, 5) + ' nm — the '
+            + 'series limit, which is an electron falling in from free.' },
+      ]),
+      worked('6. Where the C–O stretch appears', [
+        { q: 'Reduced mass', why: '(12 × 15.995)/(12 + 15.995) u',
+          maths: fmt(Q.reducedMass(12, 15.9949), 5) + ' u' },
+        { q: 'In kilograms', why: '× 1.6605 × 10⁻²⁷',
+          maths: ME.fmt.sciUnicode(Q.reducedMass(12, 15.9949) * ME.fmt.CONST.amu, 4) + ' kg' },
+        { q: 'Angular frequency', why: 'ω = √(k/μ) with k = 1902 N/m',
+          maths: ME.fmt.sciUnicode(co.omega, 5) + ' rad/s' },
+        { q: 'As a wavenumber', why: 'ω/2πc, with c in cm/s',
+          maths: Math.round(co.wavenumber) + ' cm⁻¹' },
+        { q: 'Zero-point energy', why: '½ℏω, the vibration that survives absolute zero',
+          maths: fmt(co.zeroPointEV, 4) + ' eV' },
+      ]),
+      worked('7. Tunnelling through a thin barrier', [
+        { q: 'Set up', why: 'A 2 eV electron, a 6 eV barrier, 0.25 nm thick' },
+        { q: 'Decay constant', why: 'κ = √(2m(V₀−E))/ℏ with V₀−E = 4 eV',
+          maths: ME.fmt.sciUnicode(tun.kappa, 5) + ' m⁻¹' },
+        { q: 'How many decay lengths', why: 'κ × 0.25 nm',
+          maths: fmt(tun.kappa * 0.25e-9, 4) },
+        { q: 'Transmission', why: 'Into T = 1/(1 + V₀²sinh²(κa)/4E(V₀−E))',
+          maths: fmt(tun.T, 4) + ', about ' + fmt(tun.T * 100, 3) + '%' },
+        { q: 'Sanity', why: 'Classically zero. Quantum mechanically about one in '
+            + Math.round(1 / tun.T) + '. Thicken the barrier to 1 nm and it falls to '
+            + ME.fmt.sciUnicode(Q.tunnel(2, 6, 1).T, 3) + '.' },
+      ]),
+      worked('8. Why atoms are the size they are', [
+        { q: 'Pin an electron down to 0.05 nm', why: 'Roughly half an atom’s radius' },
+        { q: 'Minimum momentum spread', why: 'Δp = ℏ/2Δx',
+          maths: ME.fmt.sciUnicode(unc.dp, 4) + ' kg·m/s' },
+        { q: 'Which is a speed of', why: 'Δp/m for an electron',
+          maths: Math.round(unc.speed / 1000) + ' km/s' },
+        { q: 'And a kinetic energy of at least', why: '(Δp)²/2m',
+          maths: fmt(unc.energyEV, 4) + ' eV' },
+        { q: 'The point', why: 'Squeezing an electron to atomic size forces electronvolts of energy '
+            + 'on it, and electronvolts is exactly the scale of chemical bonds. Chemistry happens '
+            + 'at the energies it does because atoms are the size they are, and atoms are that size '
+            + 'because of this trade-off.' },
+      ]),
+      callout(b('One more, for scale. '), 'A quantum dot 6 nm across gives a ground state of '
+        + fmt(dot.eV, 4) + ' eV, and gaps of a few tenths of an electronvolt — right in the visible. '
+        + 'Grow the dot and the colour shifts red. Nothing changes but the size of the box, and the '
+        + 'whole effect is the formula you derived by hand four pages ago.')
+    );
+  });
+
+  page('problems', 'Problems', 'Fifteen kinds, endlessly regenerated', () => {
+    const wrap = el('div');
+    wrap.appendChild(p('Each of these is generated fresh, and the answer is computed by the engine '
+      + 'rather than stored — so the number you are marked against is the number the worked '
+      + 'examples would give. Press for new ones as often as you like.'));
+
+    const GROUPS = [
+      ['Reading the equation', ['qm-which-equation', 'qm-psi-meaning']],
+      ['The box', ['qm-box-energy', 'qm-box-jump', 'qm-box-probability', 'qm-box-nodes', 'qm-box-thinking']],
+      ['Light', ['qm-photon', 'qm-hydrogen-line', 'qm-hydrogen-series', 'qm-hydrogen-level']],
+      ['Bonds and barriers', ['qm-oscillator', 'qm-tunnel', 'qm-tunnel-thinking', 'qm-uncertainty']],
+    ];
+
+    GROUPS.forEach(([name, keys]) => {
+      wrap.appendChild(h3(name));
+      const holder = el('div', { class: 'qm-problems' });
+      let seed = (Math.random() * 1e9) | 0;
+      const fill = () => {
+        ME.clear(holder);
+        keys.forEach((k, i) => {
+          const q = ME.practice.generate(k, seed + i * 7919);
+          if (q) holder.appendChild(ME.quiz.buildQuestion(q, i, keys.length, false, null));
+        });
+      };
+      const again = el('button', { class: 'btn btn-sm', text: 'New set' });
+      again.addEventListener('click', () => { seed = (Math.random() * 1e9) | 0; fill(); });
+      wrap.appendChild(holder);
+      wrap.appendChild(again);
+      fill();
+    });
+    return wrap;
+  });
+
+  /* ===================================================== the tab shell === */
+  const St = { built: false, host: null, panel: null, nav: null, current: null, raf: null,
+    last: 0, running: false };
+
+  function build(host) {
+    St.host = host;
+    const wrap = el('div', { class: 'wrap' });
+    wrap.appendChild(el('h1', { text: 'The Schrödinger equation' }));
+    wrap.appendChild(el('p', { class: 'note' },
+      'Twelve pages on one equation, from the problem it was invented to solve through to doing it by '
+      + 'hand. Separate from the course on purpose: nothing here is required for anything else, '
+      + 'and it goes deeper than a first chemistry class needs.'));
+
+    const layout = el('div', { class: 'qm-layout' });
+    St.nav = el('nav', { class: 'qm-nav', 'aria-label': 'Pages' });
+    PAGES.forEach((pg, i) => {
+      const btn = el('button', { class: 'qm-navbtn', 'data-page': pg.id });
+      btn.appendChild(el('span', { class: 'qm-navnum', text: String(i + 1) }));
+      const txt = el('span', { class: 'qm-navtext' });
+      txt.appendChild(el('span', { class: 'qm-navname', text: pg.name }));
+      txt.appendChild(el('span', { class: 'note', text: pg.blurb }));
+      btn.appendChild(txt);
+      btn.addEventListener('click', () => { show(pg.id); ME.revealTop(St.panel); });
+      St.nav.appendChild(btn);
+    });
+    layout.appendChild(St.nav);
+    St.panel = el('div', { class: 'qm-panel' });
+    layout.appendChild(St.panel);
+    wrap.appendChild(layout);
+    host.appendChild(wrap);
+    St.built = true;
+    show(PAGES[0].id);
+  }
+
+  function show(id) {
+    const pg = PAGES.filter((x) => x.id === id)[0] || PAGES[0];
+    St.current = pg;
+    /* Figures from the page being left stop being painted. */
+    ME.quantumInternals.LIVE.length = 0;
+    ME.$$('.qm-navbtn', St.host).forEach((x) => x.classList.toggle('on', x.dataset.page === pg.id));
+    ME.clear(St.panel);
+
+    const card = el('div', { class: 'card card-pad qm-page' });
+    card.appendChild(el('h2', { text: pg.name }));
+    card.appendChild(pg.build());
+
+    /* Previous and next, because ten pages in an order is a sequence even if
+     * it is not a course. */
+    const i = PAGES.indexOf(pg);
+    const nav = el('div', { class: 'qm-pagenav' });
+    if (i > 0) {
+      const prev = el('button', { class: 'btn btn-sm', text: '← ' + PAGES[i - 1].name });
+      prev.addEventListener('click', () => { show(PAGES[i - 1].id); ME.revealTop(St.panel, 0); });
+      nav.appendChild(prev);
+    }
+    if (i < PAGES.length - 1) {
+      const next = el('button', { class: 'btn btn-sm btn-primary', text: PAGES[i + 1].name + ' →' });
+      next.addEventListener('click', () => { show(PAGES[i + 1].id); ME.revealTop(St.panel, 0); });
+      nav.appendChild(next);
+    }
+    card.appendChild(nav);
+    St.panel.appendChild(card);
+    ME.bindTips(St.panel);
+    paintAll();
+    resume();
+  }
+
+  function paintAll() { ME.quantumInternals.LIVE.forEach((s) => s.paint()); }
+
+  function step(now) {
+    St.raf = null;
+    if (!St.running) return;
+    const dt = St.last ? Math.min(0.05, (now - St.last) / 1000) : 0;
+    St.last = now;
+    let anyAnimated = false;
+    ME.quantumInternals.LIVE.forEach((s) => {
+      if (!s.animated) return;
+      anyAnimated = true;
+      s.t += dt * 2.2;
+      s.paint();
+    });
+    /* Nothing on this page moves, so there is nothing to keep a frame loop
+     * alive for. */
+    if (!anyAnimated) { St.running = false; return; }
+    St.raf = requestAnimationFrame(step);
+  }
+
+  function resume() {
+    if (!St.built || St.raf) return;
+    St.running = true;
+    St.last = 0;
+    St.raf = requestAnimationFrame(step);
+  }
+  function pause() {
+    St.running = false;
+    if (St.raf) cancelAnimationFrame(St.raf);
+    St.raf = null;
+  }
+  function ensureBuilt(host) {
+    if (!St.built) build(host);
+    paintAll();
+  }
+
+  window.addEventListener('resize', ME.debounce(() => { if (St.built) paintAll(); }, 150));
+
+  ME.quantumview = { ensureBuilt, show, resume, pause, PAGES,
+    get state() { return St; } };
+})();
+
+
 /* ================= 90-app.js ================= */
 /* Application shell: navigation, routing, the always-present search box and
  * the theme switch. */
@@ -20136,7 +22281,8 @@ window.ME = window.ME || {};
   const ME = window.ME;
   const el = ME.el;
 
-  const VIEWS = ['learn', 'draw', 'elements', 'balancer', 'gas', 'reactions', 'tools', 'reference', 'gallery', 'search', 'molecule'];
+  const VIEWS = ['learn', 'draw', 'elements', 'balancer', 'gas', 'reactions', 'tools',
+    'reference', 'gallery', 'search', 'quantum', 'molecule'];
   const TABS = [
     { k: 'learn', label: 'Learn', icon: 'book' },
     { k: 'draw', label: 'Draw', icon: 'pencil' },
@@ -20148,6 +22294,9 @@ window.ME = window.ME || {};
     { k: 'reference', label: 'Reference', icon: 'book' },
     { k: 'gallery', label: 'Gallery', icon: 'grid' },
     { k: 'search', label: 'Search', icon: 'search' },
+    /* Deliberately last: it is the one tab that is not part of the course and
+     * not needed for anything else on the bar. */
+    { k: 'quantum', label: 'Quantum', icon: 'book' },
   ];
 
   /* Molecules fetched from PubChem this session, so a back button still works. */
@@ -20300,6 +22449,7 @@ window.ME = window.ME || {};
     /* Same reason as the gas tab: an animation left running behind a hidden
      * view is a battery drain with nobody watching it. */
     if (currentView === 'reactions' && name !== 'reactions' && ME.reactionsim) ME.reactionsim.pause();
+    if (currentView === 'quantum' && name !== 'quantum' && ME.quantumview) ME.quantumview.pause();
     currentView = name;
     VIEWS.forEach((v) => {
       const node = ME.$('#view-' + v);
@@ -20358,6 +22508,13 @@ window.ME = window.ME || {};
       setView('gas');
       ME.gassim.ensureBuilt(ME.$('#view-gas'));
       ME.gassim.resume();
+      return;
+    }
+    if (parts[0] === 'quantum') {
+      setView('quantum');
+      ME.quantumview.ensureBuilt(ME.$('#view-quantum'));
+      if (parts[1]) ME.quantumview.show(decodeURIComponent(parts[1]));
+      ME.quantumview.resume();
       return;
     }
     if (parts[0] === 'reactions') {

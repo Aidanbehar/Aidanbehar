@@ -37,7 +37,14 @@
 
 .nav-spacer { flex: 1 1 auto; }
 
-.searchbox { position: relative; flex: 1 1 200px; min-width: 150px; max-width: 360px; }
+.searchbox { position: relative; flex: 1 1 200px; min-width: 130px; max-width: 360px; }
+/* Eleven tabs plus a search box plus the theme button is a tight fit on a
+   1280-wide laptop, and the browser's instinct is to wrap the theme button
+   onto a row of its own, which looks like a mistake. The search box gives up
+   the width instead; it is a placeholder and an icon, and it loses nothing by
+   being narrower. */
+@media (max-width: 1430px) { .searchbox { max-width: 210px; } }
+@media (max-width: 1330px) { .searchbox { max-width: 165px; } }
 .searchbox svg.mag {
   position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
   width: 16px; height: 16px; color: var(--text-faint); pointer-events: none;

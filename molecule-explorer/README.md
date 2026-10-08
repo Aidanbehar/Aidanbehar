@@ -25,6 +25,7 @@ What is in it:
 | **Reference** | 13 tables, each stating where its data came from, and a 49-word glossary. |
 | **Gallery** | 688 molecules grouped by what they are for. |
 | **Search** | Molecules by name, nickname, formula or SMILES — and lessons, calculators, tables and glossary words. |
+| **Quantum** | Twelve pages on the Schrödinger equation: what ψ is, the TDSE and where the TISE comes from, the particle in a box derived by hand, tunnelling, the finite well, vibrations, the hydrogen atom, eight worked examples and fifteen kinds of generated problem. |
 
 19 interactive simulations are embedded in the lessons that need them.
 
@@ -319,6 +320,53 @@ blocked, with the reason.
 A gas has three degrees of freedom, not four, so one variable is always
 recomputed from the other three — including at startup, which is how the first
 version came to violate PV = nRT by 1.4% on its opening frame.
+
+**Quantum.** Deliberately not part of the course — the course is a path with a
+next button, and this is one topic taken as far as it will go. It sits at the
+far right of the bar for that reason.
+
+The order is the order the reasoning actually goes, which is not the order a
+textbook uses. A textbook states the equation and then explains the terms; this
+starts from the problem the equation was invented to solve (spectra are lines,
+not smears, and Bohr's rule produced the right numbers for no reason), gets to
+quantisation as what happens when you make a wave fit a boundary, and only then
+writes the equation down. The kinetic energy term is introduced as *curvature*,
+because once that substitution lands the reader can rank states by energy off a
+graph without calculating anything.
+
+The TDSE/TISE page does the separation of variables in five lines rather than
+asserting the result, because the payoff is the definition of an orbital: f(t)
+turns out to be e^(−iEt/ℏ), whose magnitude is 1, so |ψ|² does not change with
+time at all. There is a live figure of exactly that — the real and imaginary
+parts of ψ spinning into each other while |ψ|² sits frozen — next to a mixture
+of two states where the same figure sloshes, because motion built out of two
+things that individually never move is the honest way to show what the mixture
+buys you. Then a table of which equation to reach for, with the rule of thumb
+that a question containing the word "when" needs the time-dependent one.
+
+The particle in a box is derived completely: write down V, solve where V = 0,
+apply the boundary conditions (which is where quantisation comes from and
+nowhere else), read off E = n²h²/8mL², normalise to get √(2/L). Then tunnelling,
+and then the finite well — which is in there specifically because it has *no*
+closed-form answer. Its energies come out of a bisection, and the page says so:
+the particle in a box is the unusual case, hydrogen is the only atom with an
+exact solution, and every molecular orbital anyone has seen came out of a
+computer doing approximately this a few million times.
+
+Nothing is typed. There is no 13.6 anywhere in the app: the hydrogen ground
+state is mₑe⁴/8ε₀²h² evaluated from the defined constants, the Bohr radius and
+hc = 1239.84 eV·nm likewise. Hydrogen uses the reduced mass rather than the
+electron mass — a 0.05% correction, and the difference between 13.606 eV and the
+measured 13.598, so leaving it out would have made the tab disagree with a data
+table for no reason. The engine tests pin Balmer α at 656.47 nm (vacuum; tables
+quote 656.28 because they measure in air, and the worked example explains that
+rather than looking wrong), the HCl stretch at 2990 cm⁻¹, the H/D ratio at
+1.3943, the tunnelling cliff across four thicknesses, and that a shallow well
+still binds exactly one state.
+
+The fifteen problem generators register in the same registry the course uses, so
+the existing self-test covers them, and a separate test parses each generated
+question back out of its own text and re-derives the answer independently.
 
 **Reactions.** Pick one of 22 reactions and watch the atoms rearrange. Nothing
 here is hand-choreographed, because hand-choreographing twenty reactions means

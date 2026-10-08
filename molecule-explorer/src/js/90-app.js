@@ -6,7 +6,8 @@
   const ME = window.ME;
   const el = ME.el;
 
-  const VIEWS = ['learn', 'draw', 'elements', 'balancer', 'gas', 'reactions', 'tools', 'reference', 'gallery', 'search', 'molecule'];
+  const VIEWS = ['learn', 'draw', 'elements', 'balancer', 'gas', 'reactions', 'tools',
+    'reference', 'gallery', 'search', 'quantum', 'molecule'];
   const TABS = [
     { k: 'learn', label: 'Learn', icon: 'book' },
     { k: 'draw', label: 'Draw', icon: 'pencil' },
@@ -18,6 +19,9 @@
     { k: 'reference', label: 'Reference', icon: 'book' },
     { k: 'gallery', label: 'Gallery', icon: 'grid' },
     { k: 'search', label: 'Search', icon: 'search' },
+    /* Deliberately last: it is the one tab that is not part of the course and
+     * not needed for anything else on the bar. */
+    { k: 'quantum', label: 'Quantum', icon: 'book' },
   ];
 
   /* Molecules fetched from PubChem this session, so a back button still works. */
@@ -170,6 +174,7 @@
     /* Same reason as the gas tab: an animation left running behind a hidden
      * view is a battery drain with nobody watching it. */
     if (currentView === 'reactions' && name !== 'reactions' && ME.reactionsim) ME.reactionsim.pause();
+    if (currentView === 'quantum' && name !== 'quantum' && ME.quantumview) ME.quantumview.pause();
     currentView = name;
     VIEWS.forEach((v) => {
       const node = ME.$('#view-' + v);
@@ -228,6 +233,13 @@
       setView('gas');
       ME.gassim.ensureBuilt(ME.$('#view-gas'));
       ME.gassim.resume();
+      return;
+    }
+    if (parts[0] === 'quantum') {
+      setView('quantum');
+      ME.quantumview.ensureBuilt(ME.$('#view-quantum'));
+      if (parts[1]) ME.quantumview.show(decodeURIComponent(parts[1]));
+      ME.quantumview.resume();
       return;
     }
     if (parts[0] === 'reactions') {

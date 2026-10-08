@@ -22,7 +22,37 @@
   const ATM_IN_PA = 101325;                /* exact by definition */
   const ZERO_C = 273.15;                   /* exact by definition */
 
+  /* Quantum constants. Three of these are exact by definition in the SI, and
+   * the two that are not are measured to a precision no school problem will
+   * ever reach. Everything the Schrodinger tab computes is built from them
+   * rather than from a remembered 13.6 or 0.529 \u2014 those two numbers are
+   * derived below, so they cannot disagree with the constants they come from. */
+  const PLANCK = 6.62607015e-34;           /* J s,   exact by definition */
+  const ELEMENTARY = 1.602176634e-19;      /* C,     exact by definition */
+  const LIGHT = 299792458;                 /* m/s,   exact by definition */
+  const ELECTRON_MASS = 9.1093837015e-31;  /* kg,    measured */
+  const VACUUM_PERMITTIVITY = 8.8541878128e-12; /* F/m, measured */
+  const AMU = 1.66053906660e-27;           /* kg,    measured */
+  const PROTON_MASS = 1.67262192369e-27;   /* kg,    measured */
+  const HBAR = PLANCK / (2 * Math.PI);
+  /* The hydrogen ground state, from first principles: it is what you get when
+   * you solve the Schrodinger equation for one electron and one proton. */
+  const RYDBERG_ENERGY = ELECTRON_MASS * Math.pow(ELEMENTARY, 4)
+    / (8 * VACUUM_PERMITTIVITY * VACUUM_PERMITTIVITY * PLANCK * PLANCK);
+  const BOHR_RADIUS = VACUUM_PERMITTIVITY * PLANCK * PLANCK
+    / (Math.PI * ELECTRON_MASS * ELEMENTARY * ELEMENTARY);
+
   const CONST = {
+    h: PLANCK,
+    hbar: HBAR,
+    e: ELEMENTARY,
+    c: LIGHT,
+    me: ELECTRON_MASS,
+    eps0: VACUUM_PERMITTIVITY,
+    amu: AMU,
+    mp: PROTON_MASS,
+    rydbergEnergy: RYDBERG_ENERGY,
+    bohrRadius: BOHR_RADIUS,
     NA: AVOGADRO,
     kB: BOLTZMANN,
     R: R_SI,

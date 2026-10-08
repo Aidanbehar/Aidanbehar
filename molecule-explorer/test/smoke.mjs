@@ -63,21 +63,31 @@ await page.waitForTimeout(1200);
 check('page loads with no script errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 check('no network requests attempted on load', attempted.length === 0, attempted.slice(0, 3).join(', '));
 const tabNames = (await page.locator('.nav .tab').allInnerTexts()).join('|');
-check('navigation rendered', await page.locator('.nav .tab').count() >= 10, tabNames);
+check('navigation rendered', await page.locator('.nav .tab').count() >= 11, tabNames);
 /* The order is part of the spec: the three playable tabs — Balancer, Gas
-   Simulator and Reactions — go immediately after Elements, and Gallery and
-   Search stay at the end. */
+   Simulator and Reactions — go immediately after Elements, Gallery and Search
+   come near the end, and Quantum is deliberately last because it is the one
+   tab that belongs to no part of the course. */
 check('the tabs are in the order the app promises',
-  tabNames === 'Learn|Draw|Elements|Balancer|Gas Simulator|Reactions|Tools|Reference|Gallery|Search',
+  tabNames === 'Learn|Draw|Elements|Balancer|Gas Simulator|Reactions|Tools|Reference|Gallery|Search|Quantum',
   tabNames);
-/* Ten tabs plus the search box must not push the nav onto a second row on a
+/* Eleven tabs plus the search box must not push the nav onto a second row on a
    laptop, which is what dropped the search box below the tabs once. */
 const navFits = await page.evaluate(() => {
+  const inner = document.querySelector('.nav-inner');
   const tabs = document.querySelector('.tabs').getBoundingClientRect();
   const box = document.querySelector('.searchbox').getBoundingClientRect();
-  return { oneRow: Math.abs(tabs.top - box.top) < 8, height: Math.round(document.querySelector('.nav-inner').getBoundingClientRect().height) };
+  /* The theme button is the last thing in the bar, and it is the one that
+     wrapped onto a row of its own when the eleventh tab arrived — so the
+     check includes it rather than only the search box. */
+  const last = inner.lastElementChild.getBoundingClientRect();
+  return {
+    oneRow: Math.abs(tabs.top - box.top) < 8 && Math.abs(tabs.top - last.top) < 10,
+    height: Math.round(inner.getBoundingClientRect().height),
+  };
 });
 check('the nav stays on one row', navFits.oneRow, JSON.stringify(navFits));
+check('and the bar is still one row tall', navFits.height < 70, JSON.stringify(navFits));
 check('Learn is the default view', await page.locator('#view-learn.active').count() === 1);
 
 /* ---------------------------------------------------------- course map */
@@ -682,6 +692,85 @@ check('picking a tool while already at the top does not move the page',
   'scrollY ' + (await page.evaluate(() => window.scrollY)));
 await page.locator('.tl-navbtn', { hasText: 'Reaction energy' }).click();
 await page.waitForTimeout(400);
+
+/* Quantum */
+await page.locator('.tab[data-view=quantum]').click();
+await page.waitForTimeout(700);
+check('the Schrödinger tab lists its pages',
+  (await page.locator('.qm-navbtn').count()) >= 10,
+  (await page.locator('.qm-navbtn').count()) + ' pages');
+
+/* Every page, rendered for real. The engine tests check the prose has no
+ * gaps; this checks the page actually goes on screen. */
+const qmPages = await page.locator('.qm-navname').allInnerTexts();
+const qmBad = [];
+for (let i = 0; i < qmPages.length; i++) {
+  await page.locator('.qm-navbtn').nth(i).click();
+  await page.waitForTimeout(260);
+  const t = await page.locator('.qm-page').innerText();
+  if (t.length < 700 || /undefined|NaN/.test(t)) qmBad.push(qmPages[i] + ': ' + t.slice(0, 60));
+}
+check('every page renders with real content', qmBad.length === 0, qmBad.join(' | '));
+
+await page.locator('.qm-navbtn', { hasText: 'TDSE and TISE' }).click();
+await page.waitForTimeout(600);
+const tiseText = await page.locator('.qm-page').innerText();
+check('the TISE is derived rather than asserted',
+  /separation/i.test(tiseText) && /both the same constant/i.test(tiseText), tiseText.slice(0, 120));
+check('and it says what stationary actually means',
+  /probability cloud it produces is completely frozen/i.test(tiseText));
+check('and gives a table of which equation to use',
+  (await page.locator('.qm-page table tr').count()) >= 5);
+
+/* The stationary-state animation is the one figure this topic needs, so it
+ * has to be painting something rather than sitting blank. */
+const qmPainted = await page.evaluate(() => {
+  const c = document.querySelector('.qm-canvas');
+  if (!c) return { n: 0 };
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  let n = 0;
+  for (let i = 3; i < d.length; i += 4 * 7) if (d[i] > 12) n++;
+  return { n: n };
+});
+check('the stationary-state figure is drawing', qmPainted.n > 100, JSON.stringify(qmPainted));
+
+await page.locator('.qm-navbtn', { hasText: 'Doing it by hand' }).click();
+await page.waitForTimeout(600);
+const byHand = await page.locator('.qm-page').innerText();
+check('the derivation shows the boundary conditions doing the work',
+  /B = 0/.test(byHand) && /kL = n/.test(byHand) && /8mL/.test(byHand), byHand.slice(0, 120));
+check('and the worked numbers are there', /0\.376/.test(byHand), 'no 0.376 eV in the worked example');
+const slidersBefore = await page.locator('.qm-canvas').first().screenshot();
+await page.locator('.qm-slider input[type=range]').first().fill('4');
+await page.waitForTimeout(400);
+const slidersAfter = await page.locator('.qm-canvas').first().screenshot();
+check('dragging the level slider redraws the wave',
+  Buffer.compare(slidersBefore, slidersAfter) !== 0, 'the canvas did not change');
+check('and the energy readout followed it',
+  /eV/.test(await page.locator('.qm-pill').first().innerText()),
+  await page.locator('.qm-pill').first().innerText());
+
+await page.locator('.qm-navbtn', { hasText: 'Problems' }).click();
+await page.waitForTimeout(700);
+check('the problems page generates a set',
+  (await page.locator('.qm-problems .quiz-item').count()) >= 12,
+  (await page.locator('.qm-problems .quiz-item').count()) + ' problems');
+/* Answer one wrongly and one rightly, through the same grader the course uses. */
+const firstNumeric = page.locator('.qm-problems .quiz-numinput').first();
+await firstNumeric.fill('-999');
+await firstNumeric.press('Enter');
+await page.waitForTimeout(300);
+check('a wrong answer is marked wrong',
+  (await page.locator('.qm-problems .quiz-feedback .callout.warn').count()) >= 1);
+
+/* Leaving the tab must stop the animation loop. */
+await page.locator('.tab[data-view=tools]').click();
+await page.waitForTimeout(400);
+check('leaving the tab stops the animation',
+  await page.evaluate(() => window.ME.quantumview.state.raf === null));
+await page.locator('.tab[data-view=quantum]').click();
+await page.waitForTimeout(500);
+await page.screenshot({ path: path.join(SHOTS, '13-quantum.png'), fullPage: true });
 
 /* Reference */
 await page.locator('.tab[data-view=reference]').click();

@@ -1949,6 +1949,325 @@ describe('reaction animations', () => {
   });
 });
 
+/* --------------------------------------------------- the Schrödinger engine */
+describe('quantum mechanics', () => {
+  test('the derived constants come out to the measured values', async () => {
+    const got = await run(() => {
+      const C = window.ME.fmt.CONST, Q = window.ME.quantum;
+      return {
+        hc: Q.HC_EV_NM,
+        rydbergEV: C.rydbergEnergy / C.e,
+        bohrNM: C.bohrRadius * 1e9,
+        ionisation: Q.ionisationEV(1),
+        reduced: Q.hydrogenEnergy(1).reduced,
+      };
+    });
+    /* Nothing below is stored in the app. Each one is a product of the defined
+     * constants, so if any of them were mistyped these would all drift. */
+    assert.ok(Math.abs(got.hc - 1239.8419) < 0.001, 'hc = ' + got.hc + ' eV nm');
+    assert.ok(Math.abs(got.rydbergEV - 13.605693) < 1e-5, 'Rydberg = ' + got.rydbergEV);
+    assert.ok(Math.abs(got.bohrNM - 0.0529177) < 1e-6, 'Bohr radius = ' + got.bohrNM + ' nm');
+    /* The measured ionisation energy of hydrogen is 13.5984 eV. Getting this
+     * right needs the reduced mass; the electron mass alone gives 13.6057,
+     * which is wrong in the fourth figure. */
+    assert.ok(Math.abs(got.ionisation - 13.5983) < 0.0005, 'ionisation = ' + got.ionisation);
+    assert.ok(Math.abs(got.reduced - 0.99945568) < 1e-7, 'reduced mass factor = ' + got.reduced);
+  });
+
+  test('a particle in a box matches the hand calculation and its own scaling laws', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        e1: Q.boxEnergy(1, 1).eV,
+        e2: Q.boxEnergy(2, 1).eV,
+        e3: Q.boxEnergy(3, 1).eV,
+        halfWidth: Q.boxEnergy(1, 0.5).eV,
+        doubleWidth: Q.boxEnergy(1, 2).eV,
+        heavy: Q.boxEnergy(1, 1, 2).eV,
+      };
+    });
+    assert.ok(Math.abs(got.e1 - 0.37603) < 1e-4, 'E1 in a 1 nm box = ' + got.e1 + ' eV');
+    /* E goes as n², so these are not independent numbers — and that is the point. */
+    assert.ok(Math.abs(got.e2 / got.e1 - 4) < 1e-9, 'E2/E1 = ' + got.e2 / got.e1);
+    assert.ok(Math.abs(got.e3 / got.e1 - 9) < 1e-9, 'E3/E1 = ' + got.e3 / got.e1);
+    /* and as 1/L², so halving the width quadruples it */
+    assert.ok(Math.abs(got.halfWidth / got.e1 - 4) < 1e-9, 'half width: ' + got.halfWidth);
+    assert.ok(Math.abs(got.doubleWidth / got.e1 - 0.25) < 1e-9, 'double width: ' + got.doubleWidth);
+    /* and as 1/m, which is why nothing large is visibly quantised */
+    assert.ok(Math.abs(got.heavy / got.e1 - 0.5) < 1e-9, 'twice the mass: ' + got.heavy);
+  });
+
+  test('the wavefunction is normalised, and the probabilities behave', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      const out = { whole: [], halves: [], middleThird: Q.boxProbability(1, 1, 1 / 3, 2 / 3),
+        n2middle: Q.boxProbability(2, 1, 1 / 3, 2 / 3), numeric: 0 };
+      for (let n = 1; n <= 6; n++) {
+        out.whole.push(Q.boxProbability(n, 1, 0, 1));
+        out.halves.push(Q.boxProbability(n, 1, 0, 0.5));
+      }
+      /* An independent check of the closed form, by brute-force summing the
+       * square of the wavefunction the app would draw. */
+      const L = 1, n = 3, steps = 20000;
+      let sum = 0;
+      for (let i = 0; i < steps; i++) {
+        const x = ((i + 0.5) / steps) * L;
+        const psi = Q.boxPsi(n, L, x);
+        sum += psi * psi * (L * 1e-9 / steps);
+      }
+      out.numeric = sum;
+      return out;
+    });
+    got.whole.forEach((v, i) => assert.ok(Math.abs(v - 1) < 1e-12,
+      'n=' + (i + 1) + ' does not integrate to 1: ' + v));
+    got.halves.forEach((v, i) => assert.ok(Math.abs(v - 0.5) < 1e-12,
+      'n=' + (i + 1) + ' is not symmetric about the middle: ' + v));
+    /* The textbook result, and the one that shows the electron is not spread
+     * evenly: a classical particle would be here a third of the time. */
+    assert.ok(Math.abs(got.middleThird - 0.6090) < 0.0005, 'middle third: ' + got.middleThird);
+    /* n = 2 has its node dead centre, so the middle becomes the least likely place. */
+    assert.ok(got.n2middle < 0.2, 'n=2 middle third should be small: ' + got.n2middle);
+    /* The closed form and the drawn wavefunction agree, so the picture and the
+     * number come from the same physics. */
+    assert.ok(Math.abs(got.numeric - 1) < 1e-4, 'summing |psi|² over the box gave ' + got.numeric);
+  });
+
+  test('hydrogen reproduces its measured spectrum', async () => {
+    /* Vacuum wavelengths. Tables usually quote air, which is about 0.03%
+     * shorter, and the worked example says so rather than appearing wrong. */
+    const LINES = [
+      [3, 2, 656.47, 'Balmer alpha, the red line'],
+      [4, 2, 486.27, 'Balmer beta'],
+      [5, 2, 434.17, 'Balmer gamma'],
+      [2, 1, 121.57, 'Lyman alpha'],
+      [3, 1, 102.57, 'Lyman beta'],
+      [4, 3, 1875.6, 'Paschen alpha'],
+    ];
+    const got = await run((lines) => lines.map((l) => {
+      const t = window.ME.quantum.hydrogenTransition(l[0], l[1]);
+      return [t.lambdaNM, t.series, t.region];
+    }), LINES);
+    got.forEach(([nm, series], i) => {
+      const [from, to, want, label] = LINES[i];
+      assert.ok(Math.abs(nm - want) / want < 0.0005,
+        label + ' (' + from + '→' + to + '): engine says ' + nm.toFixed(2)
+          + ' nm, the measured vacuum value is ' + want);
+    });
+    assert.equal(got[0][1], 'Balmer');
+    assert.equal(got[3][1], 'Lyman');
+    assert.equal(got[5][1], 'Paschen');
+    assert.equal(got[0][2], 'red', 'the red line should come out red');
+  });
+
+  test('the energy levels only depend on n, and that is special to hydrogen', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        levels: [1, 2, 3, 4].map((n) => Q.hydrogenEnergy(n).eV),
+        helium: Q.hydrogenEnergy(1, 2, 4.0015).eV,
+        limit: Q.hydrogenTransition(1e6, 2).lambdaNM,
+      };
+    });
+    /* E ∝ 1/n², checked as ratios so a wrong Rydberg could not hide. */
+    assert.ok(Math.abs(got.levels[0] / got.levels[1] - 4) < 1e-9);
+    assert.ok(Math.abs(got.levels[0] / got.levels[2] - 9) < 1e-9);
+    assert.ok(Math.abs(got.levels[0] / got.levels[3] - 16) < 1e-9);
+    /* He⁺ is one electron with a charge of two, so four times deeper. Measured
+     * at 54.418 eV. */
+    assert.ok(Math.abs(got.helium + 54.42) < 0.02, 'He+ ground state: ' + got.helium);
+    /* The Balmer series limit is 364.6 nm in vacuum. */
+    assert.ok(Math.abs(got.limit - 364.6) < 0.5, 'Balmer limit: ' + got.limit);
+  });
+
+  test('a bond as a spring lands where the infrared band is', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      const o = (k, m1, m2) => Q.oscillator(k, Q.reducedMass(m1, m2));
+      return {
+        hcl: o(516, 1.00783, 34.9689),
+        dcl: o(516, 2.0141, 34.9689),
+        co: o(1902, 12, 15.9949),
+        mu: Q.reducedMass(1.00783, 34.9689),
+      };
+    });
+    /* These are the harmonic constants spectroscopists quote: HCl 2990 cm⁻¹,
+     * CO 2170 cm⁻¹. The observed fundamental bands sit a few per cent lower
+     * because a real bond is not a spring, and the page says so. */
+    assert.ok(Math.abs(got.hcl.wavenumber - 2990) < 10, 'HCl: ' + got.hcl.wavenumber);
+    assert.ok(Math.abs(got.co.wavenumber - 2170) < 10, 'CO: ' + got.co.wavenumber);
+    /* The reduced mass of H–Cl is almost exactly the hydrogen mass, because
+     * chlorine barely moves. */
+    assert.ok(Math.abs(got.mu - 0.9796) < 0.001, 'reduced mass: ' + got.mu);
+    /* Swapping H for D nearly doubles the reduced mass, and ω goes as 1/√μ,
+     * so the band must drop by roughly √2 — exactly √(μ_DCl/μ_HCl) = 1.3943.
+     * Same bond, same force constant, and the observed bands (2886 and 2091)
+     * give 1.380, which is the right ratio arriving from real spectra. */
+    const ratio = got.hcl.wavenumber / got.dcl.wavenumber;
+    assert.ok(Math.abs(ratio - 1.3943) < 0.002, 'H/D ratio: ' + ratio);
+    assert.ok(Math.abs(ratio - 2886 / 2091) < 0.02,
+      'predicted ratio ' + ratio + ' should be close to the observed 1.380');
+    /* The lowest level is half a gap above the floor, never on it. */
+    assert.ok(Math.abs(got.hcl.zeroPointEV - got.hcl.spacingEV / 2) < 1e-12);
+    assert.ok(got.hcl.zeroPointEV > 0.18, 'zero-point energy: ' + got.hcl.zeroPointEV);
+  });
+
+  test('tunnelling falls off a cliff with thickness, and never exceeds certainty', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        widths: [0.05, 0.1, 0.2, 0.5, 1].map((w) => Q.tunnel(1, 5, w).T),
+        hand: Q.tunnel(1, 5, 0.1),
+        over: Q.tunnel(6, 5, 0.3),
+        energies: [0.5, 1, 2, 3, 4].map((E) => Q.tunnel(E, 5, 0.3).T),
+      };
+    });
+    /* Worked by hand: κ = 1.0246 × 10¹⁰ m⁻¹, κa = 1.0246, sinh = 1.2175,
+     * T = 1/(1 + 25 × 1.482 / 16) = 0.302. */
+    assert.ok(Math.abs(got.hand.T - 0.3029) < 0.001, 'T = ' + got.hand.T);
+    assert.ok(Math.abs(got.hand.kappa - 1.0246e10) / 1.0246e10 < 1e-3, 'kappa = ' + got.hand.kappa);
+    for (let i = 1; i < got.widths.length; i++) {
+      assert.ok(got.widths[i] < got.widths[i - 1], 'thicker should mean less: ' + got.widths);
+    }
+    /* Ten times the thickness costs eight orders of magnitude. */
+    assert.ok(got.widths[1] / got.widths[4] > 1e7, 'the cliff is not steep enough');
+    got.widths.forEach((T) => assert.ok(T > 0 && T <= 1, 'T out of range: ' + T));
+    for (let i = 1; i < got.energies.length; i++) {
+      assert.ok(got.energies[i] > got.energies[i - 1], 'more energy should get through more often');
+    }
+    /* Above the barrier it can still reflect, which has no classical version. */
+    assert.ok(got.over.over === true && got.over.T < 1, 'over the barrier: ' + got.over.T);
+  });
+
+  test('a finite well holds fewer, lower levels than a perfect box — but never none', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      return {
+        mid: Q.finiteWell(5, 1),
+        shallow: Q.finiteWell(0.02, 0.2),
+        deep: Q.finiteWell(5000, 1).levels.slice(0, 3).map((l) => l.eV),
+        box: [1, 2, 3].map((n) => Q.boxEnergy(n, 1).eV),
+        deeper: Q.finiteWell(20, 1).count,
+      };
+    });
+    /* Every level sits below its box counterpart, because the wave leaks into
+     * the walls and so curves less. */
+    got.mid.levels.forEach((lv, i) => {
+      assert.ok(lv.eV < got.box[i] || i >= got.box.length,
+        'level ' + (i + 1) + ' is not below the box level');
+    });
+    /* And they are ordered, and all inside the well. */
+    for (let i = 1; i < got.mid.levels.length; i++) {
+      assert.ok(got.mid.levels[i].eV > got.mid.levels[i - 1].eV, 'levels out of order');
+    }
+    got.mid.levels.forEach((lv) => assert.ok(lv.eV < 5, 'a bound level above the well top'));
+    /* However feeble the well, one state survives. In one dimension that is
+     * always true, and it is worth a test because the root-finder could easily
+     * have missed it. */
+    assert.equal(got.shallow.count, 1, 'a very shallow well should still bind one state');
+    /* A very deep well converges on the ideal box, which is the check that the
+     * numerical answer and the closed form are the same physics. */
+    got.deep.forEach((v, i) => assert.ok(Math.abs(v - got.box[i]) / got.box[i] < 0.03,
+      'deep well level ' + (i + 1) + ': ' + v + ' against box ' + got.box[i]));
+    assert.ok(got.deeper > got.mid.count, 'a deeper well should hold more');
+  });
+
+  test('photon arithmetic round-trips, and names the colour', async () => {
+    const got = await run(() => {
+      const Q = window.ME.quantum;
+      const round = [400, 550, 700].map((nm) => Q.photonFromEV(Q.photonFromNM(nm).eV).lambdaNM);
+      return { round: round, green: Q.photonFromNM(550).region, uv: Q.photonFromNM(250).region,
+        ir: Q.photonFromNM(2000).region, twoEV: Q.photonFromEV(2).lambdaNM };
+    });
+    got.round.forEach((nm, i) => assert.ok(Math.abs(nm - [400, 550, 700][i]) < 1e-9));
+    assert.equal(got.green, 'green');
+    assert.equal(got.uv, 'ultraviolet');
+    assert.equal(got.ir, 'infrared');
+    /* 2 eV is 620 nm, which is the one most worth knowing by heart. */
+    assert.ok(Math.abs(got.twoEV - 619.92) < 0.01, '2 eV is ' + got.twoEV + ' nm');
+  });
+
+  test('uncertainty gives the energy scale of an atom', async () => {
+    const got = await run(() => window.ME.quantum.uncertainty(0.05));
+    /* Pin an electron to half an atom and it must carry about an electronvolt,
+     * which is why chemistry happens at the energies it does. */
+    assert.ok(Math.abs(got.dp - 1.0546e-24) / 1.0546e-24 < 0.001, 'dp = ' + got.dp);
+    assert.ok(got.energyEV > 3 && got.energyEV < 4.5, 'energy = ' + got.energyEV + ' eV');
+    assert.ok(got.speed > 1e6, 'speed = ' + got.speed);
+  });
+
+  test('every quantum problem can be re-derived from the numbers in its own question', async () => {
+    /* Same discipline as the rest of the suite: parse the question text, work
+     * the answer out a second way, and compare. A generator that printed one
+     * set of numbers and graded against another would not survive this. */
+    const bad = await run(() => {
+      const Q = window.ME.quantum, out = [];
+      for (let i = 1; i <= 60; i++) {
+        const seed = i * 7919;
+
+        const box = window.ME.practice.generate('qm-box-energy', seed);
+        const bm = /box ([\d.]+) nm wide.*n = (\d+)/.exec(box.q);
+        if (!bm) { out.push(['qm-box-energy', 'could not read the question', box.q]); continue; }
+        const mine = Q.boxEnergy(Number(bm[2]), Number(bm[1])).eV;
+        if (Math.abs(mine - box.answer) > 1e-9) out.push(['qm-box-energy', mine, box.answer]);
+
+        const ph = window.ME.practice.generate('qm-photon', seed);
+        const asNM = /([\d.]+) eV\. What is its wavelength/.exec(ph.q);
+        const asEV = /wavelength (\d+) nm/.exec(ph.q);
+        if (asNM) {
+          const want = Q.HC_EV_NM / Number(asNM[1]);
+          if (Math.abs(want - ph.answer) > 1e-9) out.push(['qm-photon nm', want, ph.answer]);
+        } else if (asEV) {
+          const want = Q.HC_EV_NM / Number(asEV[1]);
+          if (Math.abs(want - ph.answer) > 1e-9) out.push(['qm-photon eV', want, ph.answer]);
+        } else out.push(['qm-photon', 'unreadable', ph.q]);
+
+        const hy = window.ME.practice.generate('qm-hydrogen-line', seed);
+        const hm = /n = (\d+) to n = (\d+)/.exec(hy.q);
+        if (hm) {
+          const want = Q.hydrogenTransition(Number(hm[1]), Number(hm[2])).lambdaNM;
+          if (Math.abs(want - hy.answer) > 1e-9) out.push(['qm-hydrogen-line', want, hy.answer]);
+        }
+
+        const nd = window.ME.practice.generate('qm-box-nodes', seed);
+        const nm2 = /n = (\d+) wavefunction/.exec(nd.q);
+        if (nm2 && Number(nm2[1]) - 1 !== nd.answer) out.push(['qm-box-nodes', nm2[1], nd.answer]);
+
+        const tn = window.ME.practice.generate('qm-tunnel', seed);
+        const tm = /with ([\d.]+) eV meets a barrier ([\d.]+) eV high and ([\d.]+) nm/.exec(tn.q);
+        if (tm) {
+          const want = Q.tunnel(Number(tm[1]), Number(tm[2]), Number(tm[3])).T;
+          if (Math.abs(want - tn.answer) > 1e-12) out.push(['qm-tunnel', want, tn.answer]);
+        }
+      }
+      return out;
+    });
+    assert.deepEqual(bad.slice(0, 6), [], JSON.stringify(bad.slice(0, 6)));
+  });
+
+  test('every page of the tab builds, with no gaps in the prose', async () => {
+    const bad = await run(() => {
+      const out = [];
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      window.ME.quantumview.PAGES.forEach((pg) => {
+        let node;
+        try { node = pg.build(); }
+        catch (e) { out.push([pg.id, 'threw: ' + e.message]); return; }
+        const holder = document.createElement('div');
+        holder.appendChild(node);
+        const text = holder.textContent;
+        if (text.length < 900) out.push([pg.id, 'only ' + text.length + ' characters']);
+        if (/undefined|NaN|\[object/.test(text)) {
+          out.push([pg.id, (text.match(/.{0,50}(undefined|NaN|\[object).{0,50}/) || [''])[0]]);
+        }
+      });
+      host.remove();
+      return out;
+    });
+    assert.deepEqual(bad, [], JSON.stringify(bad));
+  });
+});
+
 /* ------------------------------------------------------------ simulations */
 describe('every simulation builds', () => {
   /* The page-render test covers the sims a lesson embeds, and not the ones

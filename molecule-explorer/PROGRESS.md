@@ -366,6 +366,12 @@ calculators, 11 reference tables and a 49-word glossary.
   structures, formation enthalpies for the flash — and findable from the
   search bar by name.
 
+- **Quantum**, an eleventh tab at the far right and separate from the course:
+  twelve pages on the Schrödinger equation, from why it exists to doing the
+  particle in a box by hand, with six live figures, eight worked examples and
+  fifteen kinds of generated problem. Every number derives from the defined
+  constants — there is no 13.6 typed anywhere.
+
 ### Bugs found and fixed
 - The Balancer's live preview printed `nullH₂ + nullO₂ → nullH₂O` (reported
   with a screenshot). A species parsed from an equation with no leading number
@@ -412,6 +418,22 @@ calculators, 11 reference tables and a 49-word glossary.
 - A canvas label called table salt `ClNa`, the same Hill-order wart as the
   formation table. Structures are looked up by Hill text; labels use what the
   reader wrote.
+- Every worked example on the quantum pages was missing its answer. The lesson
+  kit's `worked()` renders `q`, `why` and `maths`; I wrote the answers under a
+  field called `a`, which it silently ignores. Eight examples, all of them
+  showing their reasoning and none of them showing a number.
+- A figure that wrapped its own draw function to update a readout alongside the
+  canvas never ran the wrapper, because `paint()` closed over the original
+  argument rather than reading it back off the state object. The readouts were
+  simply empty.
+- Hydrogen came out 0.05% wrong because it used the electron mass rather than
+  the reduced mass of electron and proton. Small, and the difference between
+  13.606 eV and the measured 13.598 — a number a reader could check against any
+  data table.
+- The eleventh tab pushed the theme button onto a row of its own at 1280 px,
+  which reads as a layout mistake rather than a tight fit. The search box gives
+  up the width instead, and the test now checks the whole bar rather than just
+  the search box.
 - `pH 7` printed where `pH 7.00` belonged. pH is not a significant-figures
   quantity — the digits in front of the point are the exponent of a
   concentration — so trimming the trailing zero threw away the part that
