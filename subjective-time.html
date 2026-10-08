@@ -1,0 +1,1096 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subjective Time Evaluator</title>
+<meta name="description" content="How much of your life have you subjectively experienced? An interactive calculator built on Paul Janet's 1877 hypothesis that a year feels proportional to 1/age.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f3ef;
+  --surface: #fcfcfb;
+  --surface-2: #f0efea;
+  --border: #e2e0d9;
+  --text: #121211;
+  --text-2: #52514e;
+  --text-3: #75736d;
+  --accent: #2a78d6;
+  --accent-ink: #1c5cab;
+  --accent-soft: #e3eefc;
+  --s-log: #2a78d6;
+  --s-sqrt: #eb6834;
+  --s-power: #1baf7a;
+  --s-linear: #8f8d86;
+  --halfway-bg: #fdf1dc;
+  --halfway-ink: #8a5a00;
+  --current-bg: #e3eefc;
+  --grid: #e8e6e0;
+  --shadow: 0 1px 2px rgba(20,20,15,.05), 0 6px 24px -8px rgba(20,20,15,.10);
+  --radius: 16px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --border: #2f2f2c;
+    --text: #f4f3ef;
+    --text-2: #c3c2b7;
+    --text-3: #9a998f;
+    --accent: #5598e7;
+    --accent-ink: #86b6ef;
+    --accent-soft: #1b2b40;
+    --s-log: #3987e5;
+    --s-sqrt: #d95926;
+    --s-power: #199e70;
+    --s-linear: #85847c;
+    --halfway-bg: #3a2c12;
+    --halfway-ink: #f2c46b;
+    --current-bg: #1b2b40;
+    --grid: #2a2a27;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px -10px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --border: #2f2f2c;
+  --text: #f4f3ef;
+  --text-2: #c3c2b7;
+  --text-3: #9a998f;
+  --accent: #5598e7;
+  --accent-ink: #86b6ef;
+  --accent-soft: #1b2b40;
+  --s-log: #3987e5;
+  --s-sqrt: #d95926;
+  --s-power: #199e70;
+  --s-linear: #85847c;
+  --halfway-bg: #3a2c12;
+  --halfway-ink: #f2c46b;
+  --current-bg: #1b2b40;
+  --grid: #2a2a27;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px -10px rgba(0,0,0,.6);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  transition: background-color .25s ease, color .25s ease;
+}
+a { color: var(--accent-ink); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+
+/* ---------- header ---------- */
+header.hero { padding: 40px 0 24px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 28px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -.01em; }
+.brand svg { color: var(--accent); }
+.theme-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--surface); color: var(--text-2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 14px; cursor: pointer;
+  transition: background-color .2s, border-color .2s;
+}
+.theme-btn:hover { border-color: var(--text-3); }
+h1 {
+  font-family: var(--serif); font-weight: 500; letter-spacing: -.02em;
+  font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 0 0 14px; max-width: 18ch;
+}
+h1 em { font-style: italic; color: var(--accent-ink); }
+.lede { color: var(--text-2); font-size: 1.1rem; max-width: 62ch; margin: 0; }
+.formula-chip {
+  display: inline-flex; align-items: baseline; gap: 4px; margin-top: 18px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+  padding: 6px 14px; font-family: var(--serif); font-size: 1.05rem; color: var(--text-2);
+}
+
+/* ---------- layout ---------- */
+.grid { display: grid; gap: 20px; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.stack { display: grid; gap: 20px; min-width: 0; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 22px; min-width: 0;
+  transition: background-color .25s ease, border-color .25s ease;
+}
+.card h2 { font-size: 1.05rem; margin: 0 0 4px; letter-spacing: -.01em; }
+.card .sub { color: var(--text-3); font-size: .875rem; margin: 0 0 16px; }
+.inputs { position: sticky; top: 16px; }
+#presetZone { margin-bottom: 18px; }
+@media (max-width: 900px) { .inputs { position: static; } }
+
+/* ---------- form ---------- */
+.field { margin-bottom: 18px; }
+.field:last-child { margin-bottom: 0; }
+label, .label { display: block; font-size: .8125rem; font-weight: 600; color: var(--text-2); margin-bottom: 6px; letter-spacing: .01em; }
+.hint { font-size: .78rem; color: var(--text-3); margin: 6px 0 0; line-height: 1.45; }
+select, input[type="number"] {
+  width: 100%; font: inherit; font-size: .95rem; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 12px; transition: border-color .15s, background-color .15s;
+}
+select:hover, input[type="number"]:hover { border-color: var(--text-3); }
+select:focus, input[type="number"]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.disabled-zone { opacity: .45; pointer-events: none; transition: opacity .2s; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+legend { padding: 0; }
+
+.seg { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label {
+  margin: 0; display: block; text-align: left; cursor: pointer; font-weight: 500; color: var(--text-2);
+  border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: .84rem; line-height: 1.3;
+  background: var(--surface-2); transition: all .15s;
+}
+.seg label small { display: block; font-weight: 400; color: var(--text-3); font-size: .74rem; }
+.seg label .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.seg input:checked + label { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg .primary-opt { grid-column: 1 / -1; }
+.badge { display: inline-block; font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; }
+.seg input:checked + label .badge { background: var(--surface); }
+
+.range-row { display: flex; align-items: center; gap: 12px; }
+input[type="range"] { flex: 1; accent-color: var(--accent); }
+.range-val { font-family: var(--mono); font-size: .9rem; min-width: 3ch; text-align: right; }
+
+.adj { display: grid; gap: 8px; }
+.adj-row {
+  display: grid; grid-template-columns: auto 1fr 76px; gap: 10px; align-items: center;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px;
+}
+.adj-row input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); margin: 0; }
+.adj-row label { margin: 0; font-weight: 500; font-size: .84rem; color: var(--text); cursor: pointer; }
+.adj-row label small { display: block; font-weight: 400; color: var(--text-3); font-size: .72rem; }
+.adj-row input[type="number"] { padding: 5px 8px; font-family: var(--mono); font-size: .85rem; text-align: right; }
+
+.L-display {
+  margin: 4px 0 18px; padding: 16px 18px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent-soft), transparent 140%);
+  border: 1px solid var(--border);
+}
+.L-display .k { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); }
+.L-display .v { font-family: var(--serif); font-size: 2.6rem; line-height: 1.05; letter-spacing: -.02em; }
+.L-display .v span { font-size: 1rem; color: var(--text-2); font-family: inherit; margin-left: 4px; }
+.L-display .why { font-size: .78rem; color: var(--text-2); margin-top: 4px; }
+
+/* ---------- summary ---------- */
+.summary-head { font-family: var(--serif); font-size: clamp(1.3rem, 2.6vw, 1.75rem); line-height: 1.3; margin: 0 0 18px; font-weight: 500; letter-spacing: -.01em; }
+.summary-head b { color: var(--accent-ink); font-weight: 600; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.stat .k { font-size: .76rem; color: var(--text-3); font-weight: 600; }
+.stat .v { font-size: 1.5rem; font-weight: 650; letter-spacing: -.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.stat .d { font-size: .76rem; color: var(--text-2); }
+.meter { height: 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; position: relative; margin: 16px 0 6px; }
+.meter > i { position: absolute; inset: 0 auto 0 0; background: var(--s-log); border-radius: 999px; transition: width .35s ease; }
+.meter > b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--s-linear); }
+.meter-legend { display: flex; justify-content: space-between; gap: 10px; font-size: .76rem; color: var(--text-3); flex-wrap: wrap; }
+.note { font-size: .82rem; color: var(--text-2); background: var(--surface-2); border-radius: 10px; padding: 10px 12px; margin-top: 14px; border: 1px solid var(--border); }
+
+/* ---------- chart ---------- */
+.chart-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 8px; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--text-2); cursor: pointer; user-select: none; margin: 0; font-weight: 500; }
+.toggle input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; color: var(--text-2); margin: 4px 0 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend svg { flex: none; }
+#chart { position: relative; width: 100%; }
+#chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+#chart svg text { font-family: inherit; }
+.tip {
+  position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
+  box-shadow: var(--shadow); border-radius: 10px; padding: 8px 10px; font-size: .78rem; min-width: 170px;
+  opacity: 0; transition: opacity .12s; z-index: 2; color: var(--text);
+}
+.tip .t { font-weight: 650; margin-bottom: 4px; }
+.tip .r { display: flex; justify-content: space-between; gap: 14px; align-items: center; }
+.tip .r span:first-child { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); }
+.tip .sw { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+.tip .r span:last-child { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* ---------- table ---------- */
+.table-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.pills { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+.pills input { position: absolute; opacity: 0; pointer-events: none; }
+.pills label { margin: 0; padding: 5px 13px; border-radius: 999px; font-size: .82rem; font-weight: 500; cursor: pointer; color: var(--text-2); transition: all .15s; }
+.pills input:checked + label { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.pills input:focus-visible + label { outline: 2px solid var(--accent); }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; font: inherit; font-size: .85rem; font-weight: 600;
+  background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 8px 14px; cursor: pointer;
+  transition: filter .15s, transform .05s;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:active { transform: translateY(1px); }
+:root[data-theme="dark"] .btn { color: #0b0b0b; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn { color: #0b0b0b; } }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 12px; max-height: 620px; overflow-y: auto; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 720px; font-size: .88rem; font-variant-numeric: tabular-nums; }
+caption { text-align: left; }
+thead th {
+  position: sticky; top: 0; z-index: 1; background: var(--surface-2); text-align: right; font-weight: 600;
+  font-size: .76rem; color: var(--text-2); padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: bottom; line-height: 1.3;
+}
+thead th:first-child, tbody td:first-child { text-align: left; }
+tbody td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: var(--surface-2); }
+tr.is-half td { background: var(--halfway-bg) !important; }
+tr.is-current td { background: var(--current-bg) !important; font-weight: 600; }
+.tag { display: inline-block; font-size: .64rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; }
+.tag.half { color: var(--halfway-ink); border: 1px solid currentColor; }
+.tag.cur { color: var(--accent-ink); border: 1px solid currentColor; }
+.bar-cell { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.bar-cell .b { width: 64px; height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; display: inline-block; }
+.bar-cell .b i { display: block; height: 100%; background: var(--s-log); border-radius: 3px; }
+.muted { color: var(--text-3); }
+
+/* ---------- explanation ---------- */
+section.explain { margin-top: 40px; }
+section.explain > h2 { font-family: var(--serif); font-weight: 500; font-size: clamp(1.6rem, 3.5vw, 2.2rem); letter-spacing: -.02em; margin: 0 0 6px; }
+section.explain > p.sub { color: var(--text-2); margin: 0 0 20px; }
+details {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden;
+}
+summary {
+  list-style: none; cursor: pointer; padding: 18px 22px; font-weight: 600; font-size: 1.02rem;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+}
+summary::-webkit-details-marker { display: none; }
+summary .chev { transition: transform .2s; color: var(--text-3); flex: none; }
+details[open] summary .chev { transform: rotate(180deg); }
+summary .num { font-family: var(--mono); font-size: .78rem; color: var(--text-3); margin-right: 10px; font-weight: 500; }
+.dbody { padding: 0 22px 22px; color: var(--text); max-width: 78ch; }
+.dbody p, .dbody li { color: var(--text-2); }
+.dbody p strong, .dbody li strong { color: var(--text); }
+.dbody h4 { margin: 18px 0 6px; font-size: .95rem; }
+
+/* math */
+.m { font-family: var(--serif); font-style: italic; white-space: nowrap; }
+.m .up { font-style: normal; }
+.eq {
+  font-family: var(--serif); font-size: 1.18rem; text-align: center; padding: 14px 12px; margin: 12px 0;
+  background: var(--surface-2); border-radius: 10px; border: 1px solid var(--border); overflow-x: auto; color: var(--text);
+}
+.eq i { font-style: italic; }
+.eq .step { display: block; font-family: system-ui, sans-serif; font-size: .74rem; color: var(--text-3); margin-bottom: 4px; font-style: normal; letter-spacing: .04em; text-transform: uppercase; }
+.frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 .15em; line-height: 1.15; }
+.frac > span:first-child { border-bottom: 1px solid currentColor; padding: 0 .2em .05em; }
+.frac > span:last-child { padding: .05em .2em 0; }
+.sqrt { white-space: nowrap; }
+.sqrt > span { border-top: 1px solid currentColor; padding: 0 .1em; }
+.int { font-size: 1.5em; vertical-align: -.25em; font-style: normal; }
+
+.ratio-viz { display: grid; gap: 6px; margin: 14px 0; }
+.ratio-viz .rr { display: grid; grid-template-columns: 74px 1fr; gap: 10px; align-items: center; font-size: .82rem; color: var(--text-2); }
+.ratio-viz .track { position: relative; height: 18px; background: var(--surface-2); border-radius: 5px; border: 1px solid var(--border); }
+.ratio-viz .seg-b { position: absolute; top: 2px; bottom: 2px; background: var(--s-log); border-radius: 3px; }
+.ratio-viz .axis { display: grid; grid-template-columns: 74px 1fr; gap: 10px; font-size: .72rem; color: var(--text-3); }
+.ratio-viz .axis div:last-child { display: flex; justify-content: space-between; }
+
+.example { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 12px 0; }
+.example .stat .v { font-size: 1.2rem; }
+.models-table { width: 100%; min-width: 560px; font-size: .85rem; }
+.models-table th, .models-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); white-space: normal; vertical-align: top; }
+.models-table th { position: static; background: transparent; color: var(--text-3); }
+.science {
+  border-left: 4px solid var(--halfway-ink); background: var(--halfway-bg);
+  border-radius: 0 var(--radius) var(--radius) 0; padding: 20px 22px; margin-top: 20px;
+}
+.science h3 { margin: 0 0 8px; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; }
+.science p, .science li { color: var(--text); font-size: .93rem; }
+.science ul { padding-left: 1.2em; margin: 8px 0; }
+
+footer { color: var(--text-3); font-size: .8rem; padding: 36px 0 48px; }
+footer p { margin: 4px 0; max-width: 90ch; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+@media (max-width: 520px) {
+  .card { padding: 18px 16px; }
+  summary { padding: 16px; }
+  .dbody { padding: 0 16px 18px; }
+  .eq { font-size: 1.02rem; }
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        Subjective Time
+      </div>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle dark mode">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <span id="themeLabel">Dark</span>
+      </button>
+    </div>
+    <h1>How much of your life have you <em>already felt?</em></h1>
+    <p class="lede">In 1877 the philosopher Paul Janet suggested that a year feels shorter the older you are, in proportion to 1&#8202;/&#8202;age. Follow that idea through and childhood takes up a startling share of a lifetime. Choose a lifespan below to see how much of yours you have subjectively lived at each age.</p>
+    <div class="formula-chip" aria-label="Janet's law: d psi over d T equals k over T">
+      <span class="m">dψ</span>&#8202;/&#8202;<span class="m">dT</span>&nbsp;=&nbsp;<span class="m">k</span>&#8202;/&#8202;<span class="m">T</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="grid">
+    <!-- ================= INPUTS ================= -->
+    <aside class="card inputs" aria-labelledby="inputsTitle">
+      <h2 id="inputsTitle">Your inputs</h2>
+      <p class="sub">Everything updates as you type.</p>
+
+      <div class="L-display" aria-live="polite">
+        <div class="k">Lifespan used (L)</div>
+        <div class="v"><span id="Lval" style="font-size:inherit;color:inherit;margin:0">79</span><span>years</span></div>
+        <div class="why" id="Lwhy"></div>
+      </div>
+
+      <div class="field">
+        <label for="age">Your current age <span class="muted" style="font-weight:400">(optional)</span></label>
+        <input type="number" id="age" min="1" max="130" step="0.1" placeholder="e.g. 30" inputmode="decimal">
+        <p class="hint">The model starts at age 1, because ln(1)&nbsp;=&nbsp;0. Ages below 1 are treated as 1.</p>
+      </div>
+
+      <div id="presetZone">
+        <div class="field">
+          <label for="preset">Life-expectancy preset</label>
+          <select id="preset"></select>
+          <p class="hint" id="presetNote"></p>
+        </div>
+
+        <fieldset class="field">
+          <legend class="label">Adjustments <span class="muted" style="font-weight:400">(years; editable)</span></legend>
+          <div class="adj" id="adj"></div>
+          <p class="hint">Rough population-level estimates from large cohort studies, not personal predictions. Real effects overlap and aren't simply additive.</p>
+        </fieldset>
+      </div>
+
+      <div class="field">
+        <label for="customL">Custom lifespan <span class="muted" style="font-weight:400">(overrides everything above)</span></label>
+        <input type="number" id="customL" min="2" max="150" step="0.1" placeholder="e.g. 90" inputmode="decimal">
+      </div>
+
+      <fieldset class="field">
+        <legend class="label">Model</legend>
+        <div class="seg" role="radiogroup">
+          <input type="radio" name="model" id="m-log" value="log" checked>
+          <label for="m-log" class="primary-opt"><span class="dot" style="background:var(--s-log)"></span>Janet's log model<span class="badge">Default</span><small>P(T) = ln T / ln L · Janet, 1877</small></label>
+          <input type="radio" name="model" id="m-sqrt" value="sqrt">
+          <label for="m-sqrt"><span class="dot" style="background:var(--s-sqrt)"></span>Square-root<small>Lemlich, 1975</small></label>
+          <input type="radio" name="model" id="m-power" value="power">
+          <label for="m-power"><span class="dot" style="background:var(--s-power)"></span>Power law<small>(T / L)<sup>n</sup></small></label>
+          <input type="radio" name="model" id="m-linear" value="linear">
+          <label for="m-linear" class="primary-opt"><span class="dot" style="background:var(--s-linear)"></span>Linear baseline<small>Clock time: every year feels the same</small></label>
+        </div>
+      </fieldset>
+
+      <div class="field" id="powerField">
+        <label for="nexp">Power-law exponent n</label>
+        <div class="range-row">
+          <input type="range" id="nexp" min="0.1" max="1" step="0.05" value="0.3" aria-describedby="nexpHint">
+          <output class="range-val" id="nexpVal" for="nexp">0.30</output>
+        </div>
+        <p class="hint" id="nexpHint">Smaller n puts more weight on early life; n&nbsp;=&nbsp;0.5 is Lemlich's square root and n&nbsp;=&nbsp;1 is clock time.</p>
+      </div>
+    </aside>
+
+    <!-- ================= RESULTS ================= -->
+    <div class="stack">
+      <section class="card" aria-labelledby="sumTitle">
+        <h2 id="sumTitle" class="sr-only">Summary</h2>
+        <p class="summary-head" id="sumHead" aria-live="polite"></p>
+        <div class="stats" id="stats"></div>
+        <div id="meterWrap"></div>
+        <div id="sumNote"></div>
+      </section>
+
+      <section class="card" aria-labelledby="chartTitle">
+        <div class="chart-head">
+          <div>
+            <h2 id="chartTitle">Share of subjective life experienced, by real age</h2>
+            <p class="sub" style="margin:0">Y-axis: P(T), percent of your total subjective life already felt.</p>
+          </div>
+          <label class="toggle"><input type="checkbox" id="showAll"> Show all models</label>
+        </div>
+        <div class="legend" id="legend"></div>
+        <div id="chart" tabindex="0" role="img" aria-label="Line chart of subjective life experienced against real age. Use left and right arrow keys to inspect values."></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ================= TABLE ================= -->
+  <section class="card" style="margin-top:20px" aria-labelledby="tableTitle">
+    <div class="table-tools">
+      <div>
+        <h2 id="tableTitle">Year-by-year breakdown</h2>
+        <p class="sub" style="margin:0" id="tableSub"></p>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="pills" role="radiogroup" aria-label="Table step">
+          <input type="radio" name="step" id="st1" value="1"><label for="st1">Every year</label>
+          <input type="radio" name="step" id="st5" value="5" checked><label for="st5">5 yrs</label>
+          <input type="radio" name="step" id="st10" value="10"><label for="st10">10 yrs</label>
+        </div>
+        <button class="btn" id="csvBtn" type="button">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>
+          Download CSV
+        </button>
+      </div>
+    </div>
+    <div class="table-scroll" tabindex="0" role="region" aria-labelledby="tableTitle">
+      <table>
+        <caption class="sr-only">Subjective time by real age for the selected model and lifespan</caption>
+        <thead>
+          <tr>
+            <th scope="col">Real age T<br><span class="muted" style="font-weight:400">years</span></th>
+            <th scope="col">Subjective years<br>experienced S(T)</th>
+            <th scope="col">Subjective life<br>experienced P(T)</th>
+            <th scope="col">Real lifespan<br>lived T / L</th>
+            <th scope="col">That year (T → T+1)<br>feels like</th>
+            <th scope="col">≈ days of an<br>average year</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <p class="hint" style="margin-top:10px">“That year feels like” is S(T+1) − S(T): the subjective length of the year starting at age T, measured in average years of your life (where the whole life averages to 1). Multiply by 365 to get a rough “feels like X days”.</p>
+  </section>
+
+  <!-- ================= EXPLANATION ================= -->
+  <section class="explain" aria-labelledby="explainTitle">
+    <h2 id="explainTitle">How it works</h2>
+    <p class="sub">The idea, the math, and how much of it holds up.</p>
+
+    <details open>
+      <summary><span><span class="num">01</span>Paul Janet and the original idea</span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="dbody">
+        <p><strong>Paul Janet</strong> (1823–1899) was a French philosopher. In an 1877 essay in the <em>Revue philosophique</em> he made a simple observation: we judge the length of a stretch of time against the life we have already lived. One year is half of a 2-year-old's life but only a fiftieth of a 50-year-old's, so it seems far longer to the child.</p>
+        <p>If the felt length of a year is proportional to 1&#8202;/&#8202;age, early years count for much more than later ones. William James quoted the idea in his <em>Principles of Psychology</em> (1890), and it has stayed in circulation ever since as a neat, if speculative, explanation of why time seems to speed up as we get older.</p>
+        <p>This tool takes the idea literally: it adds up all those shrinking years and asks what share of the subjective total you have already used at each real age.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary><span><span class="num">02</span>Derivation: from dψ/dT = k/T to S(T)</span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="dbody">
+        <p>Let <span class="m">T</span> be real age in years and <span class="m">ψ</span> the amount of subjective time felt so far. Janet's hypothesis says the felt rate is inversely proportional to age:</p>
+        <div class="eq"><span class="step">1 · Hypothesis</span><span class="frac"><span><i>dψ</i></span><span><i>dT</i></span></span> = <span class="frac"><span><i>k</i></span><span><i>T</i></span></span></div>
+        <p>Add up the felt time from age 1 to age <span class="m">T</span>. We start at 1, not 0, because the integral of 1/<span class="m">T</span> diverges at zero, and ln(1)&nbsp;=&nbsp;0 gives a natural starting point.</p>
+        <div class="eq"><span class="step">2 · Integrate</span><i>ψ</i>(<i>T</i>) = <span class="int">∫</span><sub>1</sub><sup><i>T</i></sup> <span class="frac"><span><i>k</i></span><span><i>t</i></span></span> <i>dt</i> = <i>k</i> ln <i>T</i></div>
+        <p>The total felt over a life of length <span class="m">L</span> is <span class="m">k</span>&nbsp;ln&nbsp;<span class="m">L</span>. Dividing gives the share already felt. The constant <span class="m">k</span> cancels, so we never need to know it:</p>
+        <div class="eq"><span class="step">3 · Normalize</span><i>P</i>(<i>T</i>) = <span class="frac"><span><i>ψ</i>(<i>T</i>)</span><span><i>ψ</i>(<i>L</i>)</span></span> = <span class="frac"><span>ln <i>T</i></span><span>ln <i>L</i></span></span></div>
+        <p>To put this in “years”, rescale the subjective total so the whole life is worth <span class="m">L</span> subjective years, the same as its clock length:</p>
+        <div class="eq"><span class="step">4 · Subjective years</span><i>S</i>(<i>T</i>) = <i>L</i> · <i>P</i>(<i>T</i>) = <i>L</i> · <span class="frac"><span>ln <i>T</i></span><span>ln <i>L</i></span></span></div>
+        <p>Solving <span class="m">S</span>&nbsp;=&nbsp;<span class="m">L</span>&nbsp;ln&nbsp;<span class="m">T</span>&nbsp;/&nbsp;ln&nbsp;<span class="m">L</span> for <span class="m">T</span> gives the real age at which <span class="m">S</span> subjective years have been felt. Setting <span class="m">S</span>&nbsp;=&nbsp;<span class="m">L</span>/2 gives the halfway point:</p>
+        <div class="eq"><span class="step">5 · Invert</span><i>T</i> = <i>L</i><sup>&#8202;<i>S</i> / <i>L</i></sup> &nbsp;&nbsp;⇒&nbsp;&nbsp; <i>T</i><sub>½</sub> = <i>L</i><sup>&#8202;1/2</sup> = <span class="sqrt">√<span><i>L</i></span></span></div>
+        <p>Finally, the year from age <span class="m">T</span> to <span class="m">T</span>+1 has a subjective length of</p>
+        <div class="eq"><span class="step">6 · One year at age T</span><i>S</i>(<i>T</i>+1) − <i>S</i>(<i>T</i>) = <span class="frac"><span><i>L</i></span><span>ln <i>L</i></span></span> · ln <span class="frac"><span><i>T</i> + 1</span><span><i>T</i></span></span></div>
+        <p>Because the whole life adds up to <span class="m">L</span> subjective years, a value of 1 means the year feels like an average year of your life. More than 1 feels long, less than 1 feels short.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary><span><span class="num">03</span>Why equal ratios feel equal</span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="dbody">
+        <p>The felt time between two ages <span class="m">a</span> and <span class="m">b</span> is <span class="m">k</span>&nbsp;(ln&nbsp;<span class="m">b</span>&nbsp;−&nbsp;ln&nbsp;<span class="m">a</span>)&nbsp;=&nbsp;<span class="m">k</span>&nbsp;ln(<span class="m">b</span>/<span class="m">a</span>). It depends only on the <strong>ratio</strong> of the ages. Every doubling of your age feels equally long:</p>
+        <div class="eq">5 → 10 &nbsp;≈&nbsp; 10 → 20 &nbsp;≈&nbsp; 20 → 40 &nbsp;≈&nbsp; 40 → 80 &nbsp;&nbsp;(each = <i>k</i> ln 2)</div>
+        <div class="ratio-viz" id="ratioViz" aria-hidden="true"></div>
+        <p id="ratioText"></p>
+        <p>The log scale works like a musical scale: each octave is a doubling of frequency, and each octave sounds like the same-sized step. Under Janet's model, each doubling of your age is the same-sized step in felt time.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary><span><span class="num">04</span>Worked example: L = 79, T = 9</span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="dbody">
+        <p>Take a lifespan of 79 years (close to U.S. life expectancy) and a 9-year-old.</p>
+        <div class="eq"><i>P</i>(9) = <span class="frac"><span>ln 9</span><span>ln 79</span></span> = <span class="frac"><span>2.1972</span><span>4.3694</span></span> ≈ <strong>0.503</strong></div>
+        <div class="eq"><i>S</i>(9) = 79 × 0.5029 ≈ <strong>39.7</strong> subjective years</div>
+        <div class="example">
+          <div class="stat"><div class="k">Halfway point</div><div class="v">√79 ≈ 8.89</div><div class="d">Half of the felt life is gone before age 9</div></div>
+          <div class="stat"><div class="k">By age 20</div><div class="v">S ≈ 54.2</div><div class="d">≈ 68.6% of subjective life</div></div>
+          <div class="stat"><div class="k">By age 40</div><div class="v">S ≈ 66.7</div><div class="d">≈ 84.4% of subjective life</div></div>
+          <div class="stat"><div class="k">At age 79</div><div class="v">S = 79</div><div class="d">P = 1, the full subjective life</div></div>
+        </div>
+        <p>So in this model a 9-year-old has already felt about half of a 79-year life, even though they have lived only 11% of it on the clock.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary><span><span class="num">05</span>How the alternative models differ</span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="dbody">
+        <p>All of these models agree that later years feel shorter, except the linear baseline. They differ in <strong>how fast</strong> the felt rate falls with age, which comes down to the exponent on <span class="m">T</span> in the felt rate:</p>
+        <div class="table-scroll" style="max-height:none;margin:12px 0">
+          <table class="models-table">
+            <thead><tr><th>Model</th><th>Felt rate ∝</th><th>P(T)</th><th>Halfway age</th><th>Acceleration</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Janet (log)</strong></td><td><span class="m">T</span><sup>−1</sup></td><td>ln T / ln L</td><td>√L</td><td>Strongest. Early childhood dominates; after middle age, years feel very short.</td></tr>
+              <tr><td><strong>Power law, n &lt; 0.5</strong></td><td><span class="m">T</span><sup>n−1</sup></td><td>(T/L)<sup>n</sup></td><td>L · 0.5<sup>1/n</sup></td><td>Between Janet and Lemlich. As n → 0 its shape approaches the log model.</td></tr>
+              <tr><td><strong>Lemlich (√)</strong></td><td><span class="m">T</span><sup>−1/2</sup></td><td>√(T/L)</td><td>L / 4</td><td>Moderate. Felt rate halves each time age quadruples.</td></tr>
+              <tr><td><strong>Power law, n &gt; 0.5</strong></td><td><span class="m">T</span><sup>n−1</sup></td><td>(T/L)<sup>n</sup></td><td>L · 0.5<sup>1/n</sup></td><td>Gentle. Approaches clock time as n → 1.</td></tr>
+              <tr><td><strong>Linear</strong></td><td>constant</td><td>T / L</td><td>L / 2</td><td>None. Every year feels the same.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><strong>Lemlich (1975)</strong> proposed that the felt rate falls with the square root of age rather than age itself, and supported it with a small survey in which people compared how fast time seemed to pass now and at earlier ages. His model makes the early years count for less than Janet's: with L&nbsp;=&nbsp;79, the subjective halfway point moves from about 9 to about 20.</p>
+        <p>The <strong>power law</strong> generalizes both. Its exponent <span class="m">n</span> sets how front-loaded life feels: lower <span class="m">n</span> means faster acceleration and an earlier halfway point. (Technically, (<span class="m">x</span><sup>n</sup>&nbsp;−&nbsp;1)/<span class="m">n</span>&nbsp;→&nbsp;ln&nbsp;<span class="m">x</span> as <span class="m">n</span>&nbsp;→&nbsp;0, which is why the log model sits at the limit of the family.) One difference: the log model starts at exactly 0% at age 1, while power-law models give age 1 a small positive share.</p>
+        <p>The <strong>linear baseline</strong> is plain clock time and is included for comparison.</p>
+      </div>
+    </details>
+
+    <div class="science" role="note" aria-labelledby="sciTitle">
+      <h3 id="sciTitle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.5"/></svg>What the science says</h3>
+      <p>These are <strong>theoretical models, not measured laws</strong>. Nobody has measured a dψ/dT curve, and the clean numbers above should be read as a thought experiment.</p>
+      <ul>
+        <li><strong>Wittmann &amp; Lehnhoff (2005)</strong> surveyed several hundred German and Austrian participants aged 14–94. Older people did say the <em>last decade</em> passed faster, but there was little age difference for shorter spans such as a week, a month or a year. The decade effect grew until about age 50 and then levelled off.</li>
+        <li><strong>Friedman &amp; Janssen (2010)</strong> found much the same in New Zealand and the Netherlands: little relationship between age and the felt speed of recent time periods, with the clearest age effect in judgments about the past decade.</li>
+        <li>The sense that time speeds up seems to depend more on <strong>novelty, memory and routine</strong> than on age itself. Periods packed with new experiences leave more memories and look longer in hindsight. Familiar, routine stretches compress. Childhood is full of firsts, which may explain much of what Janet noticed.</li>
+      </ul>
+      <p style="margin-bottom:0">One practical reading: if novelty is what stretches time, then new places, skills and experiences may slow down your <em>remembered</em> years, whatever your age.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <p><strong>Data notes.</strong> Life-expectancy presets are approximate period life expectancy at birth, taken from published UN World Population Prospects 2024, CDC/NCHS and historical-demography estimates. Each preset lists its source and year. Adjustments are rough population-level estimates and do not predict any individual's lifespan.</p>
+  <p>Runs entirely in your browser and works offline. Nothing you enter leaves this page.</p>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ------------------------------------------------------------------ *
+   * Data
+   * ------------------------------------------------------------------ */
+  // Period life expectancy at birth, both sexes unless stated. Rounded where the
+  // published figure varies by source.
+  var PRESETS = [
+    { group: "Countries & regions", items: [
+      { id: "world",  name: "World average",   L: 73.3, src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "us",     name: "United States",   L: 78.4, src: "CDC / NCHS", year: "2023" },
+      { id: "japan",  name: "Japan",           L: 84,   src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "uk",     name: "United Kingdom",  L: 81,   src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "canada", name: "Canada",          L: 82,   src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "aus",    name: "Australia",       L: 83,   src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "france", name: "France",          L: 83,   src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "germany",name: "Germany",         L: 81,   src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "china",  name: "China",           L: 78,   src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "india",  name: "India",           L: 72,   src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "brazil", name: "Brazil",          L: 76,   src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "mexico", name: "Mexico",          L: 75,   src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "nigeria",name: "Nigeria",         L: 54,   src: "UN World Population Prospects 2024", year: "2023" },
+      { id: "southafrica", name: "South Africa", L: 66, src: "UN World Population Prospects 2024", year: "2023" }
+    ]},
+    { group: "United States by sex", items: [
+      { id: "us_m", name: "U.S. male",   L: 75.8, src: "CDC / NCHS", year: "2023" },
+      { id: "us_f", name: "U.S. female", L: 81.1, src: "CDC / NCHS", year: "2023" }
+    ]},
+    { group: "Historical eras", items: [
+      { id: "us1950",   name: "United States, 1950", L: 68.2, src: "CDC / NCHS historical life tables", year: "1950", hist: true },
+      { id: "world1950",name: "World, 1950",         L: 46.5, src: "UN World Population Prospects 2024", year: "1950", hist: true },
+      { id: "us1900",   name: "United States, 1900", L: 47.3, src: "CDC / NCHS historical life tables", year: "1900", hist: true },
+      { id: "medieval", name: "Medieval Europe",     L: 30,   src: "Historical-demography estimates (range roughly 25–35)", year: "c. 1000–1500", hist: true }
+    ]}
+  ];
+
+  var ADJUSTMENTS = [
+    { id: "smoke",    name: "Current smoker",              yrs: -10,  src: "CDC; Jha et al., NEJM 2013" },
+    { id: "exercise", name: "Regular exercise (≥150 min/wk)", yrs: 3.4, src: "Moore et al., PLoS Med 2012" },
+    { id: "obese",    name: "Obesity (BMI 30–35)",          yrs: -3,   src: "Prospective Studies Collab., Lancet 2009" },
+    { id: "alcohol",  name: "Heavy drinking (>350 g/wk)",   yrs: -4,   src: "Wood et al., Lancet 2018" }
+  ];
+
+  /* ------------------------------------------------------------------ *
+   * Models. P(T, L) in [0,1]; inv(p, L) returns real age T.
+   * All models are evaluated for T >= 1 only.
+   * ------------------------------------------------------------------ */
+  var MODELS = {
+    log: {
+      name: "Janet (log)", short: "Janet", color: "--s-log",
+      P: function (T, L) { return Math.log(T) / Math.log(L); },
+      inv: function (p, L) { return Math.pow(L, p); }
+    },
+    sqrt: {
+      name: "Lemlich (√)", short: "Lemlich", color: "--s-sqrt",
+      P: function (T, L) { return Math.sqrt(T / L); },
+      inv: function (p, L) { return L * p * p; }
+    },
+    power: {
+      name: "Power law", short: "Power", color: "--s-power",
+      P: function (T, L, n) { return Math.pow(T / L, n); },
+      inv: function (p, L, n) { return L * Math.pow(p, 1 / n); }
+    },
+    linear: {
+      name: "Linear (clock time)", short: "Clock time", color: "--s-linear",
+      P: function (T, L) { return T / L; },
+      inv: function (p, L) { return L * p; }
+    }
+  };
+  var MODEL_ORDER = ["log", "sqrt", "power", "linear"];
+
+  /* ------------------------------------------------------------------ *
+   * State & DOM
+   * ------------------------------------------------------------------ */
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { model: "log", n: 0.3, step: 5, showAll: false, age: null, L: 79, hoverT: null };
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  function fmt(x, d) {
+    if (!isFinite(x)) return "–";
+    return x.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
+  function pct(x, d) { return fmt(x * 100, d == null ? 1 : d) + "%"; }
+  function ageFmt(x) { return String(Math.round(x * 100) / 100); }
+  function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  function findPreset(id) {
+    for (var g = 0; g < PRESETS.length; g++)
+      for (var i = 0; i < PRESETS[g].items.length; i++)
+        if (PRESETS[g].items[i].id === id) return PRESETS[g].items[i];
+    return null;
+  }
+
+  // Build preset select
+  (function () {
+    var sel = $("preset"), html = "";
+    PRESETS.forEach(function (g) {
+      html += '<optgroup label="' + esc(g.group) + '">';
+      g.items.forEach(function (p) {
+        html += '<option value="' + p.id + '">' + esc(p.name) + " — ~" + p.L + " yrs</option>";
+      });
+      html += "</optgroup>";
+    });
+    sel.innerHTML = html;
+    sel.value = "us";
+  })();
+
+  // Build adjustments
+  (function () {
+    var html = "";
+    ADJUSTMENTS.forEach(function (a) {
+      html += '<div class="adj-row">' +
+        '<input type="checkbox" id="adj-' + a.id + '" aria-describedby="adjsrc-' + a.id + '">' +
+        '<label for="adj-' + a.id + '">' + esc(a.name) + '<small id="adjsrc-' + a.id + '">≈ ' + (a.yrs > 0 ? "+" : "") + a.yrs + " yrs · rough estimate · " + esc(a.src) + "</small></label>" +
+        '<input type="number" id="adjv-' + a.id + '" value="' + a.yrs + '" step="0.1" min="-30" max="30" aria-label="Years adjustment for ' + esc(a.name) + '">' +
+        "</div>";
+    });
+    $("adj").innerHTML = html;
+  })();
+
+  /* ------------------------------------------------------------------ *
+   * Read inputs → state
+   * ------------------------------------------------------------------ */
+  function readInputs() {
+    var custom = parseFloat($("customL").value);
+    var useCustom = isFinite(custom) && custom > 0;
+    var preset = findPreset($("preset").value);
+    var why;
+    var L;
+
+    $("presetZone").classList.toggle("disabled-zone", useCustom);
+    $("presetZone").setAttribute("aria-disabled", useCustom ? "true" : "false");
+
+    if (useCustom) {
+      L = custom;
+      why = "Custom value (overrides preset and adjustments)";
+    } else {
+      L = preset.L;
+      var parts = [];
+      ADJUSTMENTS.forEach(function (a) {
+        if ($("adj-" + a.id).checked) {
+          var v = parseFloat($("adjv-" + a.id).value);
+          if (isFinite(v)) { L += v; parts.push((v >= 0 ? "+ " : "− ") + fmt(Math.abs(v), 1) + " " + a.name.toLowerCase().replace(/ \(.*\)/, "")); }
+        }
+      });
+      why = preset.name + " ~" + preset.L + (parts.length ? " " + parts.join(" ") : "");
+    }
+    var clamped = Math.min(150, Math.max(2, L));
+    if (clamped !== L) why += " (clamped to the 2–150 range)";
+    state.L = Math.round(clamped * 100) / 100;
+
+    $("Lval").textContent = ageFmt(state.L);
+    $("Lwhy").textContent = why;
+
+    if (!useCustom) {
+      $("presetNote").innerHTML = "Approximate. Source: " + esc(preset.src) + ", data year " + esc(preset.year) + "." +
+        (preset.hist ? " <strong>Low historical averages mostly reflect child mortality.</strong> Adults who survived childhood often lived into their 50s–70s." : "");
+    }
+
+    var a = parseFloat($("age").value);
+    state.age = isFinite(a) && a > 0 ? Math.max(1, a) : null;
+
+    var m = document.querySelector('input[name="model"]:checked');
+    state.model = m ? m.value : "log";
+    state.n = parseFloat($("nexp").value);
+    $("nexpVal").textContent = state.n.toFixed(2);
+    $("powerField").style.display = state.model === "power" || state.showAll ? "" : "none";
+
+    var s = document.querySelector('input[name="step"]:checked');
+    state.step = s ? parseInt(s.value, 10) : 5;
+    state.showAll = $("showAll").checked;
+    $("powerField").style.display = state.model === "power" || state.showAll ? "" : "none";
+  }
+
+  function P(model, T) { return MODELS[model].P(Math.max(1, T), state.L, state.n); }
+  function S(model, T) { return state.L * P(model, T); }
+  function inv(model, p) { return MODELS[model].inv(p, state.L, state.n); }
+  function yearFeel(model, T) {
+    if (model === "log") return (state.L / Math.log(state.L)) * Math.log((T + 1) / T);
+    return S(model, T + 1) - S(model, T);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Summary
+   * ------------------------------------------------------------------ */
+  function renderSummary() {
+    var L = state.L, m = state.model, M = MODELS[m];
+    var half = inv(m, 0.5);
+    var halfExpr = m === "log" ? "√" + ageFmt(L) + " ≈ " : "";
+    $("sumHead").innerHTML = "With a lifespan of <b>" + ageFmt(L) + " years</b>, your subjective halfway point is age <b>" + halfExpr + fmt(half, 2) + "</b>" +
+      (m === "log" ? "." : " <span class='muted' style='font-size:.8em'>(" + esc(M.name) + (m === "power" ? ", n = " + state.n.toFixed(2) : "") + ")</span>.");
+
+    var a75 = inv(m, 0.75), a90 = inv(m, 0.9);
+    var stats = "";
+    var age = state.age;
+    if (age != null) {
+      var p = P(m, age), s = S(m, age);
+      stats += stat("Subjective years felt", fmt(s, 1), "of " + ageFmt(L) + " subjective years");
+      stats += stat("Subjective life behind you", pct(p, 1), "vs " + pct(age / L, 1) + " of clock time");
+      stats += stat("75% felt at age", fmt(a75, 1), age >= a75 ? "already passed" : "in " + fmt(a75 - age, 1) + " years");
+      stats += stat("90% felt at age", fmt(a90, 1), age >= a90 ? "already passed" : "in " + fmt(a90 - age, 1) + " years");
+      $("meterWrap").innerHTML =
+        '<div class="meter" role="meter" aria-label="Subjective life experienced" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.min(100, p * 100).toFixed(1) + '">' +
+        '<i style="width:' + Math.min(100, p * 100) + '%;background:var(' + M.color + ')"></i>' +
+        '<b style="left:calc(' + Math.min(100, age / L * 100) + '% - 1px)" title="Clock time lived"></b></div>' +
+        '<div class="meter-legend"><span>Bar: subjective life felt (' + pct(p, 1) + ')</span><span>Gray tick: clock time lived (' + pct(age / L, 1) + ')</span></div>';
+      var notes = [];
+      if (age > L) notes.push("Your age is past the lifespan L, so the percentages exceed 100%. Try a higher custom lifespan.");
+      if (parseFloat($("age").value) < 1) notes.push("Ages below 1 are treated as 1, where the log model starts.");
+      if (age <= L) {
+        var yf = yearFeel(m, age);
+        notes.push("This year of your life (age " + ageFmt(age) + " → " + ageFmt(age + 1) + ") feels like about <strong>" + fmt(yf, 2) + "</strong> average years, or roughly <strong>" + fmt(yf * 365, 0) + " days</strong>.");
+      }
+      $("sumNote").innerHTML = notes.map(function (n) { return '<div class="note">' + n + "</div>"; }).join("");
+    } else {
+      stats += stat("Halfway point", fmt(half, 2), "age at which 50% is felt");
+      stats += stat("75% felt at age", fmt(a75, 1), "real age");
+      stats += stat("90% felt at age", fmt(a90, 1), "real age");
+      stats += stat("First decade", pct(P(m, 10), 1), "of subjective life (ages 1–10)");
+      $("meterWrap").innerHTML = "";
+      $("sumNote").innerHTML = '<div class="note">Enter your current age to see how much of your subjective life is behind you.</div>';
+    }
+    $("stats").innerHTML = stats;
+  }
+  function stat(k, v, d) {
+    return '<div class="stat"><div class="k">' + k + '</div><div class="v">' + v + '</div><div class="d">' + d + "</div></div>";
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Table + CSV
+   * ------------------------------------------------------------------ */
+  function tableRows() {
+    var L = state.L, m = state.model, step = state.step, rows = [];
+    var ages = [1];
+    for (var t = step; t <= L + 1e-9; t += step) if (t > 1) ages.push(t);
+    if (Math.abs(ages[ages.length - 1] - L) > 1e-9) ages.push(L);
+    var half = inv(m, 0.5);
+    var extra = [{ T: half, kind: "half" }];
+    if (state.age != null) extra.push({ T: state.age, kind: "cur" });
+    ages = ages.map(function (T) { return { T: T, kinds: [] }; });
+    extra.forEach(function (e) {
+      var hit = null;
+      ages.forEach(function (r) { if (Math.abs(r.T - e.T) < 0.005) hit = r; });
+      if (hit) hit.kinds.push(e.kind);
+      else if (e.T >= 1) ages.push({ T: e.T, kinds: [e.kind] });
+    });
+    ages.sort(function (a, b) { return a.T - b.T; });
+    ages.forEach(function (r) {
+      var yf = yearFeel(m, r.T);
+      rows.push({ T: r.T, S: S(m, r.T), P: P(m, r.T), real: r.T / L, yf: yf, days: yf * 365, kinds: r.kinds });
+    });
+    return rows;
+  }
+
+  function renderTable() {
+    var rows = tableRows(), M = MODELS[state.model], html = "";
+    rows.forEach(function (r) {
+      var cls = r.kinds.indexOf("cur") >= 0 ? "is-current" : r.kinds.indexOf("half") >= 0 ? "is-half" : "";
+      var tags = (r.kinds.indexOf("half") >= 0 ? '<span class="tag half">Halfway</span>' : "") +
+                 (r.kinds.indexOf("cur") >= 0 ? '<span class="tag cur">You</span>' : "");
+      html += '<tr class="' + cls + '">' +
+        "<td>" + ageFmt(r.T) + tags + "</td>" +
+        "<td>" + fmt(r.S, 1) + "</td>" +
+        '<td><span class="bar-cell">' + pct(r.P, 1) + '<span class="b" aria-hidden="true"><i style="width:' + Math.min(100, Math.max(0, r.P * 100)) + '%;background:var(' + M.color + ')"></i></span></span></td>' +
+        "<td>" + pct(r.real, 1) + "</td>" +
+        "<td>" + fmt(r.yf, 2) + ' <span class="muted">subj. yrs</span></td>' +
+        "<td>" + fmt(r.days, 0) + ' <span class="muted">days</span></td>' +
+        "</tr>";
+    });
+    $("tbody").innerHTML = html;
+    $("tableSub").textContent = M.name + (state.model === "power" ? " (n = " + state.n.toFixed(2) + ")" : "") + " · L = " + ageFmt(state.L) + " years · halfway and current-age rows highlighted";
+  }
+
+  $("csvBtn").addEventListener("click", function () {
+    var rows = tableRows();
+    var lines = [
+      "# Subjective time table: model=" + MODELS[state.model].name + (state.model === "power" ? " n=" + state.n : "") + ", L=" + state.L,
+      "real_age_years,subjective_years_S,subjective_life_pct_P,real_lifespan_pct,year_feels_subjective_years,year_feels_days,note"
+    ];
+    rows.forEach(function (r) {
+      lines.push([r.T.toFixed(2), r.S.toFixed(3), (r.P * 100).toFixed(2), (r.real * 100).toFixed(2), r.yf.toFixed(4), r.days.toFixed(0),
+        r.kinds.map(function (k) { return k === "half" ? "halfway" : "current age"; }).join("; ")].join(","));
+    });
+    var blob = new Blob([lines.join("\n") + "\n"], { type: "text/csv;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "subjective-time-L" + state.L + "-" + state.model + ".csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+
+  /* ------------------------------------------------------------------ *
+   * Chart (hand-rolled SVG so the page works offline)
+   * ------------------------------------------------------------------ */
+  var chartEl = $("chart");
+  var tip = document.createElement("div");
+  tip.className = "tip";
+  tip.setAttribute("aria-hidden", "true");
+
+  function visibleSeries() {
+    if (state.showAll) return MODEL_ORDER.slice();
+    return state.model === "linear" ? ["linear"] : [state.model, "linear"];
+  }
+
+  var geom = null;
+  function renderChart() {
+    var W = Math.max(300, chartEl.clientWidth || 600);
+    var H = Math.round(Math.min(420, Math.max(260, W * 0.55)));
+    var pad = { l: 46, r: 18, t: 14, b: 40 };
+    var L = state.L;
+    var xMax = Math.max(L, state.age || 0);
+    var x0 = 1;
+    var iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    var xs = function (T) { return pad.l + (T - x0) / (xMax - x0) * iw; };
+    var yMax = state.age && state.age > L ? Math.max(1, P(state.model, state.age)) : 1;
+    var ys = function (p) { return pad.t + (1 - p / yMax) * ih; };
+    geom = { xs: xs, ys: ys, pad: pad, W: W, H: H, x0: x0, xMax: xMax, iw: iw };
+
+    var series = visibleSeries();
+    var svg = '<svg viewBox="0 0 ' + W + " " + H + '" width="' + W + '" height="' + H + '" aria-hidden="true">';
+
+    // grid + y axis
+    for (var g = 0; g <= 4; g++) {
+      var p = g * 0.25 * yMax, y = ys(p);
+      svg += '<line x1="' + pad.l + '" x2="' + (W - pad.r) + '" y1="' + y + '" y2="' + y + '" stroke="var(--grid)" stroke-width="1"/>';
+      svg += '<text x="' + (pad.l - 8) + '" y="' + (y + 4) + '" text-anchor="end" font-size="11" fill="var(--text-3)">' + Math.round(p * 100) + "%</text>";
+    }
+    // x ticks
+    var stepX = xMax <= 40 ? 5 : xMax <= 100 ? 10 : 20;
+    var ticks = [1];
+    for (var t = stepX; t <= xMax; t += stepX) ticks.push(t);
+    ticks.forEach(function (t) {
+      var x = xs(t);
+      svg += '<line x1="' + x + '" x2="' + x + '" y1="' + (pad.t + ih) + '" y2="' + (pad.t + ih + 4) + '" stroke="var(--text-3)"/>';
+      svg += '<text x="' + x + '" y="' + (pad.t + ih + 17) + '" text-anchor="middle" font-size="11" fill="var(--text-3)">' + t + "</text>";
+    });
+    svg += '<line x1="' + pad.l + '" x2="' + (W - pad.r) + '" y1="' + (pad.t + ih) + '" y2="' + (pad.t + ih) + '" stroke="var(--text-3)" stroke-width="1"/>';
+    svg += '<text x="' + (pad.l + iw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="12" fill="var(--text-2)">Real age (years)</text>';
+
+    // 50% reference
+    svg += '<line x1="' + pad.l + '" x2="' + (W - pad.r) + '" y1="' + ys(0.5) + '" y2="' + ys(0.5) + '" stroke="var(--text-3)" stroke-dasharray="2 4" stroke-width="1"/>';
+
+    // lines, drawn back-to-front so the selected model sits on top
+    var order = series.slice().sort(function (a, b) { return (a === state.model) - (b === state.model); });
+    var LABEL_AT = { log: 0.40, sqrt: 0.55, power: 0.72, linear: 0.62 };
+    var labels = "";
+    order.forEach(function (m) {
+      var N = 220, d = "";
+      for (var i = 0; i <= N; i++) {
+        // denser sampling near age 1 where the log curve is steep
+        var u = i / N, T = x0 + (xMax - x0) * u * u * 0.35 + (xMax - x0) * u * 0.65;
+        d += (i ? "L" : "M") + xs(T).toFixed(1) + "," + ys(P(m, T)).toFixed(1);
+      }
+      var primary = m === state.model;
+      var dash = m === "linear" ? ' stroke-dasharray="6 5"' : "";
+      svg += '<path d="' + d + '" fill="none" stroke="var(' + MODELS[m].color + ')" stroke-width="' + (primary ? 3 : 2) + '"' + dash +
+             ' stroke-linecap="round" stroke-linejoin="round" opacity="' + (primary || m === "linear" ? 1 : 0.85) + '"/>';
+      // direct label sitting on the curve: above it for the curved models, below the diagonal for clock time
+      var lt = x0 + (xMax - x0) * LABEL_AT[m], below = m === "linear";
+      labels += '<text x="' + xs(lt) + '" y="' + (ys(P(m, lt)) + (below ? 18 : -9)) + '" text-anchor="' + (below ? "start" : "end") +
+        '" font-size="11.5" font-weight="' + (primary ? 650 : 500) + '" fill="var(--text-2)" paint-order="stroke" stroke="var(--surface)" stroke-width="4">' + esc(MODELS[m].short) + "</text>";
+    });
+    svg += labels;
+
+    // halfway marker
+    var half = inv(state.model, 0.5);
+    if (half >= x0 && half <= xMax) {
+      var hx = xs(half), hy = ys(0.5);
+      svg += '<circle cx="' + hx + '" cy="' + hy + '" r="5" fill="var(' + MODELS[state.model].color + ')" stroke="var(--surface)" stroke-width="2"/>';
+      svg += '<text x="' + (hx + 9) + '" y="' + (hy - 8) + '" font-size="11.5" fill="var(--text-2)">Halfway · age ' + fmt(half, 1) + "</text>";
+    }
+
+    // user's age
+    if (state.age != null) {
+      var ax = xs(state.age), ap = P(state.model, state.age), ay = ys(ap);
+      svg += '<line x1="' + ax + '" x2="' + ax + '" y1="' + pad.t + '" y2="' + (pad.t + ih) + '" stroke="var(--text-2)" stroke-width="1.5" stroke-dasharray="3 3"/>';
+      svg += '<circle cx="' + ax + '" cy="' + ay + '" r="6" fill="var(' + MODELS[state.model].color + ')" stroke="var(--surface)" stroke-width="2.5"/>';
+      var anchor = ax > pad.l + iw * 0.7 ? "end" : "start", off = anchor === "end" ? -10 : 10;
+      svg += '<text x="' + (ax + off) + '" y="' + (Math.max(pad.t + 12, ay + 18)) + '" text-anchor="' + anchor + '" font-size="12" font-weight="650" fill="var(--text)">You · ' + pct(ap, 0) + "</text>";
+    }
+
+    // hover layer
+    svg += '<g id="hoverG" style="display:none"><line id="hLine" y1="' + pad.t + '" y2="' + (pad.t + ih) + '" stroke="var(--text-3)" stroke-width="1"/><g id="hDots"></g></g>';
+    svg += '<rect id="hit" x="' + pad.l + '" y="' + pad.t + '" width="' + iw + '" height="' + ih + '" fill="transparent" style="cursor:crosshair"/>';
+    svg += "</svg>";
+    chartEl.innerHTML = svg;
+    chartEl.appendChild(tip);
+    tip.style.opacity = 0;
+
+    // legend
+    var leg = "";
+    series.forEach(function (m) {
+      var dash = m === "linear" ? ' stroke-dasharray="4 3"' : "";
+      leg += '<span><svg width="22" height="8" aria-hidden="true"><line x1="1" x2="21" y1="4" y2="4" stroke="var(' + MODELS[m].color + ')" stroke-width="' + (m === state.model ? 3 : 2) + '"' + dash + ' stroke-linecap="round"/></svg>' +
+        esc(MODELS[m].name) + (m === "power" ? " (n = " + state.n.toFixed(2) + ")" : "") + (m === state.model ? " · selected" : "") + "</span>";
+    });
+    $("legend").innerHTML = leg;
+
+    var hit = $("hit");
+    hit.addEventListener("pointermove", function (e) {
+      var r = chartEl.getBoundingClientRect();
+      var px = (e.clientX - r.left) * (W / r.width);
+      showHover(x0 + (px - pad.l) / iw * (xMax - x0));
+    });
+    hit.addEventListener("pointerleave", hideHover);
+    if (state.hoverT != null) showHover(state.hoverT);
+  }
+
+  function showHover(T) {
+    if (!geom) return;
+    T = Math.max(geom.x0, Math.min(geom.xMax, T));
+    state.hoverT = T;
+    var x = geom.xs(T);
+    $("hoverG").style.display = "";
+    $("hLine").setAttribute("x1", x); $("hLine").setAttribute("x2", x);
+    var dots = "", rows = "";
+    visibleSeries().forEach(function (m) {
+      var p = P(m, T);
+      dots += '<circle cx="' + x + '" cy="' + geom.ys(p) + '" r="4.5" fill="var(' + MODELS[m].color + ')" stroke="var(--surface)" stroke-width="2"/>';
+      rows += '<div class="r"><span><i class="sw" style="background:var(' + MODELS[m].color + ')"></i>' + esc(MODELS[m].short) + "</span><span>" + pct(p, 1) + " · " + fmt(state.L * p, 1) + " y</span></div>";
+    });
+    $("hDots").innerHTML = dots;
+    tip.innerHTML = '<div class="t">Age ' + fmt(T, 1) + "</div>" + rows;
+    var r = chartEl.getBoundingClientRect(), scale = r.width / geom.W;
+    var left = x * scale + 14;
+    if (left + 200 > r.width) left = x * scale - 14 - tip.offsetWidth;
+    tip.style.left = Math.max(0, left) + "px";
+    tip.style.top = (geom.pad.t * scale + 6) + "px";
+    tip.style.opacity = 1;
+  }
+  function hideHover() {
+    state.hoverT = null;
+    if ($("hoverG")) $("hoverG").style.display = "none";
+    tip.style.opacity = 0;
+  }
+  chartEl.addEventListener("keydown", function (e) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Home" && e.key !== "End") return;
+    e.preventDefault();
+    var T = state.hoverT != null ? state.hoverT : (state.age || 1);
+    if (e.key === "ArrowLeft") T -= e.shiftKey ? 10 : 1;
+    if (e.key === "ArrowRight") T += e.shiftKey ? 10 : 1;
+    if (e.key === "Home") T = 1;
+    if (e.key === "End") T = geom.xMax;
+    showHover(Math.round(T));
+  });
+  chartEl.addEventListener("blur", hideHover);
+
+  /* ------------------------------------------------------------------ *
+   * "Equal ratios" mini-visual (live with L)
+   * ------------------------------------------------------------------ */
+  function renderRatio() {
+    var L = state.L, lnL = Math.log(L), spans = [[5, 10], [10, 20], [20, 40], [40, 80]];
+    var html = "";
+    spans.forEach(function (s) {
+      var a = Math.log(s[0]) / Math.log(80), b = Math.log(s[1]) / Math.log(80);
+      html += '<div class="rr"><span>' + s[0] + " → " + s[1] + '</span><div class="track"><div class="seg-b" style="left:' + (a * 100) + "%;width:" + ((b - a) * 100) + '%"></div></div></div>';
+    });
+    html += '<div class="axis"><div></div><div><span>age 1</span><span>log scale</span><span>80</span></div></div>';
+    $("ratioViz").innerHTML = html;
+    var per = L * Math.LN2 / lnL;
+    $("ratioText").innerHTML = "On a log scale each doubling is the same width. With your lifespan of " + ageFmt(L) + " years, every doubling of age is worth about <strong>" + fmt(per, 1) +
+      " subjective years</strong> (L · ln 2 / ln L). Ages 5→10 last 5 clock years and 40→80 last 40, but both feel about the same length.";
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Theme
+   * ------------------------------------------------------------------ */
+  function effectiveDark() {
+    var t = document.documentElement.getAttribute("data-theme");
+    if (t) return t === "dark";
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function syncThemeBtn() {
+    var dark = effectiveDark();
+    $("themeLabel").textContent = dark ? "Light" : "Dark";
+    $("themeBtn").setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+  }
+  var savedTheme = lsGet("subjective-time-theme");
+  if (savedTheme === "light" || savedTheme === "dark") document.documentElement.setAttribute("data-theme", savedTheme);
+  $("themeBtn").addEventListener("click", function () {
+    var next = effectiveDark() ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    lsSet("subjective-time-theme", next);
+    syncThemeBtn();
+  });
+  if (window.matchMedia) {
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    (mq.addEventListener ? mq.addEventListener.bind(mq, "change") : mq.addListener.bind(mq))(syncThemeBtn);
+  }
+  syncThemeBtn();
+
+  /* ------------------------------------------------------------------ *
+   * Wiring
+   * ------------------------------------------------------------------ */
+  function update() {
+    readInputs();
+    renderSummary();
+    renderChart();
+    renderTable();
+    renderRatio();
+  }
+  document.addEventListener("input", function (e) { if (e.target.closest("main")) update(); });
+  document.addEventListener("change", function (e) { if (e.target.closest("main")) update(); });
+  var rT;
+  if (window.ResizeObserver) new ResizeObserver(function () { clearTimeout(rT); rT = setTimeout(renderChart, 60); }).observe(chartEl);
+  else window.addEventListener("resize", function () { clearTimeout(rT); rT = setTimeout(renderChart, 60); });
+
+  update();
+
+  // Exposed for verification in the console.
+  window.SubjectiveTime = { MODELS: MODELS, state: state };
+})();
+</script>
+</body>
+</html>
