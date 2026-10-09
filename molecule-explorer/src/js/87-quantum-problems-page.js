@@ -26,7 +26,11 @@
   ];
 
   ME.quantumPage('Practice', 'problems', 'Problems',
-    'Thirty-four kinds, endlessly regenerated', () => {
+    'Thirty-four kinds, endlessly regenerated',
+    'Thirty-four kinds of problem, with fresh numbers every time you press the button. The app '
+    + 'works out each answer with the same code that produced the worked examples, so nothing '
+    + 'here can be marked against a number that was typed in by hand and never checked.',
+    () => {
       const wrap = el('div');
       wrap.appendChild(p('Every one of these is generated fresh and the answer is computed rather '
         + 'than stored, so what you are marked against is what the worked examples would give. '

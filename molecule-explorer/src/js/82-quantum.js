@@ -631,8 +631,17 @@
    * across as many files as the subject needs without any of them knowing
    * about the others. Order of registration is reading order. */
   ME.quantumPages = [];
-  ME.quantumPage = function (group, id, name, blurb, build) {
-    ME.quantumPages.push({ group: group, id: id, name: name, blurb: blurb, build: build });
+  /* Every page opens with `short`: the one idea, in the plainest words it can
+   * be put in, before any of the detail. A reader who stops after that box
+   * should still have learnt the thing the page is about. It is allowed to
+   * come either before or after the build function so that content files can
+   * put it up at the top of the page where it is read, rather than trailing
+   * after a hundred lines of prose. */
+  ME.quantumPage = function (group, id, name, blurb, a, b) {
+    const build = typeof a === 'function' ? a : b;
+    const short = typeof a === 'function' ? (b || '') : (a || '');
+    ME.quantumPages.push({ group: group, id: id, name: name, blurb: blurb,
+      short: short, build: build });
   };
 
   ME.quantumFigures = { boxFigure, stationaryFigure, tunnelFigure, wellFigure,

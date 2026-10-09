@@ -16,12 +16,18 @@
   const { qeq, h3 } = ME.quantumInternals;
   const fmt = (x, s) => ME.fmt.fmt(x, s || 4);
   const frag = (...kids) => K.frag(kids.flat());
-  const rule = (id, name, blurb, build) => ME.quantumPage('The rules', id, name, blurb, build);
-  const spin = (id, name, blurb, build) => ME.quantumPage('Spin and angular momentum', id, name, blurb, build);
+  const rule = (id, name, blurb, short, build) =>
+    ME.quantumPage('The rules', id, name, blurb, short, build);
+  const spin = (id, name, blurb, short, build) =>
+    ME.quantumPage('Spin and angular momentum', id, name, blurb, short, build);
 
   /* ============================================================ the rules */
 
-  rule('postulates', 'What the theory actually claims', 'States, operators, and four rules', () => frag(
+  rule('postulates', 'What the theory actually claims', 'States, operators, and four rules',
+    'The whole subject rests on four claims. The wave is everything there is to know. Measuring '
+    + 'something means doing a particular job on the wave. Only certain answers can come out, and '
+    + 'which one you get is random. And in between measurements, nothing is random at all.',
+    () => frag(
     p('Everything so far has been one equation applied to one situation at a time. Underneath it '
       + 'there is a short list of claims that the whole subject rests on. They are worth seeing '
       + 'written out, because almost every "quantum is weird" story turns out to be one of these '
@@ -31,23 +37,42 @@
       + 'currently get at — everything. If two systems have the same ψ they are '
       + 'identical, and no measurement can tell them apart. This is a much stronger claim than it '
       + 'looks, and it is where the argument about whether quantum mechanics is "complete" lives.'),
-    h3('Two: every measurable thing has an operator'),
-    p('Position, momentum, energy, angular momentum — each is represented by an operation you '
-      + 'do to the wavefunction rather than by a number the system carries around:'),
+    h3('Two: every measurable thing is a job you do to the wave'),
+    p('This is the one piece of vocabulary worth slowing down for, because it sounds far more '
+      + 'abstract than it is. In ordinary physics a quantity like momentum is a ', em('number'),
+      ' the object carries around with it. Here it is not. Here each measurable quantity is a '
+      + 'piece of ', b('work you do to the wave'), ' — multiply it by something, differentiate '
+      + 'it, that sort of thing. The name for such a job is an ',
+      term('operator', 'A recipe for acting on a wavefunction — multiply it, differentiate it, '
+      + 'and so on. Each measurable quantity has one, and the little hat marks it as a job '
+      + 'rather than a number.'), ', and the little hat on the symbol is there to remind you '
+      + 'that it is a job and not a number:'),
     table(['Quantity', 'Operator', 'What it does to ψ'], [
       ['Position', 'x̂', 'Multiply by x'],
       ['Momentum', 'p̂ = −iℏ d/dx', 'Differentiate once'],
       ['Kinetic energy', 'p̂²/2m', 'Differentiate twice — curvature, as on the equation page'],
       ['Total energy', 'Ĥ', 'Kinetic plus potential: the Hamiltonian'],
     ], 'Momentum being a derivative is why a short wavelength means a big momentum: differentiating a tight wiggle gives a big answer.'),
-    h3('Three: the answers you can get are the eigenvalues'),
-    p('Apply the operator. If the wavefunction comes back unchanged except for a multiplying '
-      + 'number, that number is what you measure and it is certain:'),
+    h3('Three: you only ever get the answers the wave survives'),
+    p('Do the job to the wave and watch what comes back. Usually you get a different shape out '
+      + 'than you put in. But for a few special shapes, the wave comes back as ', em('itself'),
+      ', merely scaled up or down by some number. Those shapes are the ones that have a definite '
+      + 'value of that quantity, and the number they get scaled by is the value you measure:'),
     qeq('Ĥψ = Eψ'),
-    p('Which is the time-independent Schrödinger equation — so the TISE is not a special '
-      + 'case of anything, it is rule three for energy. And if ψ is ', em('not'), ' one of '
-      + 'those special shapes, you get one of them at random, with probabilities set by how much '
-      + 'of each is in the mixture. That is the whole of quantum randomness in one sentence.'),
+    p('Read that as a question and an answer. "Work out the energy of this wave" gives back the '
+      + 'same wave, E times bigger. So the wave has energy E, definitely, every time you look. '
+      + 'The special shapes are called ', term('eigenstates',
+      'A state that an operator returns unchanged apart from a scale factor. Such a state has a '
+      + 'definite, repeatable value of that quantity.'), ' and the scale factors are called ',
+      term('eigenvalues', 'The scale factor an eigenstate comes back multiplied by — the value '
+      + 'you actually measure.'), ' — German for "own", as in the operator\u2019s own shapes.'),
+    p('And notice that this equation is the time-independent Schrödinger equation, which you have '
+      + 'already solved by hand. The TISE is not a special trick. It is rule three, asked about '
+      + 'energy.'),
+    p('What if your wave is ', em('not'), ' one of the special shapes? Then it is a mixture of '
+      + 'several of them, and you get one of those at random, with the odds set by how much of '
+      + 'each went into the mixture. That sentence is the entirety of quantum randomness. There '
+      + 'is no more to it than that.'),
     h3('Four: between measurements it evolves smoothly'),
     p('The TDSE runs, deterministically, with no randomness anywhere in it. Give me ψ now and '
       + 'I will give you ψ at any future time exactly.'),
@@ -60,7 +85,11 @@
       + 'side.')
   ));
 
-  rule('measurement', 'Measurement and averages', 'What you actually get, and what you get on average', () => frag(
+  rule('measurement', 'Measurement and averages', 'What you actually get, and what you get on average',
+    'If a particle is in a mixture, it has no value of the thing you are about to measure — not '
+    + 'a hidden one, none. You get one of the possible answers at random. The average of many '
+    + 'such measurements is a useful number, and it need not be a possible answer itself.',
+    () => frag(
     p('A wavefunction that is not an eigenstate does not have a value of the thing you are about '
       + 'to measure. It is not that the value is hidden; there is no value. What there is, is a '
       + 'set of possible answers with probabilities.'),
@@ -76,9 +105,10 @@
     p('The particle in a box is the one system where all of this can be computed in closed form '
       + 'rather than described, so it is worth doing. For the n-th state:'),
     qeq('⟨x⟩ = L/2        ⟨x²⟩ = L²(1/3 − 1/2n²π²)        ⟨p⟩ = 0        ⟨p²⟩ = (nπℏ/L)²'),
-    p('⟨x⟩ = L/2 by symmetry, and ⟨p⟩ = 0 because a standing wave is going both '
-      + 'ways at once — which is worth pausing on, because the particle certainly has momentum '
-      + '(⟨p²⟩ is not zero) and its average is still exactly nothing.'),
+    p('⟨x⟩ = L/2 by symmetry: the box looks the same from both ends. And ⟨p⟩ = 0 '
+      + 'because a standing wave is going both ways at once, so the two directions cancel in the '
+      + 'average. That second one is worth a pause. The particle definitely has momentum — '
+      + '⟨p²⟩ is nowhere near zero — and the average of it is still exactly nothing.'),
     p('The spread is what is left after you subtract the square of the average:'),
     table(['State', 'Spread in position', 'Spread in momentum', 'σₓσₚ, in units of ℏ/2'],
       [1, 2, 3, 5, 10].map((n) => {
@@ -94,7 +124,11 @@
       + 'sharper.')
   ));
 
-  rule('uncertainty', 'Uncertainty, properly', 'Not about clumsy apparatus', () => frag(
+  rule('uncertainty', 'Uncertainty, properly', 'Not about clumsy apparatus',
+    'A wave squeezed into a narrow space has to be built out of many different wavelengths, and '
+    + 'wavelength is momentum. So a particle with a sharp position has a vague momentum. This is '
+    + 'not about clumsy instruments — it is true before anybody measures anything at all.',
+    () => frag(
     p('The usual story is that measuring a position means bouncing something off the particle, and '
       + 'that knocks it, so you lose track of the momentum. Heisenberg told that story himself in '
       + '1927, and it is wrong — or rather, it describes a real effect that is not this one.'),
@@ -104,19 +138,29 @@
       + 'see the whole thing in a sound wave: a very short click has no definite pitch, and a pure '
       + 'tone has to last a long time. Nobody thinks the clock is disturbing the note.'),
     qeq('σₓ σₚ ≥ ℏ/2'),
-    h3('Where it comes from'),
-    p('Two quantities have a joint uncertainty when their operators do not commute — when '
-      + 'doing them in the other order gives a different answer:'),
+    h3('Where it comes from: order matters'),
+    p('Some pairs of actions give a different result depending on which you do first. Socks then '
+      + 'shoes is not the same as shoes then socks. Other pairs genuinely do not care — putting '
+      + 'on your hat and putting on your left shoe can go in either order. Quantities whose '
+      + 'order does not matter are said to ', term('commute',
+      'Two operations commute when doing them in either order gives the same result. When they '
+      + 'do not, the two quantities cannot both be sharp at once.'), '.'),
+    p('Measuring position and measuring momentum are socks and shoes. Do them to a wave in the '
+      + 'two different orders and you do not get the same thing, and the exact size of the '
+      + 'difference is this:'),
     qeq('[x̂, p̂] = x̂p̂ − p̂x̂ = iℏ'),
-    p('That is not an analogy; it is the source. Work out the commutator of any two operators and '
-      + 'you get the uncertainty relation between them for free. Position and momentum do not '
-      + 'commute, so they have one. Two components of angular momentum do not commute, so you can '
-      + 'know how much total angular momentum there is and which way one component points, but '
-      + 'never the whole direction — which is exactly the cone picture a few pages on.'),
-    p('And operators that ', em('do'), ' commute have no such limit at all. Energy and momentum in '
-      + 'free space commute, so a free particle can have both exactly. Nothing is mysterious about '
-      + 'that pair, and nothing is mysterious about the other pair either; it is the same algebra '
-      + 'giving different answers.'),
+    p('That is not an illustration of the uncertainty principle. It ', em('is'), ' the '
+      + 'uncertainty principle. A short theorem turns the size of the ordering mismatch straight '
+      + 'into the smallest possible product of the two spreads. The ℏ going in on this line '
+      + 'is exactly what puts the ℏ/2 on the line above.'),
+    p('So the rule is simple to apply. Any two quantities whose order matters cannot both be '
+      + 'sharp. Position and momentum: order matters, so you cannot have both. Two different '
+      + 'directions of angular momentum: order matters, so you can know how much total there is '
+      + 'and how much points up, but never the full direction — that is the cone a few pages on.'),
+    p('And pairs that ', em('do'), ' commute carry no limit whatsoever. Energy and momentum for a '
+      + 'free particle commute, so a free particle can have both of them exactly. Nothing is '
+      + 'mysterious about that pair, and nothing is really mysterious about the other pair '
+      + 'either. It is the same piece of algebra giving different answers.'),
     h3('Energy and time, which is a different animal'),
     p('ΔEΔt ≥ ℏ/2 looks like the same statement and is not, because time is not '
       + 'an observable in quantum mechanics — there is no time operator. What it means is: a '
@@ -134,7 +178,11 @@
       + 'dissociate by looking at how smeared its spectrum is.')
   ));
 
-  rule('superposition', 'Superposition', 'Adding states, and the interference that follows', () => frag(
+  rule('superposition', 'Superposition', 'Adding states, and the interference that follows',
+    'Add two allowed waves together and you get another allowed wave. This is not the same as '
+    + 'not knowing which one you have, because waves added together can cancel — and cancelling '
+    + 'means opening a second route can make somewhere harder to reach. Ignorance cannot do that.',
+    () => frag(
     p('If ψ₁ and ψ₂ are both solutions, so is any combination of them. That '
       + 'follows from the equation being linear, which is a dull mathematical property with '
       + 'extraordinary consequences.'),
@@ -157,15 +205,20 @@
     h3('Superposition of what, though'),
     p('Of anything with more than one option. Two energy levels, two slits, two spin directions, '
       + 'two positions. The one thing it is never a superposition of is a single definite outcome '
-      + 'with itself — and the states you build everything out of, the eigenstates, are '
-      + 'precisely the ones that are not superpositions of anything, with respect to the quantity '
-      + 'you are asking about.'),
+      + 'with itself.'),
+    p('Which is what makes the special shapes from the rules page special. Those are the states '
+      + 'that are ', em('not'), ' a superposition of anything — at least as far as the one '
+      + 'quantity you are asking about goes.'),
     p('Which comes with a twist worth knowing: a state that is definite in energy is usually a '
       + 'superposition in position, and the other way round. There is no state that is definite in '
       + 'everything, and the reason is the commutator on the last page.')
   ));
 
-  rule('correspondence', 'Why you never see any of this', 'Correspondence, and decoherence', () => frag(
+  rule('correspondence', 'Why you never see any of this', 'Correspondence, and decoherence',
+    'Big things are not exempt from quantum mechanics. Two things hide it. The effects shrink as '
+    + 'things get bigger, and — more importantly — anything big is constantly being nudged by '
+    + 'its surroundings, which leaves a record of where it was, and records destroy interference.',
+    () => frag(
     p('A reasonable complaint at this point: if everything is waves and superpositions, why is a '
       + 'cricket ball not in two places? Two answers, and they are different answers.'),
     h3('The first: things get classical when they get big'),
@@ -175,10 +228,12 @@
       [1, 2, 5, 20, 100].map((n) => ['n = ' + n,
         fmt(Q.boxProbability(n, 1, 1 / 3, 2 / 3), 4), '0.3333']),
       'By n = 100 the quantum answer is the classical one to three figures, and the bumps are too fine to see.'),
-    p('Same story for the energy levels: the gaps are a large fraction of the energy when n is '
-      + 'small and a vanishing fraction when n is large, so a macroscopic object’s levels are '
-      + 'so finely spaced that its energy looks continuous. A pendulum has quantum levels. They are '
-      + 'about 10⁻³³ J apart.'),
+    p('The energy levels tell the same story. When n is small the gap between levels is a big '
+      + 'fraction of the energy itself, so the steps are obvious. When n is huge the gap is a '
+      + 'vanishing fraction, so the staircase is too fine to see and the energy looks smooth. A '
+      + 'swinging pendulum really does have quantum energy levels. They are about '
+      + '10⁻³³ J apart, so you would need to measure its energy to thirty-odd '
+      + 'decimal places before you noticed.'),
     h3('The second, and the real one: decoherence'),
     p('Size is not actually the point — superpositions of fairly large things have been made '
       + 'in the lab. What kills them is contact with everything else.'),
@@ -188,9 +243,10 @@
       + 'somewhere in the universe. Once it does, the paths are distinguishable, the cross terms '
       + 'average to nothing, and what is left behaves exactly like ordinary probability.'),
     p('The timescales are absurd. A dust grain in a vacuum chamber, lit only by starlight, '
-      + 'decoheres in something like a trillionth of a second. A large molecule in a good vacuum, '
-      + 'in the dark, can be kept coherent for long enough to diffract — which is why those '
-      + 'experiments are done at high vacuum and low temperature and are so hard.'),
+      + 'loses its coherence in something like a trillionth of a second. A large molecule can be '
+      + 'kept coherent long enough to diffract, but only in a good vacuum and in the dark. That '
+      + 'is why those experiments are so hard, and why they are always done cold: every stray air '
+      + 'molecule and every stray photon is a witness.'),
     p('So the answer to "why is the world classical" is not that quantum mechanics stops applying. '
       + 'It is that the world is extremely good at keeping records, and records destroy '
       + 'interference. ', b('A quantum computer is a machine built entirely around postponing '
@@ -200,7 +256,11 @@
 
   /* ================================================ angular momentum, spin */
 
-  spin('angular', 'Angular momentum comes in steps', 'And why it can never point straight at you', () => frag(
+  spin('angular', 'Angular momentum comes in steps', 'And why it can never point straight at you',
+    'Spinning motion comes in fixed steps, and here is the strange part: the total is always '
+    + 'bigger than the most that can point along any one direction. So the spin axis can never '
+    + 'quite line up with the direction you are measuring. There is always some left over sideways.',
+    () => frag(
     p('Angular momentum is quantised too, and the way it is quantised is odder than energy. Two '
       + 'numbers come out of the equation: how much there is, and how much of it points along '
       + 'whichever axis you choose to call z.'),
@@ -224,12 +284,17 @@
     p('The 2ℓ+1 column is doing quiet work: it is why there is one s orbital, three p, five d '
       + 'and seven f, which is why the blocks of the periodic table are 2, 6, 10 and 14 wide. The '
       + 'shape of the table is this column times two for spin.'),
-    p('And ℓ = 0 deserves a note. No angular momentum means no axis, which means nothing to '
-      + 'be oriented about — so an s orbital is spherical, not because somebody chose a '
-      + 'spherical shape but because there is no direction available to make it anything else.')
+    p('And ℓ = 0 deserves a note. No angular momentum at all means there is no axis, and with '
+      + 'no axis there is nothing for the orbital to be oriented about. So an s orbital is '
+      + 'spherical. Not because anybody picked a sphere, but because there is no direction '
+      + 'available to make it anything else.')
   ));
 
-  spin('spin', 'Spin', 'An angular momentum with nothing going round', () => frag(
+  spin('spin', 'Spin', 'An angular momentum with nothing going round',
+    'Send atoms through a magnet and they split into exactly two beams, whichever way you turn '
+    + 'the magnet. Electrons carry a fixed amount of built-in angular momentum with only two '
+    + 'settings. Nothing is actually rotating — it is a property, like charge.',
+    () => frag(
     p('In 1922 Stern and Gerlach sent silver atoms through an uneven magnetic field, expecting the '
       + 'beam to smear. A magnetic atom tumbling out of an oven points every which way, so the '
       + 'field should pull each one by a different amount and spread them into a band.'),
@@ -263,7 +328,11 @@
       + 'an afternoon with a beam of atoms and three magnets.')
   ));
 
-  spin('pauli', 'The exclusion principle', 'Why matter takes up room', () => frag(
+  spin('pauli', 'The exclusion principle', 'Why matter takes up room',
+    'Two electrons can never be in the same state, and the reason is a sign flip: swap two '
+    + 'electrons and their combined wave flips sign, so putting them in the same state makes the '
+    + 'wave equal minus itself, which means zero. This is why you do not fall through your chair.',
+    () => frag(
     p('Two electrons cannot be in the same state. That is Pauli’s principle, usually met as a '
       + 'bookkeeping rule for filling orbitals, and it is in fact the reason you do not fall '
       + 'through your chair.'),
@@ -302,10 +371,15 @@
       + 'with structure and a universe of identical inert blobs.')
   ));
 
-  spin('magnetic', 'Spin in a magnetic field', 'Zeeman, fine structure, MRI', () => frag(
+  spin('magnetic', 'Spin in a magnetic field', 'Zeeman, fine structure, MRI',
+    'A spinning charge is a tiny magnet, and a magnet in a field has different energies for '
+    + 'different orientations. Since the orientations come in steps, so do the energies, and one '
+    + 'spectral line splits into several. An MRI scanner is built on this.',
+    () => frag(
     p('An electron with angular momentum is a tiny magnet, and a magnet in a field has different '
-      + 'energies depending on which way it points. Since the pointing is quantised, so are the '
-      + 'energies — and a single spectral line splits into several.'),
+      + 'energies depending on which way it points — a compass needle takes work to turn against '
+      + 'the field. From the last two pages, which way it points comes in steps. So the energies '
+      + 'come in steps too, and what was one spectral line becomes several close together.'),
     qeq('ΔE = g μᴮ B m'),
     p('μᴮ is the Bohr magneton, eℏ/2mₑ = '
       + ME.fmt.sciUnicode(Q.BOHR_MAGNETON, 4) + ' J/T, or '

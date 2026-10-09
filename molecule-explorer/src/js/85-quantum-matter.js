@@ -15,13 +15,17 @@
   const { qeq, h3 } = ME.quantumInternals;
   const fmt = (x, s) => ME.fmt.fmt(x, s || 4);
   const frag = (...kids) => K.frag(kids.flat());
-  const atom = (id, n, bl, f) => ME.quantumPage('Atoms and the table', id, n, bl, f);
-  const mol = (id, n, bl, f) => ME.quantumPage('Molecules', id, n, bl, f);
-  const light = (id, n, bl, f) => ME.quantumPage('Light and matter', id, n, bl, f);
+  const atom = (id, n, bl, sh, f) => ME.quantumPage('Atoms and the table', id, n, bl, sh, f);
+  const mol = (id, n, bl, sh, f) => ME.quantumPage('Molecules', id, n, bl, sh, f);
+  const light = (id, n, bl, sh, f) => ME.quantumPage('Light and matter', id, n, bl, sh, f);
 
   /* ===================================================== atoms */
 
-  atom('multielectron', 'Atoms with more than one electron', 'Where the exact answer runs out', () => frag(
+  atom('multielectron', 'Atoms with more than one electron', 'Where the exact answer runs out',
+    'Hydrogen can be solved exactly. Helium cannot, and never will be, because each electron '
+    + 'depends on where the other one happens to be. The fix is to pretend each electron sees a '
+    + 'nucleus partly hidden by the others — which is where shielding comes from.',
+    () => frag(
     p('Hydrogen is solved exactly. Helium is not, and never will be — not because nobody has '
       + 'been clever enough, but because the problem does not have a closed-form answer. Two '
       + 'electrons and a nucleus is a three-body problem, and each electron’s wavefunction '
@@ -60,7 +64,11 @@
       + 'They are not being careful. They are incapable of being in the same place.')
   ));
 
-  atom('periodic', 'Why the table is that shape', 'Blocks, periods, and 2, 6, 10, 14', () => frag(
+  atom('periodic', 'Why the table is that shape', 'Blocks, periods, and 2, 6, 10, 14',
+    'The periodic table is not a chart somebody designed. Its shape is the list of how many '
+    + 'electrons fit in each kind of orbital — 2, 6, 10 and 14 — which comes from counting the '
+    + 'orientations of a wave and doubling for spin. The blocks are that arithmetic, drawn.',
+    () => frag(
     p('The periodic table was built by chemists who sorted elements by behaviour and had no idea '
       + 'why the pattern existed. Quantum mechanics explains the whole shape — the width of '
       + 'every block, the length of every period, where the awkward gaps are — from two facts '
@@ -97,7 +105,11 @@
       + 'years before anyone could say what was repeating.')
   ));
 
-  atom('xray', 'X-rays and the order of the elements', 'Moseley, and the number that matters', () => frag(
+  atom('xray', 'X-rays and the order of the elements', 'Moseley, and the number that matters',
+    'Knock out an innermost electron and the X-ray that comes out has an energy that depends '
+    + 'cleanly on the nuclear charge. That gave each element a number you could measure rather '
+    + 'than argue about, and it is why the table is ordered by protons and not by weight.',
+    () => frag(
     p('Before 1913 the periodic table was ordered by atomic weight, and there were places where '
       + 'that clearly did not work — put tellurium before iodine by weight and the chemistry '
       + 'comes out wrong. Nobody could say what the right ordering principle was, because nobody '
@@ -131,7 +143,11 @@
 
   /* ===================================================== molecules */
 
-  mol('bonding', 'Where a covalent bond comes from', 'Two waves, added and subtracted', () => frag(
+  mol('bonding', 'Where a covalent bond comes from', 'Two waves, added and subtracted',
+    'Bring two atoms together and their electron waves overlap. Add them and the electron '
+    + 'spends more time between the two nuclei, which pulls them together: a bond. Subtract them '
+    + 'and it is pushed out of the middle, which is the opposite. Same two atoms, one sign.',
+    () => frag(
     p('Two hydrogen atoms stick together and release energy. The usual school answer is that they '
       + '"share electrons to fill their shells", which describes the result without explaining '
       + 'anything. The actual reason is the sign of a wave.'),
@@ -167,7 +183,11 @@
       + 'that; this does.')
   ));
 
-  mol('hybrid', 'Hybridisation', 'Not a thing atoms do — a thing we do', () => frag(
+  mol('hybrid', 'Hybridisation', 'Not a thing atoms do — a thing we do',
+    'Carbon does not promote an electron and then mix its orbitals in preparation for bonding. '
+    + 'Hybrid orbitals are a bookkeeping choice we make, because adding the atomic waves together '
+    + 'in that particular combination gives a description that points the right way for methane.',
+    () => frag(
     p('Methane has four identical bonds at 109.5°. Carbon’s outer electrons are in one 2s '
       + 'and three 2p orbitals, which are not identical and are at 90°. The usual fix is to '
       + 'say the carbon "hybridises" its orbitals into four sp³ ones, and it is worth being '
@@ -193,15 +213,19 @@
       + 'ring of delocalised electrons above and below the plane, which is why benzene is flat, '
       + 'unusually stable, and not two alternating structures flickering back and forth.'),
     h3('When to stop believing it'),
-    p('Hybridisation is a model, and it creaks. It does badly for heavier elements, where the '
-      + 'energy cost of mixing s and p is high and the bond angles stay nearer 90° — '
-      + 'H₂S has a bond angle of 92°, not 109.5°, and calling it sp³ is a '
-      + 'fiction. For anything serious, chemists compute molecular orbitals over the whole molecule '
-      + 'and never mention hybrids at all. ', b('It is a very good language for drawing organic '
+    p('Hybridisation is a model, and it creaks. It does badly for the heavier elements, where '
+      + 'mixing s and p costs more energy and the bond angles stay nearer 90°. Hydrogen '
+      + 'sulfide has a bond angle of 92°, not 109.5°, and calling it sp³ is simply a '
+      + 'fiction. For anything serious, chemists compute orbitals over the whole molecule and '
+      + 'never mention hybrids at all. ', b('It is a very good language for drawing organic '
       + 'molecules on paper and a poor description of what the electrons are doing.'))
   ));
 
-  mol('colour', 'Why things are coloured', 'The box, applied to a real molecule', () => frag(
+  mol('colour', 'Why things are coloured', 'The box, applied to a real molecule',
+    'A molecule absorbs the colours whose photons match the gap between its filled and empty '
+    + 'levels, and you see what is left over. For a chain of alternating double bonds you can '
+    + 'predict that gap with the particle in a box — the longer the chain, the redder the colour.',
+    () => frag(
     p('Carrots are orange, blood is red and leaves are green, and all three are the same physics: '
       + 'a molecule has a gap between its filled and empty levels, and light whose photons match '
       + 'that gap gets absorbed. What you see is what is left.'),
@@ -238,17 +262,28 @@
       + 'excellent at four carbons and increasingly too red after that, and the discrepancy is '
       + 'measuring the bond alternation.'),
     h3('And the general rule you can keep'),
-    p('Longer conjugation, smaller gap, redder absorption. That one sentence covers an enormous '
-      + 'amount of chemistry: why β-carotene with eleven conjugated double bonds absorbs blue '
-      + 'and looks orange, why adding more rings to a dye shifts it through the spectrum, why '
-      + 'chlorophyll’s huge conjugated ring absorbs red and blue and leaves green, and why '
-      + 'short molecules like ethene are colourless — their gap is so big that the absorption '
-      + 'is in the far ultraviolet, where your eyes were never going to notice.')
+    p('Longer conjugation, smaller gap, redder absorption. A longer box has lower levels packed '
+      + 'closer together, so less energy gets an electron across, so the light it swallows is '
+      + 'redder. That one sentence covers an enormous amount of chemistry.'),
+    p('β-carotene has eleven double bonds in a row. Long box, small gap, so it absorbs blue '
+      + 'light — and a carrot that has had the blue taken out of it looks orange. '
+      + 'Chlorophyll’s big conjugated ring takes red and blue and leaves green, which is the '
+      + 'colour of almost every plant on the planet. Adding rings to a dye walks its colour '
+      + 'along the spectrum for the same reason.'),
+    p('And it explains the other half of the world, the colourless half. Ethene has just one '
+      + 'double bond. Tiny box, huge gap, so its absorption sits far out in the ultraviolet where '
+      + 'your eyes have nothing to see with. It is not that ethene fails to absorb light. It is '
+      + 'that it absorbs light you cannot see, and anything that absorbs nothing in the visible '
+      + 'range looks clear.')
   ));
 
   /* ===================================================== light and matter */
 
-  light('transitions', 'Absorption and emission', 'And the rules about which jumps happen', () => frag(
+  light('transitions', 'Absorption and emission', 'And the rules about which jumps happen',
+    'An atom will only take a photon whose energy exactly matches a gap it has. That is why a '
+    + 'gas is see-through at almost every colour and solidly opaque at a few. Some exactly '
+    + 'matching jumps still do not happen, because the photon has to hand over its spin as well.',
+    () => frag(
     p('An atom in a low state meets a photon of exactly the right energy and takes it, jumping up. '
       + 'Later it drops back and emits one. That is the basic exchange, and two things about it '
       + 'are less obvious than they look.'),
@@ -287,11 +322,15 @@
       + 'when you arrange for that to run away with itself.')
   ));
 
-  light('lasers', 'Lasers', 'Why you have to fight thermodynamics to build one', () => frag(
+  light('lasers', 'Lasers', 'Why you have to fight thermodynamics to build one',
+    'A photon passing an excited atom can knock it down and make a second photon identical to '
+    + 'itself. Do that over and over and you get a laser. The hard part is that you need more '
+    + 'atoms excited than not, and no temperature in the universe will give you that.',
+    () => frag(
     p('Stimulated emission multiplies photons: one goes in, two come out, identical. Do that '
-      + 'repeatedly and you get an avalanche of photons all in step — which is what laser '
-      + 'light is, and why it stays a narrow beam over a kilometre while a torch spreads out in '
-      + 'ten metres.'),
+      + 'over and over and you get an avalanche of photons all in step with each other. That is '
+      + 'what laser light is. And being in step is why a laser stays a narrow beam over a '
+      + 'kilometre while a torch has spread out after ten metres.'),
     p('There is one problem, and it is fundamental. Stimulated emission needs atoms in the upper '
       + 'state. Absorption needs atoms in the lower one. Both processes have the same rate '
       + 'constant, so whichever population is bigger wins — and at equilibrium the lower one '
@@ -324,10 +363,20 @@
       + 'a process Einstein deduced from thermodynamics in 1917.'))
   ));
 
-  light('spectroscopy', 'Reading a spectrum', 'What a chemist actually does with all this', () => frag(
-    p('Nearly everything known about a molecule was found by shining something at it and seeing '
-      + 'what came back. Each region of the spectrum reaches a different kind of motion, because '
-      + 'each kind has a different energy spacing:'),
+  light('spectroscopy', 'Reading a spectrum', 'What a chemist actually does with all this',
+    'Almost everything known about any molecule was learnt by shining light at it and seeing '
+    + 'what came back. Each region of the spectrum has the right size of energy to move a '
+    + 'different thing — rotations, vibrations, electrons, inner shells — so each answers a '
+    + 'different question.',
+    () => frag(
+    p('Nearly everything known about any molecule was found by shining something at it and '
+      + 'seeing what came back. You cannot look at a molecule. But you can find out which '
+      + 'photons it is willing to accept, and that turns out to be nearly as good.'),
+    p('Which photons those are depends on what you are trying to move. Spinning a whole molecule '
+      + 'round is easy and needs very little energy. Stretching a bond costs more. Shifting an '
+      + 'electron between orbitals costs much more again, and knocking out an inner-shell '
+      + 'electron costs enormously more. So each region of the spectrum answers a different '
+      + 'question, and the four of them barely overlap:'),
     table(['Region', 'Photon energy', 'What it moves', 'What it tells you'], [
       ['Microwave', fmt(Q.photonFromNM(1e7).eV * 1000, 3) + ' meV',
         'Whole-molecule rotation', 'Bond lengths, to astonishing precision'],
@@ -339,10 +388,13 @@
         'Inner-shell electrons, and diffraction', 'Which elements, and where every atom sits'],
     ], 'Four orders of magnitude in energy, four completely different questions answered.'),
     h3('Beer–Lambert, and why absorbance is a logarithm'),
-    p('Each thin slice of solution absorbs the same ', em('fraction'), ' of whatever light reaches '
-      + 'it — not the same amount, the same fraction, because what matters is how many '
-      + 'molecules a photon meets. Fractions multiply, so the intensity falls exponentially, so '
-      + 'taking a logarithm makes everything linear again:'),
+    p('Picture the solution as a stack of thin slices. Each slice absorbs the same ',
+      em('fraction'), ' of whatever light arrives at it — not the same amount, the same '
+      + 'fraction, because a photon only cares how many molecules it has to get past. Halve the '
+      + 'light at the first slice, halve what is left at the second, and so on.'),
+    p('Fractions multiply rather than add, so the brightness falls away exponentially with '
+      + 'depth. And the thing that undoes an exponential is a logarithm. So chemists take the log '
+      + 'and get a quantity that goes up in a straight line with concentration:'),
     qeq('A = εcl,    and the light that gets through is 10⁻ᴬ'),
     table(['Absorbance', 'Light getting through', 'Reading it'], [
       ['0.1', fmt(Q.beerLambert(0.1, 1, 1).percent, 3) + '%', 'a pale solution'],

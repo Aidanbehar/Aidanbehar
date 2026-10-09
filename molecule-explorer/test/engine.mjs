@@ -2686,6 +2686,64 @@ describe('quantum physics beyond the equation', () => {
     assert.ok(total >= 40, 'only ' + total + ' pages');
   });
 
+  /* Readability, enforced rather than hoped for.
+   *
+   * Two things make an explanation hard that no structural test would catch:
+   * a sentence so long the reader loses the thread before the verb, and a
+   * technical word used before anything has earned it. These two tests pin
+   * both, because the prose on these pages is the actual product — a page
+   * that builds and renders and is still incomprehensible has failed. */
+  test('every page opens with a plain-words summary, and it is plain', async () => {
+    const got = await run(() => {
+      /* Words that may appear in the body of a page, once the page has built
+       * up to them, but never in the summary that is supposed to be readable
+       * cold by somebody who has read nothing else. */
+      const JARGON = ['eigenvalue', 'eigenstate', 'eigenfunction', 'hamiltonian', 'operator',
+        'commutator', 'degenerac', 'orthogonal', 'chemical potential', 'metastable',
+        'equipartition', 'observable', 'postulate', 'expectation value', 'wavefunction',
+        'amplitude', 'normalis', 'eigen'];
+      const bad = [];
+      window.ME.quantumPages.forEach((pg) => {
+        const short = pg.short || '';
+        if (!short) { bad.push([pg.id, 'no short version at all']); return; }
+        if (short.length < 120) bad.push([pg.id, 'summary is only ' + short.length + ' characters']);
+        if (short.length > 400) bad.push([pg.id, 'summary is ' + short.length + ' characters, too long to be a summary']);
+        if (/undefined|NaN|\[object/.test(short)) bad.push([pg.id, 'broken text in summary']);
+        /* No equations in the summary: it is prose, in words. */
+        if (/[=∫∂ℏψφ]/.test(short)) bad.push([pg.id, 'summary contains equation symbols']);
+        const hit = JARGON.filter((j) => short.toLowerCase().indexOf(j) >= 0);
+        if (hit.length) bad.push([pg.id, 'summary uses ' + hit.join(', ') + ' before the page earns it']);
+      });
+      return bad;
+    });
+    assert.deepEqual(got, [], JSON.stringify(got, null, 1));
+  });
+
+  test('no page has a sentence long enough to lose the reader', async () => {
+    const LIMIT = 36;
+    const got = await run((limit) => {
+      const bad = [];
+      window.ME.quantumPages.forEach((pg) => {
+        const holder = document.createElement('div');
+        holder.appendChild(pg.build());
+        /* Per paragraph, and a trailing colon ends a sentence: these pages
+         * routinely run a sentence into a displayed equation, and joining
+         * paragraphs would invent run-ons that no reader ever sees. */
+        Array.from(holder.querySelectorAll('p')).forEach((node) => {
+          const t = node.textContent.trim();
+          if (t.length < 40) return;
+          t.split(/(?<=[.?!:])\s+/).forEach((sentence) => {
+            const n = sentence.split(/\s+/).filter((w) => w).length;
+            if (n > limit) bad.push([pg.id, n + ' words', sentence.slice(0, 110)]);
+          });
+        });
+      });
+      return bad;
+    }, LIMIT);
+    assert.deepEqual(got, [], got.length + ' over-long sentences:\n'
+      + got.map((x) => '  ' + x.join(' | ')).join('\n'));
+  });
+
   test('every quantum generator produces a gradeable question', async () => {
     const bad = await run(() => {
       const out = [];

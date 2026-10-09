@@ -15,16 +15,22 @@
   const { qeq, h3 } = ME.quantumInternals;
   const fmt = (x, s) => ME.fmt.fmt(x, s || 4);
   const frag = (...kids) => K.frag(kids.flat());
-  const many = (id, n, bl, f) => ME.quantumPage('Many particles', id, n, bl, f);
-  const odd = (id, n, bl, f) => ME.quantumPage('The strange part', id, n, bl, f);
+  const many = (id, n, bl, sh, f) => ME.quantumPage('Many particles', id, n, bl, sh, f);
+  const odd = (id, n, bl, sh, f) => ME.quantumPage('The strange part', id, n, bl, sh, f);
 
   /* ===================================================== many particles */
 
-  many('statistics', 'Two kinds of particle, two kinds of crowd', 'Fermi–Dirac and Bose–Einstein', () => frag(
-    p('Classical physics has one rule for how particles share out energy: the Boltzmann '
-      + 'distribution, where the chance of a state goes as e^(−E/kT) and anything can be '
-      + 'anywhere. Quantum mechanics has two rules, because there are two kinds of particle, and '
-      + 'the difference between them is a single sign in the wavefunction.'),
+  many('statistics', 'Two kinds of particle, two kinds of crowd', 'Fermi–Dirac and Bose–Einstein',
+    'There are two kinds of particle in the universe. One kind refuses to share a state with '
+    + 'another of its own kind, so they stack up from the bottom — that is matter. The other '
+    + 'kind actively likes company and piles into the lowest state together — that is light.',
+    () => frag(
+    p('Classical physics has one rule for how a crowd of particles shares out energy. The chance '
+      + 'of finding a particle in a state of energy E goes as e^(−E/kT), and there is no limit '
+      + 'on how many can pile into the same state. Everyone is free to be anywhere.'),
+    p('Quantum mechanics has two rules instead of one, because it turns out there are two kinds '
+      + 'of particle in the universe, and the only difference between them is the sign flip from '
+      + 'the exclusion page. The consequences of that one sign are enormous:'),
     F.statisticsFigure(),
     table(['', 'Fermions', 'Bosons'], [
       ['Who', 'Electrons, protons, neutrons — matter', 'Photons, phonons, helium-4 — carriers and condensates'],
@@ -35,16 +41,21 @@
       ['What that makes', 'Solid matter, metals, white dwarfs', 'Lasers, superfluids, Bose–Einstein condensates'],
     ]),
     h3('Why the Fermi curve is a cliff'),
-    p('At absolute zero every state below a certain energy is full and every state above it is '
-      + 'empty, with nothing in between — not because the electrons are cold and sluggish, but '
-      + 'because there is nowhere else for them to go. The lowest states are taken, so the next '
-      + 'electron is forced upstairs. ', b('A metal at absolute zero still has electrons moving at '
-      + 'thousands of kilometres per second'), ', and they cannot slow down.'),
-    p('Warm it up and only the electrons within about kT of the top of the pile can do anything '
-      + '— everyone below is boxed in by full states above them. At room temperature that is '
-      + 'a fraction of a percent of them, which is why metals have far smaller heat capacities '
-      + 'than classical physics predicts. That discrepancy was a famous embarrassment for thirty '
-      + 'years before Pauli explained it in one line.'),
+    p('At absolute zero every state below a certain energy is full, every state above it is '
+      + 'empty, and there is nothing in between. That is not because the electrons are cold and '
+      + 'sluggish. It is because there is nowhere else for them to go: the lowest states are '
+      + 'already taken, so each new electron is forced upstairs. ',
+      b('A metal at absolute zero still has electrons moving at thousands of kilometres per '
+      + 'second'), ', and there is nothing they can do to slow down.'),
+    p('Now warm it up. Heating a crowd means letting some of them move up to higher states. But '
+      + 'an electron deep in the pile has nowhere to move up ', em('to'), ': every state just '
+      + 'above it is already occupied. Only the ones near the very top of the pile have empty '
+      + 'states within reach, and at room temperature that is a fraction of a percent of them.'),
+    p('Which settles an old embarrassment. Classical physics predicts that the free electrons in '
+      + 'a metal should soak up a great deal of heat, and they do not — a metal\u2019s heat '
+      + 'capacity is almost all lattice vibration. The electrons cannot absorb heat because '
+      + 'almost none of them are allowed to move. That mismatch went unexplained for thirty '
+      + 'years, and then Pauli settled it in a line.'),
     h3('And why the Bose curve has no ceiling'),
     p('Nothing stops bosons sharing, and in fact they prefer it: the more there are in a state, '
       + 'the more likely the next one is to join. Cool a gas of them far enough and a macroscopic '
@@ -57,7 +68,11 @@
       + 'works for air, and fails completely for the electrons in a wire.')
   ));
 
-  many('bands', 'Why metals conduct', 'What happens to levels when you bring 10²³ atoms together', () => frag(
+  many('bands', 'Why metals conduct', 'What happens to levels when you bring 10²³ atoms together',
+    'Two atoms make two levels out of one. A huge number of atoms make a huge number of levels '
+    + 'so close together that they are effectively a continuous band. Whether a material '
+    + 'conducts comes down to one question: is its topmost band part-full, or exactly full?',
+    () => frag(
     p('Two atoms give two molecular orbitals, one up and one down, as on the bonding page. Three '
       + 'give three. A mole gives 10²³, spread over the same finite energy range — '
       + 'so the gaps between them become unmeasurably small and the levels merge into a continuous ',
@@ -94,7 +109,11 @@
       + 'colour.')
   ));
 
-  many('devices', 'Doping, LEDs and solar cells', 'Engineering the gap', () => frag(
+  many('devices', 'Doping, LEDs and solar cells', 'Engineering the gap',
+    'Add about one foreign atom per million to silicon and you change how well it conducts by a '
+    + 'factor of a billion. Join a piece with spare electrons to a piece short of them and you '
+    + 'get a one-way valve for current — which is a diode, an LED and a solar cell.',
+    () => frag(
     p('Pure silicon is nearly useless — too few carriers to carry anything. The trick that '
       + 'built the modern world is to add impurities on purpose, about one atom in a million, and '
       + 'change the carrier count by a factor of a billion.'),
@@ -123,23 +142,29 @@
         return [n, g + ' eV', Math.round(r.lambdaNM) + ' nm', r.region];
       }), 'Red, orange and green LEDs arrived in the 1960s. Blue took until the 1990s and won a Nobel Prize.'),
     p('Blue was hard because it needs a wide gap, and wide-gap materials are difficult to grow '
-      + 'without defects and difficult to dope p-type. Nobody could make a good blue LED for thirty '
-      + 'years after the red one — and without blue there is no white LED, because white is '
-      + 'made from a blue LED with a phosphor on top. Every white light in your house is downstream '
-      + 'of solving that one materials problem.'),
+      + 'without defects and difficult to dope p-type. Nobody could make a good blue LED for '
+      + 'thirty years after the red one.'),
+    p('And without blue there is no white LED at all, because a white LED is a blue one with a '
+      + 'phosphor coating on top of it. Every white light in your house is downstream of somebody '
+      + 'solving that single materials problem.'),
     h3('Run it backwards: a solar cell'),
     p('Same junction, no current applied. A photon with more than the gap energy knocks an electron '
       + 'up into the conduction band, the built-in field sweeps it one way and the hole the other, '
-      + 'and you have a current. The gap sets the trade-off and there is no way around it: too '
-      + 'small a gap and you capture plenty of photons but waste most of each one’s energy as '
-      + 'heat; too large and most sunlight passes straight through. The best compromise for the '
-      + 'solar spectrum is around 1.3 eV, which is close enough to silicon’s '
-      + fmt(1.12, 3) + ' eV to be the reason the whole industry is built on sand.')
+      + 'and you have a current.'),
+    p('The gap sets a trade-off with no way round it. A small gap catches plenty of photons, but '
+      + 'every photon with more energy than the gap wastes the excess as heat. A large gap wastes '
+      + 'nothing, but most of the sunlight sails straight through without being caught at all. '
+      + 'The best compromise against the solar spectrum is around 1.3 eV — close enough to '
+      + 'silicon’s ' + fmt(1.12, 3) + ' eV that the entire industry ended up built on sand.')
   ));
 
   /* ===================================================== the strange part */
 
-  odd('entanglement', 'Entanglement', 'The one Einstein would not accept', () => frag(
+  odd('entanglement', 'Entanglement', 'The one Einstein would not accept',
+    'Two particles can be prepared so that neither has a definite property of its own, but the '
+    + 'pair has a definite relationship. Measure one and the other is settled at once, however '
+    + 'far away. Experiments show this is not the two of them having agreed in advance.',
+    () => frag(
     p('Make two particles together in the right way and they stop having separate states. There is '
       + 'one wavefunction for the pair, and it says things about the pair that it does not say '
       + 'about either half.'),
@@ -179,7 +204,11 @@
       + 'control, which is exactly why it does not break relativity.'))
   ));
 
-  odd('qubits', 'Quantum computing, honestly', 'What it is, and what it is not', () => frag(
+  odd('qubits', 'Quantum computing, honestly', 'What it is, and what it is not',
+    'A quantum computer does not try every answer at once and hand you the best one. It arranges '
+    + 'for the wrong answers to cancel each other out, like the dark bands in a two-slit '
+    + 'pattern, so that what is left when you look is probably right. Cancelling, not parallelism.',
+    () => frag(
     p('An ordinary bit is 0 or 1. A qubit is a superposition of both, which gets described as '
       + '"being in both states at once" — a phrase that has done more harm than good. Here is '
       + 'the version that survives contact with the details.'),
@@ -209,19 +238,25 @@
       ['Most other things', 'None known', 'Including, as far as anyone can prove, the hard optimisation problems people most want solved'],
     ]),
     h3('Why it is so hard to build'),
-    p('Decoherence. The machine must keep its superpositions intact, and the universe is extremely '
-      + 'good at recording what things are doing. Every stray photon, every vibration, every '
-      + 'passing magnetic field is a measurement, and a measurement is the end of the computation. '
-      + 'That is why these machines sit in dilution refrigerators at a hundredth of a degree above '
-      + 'absolute zero behind layers of shielding, and why qubit counts are still in the hundreds '
-      + 'rather than the millions a useful factoring run would need.'),
-    p('None of which means it is hype. It means the hard part is engineering coherence, and the '
-      + 'first real application is likely to be simulating molecules — which is fitting, since '
-      + 'Feynman’s original argument for building one was that nature is not classical and '
-      + 'simulating it on a classical machine is a losing game.')
+    p('Decoherence, which is the page on why you never see any of this, turned into an '
+      + 'engineering problem. The machine has to keep its superpositions intact, and the universe '
+      + 'is extremely good at recording what things are up to. Every stray photon, every '
+      + 'vibration, every passing magnetic field leaves a record of which state a qubit was in '
+      + '— and a record is a measurement, and a measurement ends the computation.'),
+    p('That is why these machines sit in refrigerators a hundredth of a degree above absolute '
+      + 'zero, behind layer after layer of shielding. And it is why qubit counts are still in the '
+      + 'hundreds rather than the millions that a useful factoring run would need.'),
+    p('None of which means the whole thing is hype. It means the hard part is engineering '
+      + 'coherence, and that the first real application is likely to be simulating molecules. '
+      + 'Which is fitting. Feynman’s original argument for building one of these was simply that '
+      + 'nature is not classical, so simulating it on a classical machine is a losing game.')
   ));
 
-  odd('decay', 'Radioactivity, and real randomness', 'Tunnelling with no clock', () => frag(
+  odd('decay', 'Radioactivity, and real randomness',  'Tunnelling with no clock',
+    'A radioactive nucleus has no way of knowing how old it is. Its chance of decaying in the '
+    + 'next second is the same whether it was made yesterday or a billion years ago. Half-lives '
+    + 'are statistics about crowds, and say nothing whatever about any individual atom.',
+    () => frag(
     p('An alpha particle inside a uranium nucleus does not have enough energy to climb out over the '
       + 'barrier holding it in. It gets out anyway, by tunnelling — the same effect from the '
       + 'barrier page, happening at nuclear scale.'),
@@ -257,7 +292,11 @@
       + 'only randomness anyone knows of that is not merely ignorance.')
   ));
 
-  odd('interpretations', 'What any of it means', 'And why chemistry gets to not care', () => frag(
+  odd('interpretations', 'What any of it means', 'And why chemistry gets to not care',
+    'The equations are agreed on and the predictions all work. What is still argued about is '
+    + 'what is physically going on underneath, and every answer on offer makes exactly the same '
+    + 'predictions. So you can do all of chemistry without ever picking a side.',
+    () => frag(
     p('The equations are not in dispute. Every prediction in this tab has been checked, often to '
       + 'ten or twelve figures, and quantum mechanics is the most precisely tested theory anybody '
       + 'has. The argument is about what the mathematics is describing — and it is a hundred '

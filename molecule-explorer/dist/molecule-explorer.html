@@ -1974,6 +1974,20 @@ code, .mono { font-family: var(--font-mono); font-size: .88em; }
 .qm-pagenav { display: flex; gap: 10px; justify-content: space-between; margin-top: 28px;
   padding-top: 16px; border-top: 1px solid var(--border); }
 
+/* The plain-words summary every page opens with. Visually set apart because
+   it is a different kind of writing from the page body: no jargon, no
+   equations, short sentences. A reader in a hurry reads only these. */
+.qm-short {
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  padding: 12px 16px; margin: 0 0 20px;
+}
+.qm-shortlabel {
+  display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .08em;
+  font-weight: 700; color: var(--accent-strong); margin-bottom: 4px;
+}
+.qm-short p { margin: 0 !important; font-size: 1.02rem; line-height: 1.6; }
+
 </style>
 </head>
 <body>
@@ -22491,8 +22505,17 @@ window.ME = window.ME || {};
    * across as many files as the subject needs without any of them knowing
    * about the others. Order of registration is reading order. */
   ME.quantumPages = [];
-  ME.quantumPage = function (group, id, name, blurb, build) {
-    ME.quantumPages.push({ group: group, id: id, name: name, blurb: blurb, build: build });
+  /* Every page opens with `short`: the one idea, in the plainest words it can
+   * be put in, before any of the detail. A reader who stops after that box
+   * should still have learnt the thing the page is about. It is allowed to
+   * come either before or after the build function so that content files can
+   * put it up at the top of the page where it is read, rather than trailing
+   * after a hundred lines of prose. */
+  ME.quantumPage = function (group, id, name, blurb, a, b) {
+    const build = typeof a === 'function' ? a : b;
+    const short = typeof a === 'function' ? (b || '') : (a || '');
+    ME.quantumPages.push({ group: group, id: id, name: name, blurb: blurb,
+      short: short, build: build });
   };
 
   ME.quantumFigures = { boxFigure, stationaryFigure, tunnelFigure, wellFigure,
@@ -22510,6 +22533,11 @@ window.ME = window.ME || {};
  * direction. A reader who has seen the damage understands why anybody would
  * tear up mechanics and start again; a reader who meets the equation first
  * has to take it on trust.
+ *
+ * Every page opens with a plain-words summary (the fourth argument). That box
+ * carries no equations, no symbols and no words the page has not earned yet.
+ * Somebody who reads only the boxes should still finish the tab knowing what
+ * quantum mechanics claims.
  */
 (function () {
   'use strict';
@@ -22521,38 +22549,53 @@ window.ME = window.ME || {};
   const { qeq, h3 } = ME.quantumInternals;
   const fmt = (x, s) => ME.fmt.fmt(x, s || 4);
   const frag = (...kids) => K.frag(kids.flat());
-  const page = (id, name, blurb, build) =>
-    ME.quantumPage('Where it came from', id, name, blurb, build);
+  const page = (id, name, blurb, short, build) =>
+    ME.quantumPage('Where it came from', id, name, blurb, short, build);
 
-  page('catastrophe', 'The ultraviolet catastrophe', 'Classical physics predicts infinity', () => frag(
+  page('catastrophe', 'The ultraviolet catastrophe', 'Classical physics predicts infinity',
+    'Hot things glow, and old physics could not say why. Worse: it said every warm object '
+    + 'should blast out infinite ultraviolet. Planck fixed it by guessing that light can only '
+    + 'be built up in whole lumps, never in any amount you like. That guess started all of this.',
+    () => frag(
     p('Heat something up and it glows. A poker goes dull red, then orange, then white. That is '
       + 'about as ordinary as physics gets, and in 1900 nobody could explain it — not '
       + 'approximately, not nearly. The theory gave an answer of infinity.'),
-    p('The reasoning was impeccable. Inside a hot cavity, light rattles around in standing waves, '
-      + 'and classical physics has an iron rule that every way a system can wiggle gets the same '
-      + 'share of energy on average. Count the standing waves that fit, give each one its share, '
-      + 'add them up. The trouble is that short wavelengths fit in far more ways than long ones '
-      + '— and there is no shortest wavelength. So the sum runs away.'),
+    h3('How you get to infinity by doing everything right'),
+    p('Light inside a hot oven bounces back and forth between the walls, and as with a guitar '
+      + 'string, only the waves that fit neatly between the ends survive. Call each wave that fits '
+      + 'a ', em('way of wiggling'), '. Classical physics then adds one rule, and the whole disaster '
+      + 'comes out of it: on average, every way of wiggling ends up holding the same amount of '
+      + 'energy. Nothing gets a bigger share for being short or long. Everybody gets the same wage.'),
+    p('So count the ways of wiggling, pay each one its wage, and add up the bill. Here is the '
+      + 'problem. Short waves fit between the walls in far more ways than long ones — halve the '
+      + 'wavelength and you roughly ', em('octuple'), ' the number of ways — and there is no '
+      + 'shortest wave. The workforce is infinite and everyone is on the same wage, so the payroll '
+      + 'is infinite. That is not a rounding error in the theory. That is the theory.'),
     callout(b('Taken seriously, this says that opening an oven door should kill you. '),
-      'Every warm object would dump most of its energy as ultraviolet and X-rays, instantly. '
-      + 'Ehrenfest named it the ultraviolet catastrophe, and it is the clearest case in physics of '
-      + 'a theory being not slightly off but spectacularly, visibly absurd.'),
+      'Every warm object would dump most of its energy as ultraviolet and X-rays, instantly, '
+      + 'because that is where almost all of the ways of wiggling are. Ehrenfest named it the '
+      + 'ultraviolet catastrophe. It is the clearest case in physics of a theory being not '
+      + 'slightly off but visibly absurd.'),
     F.blackbodyFigure(),
     h3('Planck’s fix, which he hated'),
-    p('Planck found that one assumption makes the curve come out right: that a wiggle of frequency '
-      + 'f cannot hold just any amount of energy, only whole multiples of a lump:'),
+    p('Planck found one assumption that makes the curve come out right. A wiggle of frequency f '
+      + 'cannot hold just any amount of energy. It can hold one lump, or two lumps, or seventeen '
+      + 'lumps — never half a lump — and the size of a lump is hf:'),
     qeq('E = nhf,    n = 1, 2, 3, …'),
-    p('That single change fixes everything, and the reason it works is worth understanding rather '
-      + 'than memorising. A high-frequency wiggle needs a ', em('big'), ' lump to get started — '
-      + 'a whole hf. At the temperatures involved there is simply not enough energy going around to '
-      + 'pay the entry fee, so those wiggles sit empty. The short wavelengths are not sharing; they '
-      + 'are priced out. The sum stops running away because most of its terms are zero.'),
-    p('Planck thought this was a mathematical trick to be explained away later. It took Einstein, '
-      + 'five years on, to say the obvious uncomfortable thing: the lumps are real.'),
+    p('Why that fixes it is worth following rather than memorising, and the wage analogy carries '
+      + 'straight over. A high-frequency wiggle has a big lump size, so it will not turn up for '
+      + 'less than a big payment. At the temperature of an oven there is nowhere near enough energy '
+      + 'going around to pay that, so those wiggles never show up for work at all. The short '
+      + 'wavelengths are not sharing the energy. They are ', b('priced out'), '. The sum stops '
+      + 'running away because almost all of its terms are now zero.'),
+    p('Note what Planck did not say. He did not say light is made of particles — only that it '
+      + 'is handed over in whole lumps, which he took for a bookkeeping trick that somebody would '
+      + 'later explain away. It took Einstein, five years on, to say the uncomfortable thing: the '
+      + 'lumps are real, and they are what light is made of.'),
     h3('What falls out for free'),
-    p('Two laws that had been found by measurement and had no explanation now follow from the '
-      + 'curve. Wien’s law says the peak shifts as 1/T, and Stefan’s law says the total '
-      + 'power goes as T⁴ — both derivable, both checkable:'),
+    p('Two laws that had been found by measurement, with no explanation behind them, now follow '
+      + 'from the curve. Wien’s law says the peak colour shifts as 1/T, and Stefan’s law says the '
+      + 'total power goes as T⁴. Both are derivable and both are checkable:'),
     table(['Object', 'Temperature', 'Peak wavelength', 'Which is'], [
       ['You', '310 K', Math.round(Q.wienPeak(310).lambdaNM) + ' nm', 'far infrared — a thermal camera sees you by this'],
       ['A wood fire', '1100 K', Math.round(Q.wienPeak(1100).lambdaNM) + ' nm', 'infrared, with the red tail just visible'],
@@ -22560,18 +22603,22 @@ window.ME = window.ME || {};
       ['The Sun', '5772 K', Math.round(Q.wienPeak(5772).lambdaNM) + ' nm', 'green, right in the middle of what your eyes do'],
       ['Rigel', '11000 K', Math.round(Q.wienPeak(11000).lambdaNM) + ' nm', 'ultraviolet, which is why it looks blue-white'],
     ], 'Every number from λT = hc/kx, with x the root of x = 5(1 − e⁻ˣ) solved in the app.'),
-    p('The Sun row is not a coincidence worth passing over. Your eyes are sensitive exactly where '
-      + 'the Sun is brightest, which is a fact about evolution rather than about physics — but '
-      + 'it is nice that the quantum theory of hot objects tells you why green is the middle of the '
-      + 'visible range.')
+    p('The Sun row is worth a second look. Your eyes are most sensitive exactly where the Sun is '
+      + 'brightest. That is a fact about evolution rather than about physics. But it is a nice '
+      + 'one: it means the quantum theory of hot objects is what tells you why green ended up in '
+      + 'the middle of the colours you can see.')
   ));
 
-  page('photoelectric', 'Light arrives in lumps', 'The photoelectric effect, and why brightness does nothing', () => frag(
-    p('Shine light on a metal and electrons come off. Classically that is easy: light is a wave, '
-      + 'the wave shakes the electrons, and a stronger wave shakes them harder. Brighter light '
-      + 'should give faster electrons. It should also work at any colour, given enough time for '
-      + 'the energy to build up.'),
-    p('Neither happens, and the way it fails is specific enough to point straight at the answer.'),
+  page('photoelectric', 'Light arrives in lumps', 'The photoelectric effect, and why brightness does nothing',
+    'Shine light on metal and electrons come off — but only if the light is blue enough. Red '
+    + 'light fails however bright you make it. That only makes sense if each electron is knocked '
+    + 'out by one single lump of light, and a red lump is too small to do the job.',
+    () => frag(
+    p('Shine light on a metal and electrons come off. Classically that is easy. Light is a wave, '
+      + 'the wave shakes the electrons loose, and a stronger wave shakes them harder, so brighter '
+      + 'light should give faster electrons. It should also work at any colour if you are patient, '
+      + 'because a weak wave just takes longer to build the energy up.'),
+    p('Neither happens. And the way it fails is specific enough to point straight at the answer:'),
     table(['What you do', 'What classical physics says', 'What actually happens'], [
       ['Make the light brighter', 'Faster electrons', 'More electrons, each one exactly as fast as before'],
       ['Use redder light', 'Slower electrons, eventually', 'Below a threshold colour, nothing at all — forever'],
@@ -22579,18 +22626,23 @@ window.ME = window.ME || {};
       ['Make the light bluer', 'Not much', 'Faster electrons, in exact proportion to the frequency'],
     ]),
     callout(b('The threshold is the killer. '), 'A dim blue lamp frees electrons from sodium. An '
-      + 'arc lamp of red light, blindingly bright, frees none — not one, not ever, no matter '
-      + 'how long you leave it. A wave has no way to explain that: pour in enough energy and '
-      + 'something should eventually give. Nothing gives.'),
-    p('Einstein’s reading, in 1905, was that light arrives as lumps of energy hf and each '
-      + 'electron is hit by exactly one. Then everything lines up at once. Brighter means more '
-      + 'lumps, so more electrons — not faster ones, because each electron still only gets one '
-      + 'lump. Redder means smaller lumps, and below a certain size the lump cannot pay the cost of '
-      + 'getting out:'),
+      + 'arc lamp of red light, blindingly bright, frees none — not one, not ever, no matter how '
+      + 'long you leave it on. A wave has no way out of this. Pour in enough energy and something '
+      + 'should eventually give. Nothing gives.'),
+    h3('One lump, one electron'),
+    p('Einstein’s reading, in 1905, was that light arrives as lumps of energy hf, and that each '
+      + 'electron is hit by exactly one of them. No teaming up, no saving the energy from an '
+      + 'earlier lump. One lump, one electron, take it or leave it.'),
+    p('Every row of that table then falls into place at once. Brighter light means more lumps '
+      + 'arriving, so more electrons come off — but not faster ones, because each electron is '
+      + 'still being paid by a single lump of the same size. Redder light means smaller lumps, and '
+      + 'below a certain size a lump simply cannot cover the cost of getting out of the metal:'),
     qeq('(energy of the fastest electron) = hf − φ'),
-    p('φ is the work function, the toll for leaving the metal. The equation is a straight '
-      + 'line, which is what makes the experiment so decisive — plot the electron energy '
-      + 'against frequency and you can read Planck’s constant off the slope with a ruler:'),
+    p('φ is the work function: the toll an electron pays to leave. Read the equation as a '
+      + 'sentence and it says what the lump brought in, minus the toll, is what the electron '
+      + 'leaves with. It is also a straight line, which is what made the experiment decisive. '
+      + 'Plot electron energy against frequency and Planck’s constant is the slope — you can get '
+      + 'it off the graph with a ruler:'),
     F.photoelectricFigure(),
     worked('Violet light on sodium', [
       { q: 'The light', why: '400 nm, so each photon carries 1239.8/400',
@@ -22600,39 +22652,46 @@ window.ME = window.ME || {};
         maths: fmt(Q.photoelectric(400, 2.28).kineticEV, 3) + ' eV' },
       { q: 'As a speed', why: 'From ½mv² for an electron',
         maths: Math.round(Q.photoelectric(400, 2.28).speed / 1000) + ' km/s' },
-      { q: 'The stopping voltage', why: 'The potential that just turns the fastest one back — '
-          + 'numerically the same as the energy in eV, which is what makes eV such a convenient unit',
+      { q: 'The stopping voltage', why: 'The voltage that just turns the fastest one back. It is '
+          + 'numerically the same as the energy in eV, which is the whole reason eV is a '
+          + 'convenient unit here',
         maths: fmt(Q.photoelectric(400, 2.28).stoppingVolts, 3) + ' V' },
-      { q: 'And the threshold', why: '1239.8/2.28 — longer than this and nothing happens',
+      { q: 'And the threshold', why: '1239.8/2.28 — any longer than this and nothing happens',
         maths: Math.round(Q.photoelectric(400, 2.28).thresholdNM) + ' nm, which is green' },
     ]),
-    p('That last line is testable on a kitchen table. Green light on sodium: nothing. Blue: '
-      + 'electrons. The line between them sits at '
-      + Math.round(Q.photoelectric(400, 2.28).thresholdNM) + ' nm and it is sharp.')
+    p('That last line is testable on a kitchen table. Green light on sodium: nothing. Blue light: '
+      + 'electrons. The line between the two sits at '
+      + Math.round(Q.photoelectric(400, 2.28).thresholdNM) + ' nm, and it is sharp.')
   ));
 
-  page('compton', 'Photons push back', 'Compton scattering, and momentum without mass', () => frag(
-    p('The photoelectric effect says light carries energy in lumps. Compton’s experiment, '
-      + 'twenty years later, says those lumps also carry ', b('momentum'), ' — and that is the '
-      + 'one that settled the argument, because momentum is what particles have and waves do not.'),
+  page('compton', 'Photons push back', 'Compton scattering, and momentum without mass',
+    'X-rays bouncing off a block of graphite come back a redder colour, by an amount that '
+    + 'depends only on the angle. Waves cannot do that. Collisions can. So a lump of light does '
+    + 'not just carry energy — it carries a shove, exactly like a moving ball.',
+    () => frag(
+    p('The photoelectric effect says light carries energy in lumps. Compton’s experiment, twenty '
+      + 'years later, says those lumps also carry ', b('momentum'), '. That is the one that '
+      + 'settled the argument, because momentum is the thing a moving object has and a spreading '
+      + 'wave does not.'),
     p('Fire X-rays at a block of graphite and look at what comes out sideways. Some of it comes '
-      + 'back at a longer wavelength than it went in — and the amount it lengthens depends only '
-      + 'on the angle, never on the material or the starting wavelength:'),
+      + 'back at a longer wavelength than it went in — and the amount of lengthening depends only '
+      + 'on the angle you look at. Not on the material, not on the wavelength you started with:'),
     qeq('Δλ = (h/mₑc)(1 − cos θ)'),
-    p('A wave cannot do this. Scatter a wave off something and it comes back at the same frequency, '
-      + 'because the electron is being shaken at that frequency and re-radiates at the frequency it '
-      + 'is shaken. Shift the colour and you have left wave physics behind.'),
-    callout(b('Treat it as a collision and it is just snooker. '), 'A photon with momentum h/λ '
-      + 'hits a stationary electron. Conserve energy and momentum — the same two rules you '
-      + 'would use for two billiard balls, with relativity for the electron — and the formula '
-      + 'above drops out in a page of algebra. The photon loses energy to the electron, and a photon '
-      + 'that has lost energy is a photon with a longer wavelength.'),
-    p('The quantity h/mₑc that appears is the ', term('Compton wavelength',
+    p('A wave cannot do this. Shake an electron with a wave of some frequency and it re-radiates '
+      + 'at the frequency you shook it at, because that is the only frequency in the problem. '
+      + 'Shift the colour and you have left wave physics behind.'),
+    callout(b('Treat it as a collision and it is just snooker. '), 'A photon carrying momentum '
+      + 'h/λ hits a stationary electron. Conserve energy and conserve momentum — the same two '
+      + 'rules you would use on two billiard balls, with relativity for the electron — and the '
+      + 'formula above drops out in a page of algebra. The photon loses energy to the electron it '
+      + 'hit, and a photon that has lost energy is a photon with a longer wavelength.'),
+    p('The quantity h/mₑc in that formula is the ', term('Compton wavelength',
       'h/mc for a particle, the wavelength at which its quantum and relativistic descriptions '
       + 'collide. For an electron it is 2.426 pm.'), ' of the electron, '
-      + fmt(Q.COMPTON * 1e12, 5) + ' pm. It is not a size, and the electron is not that big. It is '
-      + 'the scale at which trying to pin an electron down costs enough energy to make a second '
-      + 'electron out of nothing — which is where this subject hands over to particle physics.'),
+      + fmt(Q.COMPTON * 1e12, 5) + ' pm. It is not a size, and the electron is not that big. It '
+      + 'is the scale at which pinning an electron down gets absurdly expensive: squeeze one into '
+      + 'that space and it costs more energy than it would take to make a second electron out of '
+      + 'nothing. Which is the point where this subject hands over to particle physics.'),
     worked('X-rays bouncing off at a right angle', [
       { q: 'Going in', why: '0.0709 nm, the molybdenum Kα line Compton used',
         maths: fmt(Q.photonFromNM(0.0709).eV / 1000, 4) + ' keV' },
@@ -22640,7 +22699,7 @@ window.ME = window.ME || {};
         maths: fmt(Q.compton(0.0709, 90).shiftNM * 1000, 4) + ' pm' },
       { q: 'Coming out', why: '0.0709 nm + the shift',
         maths: fmt(Q.compton(0.0709, 90).lambdaOutNM, 5) + ' nm' },
-      { q: 'What the electron got', why: 'The difference in photon energy, which is now kinetic energy in the graphite',
+      { q: 'What the electron got', why: 'The energy the photon lost, which is now kinetic energy in the graphite',
         maths: fmt(Q.compton(0.0709, 90).electronEV, 4) + ' eV' },
       { q: 'Straight back at 180°', why: 'Twice the shift, because (1 − cos 180°) = 2',
         maths: fmt(Q.compton(0.0709, 180).shiftNM * 1000, 4) + ' pm' },
@@ -22651,61 +22710,74 @@ window.ME = window.ME || {};
       + 'and a very ordinary thing for a collision.')
   ));
 
-  page('spectra', 'Why atoms glow in stripes', 'Line spectra, Bohr, and a rule with no reason', () => frag(
-    p('Put hydrogen in a tube and run a current through it and it glows pink. Split that light with '
-      + 'a prism and the pink turns out to be four sharp lines — red, blue-green, violet, deep '
-      + 'violet — with nothing in between. Every hydrogen tube in every lab gives the same four. '
-      + 'So does every star.'),
-    p('Classically this is impossible twice over. An electron orbiting a nucleus is an accelerating '
-      + 'charge, and accelerating charges radiate; it should spiral into the nucleus in about ten '
-      + 'picoseconds, shining at a smoothly rising frequency as it goes. Instead atoms are stable '
-      + 'for billions of years and emit a handful of exact frequencies.'),
+  page('spectra', 'Why atoms glow in stripes', 'Line spectra, Bohr, and a rule with no reason',
+    'A hydrogen lamp does not glow in all colours. It glows in four sharp lines and nothing in '
+    + 'between, and every hydrogen lamp in the universe picks the same four. Something inside '
+    + 'the atom is only allowed certain energies, and the lines are the gaps between them.',
+    () => frag(
+    p('Put hydrogen in a tube and run a current through it and it glows pink. Split that light '
+      + 'with a prism and the pink turns out to be four sharp lines — red, blue-green, violet, '
+      + 'deep violet — with darkness in between. Every hydrogen tube in every lab gives the same '
+      + 'four. So does every star.'),
+    p('Classically this is impossible twice over. An electron going round a nucleus is a charge '
+      + 'going round a corner, and charges that go round corners radiate their energy away. So '
+      + 'the electron should spiral into the nucleus in about ten picoseconds, with its colour '
+      + 'sliding smoothly up the scale as it falls in. Instead, atoms last for billions of years '
+      + 'and give out a handful of exact frequencies.'),
     h3('Balmer’s formula, which nobody could explain'),
-    p('In 1885 a Swiss schoolteacher noticed the four visible lines fit one expression with no '
-      + 'physics in it at all — just small whole numbers:'),
+    p('In 1885 a Swiss schoolteacher noticed that the four visible lines fit one expression with '
+      + 'no physics in it at all — just small whole numbers:'),
     qeq('1/λ = R (1/n₁² − 1/n₂²)'),
-    p('It worked to five figures. It predicted lines nobody had looked for, in the ultraviolet and '
-      + 'the infrared, and they were there. And it meant nothing: why would the colour of light '
-      + 'depend on the difference of two reciprocal squares?'),
+    p('It worked to five figures. It predicted lines nobody had looked for yet, in the ultraviolet '
+      + 'and the infrared, and they were there. And it meant nothing. Why would the colour of '
+      + 'light depend on the difference of two reciprocal squares?'),
     h3('Bohr’s answer, and the price of it'),
-    p('Bohr’s 1913 model says the electron can only occupy certain orbits, it does not radiate '
-      + 'while it is in one, and light comes out when it drops from one to another. Pick the orbits '
-      + 'by insisting that the angular momentum is a whole multiple of ℏ and the energies come '
-      + 'out as −' + fmt(Q.ionisationEV(1), 5) + '/n² eV, which reproduces Balmer exactly.'),
+    p('Bohr’s 1913 model says three things. The electron can only sit in certain orbits. It does '
+      + 'not radiate while it stays in one. And light comes out when it drops from one orbit to '
+      + 'another, carrying away exactly the energy difference. Pick which orbits are allowed by '
+      + 'insisting the angular momentum is a whole multiple of ℏ, and the energies come out as '
+      + '−' + fmt(Q.ionisationEV(1), 5) + '/n² eV — which reproduces Balmer exactly.'),
     table(['Orbit', 'Radius', 'Electron speed', 'Energy'], [1, 2, 3, 4].map((n) => {
       const bo = Q.bohr(n);
       return ['n = ' + n, fmt(bo.radiusNM, 4) + ' nm',
         fmt(bo.fractionOfLight * 100, 3) + '% of light speed', fmt(bo.energyEV, 4) + ' eV'];
     }), 'The n = 1 radius is the Bohr radius, and it is still the unit atoms are measured in.'),
-    callout(b('But why whole multiples of ℏ? '), 'Bohr had no answer, and said so. The model '
-      + 'also fails completely on helium, says nothing about why some lines are brighter than '
-      + 'others, and has the electron on a definite path, which later turns out to be the one thing '
-      + 'it certainly does not have. It is right about the energies and wrong about everything '
-      + 'underneath them — which is a specific and useful kind of wrong.'),
+    callout(b('But why whole multiples of ℏ? '), 'Bohr had no answer and said so. The model also '
+      + 'fails completely on helium, says nothing about why some lines come out brighter than '
+      + 'others, and puts the electron on a definite path — which later turns out to be the one '
+      + 'thing it certainly does not have. It is right about the energies and wrong about '
+      + 'everything underneath them, which is a specific and useful kind of wrong.'),
     h3('The hint that cracked it'),
-    p('Ten years later de Broglie pointed out what Bohr’s rule is really saying. Angular '
-      + 'momentum mvr = nℏ rearranges to 2πr = n(h/mv), and h/mv is a wavelength. So the '
+    p('Ten years later de Broglie pointed out what Bohr’s rule had been saying all along. '
+      + 'Angular momentum mvr = nℏ rearranges to 2πr = n(h/mv), and h/mv is a wavelength. So the '
       + 'rule reads: ', b('a whole number of wavelengths fits around the orbit.')),
     table(['Orbit', 'Circumference', 'One de Broglie wavelength', 'How many fit'], [1, 2, 3].map((n) => {
       const bo = Q.bohr(n);
       return ['n = ' + n, fmt(bo.circumferenceNM, 4) + ' nm', fmt(bo.deBroglieNM, 4) + ' nm',
         fmt(bo.circumferenceNM / bo.deBroglieNM, 3)];
     }), 'Exactly n, every time. Not approximately — exactly, by construction.'),
-    p('Which is the guitar string again, bent into a circle. Bohr’s mysterious whole numbers '
-      + 'were counting waves all along, and the next page is about what put the wave there.')
+    p('Which is the guitar string again, bent into a circle. A guitar string can only play the '
+      + 'notes whose waves fit its length, and an atom can only hold the orbits whose waves fit '
+      + 'the way round. Bohr’s mysterious whole numbers were counting waves the whole time, and '
+      + 'the next page is about what put the wave there.')
   ));
 
-  page('debroglie', 'Everything has a wavelength', 'Matter waves, and why you have never noticed yours', () => frag(
+  page('debroglie', 'Everything has a wavelength', 'Matter waves, and why you have never noticed yours',
+    'If light can behave like a particle, maybe particles can behave like waves. They do — '
+    + 'electrons diffract. You have never noticed your own wavelength because it is smaller '
+    + 'than a proton by a factor with twenty-five zeros in it.',
+    () => frag(
     p('In 1924, in a doctoral thesis his examiners were not sure what to do with, de Broglie '
       + 'proposed a symmetry. Light had been a wave and turned out to carry momentum like a '
       + 'particle. So perhaps matter, which everyone agreed was particles, carries a wavelength:'),
     qeq('λ = h / p = h / mv'),
     p('No new constant, no new mechanism — just the photon relation read backwards. It is the '
       + 'kind of idea that is either empty or enormous, and three years later Davisson and Germer '
-      + 'bounced electrons off a nickel crystal and got a diffraction pattern. Electrons diffract. '
-      + 'The thesis was right.'),
+      + 'bounced electrons off a nickel crystal and got a diffraction pattern out. Electrons '
+      + 'diffract. The thesis was right.'),
     h3('Why nobody noticed for three hundred years'),
-    p('Because h is tiny and everyday masses are not:'),
+    p('Because h is tiny and everyday masses are not. Momentum sits on the bottom of that '
+      + 'fraction, so the heavier and faster a thing is, the shorter its wavelength:'),
     table(['Thing', 'Momentum', 'Wavelength', 'Compared with'], [
       ['A thrown cricket ball', '0.145 kg at 40 m/s',
         ME.fmt.sciUnicode(Q.deBroglieFromSpeed(0.145, 40).lambdaNM * 1e-9, 3) + ' m',
@@ -22721,54 +22793,63 @@ window.ME = window.ME || {};
         fmt(Q.deBroglieFromEnergy(0.025, 1839).lambdaNM, 4) + ' nm', 'the spacing between atoms in a crystal'],
     ]),
     callout(b('The cricket ball’s wavelength is not small. It is nothing. '),
-      'Twenty-five orders of magnitude below the size of a proton. There is no experiment, even in '
-      + 'principle, that could reveal it. That is why classical mechanics works and why it took '
-      + 'until the twentieth century to notice anything was wrong — the quantum effects were '
-      + 'never hiding, they were just scaled by a number with thirty-three zeros after the point.'),
+      'Twenty-five orders of magnitude below the size of a proton. There is no experiment, even '
+      + 'in principle, that could reveal it. That is why ordinary mechanics works so well, and '
+      + 'why it took until the twentieth century for anyone to notice something was wrong. The '
+      + 'quantum effects were never hiding. They were scaled by a number with thirty-three zeros '
+      + 'after the point.'),
     h3('And why it matters that it is small but not zero'),
-    p('The electron microscope row is the practical payoff. An optical microscope cannot resolve '
-      + 'anything smaller than about half a wavelength of light, which puts a floor at roughly '
-      + Math.round(Q.resolution(550).limitNM) + ' nm — you can see a bacterium and you will '
-      + 'never see a virus. Accelerate an electron through 100 kV and its wavelength is '
-      + fmt(Q.deBroglieFromVolts(100000).lambdaNM * 1000, 3) + ' picometres, which is smaller than '
-      + 'an atom. Same optics, same diffraction limit, a hundred thousand times finer. Every image '
-      + 'you have seen of individual atoms exists because electrons have a wavelength.')
+    p('The electron microscope row is the practical payoff. No microscope can resolve anything '
+      + 'much smaller than half a wavelength of whatever it is looking with. For ordinary light '
+      + 'that puts the floor at roughly '
+      + Math.round(Q.resolution(550).limitNM) + ' nm: you can see a bacterium, and you will '
+      + 'never see a virus. Now accelerate an electron through 100 kV. Its wavelength is '
+      + fmt(Q.deBroglieFromVolts(100000).lambdaNM * 1000, 3) + ' picometres, smaller than an atom. '
+      + 'Same optics, same limit, a hundred thousand times finer. Every image you have ever seen '
+      + 'of individual atoms exists because electrons have a wavelength.')
   ));
 
-  page('doubleslit', 'The two-slit experiment', 'The one that nobody has explained away', () => frag(
-    p('Feynman called this the only mystery — the one phenomenon that contains everything '
-      + 'strange about quantum mechanics, and which no amount of cleverness has ever reduced to '
-      + 'something familiar. It is worth meeting carefully.'),
+  page('doubleslit', 'The two-slit experiment', 'The one that nobody has explained away',
+    'Send electrons one at a time through two slits and they build up stripes on the screen, as '
+    + 'though each one went through both slits and interfered with itself. Watch which slit each '
+    + 'one uses and the stripes vanish. Nobody has ever made this feel reasonable.',
+    () => frag(
+    p('Feynman called this the only mystery — the one phenomenon that contains everything strange '
+      + 'about quantum mechanics, and which no amount of cleverness has ever reduced to something '
+      + 'familiar. It is worth meeting carefully.'),
     p('Two narrow slits, a source, a screen. With water waves you get an interference pattern: '
-      + 'bands where the two paths arrive in step and add, and gaps where they arrive out of step '
-      + 'and cancel. Nothing odd about that — it is what waves do, and the gaps are the clue, '
-      + 'because a gap is a place where ', em('more'), ' input gives ', em('less'), ' output.'),
-    p('Now fire electrons, one at a time, slowly enough that only one is in the apparatus at any '
-      + 'moment. Each arrives as a single dot — so each is a whole particle, landing in one '
-      + 'place. Wait, and watch the dots pile up:'),
+      + 'bands where the two paths arrive in step and add up, and gaps where they arrive out of '
+      + 'step and cancel out. Nothing odd about that — it is what waves do. But hold on to the '
+      + 'gaps, because a gap is a place where opening a second slit made ', em('less'),
+      ' arrive, not more.'),
+    p('Now fire electrons, one at a time, slowly enough that only one is anywhere in the '
+      + 'apparatus at a time. Each one arrives as a single dot, so each one is a whole particle '
+      + 'landing in one place. Wait, and watch the dots pile up:'),
     F.doubleSlitFigure(),
-    callout(b('The bands appear anyway. '), 'There was never a second electron for the first one to '
-      + 'interfere with. Whatever goes through the slits goes through both, interferes with itself, '
-      + 'and then lands in one spot. Close one slit and the bands vanish — so each electron '
-      + '"knows" whether the other slit is open, even though it arrives as one indivisible thing.'),
+    callout(b('The bands appear anyway. '), 'There was never a second electron for the first one '
+      + 'to interfere with. Whatever goes through the slits goes through both, interferes with '
+      + 'itself, and then lands in one spot. Close one slit and the bands vanish — so each '
+      + 'electron somehow depends on whether the other slit is open, even though it arrives as '
+      + 'one indivisible thing.'),
     h3('The part that makes people argue'),
-    p('Put a detector at the slits to see which one each electron uses, and you get a perfectly '
-      + 'reliable answer every time: this one, that one, this one. And the bands disappear. You get '
-      + 'the plain sum of two single-slit patterns, exactly as if the electrons were ordinary little '
-      + 'balls.'),
-    p('The usual explanation is that the measurement disturbs them, and that is not quite right. '
-      + 'The experiment has been done with detectors so gentle that the momentum they impart is far '
-      + 'too small to wash out the fringes — and the fringes still go. What matters is not the '
-      + 'jostling. It is that ', b('the two paths have stopped being indistinguishable.'), ' '
-      + 'Interference is what happens when there is genuinely no fact about which way it went. '
-      + 'Create that fact anywhere in the universe, even in a record nobody reads, and the '
+    p('Put a detector at the slits to see which one each electron uses. You get a perfectly '
+      + 'reliable answer every time: this one, that one, this one. And the bands disappear. What '
+      + 'you get instead is the plain sum of two single-slit patterns, exactly as if the electrons '
+      + 'had been ordinary little balls all along.'),
+    p('The usual explanation is that measuring disturbs them, and that is not quite right. The '
+      + 'experiment has been run with detectors so gentle that the shove they give is far too '
+      + 'small to wash out the fringes, and the fringes still go. So it is not the jostling. What '
+      + 'matters is that ', b('the two paths have stopped being indistinguishable.'), ' '
+      + 'Interference happens when there is genuinely no fact anywhere about which way the '
+      + 'electron went. Create that fact — even as a record nobody ever reads — and the '
       + 'interference is gone.'),
     h3('And it is not just electrons'),
-    p('The same pattern has been produced with neutrons, with whole atoms, with buckyballs of sixty '
-      + 'carbons, and with molecules of several thousand atoms. There is no known mass at which it '
-      + 'stops. It gets harder as things get heavier, because the wavelength shrinks and because '
-      + 'keeping the paths indistinguishable gets harder — which is the subject of the page on '
-      + 'decoherence, and is the best answer anyone has to why you do not diffract through doorways.')
+    p('The same pattern has been produced with neutrons, with whole atoms, with buckyballs of '
+      + 'sixty carbons, and with molecules of several thousand atoms. There is no known mass at '
+      + 'which it stops. It does get harder as things get heavier, partly because the wavelength '
+      + 'shrinks and partly because keeping the two paths indistinguishable gets harder. That '
+      + 'second reason is decoherence, it has a page of its own later on, and it is the best '
+      + 'answer anyone has to why you do not diffract when you walk through a doorway.')
   ));
 })();
 
@@ -23515,12 +23596,17 @@ window.ME = window.ME || {};
   const frag = (...kids) => K.frag(kids.flat());
 
   /* ======================================================== the pages ==== */
-  const page = (id, name, blurb, build) => ME.quantumPage('The Schrödinger equation', id, name, blurb, build);
+  const page = (id, name, blurb, short, build) =>
+    ME.quantumPage('The Schrödinger equation', id, name, blurb, short, build);
   /* Read at build time, not at load time: content files after this one are
    * still registering pages while this module is being defined. */
   const PAGES = () => ME.quantumPages;
 
-  page('why', 'Why there is an equation', 'The problem it was invented to solve', () => frag(
+  page('why', 'Why there is an equation', 'The problem it was invented to solve',
+    'Atoms only give out certain colours of light, so electrons can only have certain energies. '
+    + 'Nobody could say why until somebody treated the electron as a wave. A wave trapped in a '
+    + 'small space can only take on certain shapes — like the notes a guitar string can play.',
+    () => frag(
     p('By 1925 everybody could see that something was quantised. Heat a gas and it glows at ',
       em('particular'), ' wavelengths — sharp lines, with nothing in between. Hydrogen gives a red '
       + 'line at 656 nm, a blue-green one at 486, and a handful more, always the same ones, in '
@@ -23554,19 +23640,24 @@ window.ME = window.ME || {};
       + 'proved. That is how the deepest laws usually arrive.')
   ));
 
-  page('psi', 'What ψ actually is', 'An amplitude, not a position and not a cloud', () => frag(
+  page('psi', 'What ψ actually is', 'An amplitude, not a position and not a cloud',
+    'Psi is the height of the electron wave at a point. Square it and you get the chance of '
+    + 'finding the electron there. The height can be negative, and that matters enormously: when '
+    + 'two waves meet, a plus and a minus cancel, and that is the difference between a bond and no bond.',
+    () => frag(
     p('ψ — psi — is a number attached to every point in space. Feed it a position and it '
       + 'returns a value, which can be positive, negative, or complex. It is the amplitude of the '
       + 'wave at that point, in exactly the sense that the height of a water wave is its amplitude.'),
-    p('What you can measure is not ψ but ', b('|ψ|²'), ', and that is a '),
-    p(term('probability density', 'The probability per unit volume of finding a particle at a '
+    p('What you can measure is not ψ itself but ', b('|ψ|²'), ', which is a ',
+      term('probability density', 'The probability per unit volume of finding a particle at a '
       + 'point. Multiply it by a small volume to get an actual probability.'),
-      ': multiply it by a small volume and you get the chance of finding the particle in that '
-      + 'volume if you look. Not a fraction of the particle — the whole particle, with that '
-      + 'probability. An electron is never partly anywhere.'),
+      '. Multiply it by a small volume and you get the chance of finding the particle in that '
+      + 'volume if you look there. Not a fraction of the particle — the whole particle, with '
+      + 'that probability. An electron is never partly anywhere.'),
     h3('Why squared'),
-    p('Because ψ can be negative, and a probability cannot. That is really all. But the sign '
-      + 'is not a nuisance to be squared away — it is doing essential work:'),
+    p('Because ψ can be negative, and a probability cannot. That is really the whole reason. '
+      + 'But do not conclude from that that the sign is a nuisance to be got rid of. The sign is '
+      + 'doing essential work:'),
     callout(b('This is where bonding comes from. '), 'Bring two atoms together and their ψ’s '
       + 'overlap. Where both are positive, or both negative, they add and the amplitude between '
       + 'the nuclei grows — more electron density in the middle, which is a bond. Where one is '
@@ -23574,8 +23665,8 @@ window.ME = window.ME || {};
       + 'antibond. Same two atoms, same two waves, and the only difference is a sign. If '
       + '|ψ|² were all there was, chemistry would have no way to tell those two apart.'),
     h3('Why it has to add up to one'),
-    p('The particle is definitely somewhere, so adding up the chance of finding it everywhere has '
-      + 'to give certainty:'),
+    p('The particle is definitely somewhere. So if you add up the chance of finding it over '
+      + 'every point in space, the total has to come to one — certainty:'),
     qeq('∫ |ψ|² dV  =  1   over all space'),
     p('That is bookkeeping rather than physics — but it has a real consequence. It fixes the height '
       + 'of the wave, which is otherwise undetermined, and it is exactly where the '
@@ -23592,7 +23683,11 @@ window.ME = window.ME || {};
       + 'stand, you are in good company — Feynman said the same, at greater length.')
   ));
 
-  page('equation', 'The equation, term by term', 'What each piece is doing, and why the i', () => frag(
+  page('equation', 'The equation, term by term', 'What each piece is doing, and why the i',
+    'The equation is an energy statement. One term is potential energy and describes your '
+    + 'particular problem. The other is kinetic energy, and it measures how sharply the wave '
+    + 'bends: a tightly wiggling wave is a fast-moving particle. That one idea gets you most of the way.',
+    () => frag(
     p('Here it is, in one dimension, which is where every idea in it can be seen clearly:'),
     qeq('iℏ ∂ψ/∂t  =  −(ℏ²/2m) ∂²ψ/∂x²  +  V(x) ψ'),
     p('Read the right-hand side first. It is the energy.'),
@@ -23639,7 +23734,11 @@ window.ME = window.ME || {};
       + 'change at all.')
   ));
 
-  page('tdse-tise', 'TDSE and TISE', 'Where the second one comes from, and which to use', () => frag(
+  page('tdse-tise', 'TDSE and TISE', 'Where the second one comes from, and which to use',
+    'There is one real equation, and a shortcut version of it for situations that are not '
+    + 'changing. Almost all of chemistry wants the shortcut, because energy levels and orbital '
+    + 'shapes sit still. Use the full version only when the question has the word "when" in it.',
+    () => frag(
     p('These are not two rival equations. One is the law; the other is the law asked a narrower '
       + 'question. Seeing how the second drops out of the first takes about five lines, and it is '
       + 'worth every one of them, because the answer explains what an orbital is.'),
@@ -23654,10 +23753,12 @@ window.ME = window.ME || {};
     p('Put that into the TDSE and divide the whole thing by φf:'),
     qeq('iℏ (1/f) df/dt  =  (1/φ) [ −(ℏ²/2m) d²φ/dx² + Vφ ]'),
     p('Now look hard at that. The left side depends only on t. The right side depends only on x. '
-      + 'They are equal for every x and every t. The only way a function of time can equal a '
-      + 'function of position everywhere is if neither of them is really a function of anything — '
-      + 'they are both the same constant. Call that constant E, because it is going to turn out to '
-      + 'be the energy.'),
+      + 'And they are equal, for every x and every t at once.'),
+    p('That is a much stronger statement than it looks. Change t and the left side would move, but '
+      + 'the right side cannot — there is no t in it. So the left side cannot actually move '
+      + 'either. Run the same argument the other way for x. Neither side depends on anything, '
+      + 'which means they are ', b('both the same constant.'), ' Call it E, because it is about '
+      + 'to turn out to be the energy.'),
     p('Split them apart and you have two separate problems. The time half:'),
     qeq('iℏ df/dt  =  E f        →        f(t)  =  e^(−iEt/ℏ)'),
     p('and the space half:'),
@@ -23679,12 +23780,12 @@ window.ME = window.ME || {};
       + 'spinning into each other; the green curve is |ψ|², which is what an experiment '
       + 'could see. Then switch to a mixture of two states and watch the green curve come alive:'),
     F.stationaryFigure(),
-    p('That second case is important and often skipped. A mixture of n = 1 and n = 2 is not a state '
-      + 'of definite energy, so it is not stationary — the two pieces rotate at different rates '
-      + '(E₂ is four times E₁, so it goes round four times as fast), the interference '
-      + 'between them keeps changing, and the cloud sloshes from side to side. ', b('Motion, built '
-      + 'entirely out of two things that individually never move.'), ' That is how anything in '
-      + 'quantum mechanics ever gets anywhere.'),
+    p('That second case is important and usually skipped. A mixture of n = 1 and n = 2 does not '
+      + 'have one definite energy, so it is not stationary. The two pieces rotate at different '
+      + 'rates — E₂ is four times E₁, so it goes round four times as fast. That means the '
+      + 'way they interfere keeps changing, and the cloud sloshes from side to side.'),
+    p(b('So that is motion, built entirely out of two things that individually never move. '),
+      'Which is how anything in quantum mechanics ever gets anywhere at all.'),
     h3('So which one do you use?'),
     table(['You want', 'Use', 'Because'], [
       ['Energy levels, orbital shapes, spectral lines, bond geometry', 'TISE',
@@ -23706,7 +23807,11 @@ window.ME = window.ME || {};
       + 'the levels, and the time part is free once you have them.')
   ));
 
-  page('box', 'Doing it by hand', 'The particle in a box, every step', () => frag(
+  page('box', 'Doing it by hand', 'The particle in a box, every step',
+    'Trap a particle between two walls and solve, start to finish, in six lines. Only certain '
+    + 'energies come out — and you can see exactly where they came from: only a whole number of '
+    + 'half-waves will fit between two fixed ends. Nothing more mysterious than that is involved.',
+    () => frag(
     p('Here is the whole method, start to finish, on the one problem simple enough to do on paper. '
       + 'Six lines of algebra and you have derived quantised energy from scratch. Everything '
       + 'harder than this — real atoms, real molecules — is the same five steps with worse algebra '
@@ -23774,7 +23879,11 @@ window.ME = window.ME || {};
       em('least'), ' likely place, because that is where the node is. Same box, opposite habit.')
   ));
 
-  page('lessons', 'What the box is telling you', 'Four results that generalise', () => frag(
+  page('lessons', 'What the box is telling you', 'Four results that generalise',
+    'Four things the box teaches that hold everywhere. A trapped particle can never be fully at '
+    + 'rest. Squeezing it into a smaller space costs a lot of energy. You can rank states by '
+    + 'counting the times the wave crosses zero. And the spacing of the levels tells you the shape of the trap.',
+    () => frag(
     h3('1. You cannot make it hold still'),
     p('The lowest energy is E₁ = h²/8mL², and that is not zero. There is no state of '
       + 'rest. This is ', term('zero-point energy', 'The energy a confined system still has in its '
@@ -23802,10 +23911,11 @@ window.ME = window.ME || {};
       + 'closer together, so a smaller energy gap and a longer wavelength. Same material '
       + 'throughout. The colour is the size.'),
     h3('3. Nodes count the energy'),
-    p('The n-th state has n − 1 nodes inside the box — places where ψ passes through '
-      + 'zero. More nodes means more wiggles in the same width, which means tighter curvature, '
-      + 'which (from the kinetic energy term) means more energy. So you can rank states by energy '
-      + 'just by counting their zero crossings, without evaluating anything.'),
+    p('The n-th state has n − 1 ', term('nodes', 'Points inside the box where the wave passes '
+      + 'through zero, so the particle is never found there.'), ' inside the box: places where '
+      + 'ψ crosses zero. More nodes means more wiggles crammed into the same width. More '
+      + 'wiggles means tighter bends, and tighter bends mean more kinetic energy. So you can rank '
+      + 'states by energy just by counting zero crossings, without working anything out.'),
     p('That trick survives everywhere. It is why 2s sits above 1s, why a π* orbital costs more '
       + 'than a π, and why you can glance at two molecular orbital diagrams and tell which is '
       + 'higher.'),
@@ -23821,7 +23931,11 @@ window.ME = window.ME || {};
       + 'shape of the trap, read out in light.')
   ));
 
-  page('tunnel', 'Getting through walls', 'What happens when V is finite', () => frag(
+  page('tunnel', 'Getting through walls', 'What happens when V is finite',
+    'A wave does not stop dead at a wall — it fades away inside it. If the wall is thin enough, '
+    + 'some wave is still left on the far side, so the particle can turn up somewhere it had no '
+    + 'business reaching. This is how we image single atoms and how uranium decays.',
+    () => frag(
     p('Make the walls finite instead of infinite and something appears that has no classical '
       + 'version at all. Suppose the particle has energy E and the wall is V₀ high, with '
       + 'E < V₀. Classically it bounces, every time, full stop. Look at the equation instead:'),
@@ -23862,7 +23976,11 @@ window.ME = window.ME || {};
       + 'years.')
   ));
 
-  page('well', 'When there is no formula', 'The finite well, and why computers do this', () => frag(
+  page('well', 'When there is no formula', 'The finite well, and why computers do this',
+    'Make the walls a finite height and the answer can no longer be written down as a formula at '
+    + 'all. It still exists; you just have to hunt for it numerically. This is the normal '
+    + 'situation — the tidy box was the exception, and it is why quantum chemistry runs on computers.',
+    () => frag(
     p('Keep the walls finite and ask for the bound states — the ones that stay in. The method is '
       + 'identical in spirit: sine inside, decaying exponential outside, and then demand that '
       + 'φ and its slope join up smoothly at each wall. Do the algebra and you arrive at:'),
@@ -23882,9 +24000,9 @@ window.ME = window.ME || {};
     F.wellFigure(),
     h3('Two things to notice'),
     p('Every level sits ', em('lower'), ' than the matching level of a perfect box of the same '
-      + 'width. The reason follows from the kinetic-energy-is-curvature idea: the wave leaks a '
-      + 'little way into the walls instead of being cut dead, so it is effectively in a slightly '
-      + 'wider box, so it curves a little less, so it costs a little less. For a '
+      + 'width, and the kinetic-energy-is-curvature idea says why. The wave now leaks a little '
+      + 'way into the walls instead of being cut off dead. So it has slightly more room than the '
+      + 'box width suggests, so it bends slightly less gently, so it costs slightly less. For a '
       + '5 eV well 1 nm wide the ground state comes out at ',
       b(fmt(Q.finiteWell(5, 1).levels[0].eV, 3) + ' eV'), ' against ',
       b(fmt(Q.boxEnergy(1, 1).eV, 3) + ' eV'), ' for the ideal box.'),
@@ -23896,13 +24014,18 @@ window.ME = window.ME || {};
       + 'far enough to empty it and you will find you cannot.')
   ));
 
-  page('oscillator', 'A bond as a spring', 'Where infrared spectra come from', () => frag(
-    p('Two atoms joined by a bond sit at a comfortable distance. Push them closer and they resist; '
-      + 'pull them apart and they pull back. Near the bottom, any restoring force looks like a '
-      + 'spring — so put a parabola in for V and solve:'),
+  page('oscillator', 'A bond as a spring', 'Where infrared spectra come from',
+    'A chemical bond pushes back when you squash it and pulls back when you stretch it, which is '
+    + 'what a spring does. Solve the spring and the energy levels come out evenly spaced — which '
+    + 'is why each kind of bond absorbs infrared light at one sharp wavelength you can look up.',
+    () => frag(
+    p('Two atoms joined by a bond sit at a comfortable distance apart. Push them closer and they '
+      + 'resist; pull them apart and they pull back. That is what a spring does, and near the '
+      + 'bottom of any dip in energy the resemblance is not even approximate — the shape really '
+      + 'is a parabola. So put a parabola in for V and solve:'),
     qeq('V = ½ k x²        →        Eₙ = (n + ½) ℏω,    ω = √(k/μ)'),
-    p('The algebra is longer than the box (the solutions involve Hermite polynomials) but the '
-      + 'answer is the simplest on this page, and it has two features worth more than the formula.'),
+    p('The algebra on the way is longer than the box, but the answer is tidier than anything else '
+      + 'in this tab, and two features of it are worth more to you than the formula is.'),
     h3('The rungs are evenly spaced'),
     p('Every gap is ℏω. Not n², not converging — identical, all the way up. That is '
       + 'why an infrared spectrum shows ', b('one strong band per vibration'), ' rather than a '
@@ -23936,7 +24059,11 @@ window.ME = window.ME || {};
       + 'measures to find out how strong the bond really is.')
   ));
 
-  page('hydrogen', 'The hydrogen atom', 'Where orbitals and quantum numbers come from', () => frag(
+  page('hydrogen', 'The hydrogen atom', 'Where orbitals and quantum numbers come from',
+    'Solve one proton and one electron properly and the whole of orbital theory falls out. The '
+    + 'quantum numbers are not rules somebody imposed — they are just the three ways the wave has '
+    + 'to join up with itself in three-dimensional space. An orbital is one answer to this equation.',
+    () => frag(
     p('Now the one that mattered. One proton, one electron, and the pull between them:'),
     qeq('V(r)  =  −e² / 4πε₀ r'),
     p('This is in three dimensions, so the curvature term has three parts instead of one. The '
@@ -23972,10 +24099,10 @@ window.ME = window.ME || {};
       + 'negative sign: zero is defined as the electron free and infinitely far away, so every '
       + 'bound state is below it, and the energy ', em('needed to remove'), ' the electron is '
       + fmt(Q.ionisationEV(1), 5) + ' eV. Second — and this one is a genuine fluke — ',
-      b('the energy depends only on n.'), ' 2s and 2p come out at exactly the same energy. That is '
-      + 'special to the 1/r shape of the potential and it is true of no other atom: add a second '
-      + 'electron and the shielding breaks the tie, 2s drops below 2p, and the whole structure of '
-      + 'the periodic table follows from that split.'),
+      b('the energy depends only on n.'), ' 2s and 2p come out at exactly the same energy. That '
+      + 'is a quirk of the 1/r shape of the pull and it is true of no other atom. Add a second '
+      + 'electron and the tie breaks: 2s drops below 2p. The entire structure of the periodic '
+      + 'table grows out of that one split, which is why the next few pages chase it.'),
     h3('So what is an orbital?'),
     callout(b('An orbital is one solution of the time-independent Schrödinger equation for one '
       + 'electron in an atom. '), 'That is the entire definition. The shapes are |ψ|² for '
@@ -23991,7 +24118,11 @@ window.ME = window.ME || {};
       + 'is held up by not fitting.')
   ));
 
-  page('examples', 'Worked examples', 'Eight, done the long way', () => {
+  page('examples', 'Worked examples', 'Eight, done the long way',
+    'Eight problems worked right through, with every intermediate number shown. The app computes '
+    + 'all of them with the same code that marks the practice questions, so a worked answer and a '
+    + 'marked answer can never disagree with each other.',
+    () => {
     const box = Q.boxEnergy(1, 0.5);
     const t21 = Q.boxTransition(1, 2, 0.5);
     const ha = Q.hydrogenTransition(3, 2);
@@ -24109,8 +24240,10 @@ window.ME = window.ME || {};
       + 'classical physics, the equation that replaced it, the rules underneath, and then what '
       + 'those rules build \u2014 spin, the periodic table, the covalent bond, colour, lasers, '
       + 'semiconductors, and the handful of results nobody has managed to make comfortable. '
-      + 'Separate from the course on purpose: nothing here is required for anything else, and it '
-      + 'goes deeper than a first chemistry class needs.'));
+      + 'Every page starts with the short version, in plain words and no symbols, so you can '
+      + 'take the idea and leave the derivation if that is what you came for. Separate from the '
+      + 'course on purpose: nothing here is required for anything else, and it goes deeper than '
+      + 'a first chemistry class needs.'));
 
     const layout = el('div', { class: 'qm-layout' });
     St.nav = el('nav', { class: 'qm-nav', 'aria-label': 'Pages' });
@@ -24152,6 +24285,14 @@ window.ME = window.ME || {};
 
     const card = el('div', { class: 'card card-pad qm-page' });
     card.appendChild(el('h2', { text: pg.name }));
+    /* The plain-words version first. Somebody who reads only this should
+     * still come away with the idea; everything after it is the reasoning. */
+    if (pg.short) {
+      const lead = el('div', { class: 'qm-short' });
+      lead.appendChild(el('span', { class: 'qm-shortlabel', text: 'The short version' }));
+      lead.appendChild(el('p', { text: pg.short }));
+      card.appendChild(lead);
+    }
     card.appendChild(pg.build());
 
     /* Previous and next, because ten pages in an order is a sequence even if
@@ -24237,12 +24378,18 @@ window.ME = window.ME || {};
   const { qeq, h3 } = ME.quantumInternals;
   const fmt = (x, s) => ME.fmt.fmt(x, s || 4);
   const frag = (...kids) => K.frag(kids.flat());
-  const rule = (id, name, blurb, build) => ME.quantumPage('The rules', id, name, blurb, build);
-  const spin = (id, name, blurb, build) => ME.quantumPage('Spin and angular momentum', id, name, blurb, build);
+  const rule = (id, name, blurb, short, build) =>
+    ME.quantumPage('The rules', id, name, blurb, short, build);
+  const spin = (id, name, blurb, short, build) =>
+    ME.quantumPage('Spin and angular momentum', id, name, blurb, short, build);
 
   /* ============================================================ the rules */
 
-  rule('postulates', 'What the theory actually claims', 'States, operators, and four rules', () => frag(
+  rule('postulates', 'What the theory actually claims', 'States, operators, and four rules',
+    'The whole subject rests on four claims. The wave is everything there is to know. Measuring '
+    + 'something means doing a particular job on the wave. Only certain answers can come out, and '
+    + 'which one you get is random. And in between measurements, nothing is random at all.',
+    () => frag(
     p('Everything so far has been one equation applied to one situation at a time. Underneath it '
       + 'there is a short list of claims that the whole subject rests on. They are worth seeing '
       + 'written out, because almost every "quantum is weird" story turns out to be one of these '
@@ -24252,23 +24399,42 @@ window.ME = window.ME || {};
       + 'currently get at — everything. If two systems have the same ψ they are '
       + 'identical, and no measurement can tell them apart. This is a much stronger claim than it '
       + 'looks, and it is where the argument about whether quantum mechanics is "complete" lives.'),
-    h3('Two: every measurable thing has an operator'),
-    p('Position, momentum, energy, angular momentum — each is represented by an operation you '
-      + 'do to the wavefunction rather than by a number the system carries around:'),
+    h3('Two: every measurable thing is a job you do to the wave'),
+    p('This is the one piece of vocabulary worth slowing down for, because it sounds far more '
+      + 'abstract than it is. In ordinary physics a quantity like momentum is a ', em('number'),
+      ' the object carries around with it. Here it is not. Here each measurable quantity is a '
+      + 'piece of ', b('work you do to the wave'), ' — multiply it by something, differentiate '
+      + 'it, that sort of thing. The name for such a job is an ',
+      term('operator', 'A recipe for acting on a wavefunction — multiply it, differentiate it, '
+      + 'and so on. Each measurable quantity has one, and the little hat marks it as a job '
+      + 'rather than a number.'), ', and the little hat on the symbol is there to remind you '
+      + 'that it is a job and not a number:'),
     table(['Quantity', 'Operator', 'What it does to ψ'], [
       ['Position', 'x̂', 'Multiply by x'],
       ['Momentum', 'p̂ = −iℏ d/dx', 'Differentiate once'],
       ['Kinetic energy', 'p̂²/2m', 'Differentiate twice — curvature, as on the equation page'],
       ['Total energy', 'Ĥ', 'Kinetic plus potential: the Hamiltonian'],
     ], 'Momentum being a derivative is why a short wavelength means a big momentum: differentiating a tight wiggle gives a big answer.'),
-    h3('Three: the answers you can get are the eigenvalues'),
-    p('Apply the operator. If the wavefunction comes back unchanged except for a multiplying '
-      + 'number, that number is what you measure and it is certain:'),
+    h3('Three: you only ever get the answers the wave survives'),
+    p('Do the job to the wave and watch what comes back. Usually you get a different shape out '
+      + 'than you put in. But for a few special shapes, the wave comes back as ', em('itself'),
+      ', merely scaled up or down by some number. Those shapes are the ones that have a definite '
+      + 'value of that quantity, and the number they get scaled by is the value you measure:'),
     qeq('Ĥψ = Eψ'),
-    p('Which is the time-independent Schrödinger equation — so the TISE is not a special '
-      + 'case of anything, it is rule three for energy. And if ψ is ', em('not'), ' one of '
-      + 'those special shapes, you get one of them at random, with probabilities set by how much '
-      + 'of each is in the mixture. That is the whole of quantum randomness in one sentence.'),
+    p('Read that as a question and an answer. "Work out the energy of this wave" gives back the '
+      + 'same wave, E times bigger. So the wave has energy E, definitely, every time you look. '
+      + 'The special shapes are called ', term('eigenstates',
+      'A state that an operator returns unchanged apart from a scale factor. Such a state has a '
+      + 'definite, repeatable value of that quantity.'), ' and the scale factors are called ',
+      term('eigenvalues', 'The scale factor an eigenstate comes back multiplied by — the value '
+      + 'you actually measure.'), ' — German for "own", as in the operator\u2019s own shapes.'),
+    p('And notice that this equation is the time-independent Schrödinger equation, which you have '
+      + 'already solved by hand. The TISE is not a special trick. It is rule three, asked about '
+      + 'energy.'),
+    p('What if your wave is ', em('not'), ' one of the special shapes? Then it is a mixture of '
+      + 'several of them, and you get one of those at random, with the odds set by how much of '
+      + 'each went into the mixture. That sentence is the entirety of quantum randomness. There '
+      + 'is no more to it than that.'),
     h3('Four: between measurements it evolves smoothly'),
     p('The TDSE runs, deterministically, with no randomness anywhere in it. Give me ψ now and '
       + 'I will give you ψ at any future time exactly.'),
@@ -24281,7 +24447,11 @@ window.ME = window.ME || {};
       + 'side.')
   ));
 
-  rule('measurement', 'Measurement and averages', 'What you actually get, and what you get on average', () => frag(
+  rule('measurement', 'Measurement and averages', 'What you actually get, and what you get on average',
+    'If a particle is in a mixture, it has no value of the thing you are about to measure — not '
+    + 'a hidden one, none. You get one of the possible answers at random. The average of many '
+    + 'such measurements is a useful number, and it need not be a possible answer itself.',
+    () => frag(
     p('A wavefunction that is not an eigenstate does not have a value of the thing you are about '
       + 'to measure. It is not that the value is hidden; there is no value. What there is, is a '
       + 'set of possible answers with probabilities.'),
@@ -24297,9 +24467,10 @@ window.ME = window.ME || {};
     p('The particle in a box is the one system where all of this can be computed in closed form '
       + 'rather than described, so it is worth doing. For the n-th state:'),
     qeq('⟨x⟩ = L/2        ⟨x²⟩ = L²(1/3 − 1/2n²π²)        ⟨p⟩ = 0        ⟨p²⟩ = (nπℏ/L)²'),
-    p('⟨x⟩ = L/2 by symmetry, and ⟨p⟩ = 0 because a standing wave is going both '
-      + 'ways at once — which is worth pausing on, because the particle certainly has momentum '
-      + '(⟨p²⟩ is not zero) and its average is still exactly nothing.'),
+    p('⟨x⟩ = L/2 by symmetry: the box looks the same from both ends. And ⟨p⟩ = 0 '
+      + 'because a standing wave is going both ways at once, so the two directions cancel in the '
+      + 'average. That second one is worth a pause. The particle definitely has momentum — '
+      + '⟨p²⟩ is nowhere near zero — and the average of it is still exactly nothing.'),
     p('The spread is what is left after you subtract the square of the average:'),
     table(['State', 'Spread in position', 'Spread in momentum', 'σₓσₚ, in units of ℏ/2'],
       [1, 2, 3, 5, 10].map((n) => {
@@ -24315,7 +24486,11 @@ window.ME = window.ME || {};
       + 'sharper.')
   ));
 
-  rule('uncertainty', 'Uncertainty, properly', 'Not about clumsy apparatus', () => frag(
+  rule('uncertainty', 'Uncertainty, properly', 'Not about clumsy apparatus',
+    'A wave squeezed into a narrow space has to be built out of many different wavelengths, and '
+    + 'wavelength is momentum. So a particle with a sharp position has a vague momentum. This is '
+    + 'not about clumsy instruments — it is true before anybody measures anything at all.',
+    () => frag(
     p('The usual story is that measuring a position means bouncing something off the particle, and '
       + 'that knocks it, so you lose track of the momentum. Heisenberg told that story himself in '
       + '1927, and it is wrong — or rather, it describes a real effect that is not this one.'),
@@ -24325,19 +24500,29 @@ window.ME = window.ME || {};
       + 'see the whole thing in a sound wave: a very short click has no definite pitch, and a pure '
       + 'tone has to last a long time. Nobody thinks the clock is disturbing the note.'),
     qeq('σₓ σₚ ≥ ℏ/2'),
-    h3('Where it comes from'),
-    p('Two quantities have a joint uncertainty when their operators do not commute — when '
-      + 'doing them in the other order gives a different answer:'),
+    h3('Where it comes from: order matters'),
+    p('Some pairs of actions give a different result depending on which you do first. Socks then '
+      + 'shoes is not the same as shoes then socks. Other pairs genuinely do not care — putting '
+      + 'on your hat and putting on your left shoe can go in either order. Quantities whose '
+      + 'order does not matter are said to ', term('commute',
+      'Two operations commute when doing them in either order gives the same result. When they '
+      + 'do not, the two quantities cannot both be sharp at once.'), '.'),
+    p('Measuring position and measuring momentum are socks and shoes. Do them to a wave in the '
+      + 'two different orders and you do not get the same thing, and the exact size of the '
+      + 'difference is this:'),
     qeq('[x̂, p̂] = x̂p̂ − p̂x̂ = iℏ'),
-    p('That is not an analogy; it is the source. Work out the commutator of any two operators and '
-      + 'you get the uncertainty relation between them for free. Position and momentum do not '
-      + 'commute, so they have one. Two components of angular momentum do not commute, so you can '
-      + 'know how much total angular momentum there is and which way one component points, but '
-      + 'never the whole direction — which is exactly the cone picture a few pages on.'),
-    p('And operators that ', em('do'), ' commute have no such limit at all. Energy and momentum in '
-      + 'free space commute, so a free particle can have both exactly. Nothing is mysterious about '
-      + 'that pair, and nothing is mysterious about the other pair either; it is the same algebra '
-      + 'giving different answers.'),
+    p('That is not an illustration of the uncertainty principle. It ', em('is'), ' the '
+      + 'uncertainty principle. A short theorem turns the size of the ordering mismatch straight '
+      + 'into the smallest possible product of the two spreads. The ℏ going in on this line '
+      + 'is exactly what puts the ℏ/2 on the line above.'),
+    p('So the rule is simple to apply. Any two quantities whose order matters cannot both be '
+      + 'sharp. Position and momentum: order matters, so you cannot have both. Two different '
+      + 'directions of angular momentum: order matters, so you can know how much total there is '
+      + 'and how much points up, but never the full direction — that is the cone a few pages on.'),
+    p('And pairs that ', em('do'), ' commute carry no limit whatsoever. Energy and momentum for a '
+      + 'free particle commute, so a free particle can have both of them exactly. Nothing is '
+      + 'mysterious about that pair, and nothing is really mysterious about the other pair '
+      + 'either. It is the same piece of algebra giving different answers.'),
     h3('Energy and time, which is a different animal'),
     p('ΔEΔt ≥ ℏ/2 looks like the same statement and is not, because time is not '
       + 'an observable in quantum mechanics — there is no time operator. What it means is: a '
@@ -24355,7 +24540,11 @@ window.ME = window.ME || {};
       + 'dissociate by looking at how smeared its spectrum is.')
   ));
 
-  rule('superposition', 'Superposition', 'Adding states, and the interference that follows', () => frag(
+  rule('superposition', 'Superposition', 'Adding states, and the interference that follows',
+    'Add two allowed waves together and you get another allowed wave. This is not the same as '
+    + 'not knowing which one you have, because waves added together can cancel — and cancelling '
+    + 'means opening a second route can make somewhere harder to reach. Ignorance cannot do that.',
+    () => frag(
     p('If ψ₁ and ψ₂ are both solutions, so is any combination of them. That '
       + 'follows from the equation being linear, which is a dull mathematical property with '
       + 'extraordinary consequences.'),
@@ -24378,15 +24567,20 @@ window.ME = window.ME || {};
     h3('Superposition of what, though'),
     p('Of anything with more than one option. Two energy levels, two slits, two spin directions, '
       + 'two positions. The one thing it is never a superposition of is a single definite outcome '
-      + 'with itself — and the states you build everything out of, the eigenstates, are '
-      + 'precisely the ones that are not superpositions of anything, with respect to the quantity '
-      + 'you are asking about.'),
+      + 'with itself.'),
+    p('Which is what makes the special shapes from the rules page special. Those are the states '
+      + 'that are ', em('not'), ' a superposition of anything — at least as far as the one '
+      + 'quantity you are asking about goes.'),
     p('Which comes with a twist worth knowing: a state that is definite in energy is usually a '
       + 'superposition in position, and the other way round. There is no state that is definite in '
       + 'everything, and the reason is the commutator on the last page.')
   ));
 
-  rule('correspondence', 'Why you never see any of this', 'Correspondence, and decoherence', () => frag(
+  rule('correspondence', 'Why you never see any of this', 'Correspondence, and decoherence',
+    'Big things are not exempt from quantum mechanics. Two things hide it. The effects shrink as '
+    + 'things get bigger, and — more importantly — anything big is constantly being nudged by '
+    + 'its surroundings, which leaves a record of where it was, and records destroy interference.',
+    () => frag(
     p('A reasonable complaint at this point: if everything is waves and superpositions, why is a '
       + 'cricket ball not in two places? Two answers, and they are different answers.'),
     h3('The first: things get classical when they get big'),
@@ -24396,10 +24590,12 @@ window.ME = window.ME || {};
       [1, 2, 5, 20, 100].map((n) => ['n = ' + n,
         fmt(Q.boxProbability(n, 1, 1 / 3, 2 / 3), 4), '0.3333']),
       'By n = 100 the quantum answer is the classical one to three figures, and the bumps are too fine to see.'),
-    p('Same story for the energy levels: the gaps are a large fraction of the energy when n is '
-      + 'small and a vanishing fraction when n is large, so a macroscopic object’s levels are '
-      + 'so finely spaced that its energy looks continuous. A pendulum has quantum levels. They are '
-      + 'about 10⁻³³ J apart.'),
+    p('The energy levels tell the same story. When n is small the gap between levels is a big '
+      + 'fraction of the energy itself, so the steps are obvious. When n is huge the gap is a '
+      + 'vanishing fraction, so the staircase is too fine to see and the energy looks smooth. A '
+      + 'swinging pendulum really does have quantum energy levels. They are about '
+      + '10⁻³³ J apart, so you would need to measure its energy to thirty-odd '
+      + 'decimal places before you noticed.'),
     h3('The second, and the real one: decoherence'),
     p('Size is not actually the point — superpositions of fairly large things have been made '
       + 'in the lab. What kills them is contact with everything else.'),
@@ -24409,9 +24605,10 @@ window.ME = window.ME || {};
       + 'somewhere in the universe. Once it does, the paths are distinguishable, the cross terms '
       + 'average to nothing, and what is left behaves exactly like ordinary probability.'),
     p('The timescales are absurd. A dust grain in a vacuum chamber, lit only by starlight, '
-      + 'decoheres in something like a trillionth of a second. A large molecule in a good vacuum, '
-      + 'in the dark, can be kept coherent for long enough to diffract — which is why those '
-      + 'experiments are done at high vacuum and low temperature and are so hard.'),
+      + 'loses its coherence in something like a trillionth of a second. A large molecule can be '
+      + 'kept coherent long enough to diffract, but only in a good vacuum and in the dark. That '
+      + 'is why those experiments are so hard, and why they are always done cold: every stray air '
+      + 'molecule and every stray photon is a witness.'),
     p('So the answer to "why is the world classical" is not that quantum mechanics stops applying. '
       + 'It is that the world is extremely good at keeping records, and records destroy '
       + 'interference. ', b('A quantum computer is a machine built entirely around postponing '
@@ -24421,7 +24618,11 @@ window.ME = window.ME || {};
 
   /* ================================================ angular momentum, spin */
 
-  spin('angular', 'Angular momentum comes in steps', 'And why it can never point straight at you', () => frag(
+  spin('angular', 'Angular momentum comes in steps', 'And why it can never point straight at you',
+    'Spinning motion comes in fixed steps, and here is the strange part: the total is always '
+    + 'bigger than the most that can point along any one direction. So the spin axis can never '
+    + 'quite line up with the direction you are measuring. There is always some left over sideways.',
+    () => frag(
     p('Angular momentum is quantised too, and the way it is quantised is odder than energy. Two '
       + 'numbers come out of the equation: how much there is, and how much of it points along '
       + 'whichever axis you choose to call z.'),
@@ -24445,12 +24646,17 @@ window.ME = window.ME || {};
     p('The 2ℓ+1 column is doing quiet work: it is why there is one s orbital, three p, five d '
       + 'and seven f, which is why the blocks of the periodic table are 2, 6, 10 and 14 wide. The '
       + 'shape of the table is this column times two for spin.'),
-    p('And ℓ = 0 deserves a note. No angular momentum means no axis, which means nothing to '
-      + 'be oriented about — so an s orbital is spherical, not because somebody chose a '
-      + 'spherical shape but because there is no direction available to make it anything else.')
+    p('And ℓ = 0 deserves a note. No angular momentum at all means there is no axis, and with '
+      + 'no axis there is nothing for the orbital to be oriented about. So an s orbital is '
+      + 'spherical. Not because anybody picked a sphere, but because there is no direction '
+      + 'available to make it anything else.')
   ));
 
-  spin('spin', 'Spin', 'An angular momentum with nothing going round', () => frag(
+  spin('spin', 'Spin', 'An angular momentum with nothing going round',
+    'Send atoms through a magnet and they split into exactly two beams, whichever way you turn '
+    + 'the magnet. Electrons carry a fixed amount of built-in angular momentum with only two '
+    + 'settings. Nothing is actually rotating — it is a property, like charge.',
+    () => frag(
     p('In 1922 Stern and Gerlach sent silver atoms through an uneven magnetic field, expecting the '
       + 'beam to smear. A magnetic atom tumbling out of an oven points every which way, so the '
       + 'field should pull each one by a different amount and spread them into a band.'),
@@ -24484,7 +24690,11 @@ window.ME = window.ME || {};
       + 'an afternoon with a beam of atoms and three magnets.')
   ));
 
-  spin('pauli', 'The exclusion principle', 'Why matter takes up room', () => frag(
+  spin('pauli', 'The exclusion principle', 'Why matter takes up room',
+    'Two electrons can never be in the same state, and the reason is a sign flip: swap two '
+    + 'electrons and their combined wave flips sign, so putting them in the same state makes the '
+    + 'wave equal minus itself, which means zero. This is why you do not fall through your chair.',
+    () => frag(
     p('Two electrons cannot be in the same state. That is Pauli’s principle, usually met as a '
       + 'bookkeeping rule for filling orbitals, and it is in fact the reason you do not fall '
       + 'through your chair.'),
@@ -24523,10 +24733,15 @@ window.ME = window.ME || {};
       + 'with structure and a universe of identical inert blobs.')
   ));
 
-  spin('magnetic', 'Spin in a magnetic field', 'Zeeman, fine structure, MRI', () => frag(
+  spin('magnetic', 'Spin in a magnetic field', 'Zeeman, fine structure, MRI',
+    'A spinning charge is a tiny magnet, and a magnet in a field has different energies for '
+    + 'different orientations. Since the orientations come in steps, so do the energies, and one '
+    + 'spectral line splits into several. An MRI scanner is built on this.',
+    () => frag(
     p('An electron with angular momentum is a tiny magnet, and a magnet in a field has different '
-      + 'energies depending on which way it points. Since the pointing is quantised, so are the '
-      + 'energies — and a single spectral line splits into several.'),
+      + 'energies depending on which way it points — a compass needle takes work to turn against '
+      + 'the field. From the last two pages, which way it points comes in steps. So the energies '
+      + 'come in steps too, and what was one spectral line becomes several close together.'),
     qeq('ΔE = g μᴮ B m'),
     p('μᴮ is the Bohr magneton, eℏ/2mₑ = '
       + ME.fmt.sciUnicode(Q.BOHR_MAGNETON, 4) + ' J/T, or '
@@ -24580,13 +24795,17 @@ window.ME = window.ME || {};
   const { qeq, h3 } = ME.quantumInternals;
   const fmt = (x, s) => ME.fmt.fmt(x, s || 4);
   const frag = (...kids) => K.frag(kids.flat());
-  const atom = (id, n, bl, f) => ME.quantumPage('Atoms and the table', id, n, bl, f);
-  const mol = (id, n, bl, f) => ME.quantumPage('Molecules', id, n, bl, f);
-  const light = (id, n, bl, f) => ME.quantumPage('Light and matter', id, n, bl, f);
+  const atom = (id, n, bl, sh, f) => ME.quantumPage('Atoms and the table', id, n, bl, sh, f);
+  const mol = (id, n, bl, sh, f) => ME.quantumPage('Molecules', id, n, bl, sh, f);
+  const light = (id, n, bl, sh, f) => ME.quantumPage('Light and matter', id, n, bl, sh, f);
 
   /* ===================================================== atoms */
 
-  atom('multielectron', 'Atoms with more than one electron', 'Where the exact answer runs out', () => frag(
+  atom('multielectron', 'Atoms with more than one electron', 'Where the exact answer runs out',
+    'Hydrogen can be solved exactly. Helium cannot, and never will be, because each electron '
+    + 'depends on where the other one happens to be. The fix is to pretend each electron sees a '
+    + 'nucleus partly hidden by the others — which is where shielding comes from.',
+    () => frag(
     p('Hydrogen is solved exactly. Helium is not, and never will be — not because nobody has '
       + 'been clever enough, but because the problem does not have a closed-form answer. Two '
       + 'electrons and a nucleus is a three-body problem, and each electron’s wavefunction '
@@ -24625,7 +24844,11 @@ window.ME = window.ME || {};
       + 'They are not being careful. They are incapable of being in the same place.')
   ));
 
-  atom('periodic', 'Why the table is that shape', 'Blocks, periods, and 2, 6, 10, 14', () => frag(
+  atom('periodic', 'Why the table is that shape', 'Blocks, periods, and 2, 6, 10, 14',
+    'The periodic table is not a chart somebody designed. Its shape is the list of how many '
+    + 'electrons fit in each kind of orbital — 2, 6, 10 and 14 — which comes from counting the '
+    + 'orientations of a wave and doubling for spin. The blocks are that arithmetic, drawn.',
+    () => frag(
     p('The periodic table was built by chemists who sorted elements by behaviour and had no idea '
       + 'why the pattern existed. Quantum mechanics explains the whole shape — the width of '
       + 'every block, the length of every period, where the awkward gaps are — from two facts '
@@ -24662,7 +24885,11 @@ window.ME = window.ME || {};
       + 'years before anyone could say what was repeating.')
   ));
 
-  atom('xray', 'X-rays and the order of the elements', 'Moseley, and the number that matters', () => frag(
+  atom('xray', 'X-rays and the order of the elements', 'Moseley, and the number that matters',
+    'Knock out an innermost electron and the X-ray that comes out has an energy that depends '
+    + 'cleanly on the nuclear charge. That gave each element a number you could measure rather '
+    + 'than argue about, and it is why the table is ordered by protons and not by weight.',
+    () => frag(
     p('Before 1913 the periodic table was ordered by atomic weight, and there were places where '
       + 'that clearly did not work — put tellurium before iodine by weight and the chemistry '
       + 'comes out wrong. Nobody could say what the right ordering principle was, because nobody '
@@ -24696,7 +24923,11 @@ window.ME = window.ME || {};
 
   /* ===================================================== molecules */
 
-  mol('bonding', 'Where a covalent bond comes from', 'Two waves, added and subtracted', () => frag(
+  mol('bonding', 'Where a covalent bond comes from', 'Two waves, added and subtracted',
+    'Bring two atoms together and their electron waves overlap. Add them and the electron '
+    + 'spends more time between the two nuclei, which pulls them together: a bond. Subtract them '
+    + 'and it is pushed out of the middle, which is the opposite. Same two atoms, one sign.',
+    () => frag(
     p('Two hydrogen atoms stick together and release energy. The usual school answer is that they '
       + '"share electrons to fill their shells", which describes the result without explaining '
       + 'anything. The actual reason is the sign of a wave.'),
@@ -24732,7 +24963,11 @@ window.ME = window.ME || {};
       + 'that; this does.')
   ));
 
-  mol('hybrid', 'Hybridisation', 'Not a thing atoms do — a thing we do', () => frag(
+  mol('hybrid', 'Hybridisation', 'Not a thing atoms do — a thing we do',
+    'Carbon does not promote an electron and then mix its orbitals in preparation for bonding. '
+    + 'Hybrid orbitals are a bookkeeping choice we make, because adding the atomic waves together '
+    + 'in that particular combination gives a description that points the right way for methane.',
+    () => frag(
     p('Methane has four identical bonds at 109.5°. Carbon’s outer electrons are in one 2s '
       + 'and three 2p orbitals, which are not identical and are at 90°. The usual fix is to '
       + 'say the carbon "hybridises" its orbitals into four sp³ ones, and it is worth being '
@@ -24758,15 +24993,19 @@ window.ME = window.ME || {};
       + 'ring of delocalised electrons above and below the plane, which is why benzene is flat, '
       + 'unusually stable, and not two alternating structures flickering back and forth.'),
     h3('When to stop believing it'),
-    p('Hybridisation is a model, and it creaks. It does badly for heavier elements, where the '
-      + 'energy cost of mixing s and p is high and the bond angles stay nearer 90° — '
-      + 'H₂S has a bond angle of 92°, not 109.5°, and calling it sp³ is a '
-      + 'fiction. For anything serious, chemists compute molecular orbitals over the whole molecule '
-      + 'and never mention hybrids at all. ', b('It is a very good language for drawing organic '
+    p('Hybridisation is a model, and it creaks. It does badly for the heavier elements, where '
+      + 'mixing s and p costs more energy and the bond angles stay nearer 90°. Hydrogen '
+      + 'sulfide has a bond angle of 92°, not 109.5°, and calling it sp³ is simply a '
+      + 'fiction. For anything serious, chemists compute orbitals over the whole molecule and '
+      + 'never mention hybrids at all. ', b('It is a very good language for drawing organic '
       + 'molecules on paper and a poor description of what the electrons are doing.'))
   ));
 
-  mol('colour', 'Why things are coloured', 'The box, applied to a real molecule', () => frag(
+  mol('colour', 'Why things are coloured', 'The box, applied to a real molecule',
+    'A molecule absorbs the colours whose photons match the gap between its filled and empty '
+    + 'levels, and you see what is left over. For a chain of alternating double bonds you can '
+    + 'predict that gap with the particle in a box — the longer the chain, the redder the colour.',
+    () => frag(
     p('Carrots are orange, blood is red and leaves are green, and all three are the same physics: '
       + 'a molecule has a gap between its filled and empty levels, and light whose photons match '
       + 'that gap gets absorbed. What you see is what is left.'),
@@ -24803,17 +25042,28 @@ window.ME = window.ME || {};
       + 'excellent at four carbons and increasingly too red after that, and the discrepancy is '
       + 'measuring the bond alternation.'),
     h3('And the general rule you can keep'),
-    p('Longer conjugation, smaller gap, redder absorption. That one sentence covers an enormous '
-      + 'amount of chemistry: why β-carotene with eleven conjugated double bonds absorbs blue '
-      + 'and looks orange, why adding more rings to a dye shifts it through the spectrum, why '
-      + 'chlorophyll’s huge conjugated ring absorbs red and blue and leaves green, and why '
-      + 'short molecules like ethene are colourless — their gap is so big that the absorption '
-      + 'is in the far ultraviolet, where your eyes were never going to notice.')
+    p('Longer conjugation, smaller gap, redder absorption. A longer box has lower levels packed '
+      + 'closer together, so less energy gets an electron across, so the light it swallows is '
+      + 'redder. That one sentence covers an enormous amount of chemistry.'),
+    p('β-carotene has eleven double bonds in a row. Long box, small gap, so it absorbs blue '
+      + 'light — and a carrot that has had the blue taken out of it looks orange. '
+      + 'Chlorophyll’s big conjugated ring takes red and blue and leaves green, which is the '
+      + 'colour of almost every plant on the planet. Adding rings to a dye walks its colour '
+      + 'along the spectrum for the same reason.'),
+    p('And it explains the other half of the world, the colourless half. Ethene has just one '
+      + 'double bond. Tiny box, huge gap, so its absorption sits far out in the ultraviolet where '
+      + 'your eyes have nothing to see with. It is not that ethene fails to absorb light. It is '
+      + 'that it absorbs light you cannot see, and anything that absorbs nothing in the visible '
+      + 'range looks clear.')
   ));
 
   /* ===================================================== light and matter */
 
-  light('transitions', 'Absorption and emission', 'And the rules about which jumps happen', () => frag(
+  light('transitions', 'Absorption and emission', 'And the rules about which jumps happen',
+    'An atom will only take a photon whose energy exactly matches a gap it has. That is why a '
+    + 'gas is see-through at almost every colour and solidly opaque at a few. Some exactly '
+    + 'matching jumps still do not happen, because the photon has to hand over its spin as well.',
+    () => frag(
     p('An atom in a low state meets a photon of exactly the right energy and takes it, jumping up. '
       + 'Later it drops back and emits one. That is the basic exchange, and two things about it '
       + 'are less obvious than they look.'),
@@ -24852,11 +25102,15 @@ window.ME = window.ME || {};
       + 'when you arrange for that to run away with itself.')
   ));
 
-  light('lasers', 'Lasers', 'Why you have to fight thermodynamics to build one', () => frag(
+  light('lasers', 'Lasers', 'Why you have to fight thermodynamics to build one',
+    'A photon passing an excited atom can knock it down and make a second photon identical to '
+    + 'itself. Do that over and over and you get a laser. The hard part is that you need more '
+    + 'atoms excited than not, and no temperature in the universe will give you that.',
+    () => frag(
     p('Stimulated emission multiplies photons: one goes in, two come out, identical. Do that '
-      + 'repeatedly and you get an avalanche of photons all in step — which is what laser '
-      + 'light is, and why it stays a narrow beam over a kilometre while a torch spreads out in '
-      + 'ten metres.'),
+      + 'over and over and you get an avalanche of photons all in step with each other. That is '
+      + 'what laser light is. And being in step is why a laser stays a narrow beam over a '
+      + 'kilometre while a torch has spread out after ten metres.'),
     p('There is one problem, and it is fundamental. Stimulated emission needs atoms in the upper '
       + 'state. Absorption needs atoms in the lower one. Both processes have the same rate '
       + 'constant, so whichever population is bigger wins — and at equilibrium the lower one '
@@ -24889,10 +25143,20 @@ window.ME = window.ME || {};
       + 'a process Einstein deduced from thermodynamics in 1917.'))
   ));
 
-  light('spectroscopy', 'Reading a spectrum', 'What a chemist actually does with all this', () => frag(
-    p('Nearly everything known about a molecule was found by shining something at it and seeing '
-      + 'what came back. Each region of the spectrum reaches a different kind of motion, because '
-      + 'each kind has a different energy spacing:'),
+  light('spectroscopy', 'Reading a spectrum', 'What a chemist actually does with all this',
+    'Almost everything known about any molecule was learnt by shining light at it and seeing '
+    + 'what came back. Each region of the spectrum has the right size of energy to move a '
+    + 'different thing — rotations, vibrations, electrons, inner shells — so each answers a '
+    + 'different question.',
+    () => frag(
+    p('Nearly everything known about any molecule was found by shining something at it and '
+      + 'seeing what came back. You cannot look at a molecule. But you can find out which '
+      + 'photons it is willing to accept, and that turns out to be nearly as good.'),
+    p('Which photons those are depends on what you are trying to move. Spinning a whole molecule '
+      + 'round is easy and needs very little energy. Stretching a bond costs more. Shifting an '
+      + 'electron between orbitals costs much more again, and knocking out an inner-shell '
+      + 'electron costs enormously more. So each region of the spectrum answers a different '
+      + 'question, and the four of them barely overlap:'),
     table(['Region', 'Photon energy', 'What it moves', 'What it tells you'], [
       ['Microwave', fmt(Q.photonFromNM(1e7).eV * 1000, 3) + ' meV',
         'Whole-molecule rotation', 'Bond lengths, to astonishing precision'],
@@ -24904,10 +25168,13 @@ window.ME = window.ME || {};
         'Inner-shell electrons, and diffraction', 'Which elements, and where every atom sits'],
     ], 'Four orders of magnitude in energy, four completely different questions answered.'),
     h3('Beer–Lambert, and why absorbance is a logarithm'),
-    p('Each thin slice of solution absorbs the same ', em('fraction'), ' of whatever light reaches '
-      + 'it — not the same amount, the same fraction, because what matters is how many '
-      + 'molecules a photon meets. Fractions multiply, so the intensity falls exponentially, so '
-      + 'taking a logarithm makes everything linear again:'),
+    p('Picture the solution as a stack of thin slices. Each slice absorbs the same ',
+      em('fraction'), ' of whatever light arrives at it — not the same amount, the same '
+      + 'fraction, because a photon only cares how many molecules it has to get past. Halve the '
+      + 'light at the first slice, halve what is left at the second, and so on.'),
+    p('Fractions multiply rather than add, so the brightness falls away exponentially with '
+      + 'depth. And the thing that undoes an exponential is a logarithm. So chemists take the log '
+      + 'and get a quantity that goes up in a straight line with concentration:'),
     qeq('A = εcl,    and the light that gets through is 10⁻ᴬ'),
     table(['Absorbance', 'Light getting through', 'Reading it'], [
       ['0.1', fmt(Q.beerLambert(0.1, 1, 1).percent, 3) + '%', 'a pale solution'],
@@ -24946,16 +25213,22 @@ window.ME = window.ME || {};
   const { qeq, h3 } = ME.quantumInternals;
   const fmt = (x, s) => ME.fmt.fmt(x, s || 4);
   const frag = (...kids) => K.frag(kids.flat());
-  const many = (id, n, bl, f) => ME.quantumPage('Many particles', id, n, bl, f);
-  const odd = (id, n, bl, f) => ME.quantumPage('The strange part', id, n, bl, f);
+  const many = (id, n, bl, sh, f) => ME.quantumPage('Many particles', id, n, bl, sh, f);
+  const odd = (id, n, bl, sh, f) => ME.quantumPage('The strange part', id, n, bl, sh, f);
 
   /* ===================================================== many particles */
 
-  many('statistics', 'Two kinds of particle, two kinds of crowd', 'Fermi–Dirac and Bose–Einstein', () => frag(
-    p('Classical physics has one rule for how particles share out energy: the Boltzmann '
-      + 'distribution, where the chance of a state goes as e^(−E/kT) and anything can be '
-      + 'anywhere. Quantum mechanics has two rules, because there are two kinds of particle, and '
-      + 'the difference between them is a single sign in the wavefunction.'),
+  many('statistics', 'Two kinds of particle, two kinds of crowd', 'Fermi–Dirac and Bose–Einstein',
+    'There are two kinds of particle in the universe. One kind refuses to share a state with '
+    + 'another of its own kind, so they stack up from the bottom — that is matter. The other '
+    + 'kind actively likes company and piles into the lowest state together — that is light.',
+    () => frag(
+    p('Classical physics has one rule for how a crowd of particles shares out energy. The chance '
+      + 'of finding a particle in a state of energy E goes as e^(−E/kT), and there is no limit '
+      + 'on how many can pile into the same state. Everyone is free to be anywhere.'),
+    p('Quantum mechanics has two rules instead of one, because it turns out there are two kinds '
+      + 'of particle in the universe, and the only difference between them is the sign flip from '
+      + 'the exclusion page. The consequences of that one sign are enormous:'),
     F.statisticsFigure(),
     table(['', 'Fermions', 'Bosons'], [
       ['Who', 'Electrons, protons, neutrons — matter', 'Photons, phonons, helium-4 — carriers and condensates'],
@@ -24966,16 +25239,21 @@ window.ME = window.ME || {};
       ['What that makes', 'Solid matter, metals, white dwarfs', 'Lasers, superfluids, Bose–Einstein condensates'],
     ]),
     h3('Why the Fermi curve is a cliff'),
-    p('At absolute zero every state below a certain energy is full and every state above it is '
-      + 'empty, with nothing in between — not because the electrons are cold and sluggish, but '
-      + 'because there is nowhere else for them to go. The lowest states are taken, so the next '
-      + 'electron is forced upstairs. ', b('A metal at absolute zero still has electrons moving at '
-      + 'thousands of kilometres per second'), ', and they cannot slow down.'),
-    p('Warm it up and only the electrons within about kT of the top of the pile can do anything '
-      + '— everyone below is boxed in by full states above them. At room temperature that is '
-      + 'a fraction of a percent of them, which is why metals have far smaller heat capacities '
-      + 'than classical physics predicts. That discrepancy was a famous embarrassment for thirty '
-      + 'years before Pauli explained it in one line.'),
+    p('At absolute zero every state below a certain energy is full, every state above it is '
+      + 'empty, and there is nothing in between. That is not because the electrons are cold and '
+      + 'sluggish. It is because there is nowhere else for them to go: the lowest states are '
+      + 'already taken, so each new electron is forced upstairs. ',
+      b('A metal at absolute zero still has electrons moving at thousands of kilometres per '
+      + 'second'), ', and there is nothing they can do to slow down.'),
+    p('Now warm it up. Heating a crowd means letting some of them move up to higher states. But '
+      + 'an electron deep in the pile has nowhere to move up ', em('to'), ': every state just '
+      + 'above it is already occupied. Only the ones near the very top of the pile have empty '
+      + 'states within reach, and at room temperature that is a fraction of a percent of them.'),
+    p('Which settles an old embarrassment. Classical physics predicts that the free electrons in '
+      + 'a metal should soak up a great deal of heat, and they do not — a metal\u2019s heat '
+      + 'capacity is almost all lattice vibration. The electrons cannot absorb heat because '
+      + 'almost none of them are allowed to move. That mismatch went unexplained for thirty '
+      + 'years, and then Pauli settled it in a line.'),
     h3('And why the Bose curve has no ceiling'),
     p('Nothing stops bosons sharing, and in fact they prefer it: the more there are in a state, '
       + 'the more likely the next one is to join. Cool a gas of them far enough and a macroscopic '
@@ -24988,7 +25266,11 @@ window.ME = window.ME || {};
       + 'works for air, and fails completely for the electrons in a wire.')
   ));
 
-  many('bands', 'Why metals conduct', 'What happens to levels when you bring 10²³ atoms together', () => frag(
+  many('bands', 'Why metals conduct', 'What happens to levels when you bring 10²³ atoms together',
+    'Two atoms make two levels out of one. A huge number of atoms make a huge number of levels '
+    + 'so close together that they are effectively a continuous band. Whether a material '
+    + 'conducts comes down to one question: is its topmost band part-full, or exactly full?',
+    () => frag(
     p('Two atoms give two molecular orbitals, one up and one down, as on the bonding page. Three '
       + 'give three. A mole gives 10²³, spread over the same finite energy range — '
       + 'so the gaps between them become unmeasurably small and the levels merge into a continuous ',
@@ -25025,7 +25307,11 @@ window.ME = window.ME || {};
       + 'colour.')
   ));
 
-  many('devices', 'Doping, LEDs and solar cells', 'Engineering the gap', () => frag(
+  many('devices', 'Doping, LEDs and solar cells', 'Engineering the gap',
+    'Add about one foreign atom per million to silicon and you change how well it conducts by a '
+    + 'factor of a billion. Join a piece with spare electrons to a piece short of them and you '
+    + 'get a one-way valve for current — which is a diode, an LED and a solar cell.',
+    () => frag(
     p('Pure silicon is nearly useless — too few carriers to carry anything. The trick that '
       + 'built the modern world is to add impurities on purpose, about one atom in a million, and '
       + 'change the carrier count by a factor of a billion.'),
@@ -25054,23 +25340,29 @@ window.ME = window.ME || {};
         return [n, g + ' eV', Math.round(r.lambdaNM) + ' nm', r.region];
       }), 'Red, orange and green LEDs arrived in the 1960s. Blue took until the 1990s and won a Nobel Prize.'),
     p('Blue was hard because it needs a wide gap, and wide-gap materials are difficult to grow '
-      + 'without defects and difficult to dope p-type. Nobody could make a good blue LED for thirty '
-      + 'years after the red one — and without blue there is no white LED, because white is '
-      + 'made from a blue LED with a phosphor on top. Every white light in your house is downstream '
-      + 'of solving that one materials problem.'),
+      + 'without defects and difficult to dope p-type. Nobody could make a good blue LED for '
+      + 'thirty years after the red one.'),
+    p('And without blue there is no white LED at all, because a white LED is a blue one with a '
+      + 'phosphor coating on top of it. Every white light in your house is downstream of somebody '
+      + 'solving that single materials problem.'),
     h3('Run it backwards: a solar cell'),
     p('Same junction, no current applied. A photon with more than the gap energy knocks an electron '
       + 'up into the conduction band, the built-in field sweeps it one way and the hole the other, '
-      + 'and you have a current. The gap sets the trade-off and there is no way around it: too '
-      + 'small a gap and you capture plenty of photons but waste most of each one’s energy as '
-      + 'heat; too large and most sunlight passes straight through. The best compromise for the '
-      + 'solar spectrum is around 1.3 eV, which is close enough to silicon’s '
-      + fmt(1.12, 3) + ' eV to be the reason the whole industry is built on sand.')
+      + 'and you have a current.'),
+    p('The gap sets a trade-off with no way round it. A small gap catches plenty of photons, but '
+      + 'every photon with more energy than the gap wastes the excess as heat. A large gap wastes '
+      + 'nothing, but most of the sunlight sails straight through without being caught at all. '
+      + 'The best compromise against the solar spectrum is around 1.3 eV — close enough to '
+      + 'silicon’s ' + fmt(1.12, 3) + ' eV that the entire industry ended up built on sand.')
   ));
 
   /* ===================================================== the strange part */
 
-  odd('entanglement', 'Entanglement', 'The one Einstein would not accept', () => frag(
+  odd('entanglement', 'Entanglement', 'The one Einstein would not accept',
+    'Two particles can be prepared so that neither has a definite property of its own, but the '
+    + 'pair has a definite relationship. Measure one and the other is settled at once, however '
+    + 'far away. Experiments show this is not the two of them having agreed in advance.',
+    () => frag(
     p('Make two particles together in the right way and they stop having separate states. There is '
       + 'one wavefunction for the pair, and it says things about the pair that it does not say '
       + 'about either half.'),
@@ -25110,7 +25402,11 @@ window.ME = window.ME || {};
       + 'control, which is exactly why it does not break relativity.'))
   ));
 
-  odd('qubits', 'Quantum computing, honestly', 'What it is, and what it is not', () => frag(
+  odd('qubits', 'Quantum computing, honestly', 'What it is, and what it is not',
+    'A quantum computer does not try every answer at once and hand you the best one. It arranges '
+    + 'for the wrong answers to cancel each other out, like the dark bands in a two-slit '
+    + 'pattern, so that what is left when you look is probably right. Cancelling, not parallelism.',
+    () => frag(
     p('An ordinary bit is 0 or 1. A qubit is a superposition of both, which gets described as '
       + '"being in both states at once" — a phrase that has done more harm than good. Here is '
       + 'the version that survives contact with the details.'),
@@ -25140,19 +25436,25 @@ window.ME = window.ME || {};
       ['Most other things', 'None known', 'Including, as far as anyone can prove, the hard optimisation problems people most want solved'],
     ]),
     h3('Why it is so hard to build'),
-    p('Decoherence. The machine must keep its superpositions intact, and the universe is extremely '
-      + 'good at recording what things are doing. Every stray photon, every vibration, every '
-      + 'passing magnetic field is a measurement, and a measurement is the end of the computation. '
-      + 'That is why these machines sit in dilution refrigerators at a hundredth of a degree above '
-      + 'absolute zero behind layers of shielding, and why qubit counts are still in the hundreds '
-      + 'rather than the millions a useful factoring run would need.'),
-    p('None of which means it is hype. It means the hard part is engineering coherence, and the '
-      + 'first real application is likely to be simulating molecules — which is fitting, since '
-      + 'Feynman’s original argument for building one was that nature is not classical and '
-      + 'simulating it on a classical machine is a losing game.')
+    p('Decoherence, which is the page on why you never see any of this, turned into an '
+      + 'engineering problem. The machine has to keep its superpositions intact, and the universe '
+      + 'is extremely good at recording what things are up to. Every stray photon, every '
+      + 'vibration, every passing magnetic field leaves a record of which state a qubit was in '
+      + '— and a record is a measurement, and a measurement ends the computation.'),
+    p('That is why these machines sit in refrigerators a hundredth of a degree above absolute '
+      + 'zero, behind layer after layer of shielding. And it is why qubit counts are still in the '
+      + 'hundreds rather than the millions that a useful factoring run would need.'),
+    p('None of which means the whole thing is hype. It means the hard part is engineering '
+      + 'coherence, and that the first real application is likely to be simulating molecules. '
+      + 'Which is fitting. Feynman’s original argument for building one of these was simply that '
+      + 'nature is not classical, so simulating it on a classical machine is a losing game.')
   ));
 
-  odd('decay', 'Radioactivity, and real randomness', 'Tunnelling with no clock', () => frag(
+  odd('decay', 'Radioactivity, and real randomness',  'Tunnelling with no clock',
+    'A radioactive nucleus has no way of knowing how old it is. Its chance of decaying in the '
+    + 'next second is the same whether it was made yesterday or a billion years ago. Half-lives '
+    + 'are statistics about crowds, and say nothing whatever about any individual atom.',
+    () => frag(
     p('An alpha particle inside a uranium nucleus does not have enough energy to climb out over the '
       + 'barrier holding it in. It gets out anyway, by tunnelling — the same effect from the '
       + 'barrier page, happening at nuclear scale.'),
@@ -25188,7 +25490,11 @@ window.ME = window.ME || {};
       + 'only randomness anyone knows of that is not merely ignorance.')
   ));
 
-  odd('interpretations', 'What any of it means', 'And why chemistry gets to not care', () => frag(
+  odd('interpretations', 'What any of it means', 'And why chemistry gets to not care',
+    'The equations are agreed on and the predictions all work. What is still argued about is '
+    + 'what is physically going on underneath, and every answer on offer makes exactly the same '
+    + 'predictions. So you can do all of chemistry without ever picking a side.',
+    () => frag(
     p('The equations are not in dispute. Every prediction in this tab has been checked, often to '
       + 'ten or twelve figures, and quantum mechanics is the most precisely tested theory anybody '
       + 'has. The argument is about what the mathematics is describing — and it is a hundred '
@@ -25259,7 +25565,11 @@ window.ME = window.ME || {};
   ];
 
   ME.quantumPage('Practice', 'problems', 'Problems',
-    'Thirty-four kinds, endlessly regenerated', () => {
+    'Thirty-four kinds, endlessly regenerated',
+    'Thirty-four kinds of problem, with fresh numbers every time you press the button. The app '
+    + 'works out each answer with the same code that produced the worked examples, so nothing '
+    + 'here can be marked against a number that was typed in by hand and never checked.',
+    () => {
       const wrap = el('div');
       wrap.appendChild(p('Every one of these is generated fresh and the answer is computed rather '
         + 'than stored, so what you are marked against is what the worked examples would give. '

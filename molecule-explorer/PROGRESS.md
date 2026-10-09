@@ -378,6 +378,19 @@ calculators, 11 reference tables and a 49-word glossary.
     files push to as they load, so the pages are split across six files and
     none of them knows about the others. Reading order is registration order,
     which is filename order.
+  - **Every page opens with "the short version"**: the one idea in plain words,
+    no symbols and no vocabulary the page has not earned yet. Somebody who
+    reads only those 43 boxes still comes away with what quantum mechanics
+    claims. It is a field on the registry, so a page cannot be added without
+    one.
+  - Two tests enforce readability, which no structural check would catch. One
+    rejects a summary that is missing, too long, contains an equation symbol,
+    or uses a word off a jargon list (eigenvalue, Hamiltonian, operator,
+    commutator, wavefunction and so on). The other rejects any sentence over
+    36 words, measured per paragraph with a trailing colon ending a sentence —
+    joining paragraphs would invent run-ons no reader ever sees. The pass that
+    added these took the mean sentence from 18.7 words to 14.9 and the count of
+    over-35-word sentences from 42 to zero.
 
 - **The database grew from 688 molecules to 1007**, and from 466 gallery
   entries to 729. 341 entries went in; 34 were rejected by the build's own

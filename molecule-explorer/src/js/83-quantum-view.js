@@ -19,12 +19,17 @@
   const frag = (...kids) => K.frag(kids.flat());
 
   /* ======================================================== the pages ==== */
-  const page = (id, name, blurb, build) => ME.quantumPage('The Schrödinger equation', id, name, blurb, build);
+  const page = (id, name, blurb, short, build) =>
+    ME.quantumPage('The Schrödinger equation', id, name, blurb, short, build);
   /* Read at build time, not at load time: content files after this one are
    * still registering pages while this module is being defined. */
   const PAGES = () => ME.quantumPages;
 
-  page('why', 'Why there is an equation', 'The problem it was invented to solve', () => frag(
+  page('why', 'Why there is an equation', 'The problem it was invented to solve',
+    'Atoms only give out certain colours of light, so electrons can only have certain energies. '
+    + 'Nobody could say why until somebody treated the electron as a wave. A wave trapped in a '
+    + 'small space can only take on certain shapes — like the notes a guitar string can play.',
+    () => frag(
     p('By 1925 everybody could see that something was quantised. Heat a gas and it glows at ',
       em('particular'), ' wavelengths — sharp lines, with nothing in between. Hydrogen gives a red '
       + 'line at 656 nm, a blue-green one at 486, and a handful more, always the same ones, in '
@@ -58,19 +63,24 @@
       + 'proved. That is how the deepest laws usually arrive.')
   ));
 
-  page('psi', 'What ψ actually is', 'An amplitude, not a position and not a cloud', () => frag(
+  page('psi', 'What ψ actually is', 'An amplitude, not a position and not a cloud',
+    'Psi is the height of the electron wave at a point. Square it and you get the chance of '
+    + 'finding the electron there. The height can be negative, and that matters enormously: when '
+    + 'two waves meet, a plus and a minus cancel, and that is the difference between a bond and no bond.',
+    () => frag(
     p('ψ — psi — is a number attached to every point in space. Feed it a position and it '
       + 'returns a value, which can be positive, negative, or complex. It is the amplitude of the '
       + 'wave at that point, in exactly the sense that the height of a water wave is its amplitude.'),
-    p('What you can measure is not ψ but ', b('|ψ|²'), ', and that is a '),
-    p(term('probability density', 'The probability per unit volume of finding a particle at a '
+    p('What you can measure is not ψ itself but ', b('|ψ|²'), ', which is a ',
+      term('probability density', 'The probability per unit volume of finding a particle at a '
       + 'point. Multiply it by a small volume to get an actual probability.'),
-      ': multiply it by a small volume and you get the chance of finding the particle in that '
-      + 'volume if you look. Not a fraction of the particle — the whole particle, with that '
-      + 'probability. An electron is never partly anywhere.'),
+      '. Multiply it by a small volume and you get the chance of finding the particle in that '
+      + 'volume if you look there. Not a fraction of the particle — the whole particle, with '
+      + 'that probability. An electron is never partly anywhere.'),
     h3('Why squared'),
-    p('Because ψ can be negative, and a probability cannot. That is really all. But the sign '
-      + 'is not a nuisance to be squared away — it is doing essential work:'),
+    p('Because ψ can be negative, and a probability cannot. That is really the whole reason. '
+      + 'But do not conclude from that that the sign is a nuisance to be got rid of. The sign is '
+      + 'doing essential work:'),
     callout(b('This is where bonding comes from. '), 'Bring two atoms together and their ψ’s '
       + 'overlap. Where both are positive, or both negative, they add and the amplitude between '
       + 'the nuclei grows — more electron density in the middle, which is a bond. Where one is '
@@ -78,8 +88,8 @@
       + 'antibond. Same two atoms, same two waves, and the only difference is a sign. If '
       + '|ψ|² were all there was, chemistry would have no way to tell those two apart.'),
     h3('Why it has to add up to one'),
-    p('The particle is definitely somewhere, so adding up the chance of finding it everywhere has '
-      + 'to give certainty:'),
+    p('The particle is definitely somewhere. So if you add up the chance of finding it over '
+      + 'every point in space, the total has to come to one — certainty:'),
     qeq('∫ |ψ|² dV  =  1   over all space'),
     p('That is bookkeeping rather than physics — but it has a real consequence. It fixes the height '
       + 'of the wave, which is otherwise undetermined, and it is exactly where the '
@@ -96,7 +106,11 @@
       + 'stand, you are in good company — Feynman said the same, at greater length.')
   ));
 
-  page('equation', 'The equation, term by term', 'What each piece is doing, and why the i', () => frag(
+  page('equation', 'The equation, term by term', 'What each piece is doing, and why the i',
+    'The equation is an energy statement. One term is potential energy and describes your '
+    + 'particular problem. The other is kinetic energy, and it measures how sharply the wave '
+    + 'bends: a tightly wiggling wave is a fast-moving particle. That one idea gets you most of the way.',
+    () => frag(
     p('Here it is, in one dimension, which is where every idea in it can be seen clearly:'),
     qeq('iℏ ∂ψ/∂t  =  −(ℏ²/2m) ∂²ψ/∂x²  +  V(x) ψ'),
     p('Read the right-hand side first. It is the energy.'),
@@ -143,7 +157,11 @@
       + 'change at all.')
   ));
 
-  page('tdse-tise', 'TDSE and TISE', 'Where the second one comes from, and which to use', () => frag(
+  page('tdse-tise', 'TDSE and TISE', 'Where the second one comes from, and which to use',
+    'There is one real equation, and a shortcut version of it for situations that are not '
+    + 'changing. Almost all of chemistry wants the shortcut, because energy levels and orbital '
+    + 'shapes sit still. Use the full version only when the question has the word "when" in it.',
+    () => frag(
     p('These are not two rival equations. One is the law; the other is the law asked a narrower '
       + 'question. Seeing how the second drops out of the first takes about five lines, and it is '
       + 'worth every one of them, because the answer explains what an orbital is.'),
@@ -158,10 +176,12 @@
     p('Put that into the TDSE and divide the whole thing by φf:'),
     qeq('iℏ (1/f) df/dt  =  (1/φ) [ −(ℏ²/2m) d²φ/dx² + Vφ ]'),
     p('Now look hard at that. The left side depends only on t. The right side depends only on x. '
-      + 'They are equal for every x and every t. The only way a function of time can equal a '
-      + 'function of position everywhere is if neither of them is really a function of anything — '
-      + 'they are both the same constant. Call that constant E, because it is going to turn out to '
-      + 'be the energy.'),
+      + 'And they are equal, for every x and every t at once.'),
+    p('That is a much stronger statement than it looks. Change t and the left side would move, but '
+      + 'the right side cannot — there is no t in it. So the left side cannot actually move '
+      + 'either. Run the same argument the other way for x. Neither side depends on anything, '
+      + 'which means they are ', b('both the same constant.'), ' Call it E, because it is about '
+      + 'to turn out to be the energy.'),
     p('Split them apart and you have two separate problems. The time half:'),
     qeq('iℏ df/dt  =  E f        →        f(t)  =  e^(−iEt/ℏ)'),
     p('and the space half:'),
@@ -183,12 +203,12 @@
       + 'spinning into each other; the green curve is |ψ|², which is what an experiment '
       + 'could see. Then switch to a mixture of two states and watch the green curve come alive:'),
     F.stationaryFigure(),
-    p('That second case is important and often skipped. A mixture of n = 1 and n = 2 is not a state '
-      + 'of definite energy, so it is not stationary — the two pieces rotate at different rates '
-      + '(E₂ is four times E₁, so it goes round four times as fast), the interference '
-      + 'between them keeps changing, and the cloud sloshes from side to side. ', b('Motion, built '
-      + 'entirely out of two things that individually never move.'), ' That is how anything in '
-      + 'quantum mechanics ever gets anywhere.'),
+    p('That second case is important and usually skipped. A mixture of n = 1 and n = 2 does not '
+      + 'have one definite energy, so it is not stationary. The two pieces rotate at different '
+      + 'rates — E₂ is four times E₁, so it goes round four times as fast. That means the '
+      + 'way they interfere keeps changing, and the cloud sloshes from side to side.'),
+    p(b('So that is motion, built entirely out of two things that individually never move. '),
+      'Which is how anything in quantum mechanics ever gets anywhere at all.'),
     h3('So which one do you use?'),
     table(['You want', 'Use', 'Because'], [
       ['Energy levels, orbital shapes, spectral lines, bond geometry', 'TISE',
@@ -210,7 +230,11 @@
       + 'the levels, and the time part is free once you have them.')
   ));
 
-  page('box', 'Doing it by hand', 'The particle in a box, every step', () => frag(
+  page('box', 'Doing it by hand', 'The particle in a box, every step',
+    'Trap a particle between two walls and solve, start to finish, in six lines. Only certain '
+    + 'energies come out — and you can see exactly where they came from: only a whole number of '
+    + 'half-waves will fit between two fixed ends. Nothing more mysterious than that is involved.',
+    () => frag(
     p('Here is the whole method, start to finish, on the one problem simple enough to do on paper. '
       + 'Six lines of algebra and you have derived quantised energy from scratch. Everything '
       + 'harder than this — real atoms, real molecules — is the same five steps with worse algebra '
@@ -278,7 +302,11 @@
       em('least'), ' likely place, because that is where the node is. Same box, opposite habit.')
   ));
 
-  page('lessons', 'What the box is telling you', 'Four results that generalise', () => frag(
+  page('lessons', 'What the box is telling you', 'Four results that generalise',
+    'Four things the box teaches that hold everywhere. A trapped particle can never be fully at '
+    + 'rest. Squeezing it into a smaller space costs a lot of energy. You can rank states by '
+    + 'counting the times the wave crosses zero. And the spacing of the levels tells you the shape of the trap.',
+    () => frag(
     h3('1. You cannot make it hold still'),
     p('The lowest energy is E₁ = h²/8mL², and that is not zero. There is no state of '
       + 'rest. This is ', term('zero-point energy', 'The energy a confined system still has in its '
@@ -306,10 +334,11 @@
       + 'closer together, so a smaller energy gap and a longer wavelength. Same material '
       + 'throughout. The colour is the size.'),
     h3('3. Nodes count the energy'),
-    p('The n-th state has n − 1 nodes inside the box — places where ψ passes through '
-      + 'zero. More nodes means more wiggles in the same width, which means tighter curvature, '
-      + 'which (from the kinetic energy term) means more energy. So you can rank states by energy '
-      + 'just by counting their zero crossings, without evaluating anything.'),
+    p('The n-th state has n − 1 ', term('nodes', 'Points inside the box where the wave passes '
+      + 'through zero, so the particle is never found there.'), ' inside the box: places where '
+      + 'ψ crosses zero. More nodes means more wiggles crammed into the same width. More '
+      + 'wiggles means tighter bends, and tighter bends mean more kinetic energy. So you can rank '
+      + 'states by energy just by counting zero crossings, without working anything out.'),
     p('That trick survives everywhere. It is why 2s sits above 1s, why a π* orbital costs more '
       + 'than a π, and why you can glance at two molecular orbital diagrams and tell which is '
       + 'higher.'),
@@ -325,7 +354,11 @@
       + 'shape of the trap, read out in light.')
   ));
 
-  page('tunnel', 'Getting through walls', 'What happens when V is finite', () => frag(
+  page('tunnel', 'Getting through walls', 'What happens when V is finite',
+    'A wave does not stop dead at a wall — it fades away inside it. If the wall is thin enough, '
+    + 'some wave is still left on the far side, so the particle can turn up somewhere it had no '
+    + 'business reaching. This is how we image single atoms and how uranium decays.',
+    () => frag(
     p('Make the walls finite instead of infinite and something appears that has no classical '
       + 'version at all. Suppose the particle has energy E and the wall is V₀ high, with '
       + 'E < V₀. Classically it bounces, every time, full stop. Look at the equation instead:'),
@@ -366,7 +399,11 @@
       + 'years.')
   ));
 
-  page('well', 'When there is no formula', 'The finite well, and why computers do this', () => frag(
+  page('well', 'When there is no formula', 'The finite well, and why computers do this',
+    'Make the walls a finite height and the answer can no longer be written down as a formula at '
+    + 'all. It still exists; you just have to hunt for it numerically. This is the normal '
+    + 'situation — the tidy box was the exception, and it is why quantum chemistry runs on computers.',
+    () => frag(
     p('Keep the walls finite and ask for the bound states — the ones that stay in. The method is '
       + 'identical in spirit: sine inside, decaying exponential outside, and then demand that '
       + 'φ and its slope join up smoothly at each wall. Do the algebra and you arrive at:'),
@@ -386,9 +423,9 @@
     F.wellFigure(),
     h3('Two things to notice'),
     p('Every level sits ', em('lower'), ' than the matching level of a perfect box of the same '
-      + 'width. The reason follows from the kinetic-energy-is-curvature idea: the wave leaks a '
-      + 'little way into the walls instead of being cut dead, so it is effectively in a slightly '
-      + 'wider box, so it curves a little less, so it costs a little less. For a '
+      + 'width, and the kinetic-energy-is-curvature idea says why. The wave now leaks a little '
+      + 'way into the walls instead of being cut off dead. So it has slightly more room than the '
+      + 'box width suggests, so it bends slightly less gently, so it costs slightly less. For a '
       + '5 eV well 1 nm wide the ground state comes out at ',
       b(fmt(Q.finiteWell(5, 1).levels[0].eV, 3) + ' eV'), ' against ',
       b(fmt(Q.boxEnergy(1, 1).eV, 3) + ' eV'), ' for the ideal box.'),
@@ -400,13 +437,18 @@
       + 'far enough to empty it and you will find you cannot.')
   ));
 
-  page('oscillator', 'A bond as a spring', 'Where infrared spectra come from', () => frag(
-    p('Two atoms joined by a bond sit at a comfortable distance. Push them closer and they resist; '
-      + 'pull them apart and they pull back. Near the bottom, any restoring force looks like a '
-      + 'spring — so put a parabola in for V and solve:'),
+  page('oscillator', 'A bond as a spring', 'Where infrared spectra come from',
+    'A chemical bond pushes back when you squash it and pulls back when you stretch it, which is '
+    + 'what a spring does. Solve the spring and the energy levels come out evenly spaced — which '
+    + 'is why each kind of bond absorbs infrared light at one sharp wavelength you can look up.',
+    () => frag(
+    p('Two atoms joined by a bond sit at a comfortable distance apart. Push them closer and they '
+      + 'resist; pull them apart and they pull back. That is what a spring does, and near the '
+      + 'bottom of any dip in energy the resemblance is not even approximate — the shape really '
+      + 'is a parabola. So put a parabola in for V and solve:'),
     qeq('V = ½ k x²        →        Eₙ = (n + ½) ℏω,    ω = √(k/μ)'),
-    p('The algebra is longer than the box (the solutions involve Hermite polynomials) but the '
-      + 'answer is the simplest on this page, and it has two features worth more than the formula.'),
+    p('The algebra on the way is longer than the box, but the answer is tidier than anything else '
+      + 'in this tab, and two features of it are worth more to you than the formula is.'),
     h3('The rungs are evenly spaced'),
     p('Every gap is ℏω. Not n², not converging — identical, all the way up. That is '
       + 'why an infrared spectrum shows ', b('one strong band per vibration'), ' rather than a '
@@ -440,7 +482,11 @@
       + 'measures to find out how strong the bond really is.')
   ));
 
-  page('hydrogen', 'The hydrogen atom', 'Where orbitals and quantum numbers come from', () => frag(
+  page('hydrogen', 'The hydrogen atom', 'Where orbitals and quantum numbers come from',
+    'Solve one proton and one electron properly and the whole of orbital theory falls out. The '
+    + 'quantum numbers are not rules somebody imposed — they are just the three ways the wave has '
+    + 'to join up with itself in three-dimensional space. An orbital is one answer to this equation.',
+    () => frag(
     p('Now the one that mattered. One proton, one electron, and the pull between them:'),
     qeq('V(r)  =  −e² / 4πε₀ r'),
     p('This is in three dimensions, so the curvature term has three parts instead of one. The '
@@ -476,10 +522,10 @@
       + 'negative sign: zero is defined as the electron free and infinitely far away, so every '
       + 'bound state is below it, and the energy ', em('needed to remove'), ' the electron is '
       + fmt(Q.ionisationEV(1), 5) + ' eV. Second — and this one is a genuine fluke — ',
-      b('the energy depends only on n.'), ' 2s and 2p come out at exactly the same energy. That is '
-      + 'special to the 1/r shape of the potential and it is true of no other atom: add a second '
-      + 'electron and the shielding breaks the tie, 2s drops below 2p, and the whole structure of '
-      + 'the periodic table follows from that split.'),
+      b('the energy depends only on n.'), ' 2s and 2p come out at exactly the same energy. That '
+      + 'is a quirk of the 1/r shape of the pull and it is true of no other atom. Add a second '
+      + 'electron and the tie breaks: 2s drops below 2p. The entire structure of the periodic '
+      + 'table grows out of that one split, which is why the next few pages chase it.'),
     h3('So what is an orbital?'),
     callout(b('An orbital is one solution of the time-independent Schrödinger equation for one '
       + 'electron in an atom. '), 'That is the entire definition. The shapes are |ψ|² for '
@@ -495,7 +541,11 @@
       + 'is held up by not fitting.')
   ));
 
-  page('examples', 'Worked examples', 'Eight, done the long way', () => {
+  page('examples', 'Worked examples', 'Eight, done the long way',
+    'Eight problems worked right through, with every intermediate number shown. The app computes '
+    + 'all of them with the same code that marks the practice questions, so a worked answer and a '
+    + 'marked answer can never disagree with each other.',
+    () => {
     const box = Q.boxEnergy(1, 0.5);
     const t21 = Q.boxTransition(1, 2, 0.5);
     const ha = Q.hydrogenTransition(3, 2);
@@ -613,8 +663,10 @@
       + 'classical physics, the equation that replaced it, the rules underneath, and then what '
       + 'those rules build \u2014 spin, the periodic table, the covalent bond, colour, lasers, '
       + 'semiconductors, and the handful of results nobody has managed to make comfortable. '
-      + 'Separate from the course on purpose: nothing here is required for anything else, and it '
-      + 'goes deeper than a first chemistry class needs.'));
+      + 'Every page starts with the short version, in plain words and no symbols, so you can '
+      + 'take the idea and leave the derivation if that is what you came for. Separate from the '
+      + 'course on purpose: nothing here is required for anything else, and it goes deeper than '
+      + 'a first chemistry class needs.'));
 
     const layout = el('div', { class: 'qm-layout' });
     St.nav = el('nav', { class: 'qm-nav', 'aria-label': 'Pages' });
@@ -656,6 +708,14 @@
 
     const card = el('div', { class: 'card card-pad qm-page' });
     card.appendChild(el('h2', { text: pg.name }));
+    /* The plain-words version first. Somebody who reads only this should
+     * still come away with the idea; everything after it is the reasoning. */
+    if (pg.short) {
+      const lead = el('div', { class: 'qm-short' });
+      lead.appendChild(el('span', { class: 'qm-shortlabel', text: 'The short version' }));
+      lead.appendChild(el('p', { text: pg.short }));
+      card.appendChild(lead);
+    }
     card.appendChild(pg.build());
 
     /* Previous and next, because ten pages in an order is a sequence even if

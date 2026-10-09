@@ -70,3 +70,17 @@
 .qm-problems { display: grid; gap: 10px; margin-bottom: 12px; }
 .qm-pagenav { display: flex; gap: 10px; justify-content: space-between; margin-top: 28px;
   padding-top: 16px; border-top: 1px solid var(--border); }
+
+/* The plain-words summary every page opens with. Visually set apart because
+   it is a different kind of writing from the page body: no jargon, no
+   equations, short sentences. A reader in a hurry reads only these. */
+.qm-short {
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  padding: 12px 16px; margin: 0 0 20px;
+}
+.qm-shortlabel {
+  display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .08em;
+  font-weight: 700; color: var(--accent-strong); margin-bottom: 4px;
+}
+.qm-short p { margin: 0 !important; font-size: 1.02rem; line-height: 1.6; }
