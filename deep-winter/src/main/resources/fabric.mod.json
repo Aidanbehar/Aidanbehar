@@ -1,0 +1,29 @@
+{
+	"schemaVersion": 1,
+	"id": "deepwinter",
+	"version": "${version}",
+	"name": "Deep Winter",
+	"description": "Snow that keeps piling up, region-wide snowstorms, body temperature and freezing, heated snowy villages, a thermometer and a snow shovel.",
+	"authors": ["aidanbehar"],
+	"license": "MIT",
+	"icon": "assets/deepwinter/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["com.deepwinter.DeepWinter"],
+		"client": ["com.deepwinter.client.DeepWinterClient"],
+		"modmenu": ["com.deepwinter.client.ModMenuIntegration"]
+	},
+	"mixins": [
+		"deepwinter.mixins.json",
+		{ "config": "deepwinter.client.mixins.json", "environment": "client" }
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"modmenu": "*"
+	}
+}

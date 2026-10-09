@@ -1,0 +1,40 @@
+{
+  "variants": {
+    "layers=1": {
+      "model": "deepwinter:block/settled_snow_1"
+    },
+    "layers=2": {
+      "model": "deepwinter:block/settled_snow_2"
+    },
+    "layers=3": {
+      "model": "deepwinter:block/settled_snow_3"
+    },
+    "layers=4": {
+      "model": "deepwinter:block/settled_snow_4"
+    },
+    "layers=5": {
+      "model": "deepwinter:block/settled_snow_5"
+    },
+    "layers=6": {
+      "model": "deepwinter:block/settled_snow_6"
+    },
+    "layers=7": {
+      "model": "deepwinter:block/settled_snow_7"
+    },
+    "layers=8": {
+      "model": "deepwinter:block/settled_snow_8"
+    },
+    "layers=9": {
+      "model": "deepwinter:block/settled_snow_9"
+    },
+    "layers=10": {
+      "model": "deepwinter:block/settled_snow_10"
+    },
+    "layers=11": {
+      "model": "deepwinter:block/settled_snow_11"
+    },
+    "layers=12": {
+      "model": "deepwinter:block/settled_snow_12"
+    }
+  }
+}

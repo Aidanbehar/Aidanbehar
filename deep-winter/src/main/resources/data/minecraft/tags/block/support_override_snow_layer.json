@@ -1,0 +1,13 @@
+{
+  "replace": false,
+  "values": [
+    "#minecraft:stairs",
+    "#minecraft:fences",
+    "#minecraft:walls",
+    "minecraft:iron_bars",
+    "minecraft:glass_pane",
+    { "id": "#c:glass_panes", "required": false },
+    "minecraft:powder_snow",
+    "deepwinter:settled_snow"
+  ]
+}
