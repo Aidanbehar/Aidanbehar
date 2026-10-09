@@ -32,6 +32,7 @@ public class DeepWinter implements ModInitializer {
 
 		ModBlocks.init();
 		SnowAccumulator.STAMP.identifier();
+		com.deepwinter.temperature.BodyTemperature.init();
 
 		PayloadTypeRegistry.clientboundPlay().register(StormSyncPayload.TYPE, StormSyncPayload.CODEC);
 

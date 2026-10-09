@@ -3,7 +3,8 @@
 	"package": "com.deepwinter.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"mixins": [
-		"BiomeMixin"
+		"BiomeMixin",
+		"LivingEntityMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
