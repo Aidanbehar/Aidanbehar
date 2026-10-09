@@ -31,6 +31,8 @@ public class DeepWinter implements ModInitializer {
 		DeepWinterConfig.load();
 
 		ModBlocks.init();
+		ModParticles.init();
+		com.deepwinter.item.ModItems.init();
 		SnowAccumulator.STAMP.identifier();
 		com.deepwinter.temperature.BodyTemperature.init();
 

@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "G": "minecraft:glass",
+    "R": "minecraft:redstone",
+    "C": "minecraft:copper_ingot"
+  },
+  "pattern": [
+    "G",
+    "R",
+    "C"
+  ],
+  "result": {
+    "id": "deepwinter:thermometer"
+  }
+}

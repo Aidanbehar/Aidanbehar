@@ -3,6 +3,8 @@
 	"package": "com.deepwinter.client.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
+		"FogRendererMixin",
+		"LevelMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
