@@ -109,7 +109,8 @@ public final class BodyTemperature {
 			s.body = Math.max(15.0F, felt);
 			s.initialized = true;
 		}
-		s.body += (felt - s.body) * RATE;
+		// Villagers are used to the cold and react more slowly, which gives them time to walk home.
+		s.body += (felt - s.body) * (entity instanceof Villager ? RATE * 0.4F : RATE);
 
 		DeepWinterConfig cfg = DeepWinterConfig.get();
 		boolean exempt = entity.isSpectator() || (entity instanceof Player p && p.isCreative())
@@ -150,6 +151,10 @@ public final class BodyTemperature {
 		boolean cold = s.body < cfg.freezingThreshold + 10 || t.felt() < cfg.freezingThreshold + 4;
 		boolean night = level.isDarkOutside() && t.felt() < 5;
 		if (outdoors && (t.storm() || cold || night)) {
+			// LocateHidingPlace only picks a destination when the villager isn't already walking somewhere.
+			if (!villager.getBrain().hasMemoryValue(MemoryModuleType.HIDING_PLACE)) {
+				villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+			}
 			villager.getBrain().setMemory(MemoryModuleType.HEARD_BELL_TIME, level.getGameTime());
 			villager.getBrain().setActiveActivityIfPossible(Activity.HIDE);
 		}

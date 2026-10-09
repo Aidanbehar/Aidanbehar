@@ -1,0 +1,200 @@
+{
+  "fallback": "minecraft:village/taiga/terminators",
+  "elements": [
+    {
+      "weight": 4,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/cozy_cabin_1",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 4,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/cozy_cabin_2",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 4,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/house_1",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 3,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/house_2",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 3,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/longhouse_1",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/butcher_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 1,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/armorer_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/toolsmith_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/weaponsmith_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/fletcher_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/shepherd_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/fisher_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/leatherworker_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/cartographer_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/librarian_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/mason_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:single_pool_element",
+        "location": "deepwinter:village/taiga/cleric_house",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 6,
+      "element": {
+        "element_type": "minecraft:legacy_single_pool_element",
+        "location": "minecraft:village/taiga/houses/taiga_large_farm_1",
+        "processors": "minecraft:farm_taiga",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 6,
+      "element": {
+        "element_type": "minecraft:legacy_single_pool_element",
+        "location": "minecraft:village/taiga/houses/taiga_large_farm_2",
+        "processors": "minecraft:farm_taiga",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 1,
+      "element": {
+        "element_type": "minecraft:legacy_single_pool_element",
+        "location": "minecraft:village/taiga/houses/taiga_small_farm_1",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 2,
+      "element": {
+        "element_type": "minecraft:legacy_single_pool_element",
+        "location": "minecraft:village/taiga/houses/taiga_animal_pen_1",
+        "processors": "minecraft:mossify_10_percent",
+        "projection": "rigid"
+      }
+    },
+    {
+      "weight": 6,
+      "element": {
+        "element_type": "minecraft:empty_pool_element"
+      }
+    }
+  ]
+}
