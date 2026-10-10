@@ -1791,7 +1791,7 @@ public final class PlantModel {
 
 	/** Dose rate inside containment operating floor, Sv/h. N-16 during power operation plus airborne activity. */
 	public double containmentDoseRate() {
-		return 0.05 * kinetics.power() + 2e-3 * totalDecayFraction() / 0.065 + airborneActivity * 50.0;
+		return 0.002 * kinetics.power() + 2e-4 * totalDecayFraction() / 0.065 + airborneActivity * 50.0;
 	}
 
 	// =================================================================== utilities
