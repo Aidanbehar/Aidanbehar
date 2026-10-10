@@ -83,9 +83,9 @@ for the version decisions and [docs/PROGRESS.md](docs/PROGRESS.md) for what is c
 | `/nps timescale <1-300>` | gamemaster | Run plant time faster or back to real time |
 | `/nps dev restore confirm` | gamemaster | After an accident: reset the plant, rebuild the damaged reactor area, clear ground contamination |
 | `/nps dev clearmobs` | gamemaster | Remove hostile mobs already inside the station |
-| `/nps dev fail <equipment>` / `repair <equipment>` | gamemaster | Inject or clear an equipment failure |
+| `/nps dev fail <equipment>` / `repair <equipment>` / `repair all` | gamemaster | Inject or clear equipment failures (type the command alone for the list of equipment names, e.g. `edg_a`, `rcp_b`, `tdafw`) |
 | `/nps dev gridloss` | gamemaster | Loss of off-site power |
-| `/nps dev loca <0..1>` | gamemaster | Break in the reactor coolant system (fraction of a large break) |
+| `/nps dev loca small` / `medium` / `large` / `<0..1>` | gamemaster | Break in the reactor coolant system (fraction of a large break) |
 | `/nps dev parts` | gamemaster | Give one of each spare part |
 | `/nps dev resetplant confirm` | gamemaster | Reset the plant to full power steady state |
 | `/nps dev cleardose` | gamemaster | Clear your dose record |

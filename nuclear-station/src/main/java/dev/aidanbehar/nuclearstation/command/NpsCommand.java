@@ -72,17 +72,25 @@ public final class NpsCommand {
 					.executes(c -> timeScale(c, DoubleArgumentType.getDouble(c, "speed")))))
 			.then(Commands.literal("dev").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
 				.then(Commands.literal("clearmobs").executes(NpsCommand::clearMobs))
-				.then(Commands.literal("restore").then(Commands.literal("confirm").executes(NpsCommand::restore)))
-				.then(Commands.literal("fail").then(Commands.argument("equipment", StringArgumentType.word()).suggests((c, b) -> suggestEquipment(b))
+				.then(Commands.literal("restore").executes(c -> confirmHelp(c, "restore", "Resets the plant to full power, rebuilds the reactor area and clears ground contamination.")).then(Commands.literal("confirm").executes(NpsCommand::restore)))
+				.then(Commands.literal("fail").executes(c -> equipmentHelp(c, "fail"))
+					.then(Commands.argument("equipment", StringArgumentType.word()).suggests((c, b) -> suggestEquipment(b))
 					.executes(c -> fail(c, StringArgumentType.getString(c, "equipment")))))
-				.then(Commands.literal("repair").then(Commands.argument("equipment", StringArgumentType.word()).suggests((c, b) -> suggestEquipment(b))
+				.then(Commands.literal("repair").executes(c -> equipmentHelp(c, "repair"))
+					.then(Commands.literal("all").executes(NpsCommand::repairAll))
+					.then(Commands.argument("equipment", StringArgumentType.word()).suggests((c, b) -> suggestEquipment(b))
 					.executes(c -> repair(c, StringArgumentType.getString(c, "equipment")))))
 				.then(Commands.literal("gridloss").executes(NpsCommand::gridLoss))
-				.then(Commands.literal("loca").then(Commands.argument("area", DoubleArgumentType.doubleArg(0, 1)).executes(NpsCommand::loca)))
+				.then(Commands.literal("loca").executes(NpsCommand::locaHelp)
+					.then(Commands.literal("small").executes(c -> loca(c, 0.005)))
+					.then(Commands.literal("medium").executes(c -> loca(c, 0.05)))
+					.then(Commands.literal("large").executes(c -> loca(c, 1.0)))
+					.then(Commands.argument("area", DoubleArgumentType.doubleArg(0, 1))
+						.executes(c -> loca(c, DoubleArgumentType.getDouble(c, "area")))))
 				.then(Commands.literal("parts").executes(NpsCommand::parts))
-				.then(Commands.literal("resetplant").then(Commands.literal("confirm").executes(NpsCommand::resetPlant)))
+				.then(Commands.literal("resetplant").executes(c -> confirmHelp(c, "resetplant", "Resets the plant simulation to full power (world damage stays).")).then(Commands.literal("confirm").executes(NpsCommand::resetPlant)))
 				.then(Commands.literal("cleardose").executes(NpsCommand::clearDose))
-				.then(Commands.literal("regenerate").then(Commands.literal("confirm").executes(NpsCommand::regenerate)))));
+				.then(Commands.literal("regenerate").executes(c -> confirmHelp(c, "regenerate", "Repaints the whole station (needs development.allowRegenerate in the config).")).then(Commands.literal("confirm").executes(NpsCommand::regenerate)))));
 	}
 
 	private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestEquipment(SuggestionsBuilder b) {
@@ -216,11 +224,57 @@ public final class NpsCommand {
 		return 1;
 	}
 
-	private static int loca(CommandContext<CommandSourceStack> c) {
+	private static int equipmentHelp(CommandContext<CommandSourceStack> c, String verb) {
+		PlantModel m = PlantService.model(c.getSource().getServer());
+		StringBuilder all = new StringBuilder();
+		StringBuilder failed = new StringBuilder();
+		for (EquipmentId id : EquipmentId.values()) {
+			String name = id.name().toLowerCase(Locale.ROOT);
+			all.append(all.length() > 0 ? ", " : "").append(name);
+			if (m.equipment(id).failed) {
+				failed.append(failed.length() > 0 ? ", " : "").append(name);
+			}
+		}
+		c.getSource().sendSuccess(() -> Component.literal("Usage: /nps dev " + verb + " <equipment>" + ("repair".equals(verb) ? "  or  /nps dev repair all" : "")
+			+ "\nEquipment: " + all).withStyle(ChatFormatting.YELLOW), false);
+		String failedList = failed.length() == 0 ? "none" : failed.toString();
+		c.getSource().sendSuccess(() -> Component.literal("Currently failed: " + failedList).withStyle(ChatFormatting.GOLD), false);
+		return 1;
+	}
+
+	private static int repairAll(CommandContext<CommandSourceStack> c) {
 		if (ctx(c) == null) {
 			return noSite(c);
 		}
-		double area = DoubleArgumentType.getDouble(c, "area");
+		PlantModel m = PlantService.model(c.getSource().getServer());
+		int n = 0;
+		for (EquipmentId id : EquipmentId.values()) {
+			if (m.equipment(id).failed || m.equipment(id).condition < 1) {
+				PlantOperations.repair(m, id);
+				n++;
+			}
+		}
+		int count = n;
+		c.getSource().sendSuccess(() -> Component.literal("Repaired " + count + " pieces of equipment"), true);
+		return 1;
+	}
+
+	private static int confirmHelp(CommandContext<CommandSourceStack> c, String name, String what) {
+		c.getSource().sendSuccess(() -> Component.literal(what + " Type /nps dev " + name + " confirm to do it.").withStyle(ChatFormatting.YELLOW), false);
+		return 1;
+	}
+
+	private static int locaHelp(CommandContext<CommandSourceStack> c) {
+		c.getSource().sendSuccess(() -> Component.literal("Usage: /nps dev loca small | medium | large | <0-1>\n"
+			+ "small = 0.005 (a few kg/s leak, charging may keep up), medium = 0.05 (safety injection needed), "
+			+ "large = 1.0 (double-ended break of a main coolant pipe)").withStyle(ChatFormatting.YELLOW), false);
+		return 1;
+	}
+
+	private static int loca(CommandContext<CommandSourceStack> c, double area) {
+		if (ctx(c) == null) {
+			return noSite(c);
+		}
 		DevHooks.loca(PlantService.model(c.getSource().getServer()), area);
 		c.getSource().sendSuccess(() -> Component.literal(String.format("RCS break area set to %.4f of a double-ended guillotine break", area)), true);
 		return 1;
