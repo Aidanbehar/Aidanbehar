@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "Y": "minecraft:yellow_wool",
+    "L": "minecraft:leather"
+  },
+  "pattern": [
+    "Y Y",
+    "YLY",
+    "YYY"
+  ],
+  "result": {
+    "id": "nuclearstation:hazmat_suit",
+    "count": 1
+  }
+}

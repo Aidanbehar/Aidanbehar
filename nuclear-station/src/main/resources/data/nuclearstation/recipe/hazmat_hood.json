@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "Y": "minecraft:yellow_wool",
+    "G": "minecraft:glass_pane"
+  },
+  "pattern": [
+    "YYY",
+    "YGY"
+  ],
+  "result": {
+    "id": "nuclearstation:hazmat_hood",
+    "count": 1
+  }
+}

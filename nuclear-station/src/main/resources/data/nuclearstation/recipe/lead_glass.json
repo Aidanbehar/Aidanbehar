@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "G": "minecraft:glass",
+    "L": "nuclearstation:lead_ingot"
+  },
+  "pattern": [
+    "GLG",
+    "LGL",
+    "GLG"
+  ],
+  "result": {
+    "id": "nuclearstation:lead_glass",
+    "count": 4
+  }
+}

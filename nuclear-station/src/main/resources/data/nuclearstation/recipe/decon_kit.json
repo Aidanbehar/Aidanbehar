@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:paper",
+    "minecraft:slime_ball",
+    "minecraft:kelp",
+    "minecraft:paper"
+  ],
+  "result": {
+    "id": "nuclearstation:decon_kit",
+    "count": 4
+  }
+}

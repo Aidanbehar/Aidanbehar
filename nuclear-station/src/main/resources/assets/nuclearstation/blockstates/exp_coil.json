@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "nuclearstation:block/exp_coil"
+    }
+  }
+}

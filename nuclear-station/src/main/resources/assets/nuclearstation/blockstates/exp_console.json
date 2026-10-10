@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "nuclearstation:block/exp_console"
+    },
+    "facing=east": {
+      "model": "nuclearstation:block/exp_console",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "nuclearstation:block/exp_console",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "nuclearstation:block/exp_console",
+      "y": 270
+    }
+  }
+}

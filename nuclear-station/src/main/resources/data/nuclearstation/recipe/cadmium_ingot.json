@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:smelting",
+  "category": "misc",
+  "cookingtime": 200,
+  "experience": 0.5,
+  "ingredient": "nuclearstation:greenockite_chunk",
+  "result": {
+    "id": "nuclearstation:cadmium_ingot"
+  }
+}

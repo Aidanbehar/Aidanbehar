@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "S": "minecraft:string",
+    "I": "minecraft:iron_ingot",
+    "G": "minecraft:glass_pane",
+    "C": "minecraft:charcoal"
+  },
+  "pattern": [
+    "S S",
+    "IGI",
+    "CIC"
+  ],
+  "result": {
+    "id": "nuclearstation:respirator",
+    "count": 1
+  }
+}

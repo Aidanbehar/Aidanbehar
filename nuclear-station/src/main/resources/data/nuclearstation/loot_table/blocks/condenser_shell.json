@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      },
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "nuclearstation:condenser_shell"
+        }
+      ]
+    }
+  ],
+  "random_sequence": "nuclearstation:blocks/condenser_shell"
+}

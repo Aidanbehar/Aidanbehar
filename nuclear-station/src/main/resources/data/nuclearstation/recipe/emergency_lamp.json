@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "R": "minecraft:red_dye",
+    "G": "minecraft:glass_pane",
+    "L": "minecraft:glowstone"
+  },
+  "pattern": [
+    "IRI",
+    "GLG"
+  ],
+  "result": {
+    "id": "nuclearstation:emergency_lamp",
+    "count": 2
+  }
+}

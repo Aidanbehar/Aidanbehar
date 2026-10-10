@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "G": "minecraft:glass_pane",
+    "I": "minecraft:iron_nugget",
+    "C": "minecraft:copper_ingot",
+    "R": "minecraft:redstone"
+  },
+  "pattern": [
+    "IGI",
+    "CRC",
+    "III"
+  ],
+  "result": {
+    "id": "nuclearstation:dosimeter",
+    "count": 1
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "nuclearstation:block/crane_girder"
+    }
+  }
+}

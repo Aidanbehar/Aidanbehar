@@ -1,0 +1,16 @@
+{
+  "replace": false,
+  "values": [
+    "nuclearstation:beryl_ore",
+    "nuclearstation:containment_concrete",
+    "nuclearstation:deepslate_uraninite_ore",
+    "nuclearstation:lead_block",
+    "nuclearstation:pitchblende_ore",
+    "nuclearstation:radiferous_barite_ore",
+    "nuclearstation:resonite_ore",
+    "nuclearstation:spodumene_ore",
+    "nuclearstation:thorianite_ore",
+    "nuclearstation:uraninite_ore",
+    "nuclearstation:xenotime_ore"
+  ]
+}

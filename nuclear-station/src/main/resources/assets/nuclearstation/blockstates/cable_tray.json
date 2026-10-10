@@ -1,0 +1,11 @@
+{
+  "variants": {
+    "axis=z": {
+      "model": "nuclearstation:block/cable_tray"
+    },
+    "axis=x": {
+      "model": "nuclearstation:block/cable_tray",
+      "y": 90
+    }
+  }
+}

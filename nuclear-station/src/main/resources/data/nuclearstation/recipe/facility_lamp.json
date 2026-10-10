@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "G": "minecraft:glass_pane",
+    "L": "minecraft:glowstone"
+  },
+  "pattern": [
+    "III",
+    "GLG"
+  ],
+  "result": {
+    "id": "nuclearstation:facility_lamp",
+    "count": 4
+  }
+}

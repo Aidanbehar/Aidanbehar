@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "top": "nuclearstation:block/ventilation_fan_side",
+    "front": "nuclearstation:block/ventilation_fan_front",
+    "side": "nuclearstation:block/ventilation_fan_side",
+    "particle": "nuclearstation:block/ventilation_fan_side"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "top": "nuclearstation:block/reactor_coolant_pump_side",
+    "front": "nuclearstation:block/reactor_coolant_pump_front",
+    "side": "nuclearstation:block/reactor_coolant_pump_side",
+    "particle": "nuclearstation:block/reactor_coolant_pump_side"
+  }
+}

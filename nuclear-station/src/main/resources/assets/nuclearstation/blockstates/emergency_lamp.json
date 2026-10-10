@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "powered=true": {
+      "model": "nuclearstation:block/emergency_lamp_on"
+    },
+    "powered=false": {
+      "model": "nuclearstation:block/emergency_lamp_off"
+    }
+  }
+}

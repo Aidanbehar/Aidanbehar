@@ -1,0 +1,64 @@
+{
+  "variants": {
+    "facing=north,status=off": {
+      "model": "nuclearstation:block/annunciator_panel_off"
+    },
+    "facing=east,status=off": {
+      "model": "nuclearstation:block/annunciator_panel_off",
+      "y": 90
+    },
+    "facing=south,status=off": {
+      "model": "nuclearstation:block/annunciator_panel_off",
+      "y": 180
+    },
+    "facing=west,status=off": {
+      "model": "nuclearstation:block/annunciator_panel_off",
+      "y": 270
+    },
+    "facing=north,status=normal": {
+      "model": "nuclearstation:block/annunciator_panel_normal"
+    },
+    "facing=east,status=normal": {
+      "model": "nuclearstation:block/annunciator_panel_normal",
+      "y": 90
+    },
+    "facing=south,status=normal": {
+      "model": "nuclearstation:block/annunciator_panel_normal",
+      "y": 180
+    },
+    "facing=west,status=normal": {
+      "model": "nuclearstation:block/annunciator_panel_normal",
+      "y": 270
+    },
+    "facing=north,status=caution": {
+      "model": "nuclearstation:block/annunciator_panel_caution"
+    },
+    "facing=east,status=caution": {
+      "model": "nuclearstation:block/annunciator_panel_caution",
+      "y": 90
+    },
+    "facing=south,status=caution": {
+      "model": "nuclearstation:block/annunciator_panel_caution",
+      "y": 180
+    },
+    "facing=west,status=caution": {
+      "model": "nuclearstation:block/annunciator_panel_caution",
+      "y": 270
+    },
+    "facing=north,status=alarm": {
+      "model": "nuclearstation:block/annunciator_panel_alarm"
+    },
+    "facing=east,status=alarm": {
+      "model": "nuclearstation:block/annunciator_panel_alarm",
+      "y": 90
+    },
+    "facing=south,status=alarm": {
+      "model": "nuclearstation:block/annunciator_panel_alarm",
+      "y": 180
+    },
+    "facing=west,status=alarm": {
+      "model": "nuclearstation:block/annunciator_panel_alarm",
+      "y": 270
+    }
+  }
+}

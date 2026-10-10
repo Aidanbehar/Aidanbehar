@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:smelting",
+  "category": "misc",
+  "cookingtime": 200,
+  "experience": 0.5,
+  "ingredient": "nuclearstation:spodumene_crystal",
+  "result": {
+    "id": "nuclearstation:lithium_carbonate"
+  }
+}

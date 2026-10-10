@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "top": "nuclearstation:block/control_panel_side",
+    "front": "nuclearstation:block/control_panel_caution",
+    "side": "nuclearstation:block/control_panel_side",
+    "particle": "nuclearstation:block/control_panel_side"
+  }
+}

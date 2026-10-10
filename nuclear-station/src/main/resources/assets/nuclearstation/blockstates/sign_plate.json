@@ -1,0 +1,244 @@
+{
+  "variants": {
+    "facing=north,kind=radiation": {
+      "model": "nuclearstation:block/sign_plate_radiation"
+    },
+    "facing=east,kind=radiation": {
+      "model": "nuclearstation:block/sign_plate_radiation",
+      "y": 90
+    },
+    "facing=south,kind=radiation": {
+      "model": "nuclearstation:block/sign_plate_radiation",
+      "y": 180
+    },
+    "facing=west,kind=radiation": {
+      "model": "nuclearstation:block/sign_plate_radiation",
+      "y": 270
+    },
+    "facing=north,kind=contamination": {
+      "model": "nuclearstation:block/sign_plate_contamination"
+    },
+    "facing=east,kind=contamination": {
+      "model": "nuclearstation:block/sign_plate_contamination",
+      "y": 90
+    },
+    "facing=south,kind=contamination": {
+      "model": "nuclearstation:block/sign_plate_contamination",
+      "y": 180
+    },
+    "facing=west,kind=contamination": {
+      "model": "nuclearstation:block/sign_plate_contamination",
+      "y": 270
+    },
+    "facing=north,kind=high_radiation": {
+      "model": "nuclearstation:block/sign_plate_high_radiation"
+    },
+    "facing=east,kind=high_radiation": {
+      "model": "nuclearstation:block/sign_plate_high_radiation",
+      "y": 90
+    },
+    "facing=south,kind=high_radiation": {
+      "model": "nuclearstation:block/sign_plate_high_radiation",
+      "y": 180
+    },
+    "facing=west,kind=high_radiation": {
+      "model": "nuclearstation:block/sign_plate_high_radiation",
+      "y": 270
+    },
+    "facing=north,kind=high_voltage": {
+      "model": "nuclearstation:block/sign_plate_high_voltage"
+    },
+    "facing=east,kind=high_voltage": {
+      "model": "nuclearstation:block/sign_plate_high_voltage",
+      "y": 90
+    },
+    "facing=south,kind=high_voltage": {
+      "model": "nuclearstation:block/sign_plate_high_voltage",
+      "y": 180
+    },
+    "facing=west,kind=high_voltage": {
+      "model": "nuclearstation:block/sign_plate_high_voltage",
+      "y": 270
+    },
+    "facing=north,kind=restricted": {
+      "model": "nuclearstation:block/sign_plate_restricted"
+    },
+    "facing=east,kind=restricted": {
+      "model": "nuclearstation:block/sign_plate_restricted",
+      "y": 90
+    },
+    "facing=south,kind=restricted": {
+      "model": "nuclearstation:block/sign_plate_restricted",
+      "y": 180
+    },
+    "facing=west,kind=restricted": {
+      "model": "nuclearstation:block/sign_plate_restricted",
+      "y": 270
+    },
+    "facing=north,kind=no_entry": {
+      "model": "nuclearstation:block/sign_plate_no_entry"
+    },
+    "facing=east,kind=no_entry": {
+      "model": "nuclearstation:block/sign_plate_no_entry",
+      "y": 90
+    },
+    "facing=south,kind=no_entry": {
+      "model": "nuclearstation:block/sign_plate_no_entry",
+      "y": 180
+    },
+    "facing=west,kind=no_entry": {
+      "model": "nuclearstation:block/sign_plate_no_entry",
+      "y": 270
+    },
+    "facing=north,kind=exit": {
+      "model": "nuclearstation:block/sign_plate_exit"
+    },
+    "facing=east,kind=exit": {
+      "model": "nuclearstation:block/sign_plate_exit",
+      "y": 90
+    },
+    "facing=south,kind=exit": {
+      "model": "nuclearstation:block/sign_plate_exit",
+      "y": 180
+    },
+    "facing=west,kind=exit": {
+      "model": "nuclearstation:block/sign_plate_exit",
+      "y": 270
+    },
+    "facing=north,kind=ppe": {
+      "model": "nuclearstation:block/sign_plate_ppe"
+    },
+    "facing=east,kind=ppe": {
+      "model": "nuclearstation:block/sign_plate_ppe",
+      "y": 90
+    },
+    "facing=south,kind=ppe": {
+      "model": "nuclearstation:block/sign_plate_ppe",
+      "y": 180
+    },
+    "facing=west,kind=ppe": {
+      "model": "nuclearstation:block/sign_plate_ppe",
+      "y": 270
+    },
+    "facing=north,kind=hot_surface": {
+      "model": "nuclearstation:block/sign_plate_hot_surface"
+    },
+    "facing=east,kind=hot_surface": {
+      "model": "nuclearstation:block/sign_plate_hot_surface",
+      "y": 90
+    },
+    "facing=south,kind=hot_surface": {
+      "model": "nuclearstation:block/sign_plate_hot_surface",
+      "y": 180
+    },
+    "facing=west,kind=hot_surface": {
+      "model": "nuclearstation:block/sign_plate_hot_surface",
+      "y": 270
+    },
+    "facing=north,kind=pressure": {
+      "model": "nuclearstation:block/sign_plate_pressure"
+    },
+    "facing=east,kind=pressure": {
+      "model": "nuclearstation:block/sign_plate_pressure",
+      "y": 90
+    },
+    "facing=south,kind=pressure": {
+      "model": "nuclearstation:block/sign_plate_pressure",
+      "y": 180
+    },
+    "facing=west,kind=pressure": {
+      "model": "nuclearstation:block/sign_plate_pressure",
+      "y": 270
+    },
+    "facing=north,kind=emergency_shower": {
+      "model": "nuclearstation:block/sign_plate_emergency_shower"
+    },
+    "facing=east,kind=emergency_shower": {
+      "model": "nuclearstation:block/sign_plate_emergency_shower",
+      "y": 90
+    },
+    "facing=south,kind=emergency_shower": {
+      "model": "nuclearstation:block/sign_plate_emergency_shower",
+      "y": 180
+    },
+    "facing=west,kind=emergency_shower": {
+      "model": "nuclearstation:block/sign_plate_emergency_shower",
+      "y": 270
+    },
+    "facing=north,kind=fire": {
+      "model": "nuclearstation:block/sign_plate_fire"
+    },
+    "facing=east,kind=fire": {
+      "model": "nuclearstation:block/sign_plate_fire",
+      "y": 90
+    },
+    "facing=south,kind=fire": {
+      "model": "nuclearstation:block/sign_plate_fire",
+      "y": 180
+    },
+    "facing=west,kind=fire": {
+      "model": "nuclearstation:block/sign_plate_fire",
+      "y": 270
+    },
+    "facing=north,kind=crane": {
+      "model": "nuclearstation:block/sign_plate_crane"
+    },
+    "facing=east,kind=crane": {
+      "model": "nuclearstation:block/sign_plate_crane",
+      "y": 90
+    },
+    "facing=south,kind=crane": {
+      "model": "nuclearstation:block/sign_plate_crane",
+      "y": 180
+    },
+    "facing=west,kind=crane": {
+      "model": "nuclearstation:block/sign_plate_crane",
+      "y": 270
+    },
+    "facing=north,kind=magnetic": {
+      "model": "nuclearstation:block/sign_plate_magnetic"
+    },
+    "facing=east,kind=magnetic": {
+      "model": "nuclearstation:block/sign_plate_magnetic",
+      "y": 90
+    },
+    "facing=south,kind=magnetic": {
+      "model": "nuclearstation:block/sign_plate_magnetic",
+      "y": 180
+    },
+    "facing=west,kind=magnetic": {
+      "model": "nuclearstation:block/sign_plate_magnetic",
+      "y": 270
+    },
+    "facing=north,kind=laser": {
+      "model": "nuclearstation:block/sign_plate_laser"
+    },
+    "facing=east,kind=laser": {
+      "model": "nuclearstation:block/sign_plate_laser",
+      "y": 90
+    },
+    "facing=south,kind=laser": {
+      "model": "nuclearstation:block/sign_plate_laser",
+      "y": 180
+    },
+    "facing=west,kind=laser": {
+      "model": "nuclearstation:block/sign_plate_laser",
+      "y": 270
+    },
+    "facing=north,kind=hearing": {
+      "model": "nuclearstation:block/sign_plate_hearing"
+    },
+    "facing=east,kind=hearing": {
+      "model": "nuclearstation:block/sign_plate_hearing",
+      "y": 90
+    },
+    "facing=south,kind=hearing": {
+      "model": "nuclearstation:block/sign_plate_hearing",
+      "y": 180
+    },
+    "facing=west,kind=hearing": {
+      "model": "nuclearstation:block/sign_plate_hearing",
+      "y": 270
+    }
+  }
+}

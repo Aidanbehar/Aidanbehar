@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "L": "minecraft:leather",
+    "P": "nuclearstation:lead_ingot"
+  },
+  "pattern": [
+    "L L",
+    "PLP",
+    "PPP"
+  ],
+  "result": {
+    "id": "nuclearstation:lead_apron",
+    "count": 1
+  }
+}

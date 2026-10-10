@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "D": "minecraft:red_dye"
+  },
+  "pattern": [
+    "I",
+    "D",
+    "I"
+  ],
+  "result": {
+    "id": "nuclearstation:pipe_primary",
+    "count": 4
+  }
+}

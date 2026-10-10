@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    "nuclearstation:monazite_sand",
+    "nuclearstation:monazite_sand",
+    "nuclearstation:monazite_sand",
+    "nuclearstation:monazite_sand"
+  ],
+  "result": {
+    "id": "nuclearstation:monazite_concentrate",
+    "count": 1
+  }
+}

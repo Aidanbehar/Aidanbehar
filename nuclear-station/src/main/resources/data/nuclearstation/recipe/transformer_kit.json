@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": "minecraft:copper_ingot",
+    "I": "minecraft:iron_ingot",
+    "R": "minecraft:redstone_block"
+  },
+  "pattern": [
+    "CCC",
+    "IRI",
+    "CCC"
+  ],
+  "result": {
+    "id": "nuclearstation:transformer_kit",
+    "count": 1
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "powered=true": {
+      "model": "nuclearstation:block/facility_lamp_on"
+    },
+    "powered=false": {
+      "model": "nuclearstation:block/facility_lamp_off"
+    }
+  }
+}

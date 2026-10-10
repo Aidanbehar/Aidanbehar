@@ -1,0 +1,11 @@
+{
+  "values": [
+    "#minecraft:is_mountain",
+    "#minecraft:is_hill",
+    "#minecraft:is_badlands",
+    "minecraft:windswept_hills",
+    "minecraft:windswept_gravelly_hills",
+    "minecraft:taiga",
+    "minecraft:old_growth_pine_taiga"
+  ]
+}

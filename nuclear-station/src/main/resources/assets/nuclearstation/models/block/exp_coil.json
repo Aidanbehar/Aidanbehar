@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "side": "nuclearstation:block/exp_coil",
+    "end": "nuclearstation:block/exp_coil_end"
+  }
+}

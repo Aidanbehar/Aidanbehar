@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "fill=0": {
+      "model": "nuclearstation:block/waste_drum"
+    },
+    "fill=1": {
+      "model": "nuclearstation:block/waste_drum"
+    },
+    "fill=2": {
+      "model": "nuclearstation:block/waste_drum"
+    },
+    "fill=3": {
+      "model": "nuclearstation:block/waste_drum"
+    },
+    "fill=4": {
+      "model": "nuclearstation:block/waste_drum_sealed"
+    }
+  }
+}

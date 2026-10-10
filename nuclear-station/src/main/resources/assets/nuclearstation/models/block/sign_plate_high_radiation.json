@@ -1,0 +1,79 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "face": "nuclearstation:block/sign_high_radiation",
+    "back": "nuclearstation:block/sign_back",
+    "particle": "nuclearstation:block/sign_high_radiation"
+  },
+  "elements": [
+    {
+      "from": [
+        1,
+        1,
+        15
+      ],
+      "to": [
+        15,
+        15,
+        16
+      ],
+      "faces": {
+        "north": {
+          "texture": "#face",
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ]
+        },
+        "south": {
+          "texture": "#back",
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "cullface": "south"
+        },
+        "east": {
+          "texture": "#back",
+          "uv": [
+            0,
+            1,
+            1,
+            15
+          ]
+        },
+        "west": {
+          "texture": "#back",
+          "uv": [
+            0,
+            1,
+            1,
+            15
+          ]
+        },
+        "up": {
+          "texture": "#back",
+          "uv": [
+            1,
+            0,
+            15,
+            1
+          ]
+        },
+        "down": {
+          "texture": "#back",
+          "uv": [
+            1,
+            0,
+            15,
+            1
+          ]
+        }
+      }
+    }
+  ]
+}

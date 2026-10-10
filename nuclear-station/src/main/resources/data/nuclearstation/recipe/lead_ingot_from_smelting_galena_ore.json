@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:smelting",
+  "category": "misc",
+  "cookingtime": 200,
+  "experience": 0.5,
+  "ingredient": "nuclearstation:galena_ore",
+  "result": {
+    "id": "nuclearstation:lead_ingot"
+  }
+}

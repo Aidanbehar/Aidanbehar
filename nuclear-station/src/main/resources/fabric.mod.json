@@ -7,6 +7,7 @@
 	"authors": ["aidanbehar"],
 	"license": "MIT",
 	"environment": "*",
+	"icon": "assets/nuclearstation/icon.png",
 	"entrypoints": {
 		"main": ["dev.aidanbehar.nuclearstation.NuclearStation"],
 		"client": ["dev.aidanbehar.nuclearstation.client.NuclearStationClient"]

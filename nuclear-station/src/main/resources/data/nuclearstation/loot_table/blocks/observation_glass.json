@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      },
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "nuclearstation:observation_glass"
+        }
+      ]
+    }
+  ],
+  "random_sequence": "nuclearstation:blocks/observation_glass"
+}

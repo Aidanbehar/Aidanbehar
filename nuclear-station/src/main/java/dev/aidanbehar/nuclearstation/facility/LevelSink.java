@@ -25,6 +25,12 @@ public final class LevelSink implements BlockSink {
 	public LevelSink(ServerLevel level, LevelChunk chunk) {
 		this.level = level;
 		this.chunk = chunk;
+		// Promote block entities still stored as pending NBT (beehives, structure chests)
+		// while their block states are intact. Otherwise replacing the block leaves the
+		// pending entry behind and the next write at that position fails to create it.
+		for (BlockPos pos : chunk.getBlockEntitiesPos()) {
+			chunk.getBlockEntity(pos);
+		}
 	}
 
 	@Override

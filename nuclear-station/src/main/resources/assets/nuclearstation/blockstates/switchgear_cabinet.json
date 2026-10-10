@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "nuclearstation:block/switchgear_cabinet"
+    },
+    "facing=east": {
+      "model": "nuclearstation:block/switchgear_cabinet",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "nuclearstation:block/switchgear_cabinet",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "nuclearstation:block/switchgear_cabinet",
+      "y": 270
+    }
+  }
+}

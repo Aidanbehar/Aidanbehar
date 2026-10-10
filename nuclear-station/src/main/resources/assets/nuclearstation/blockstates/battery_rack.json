@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "nuclearstation:block/battery_rack"
+    }
+  }
+}

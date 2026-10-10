@@ -1,0 +1,67 @@
+{
+  "type": "minecraft:chest",
+  "pools": [
+    {
+      "rolls": {
+        "type": "minecraft:uniform",
+        "min": 3,
+        "max": 6
+      },
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "nuclearstation:hazmat_hood",
+          "weight": 6
+        },
+        {
+          "type": "minecraft:item",
+          "name": "nuclearstation:hazmat_suit",
+          "weight": 6
+        },
+        {
+          "type": "minecraft:item",
+          "name": "nuclearstation:hazmat_trousers",
+          "weight": 6
+        },
+        {
+          "type": "minecraft:item",
+          "name": "nuclearstation:hazmat_boots",
+          "weight": 6
+        },
+        {
+          "type": "minecraft:item",
+          "name": "nuclearstation:respirator",
+          "weight": 5
+        },
+        {
+          "type": "minecraft:item",
+          "name": "nuclearstation:lead_apron",
+          "weight": 3
+        },
+        {
+          "type": "minecraft:item",
+          "name": "nuclearstation:decon_kit",
+          "weight": 10,
+          "modifier": {
+            "type": "minecraft:set_count",
+            "count": {
+              "type": "minecraft:uniform",
+              "min": 1,
+              "max": 4
+            }
+          }
+        },
+        {
+          "type": "minecraft:item",
+          "name": "nuclearstation:dosimeter",
+          "weight": 4
+        },
+        {
+          "type": "minecraft:item",
+          "name": "nuclearstation:geiger_counter",
+          "weight": 3
+        }
+      ]
+    }
+  ]
+}

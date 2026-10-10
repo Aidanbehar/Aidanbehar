@@ -1,0 +1,14 @@
+{
+  "replace": false,
+  "values": [
+    "nuclearstation:monazite_ore",
+    "nuclearstation:carnotite_ore",
+    "nuclearstation:autunite_ore",
+    "nuclearstation:radioactive_shale",
+    "nuclearstation:zircon_ore",
+    "nuclearstation:colemanite_ore",
+    "nuclearstation:greenockite_ore",
+    "nuclearstation:graphite_ore",
+    "nuclearstation:galena_ore"
+  ]
+}

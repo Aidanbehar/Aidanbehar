@@ -1,0 +1,7 @@
+{
+  "type": "nuclearstation:uranium_mine",
+  "biomes": "#nuclearstation:has_structure/uranium_mine",
+  "spawn_overrides": {},
+  "step": "surface_structures",
+  "terrain_adaptation": "beard_thin"
+}

@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "top": "nuclearstation:block/local_station_side",
+    "front": "nuclearstation:block/local_station_front",
+    "side": "nuclearstation:block/local_station_side",
+    "particle": "nuclearstation:block/local_station_side"
+  }
+}

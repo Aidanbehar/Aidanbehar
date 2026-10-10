@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "top": "nuclearstation:block/annunciator_panel_side",
+    "front": "nuclearstation:block/annunciator_panel_off",
+    "side": "nuclearstation:block/annunciator_panel_side",
+    "particle": "nuclearstation:block/annunciator_panel_side"
+  }
+}

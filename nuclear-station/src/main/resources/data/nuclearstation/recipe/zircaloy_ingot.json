@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    "nuclearstation:zircon_crystal",
+    "nuclearstation:zircon_crystal",
+    "minecraft:iron_nugget",
+    "minecraft:coal"
+  ],
+  "result": {
+    "id": "nuclearstation:zircaloy_ingot",
+    "count": 1
+  }
+}

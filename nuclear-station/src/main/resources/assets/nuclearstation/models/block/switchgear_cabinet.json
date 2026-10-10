@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "top": "nuclearstation:block/switchgear_cabinet_side",
+    "front": "nuclearstation:block/switchgear_cabinet_front",
+    "side": "nuclearstation:block/switchgear_cabinet_side",
+    "particle": "nuclearstation:block/switchgear_cabinet_side"
+  }
+}

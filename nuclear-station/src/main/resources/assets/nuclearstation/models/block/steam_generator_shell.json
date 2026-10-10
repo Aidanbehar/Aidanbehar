@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "side": "nuclearstation:block/steam_generator_shell",
+    "end": "nuclearstation:block/steam_generator_shell_end"
+  }
+}

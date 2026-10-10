@@ -7,6 +7,8 @@ import dev.aidanbehar.nuclearstation.plant.PlantWorldEffects;
 import dev.aidanbehar.nuclearstation.radiation.RadiationManager;
 import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.WeakHashMap;
@@ -18,6 +20,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.TicketType;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -40,6 +45,11 @@ public final class FacilityManager {
 	}
 
 	/** Runtime facility state for one server. */
+	/** Keeps chunks loaded (but not ticking) while a forced build paints them. */
+	private static final TicketType FORCED_BUILD = Registry.register(BuiltInRegistries.TICKET_TYPE, NuclearStation.id("facility_build"),
+		new TicketType(0L, TicketType.FLAG_LOADING));
+	private static final int FORCED_WINDOW = 24;
+
 	public static final class Context {
 		public final ServerLevel level;
 		public final FacilityData data;
@@ -47,6 +57,7 @@ public final class FacilityManager {
 		private final LongArrayFIFOQueue queue = new LongArrayFIFOQueue();
 		private final LongOpenHashSet queued = new LongOpenHashSet();
 		private int forcedNext = -1;
+		private final List<ChunkPos> forcedTickets = new ArrayList<>();
 		private long paintNanos;
 		private int paintedThisSession;
 		private int writesThisSession;
@@ -70,7 +81,7 @@ public final class FacilityManager {
 		}
 
 		public boolean forcedBuildActive() {
-			return forcedNext >= 0;
+			return forcedNext >= 0 || !forcedTickets.isEmpty();
 		}
 
 		public BlockPos centre() {
@@ -194,22 +205,48 @@ public final class FacilityManager {
 			ctx.queued.remove(key);
 			paint(ctx, chunk);
 		}
-		// forced build (development / testing): generate and paint every footprint chunk in turn
-		while (ctx.forcedNext >= 0 && System.nanoTime() - start < budget) {
+		// forced build (development / testing): load footprint chunks asynchronously with a
+		// ticket; they are painted through the normal load queue above, never synchronously
+		if (ctx.forcedBuildActive()) {
+			forcedStep(ctx);
+		}
+	}
+
+	private static void forcedStep(Context ctx) {
+		var source = ctx.level.getChunkSource();
+		ctx.forcedTickets.removeIf(pos -> {
+			int idx = ctx.data.index(pos.x(), pos.z());
+			boolean done = idx < 0 || ctx.data.isBuilt(idx) || ctx.data.isSkipped(idx);
+			if (done) {
+				source.removeTicketWithRadius(FORCED_BUILD, pos, 0);
+			}
+			return done;
+		});
+		int total = Blueprint.CHUNKS * Blueprint.CHUNKS;
+		while (ctx.forcedNext >= 0 && ctx.forcedTickets.size() < FORCED_WINDOW) {
 			int idx = ctx.forcedNext;
-			if (idx >= Blueprint.CHUNKS * Blueprint.CHUNKS) {
+			if (idx >= total) {
 				ctx.forcedNext = -1;
-				NuclearStation.LOG.info("Forced facility build complete: {} chunks built", ctx.data.builtCount());
 				break;
 			}
 			ctx.forcedNext++;
-			if (ctx.data.isBuilt(idx)) {
+			if (ctx.data.isBuilt(idx) || ctx.data.isSkipped(idx)) {
 				continue;
 			}
-			int cx = (ctx.data.originX() >> 4) + idx / Blueprint.CHUNKS;
-			int cz = (ctx.data.originZ() >> 4) + idx % Blueprint.CHUNKS;
-			LevelChunk chunk = ctx.level.getChunk(cx, cz);
-			paint(ctx, chunk);
+			ChunkPos pos = new ChunkPos((ctx.data.originX() >> 4) + idx / Blueprint.CHUNKS, (ctx.data.originZ() >> 4) + idx % Blueprint.CHUNKS);
+			source.addTicketWithRadius(FORCED_BUILD, pos, 0);
+			ctx.forcedTickets.add(pos);
+			// already loaded chunks fire no load event: queue them directly
+			LevelChunk loaded = source.getChunkNow(pos.x(), pos.z());
+			if (loaded != null) {
+				long key = ChunkPos.pack(pos.x(), pos.z());
+				if (ctx.queued.add(key)) {
+					ctx.queue.enqueue(key);
+				}
+			}
+		}
+		if (ctx.forcedNext < 0 && ctx.forcedTickets.isEmpty()) {
+			NuclearStation.LOG.info("Forced facility build complete: {} chunks built", ctx.data.builtCount());
 		}
 	}
 

@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "lit=true": {
+      "model": "nuclearstation:block/warning_beacon_on"
+    },
+    "lit=false": {
+      "model": "nuclearstation:block/warning_beacon_off"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "nuclearstation:block/sign_plate_radiation"
+  }
+}

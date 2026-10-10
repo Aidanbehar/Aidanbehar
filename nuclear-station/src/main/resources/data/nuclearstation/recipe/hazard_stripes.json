@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "Y": "minecraft:yellow_concrete",
+    "B": "minecraft:black_concrete"
+  },
+  "pattern": [
+    "YB",
+    "BY"
+  ],
+  "result": {
+    "id": "nuclearstation:hazard_stripes",
+    "count": 4
+  }
+}

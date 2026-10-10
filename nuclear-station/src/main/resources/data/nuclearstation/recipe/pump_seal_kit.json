@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "R": "minecraft:dried_kelp",
+    "I": "minecraft:iron_ingot"
+  },
+  "pattern": [
+    " R ",
+    "RIR",
+    " R "
+  ],
+  "result": {
+    "id": "nuclearstation:pump_seal_kit",
+    "count": 2
+  }
+}

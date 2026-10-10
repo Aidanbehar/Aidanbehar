@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "nuclearstation:block/locker"
+    },
+    "facing=east": {
+      "model": "nuclearstation:block/locker",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "nuclearstation:block/locker",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "nuclearstation:block/locker",
+      "y": 270
+    }
+  }
+}

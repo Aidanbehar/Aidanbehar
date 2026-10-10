@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "C": "minecraft:copper_ingot",
+    "R": "minecraft:redstone",
+    "L": "minecraft:lever"
+  },
+  "pattern": [
+    "IRI",
+    "CLC",
+    "III"
+  ],
+  "result": {
+    "id": "nuclearstation:breaker_module",
+    "count": 1
+  }
+}

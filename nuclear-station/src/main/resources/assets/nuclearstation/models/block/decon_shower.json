@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "top": "nuclearstation:block/decon_shower_side",
+    "front": "nuclearstation:block/decon_shower_front",
+    "side": "nuclearstation:block/decon_shower_side",
+    "particle": "nuclearstation:block/decon_shower_side"
+  }
+}

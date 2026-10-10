@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    "minecraft:iron_ingot",
+    "minecraft:paper",
+    "minecraft:honey_bottle",
+    "minecraft:string"
+  ],
+  "result": {
+    "id": "nuclearstation:diesel_service_kit",
+    "count": 1
+  }
+}

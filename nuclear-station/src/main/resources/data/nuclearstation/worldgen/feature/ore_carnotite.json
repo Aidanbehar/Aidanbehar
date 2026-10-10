@@ -1,0 +1,28 @@
+{
+  "type": "minecraft:ore",
+  "discard_chance_on_air_exposure": 0.0,
+  "size": 8,
+  "targets": [
+    {
+      "state": "nuclearstation:carnotite_ore",
+      "target": {
+        "predicate_type": "minecraft:block_match",
+        "block": "minecraft:sandstone"
+      }
+    },
+    {
+      "state": "nuclearstation:carnotite_ore",
+      "target": {
+        "predicate_type": "minecraft:tag_match",
+        "tag": "minecraft:terracotta"
+      }
+    },
+    {
+      "state": "nuclearstation:carnotite_ore",
+      "target": {
+        "predicate_type": "minecraft:tag_match",
+        "tag": "minecraft:stone_ore_replaceables"
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "nuclearstation:block/spent_fuel_assembly"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "side": "nuclearstation:block/crdm_housing",
+    "end": "nuclearstation:block/crdm_housing_end"
+  }
+}

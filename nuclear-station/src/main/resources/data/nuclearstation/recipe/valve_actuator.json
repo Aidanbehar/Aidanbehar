@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "P": "minecraft:piston",
+    "I": "minecraft:iron_ingot",
+    "R": "minecraft:redstone"
+  },
+  "pattern": [
+    " P ",
+    "IRI",
+    " I "
+  ],
+  "result": {
+    "id": "nuclearstation:valve_actuator",
+    "count": 1
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "Z": "nuclearstation:zircaloy_ingot",
+    "P": "nuclearstation:uranium_dioxide_pellet"
+  },
+  "pattern": [
+    "ZPZ",
+    "PPP",
+    "ZPZ"
+  ],
+  "result": {
+    "id": "nuclearstation:fuel_assembly",
+    "count": 1
+  }
+}

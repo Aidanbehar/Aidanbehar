@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "nuclearstation:block/pump_casing"
+    },
+    "facing=east": {
+      "model": "nuclearstation:block/pump_casing",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "nuclearstation:block/pump_casing",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "nuclearstation:block/pump_casing",
+      "y": 270
+    }
+  }
+}

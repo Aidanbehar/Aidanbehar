@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "G": "minecraft:gold_nugget",
+    "Q": "minecraft:quartz",
+    "R": "minecraft:redstone",
+    "C": "minecraft:comparator"
+  },
+  "pattern": [
+    "GQG",
+    "RCR"
+  ],
+  "result": {
+    "id": "nuclearstation:instrument_module",
+    "count": 1
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "G": "minecraft:glass_pane",
+    "I": "minecraft:iron_ingot",
+    "C": "minecraft:copper_ingot",
+    "R": "minecraft:redstone",
+    "L": "nuclearstation:lead_ingot"
+  },
+  "pattern": [
+    "GRC",
+    "III",
+    "  L"
+  ],
+  "result": {
+    "id": "nuclearstation:survey_meter",
+    "count": 1
+  }
+}

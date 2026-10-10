@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "top": "nuclearstation:block/locker_side",
+    "front": "nuclearstation:block/locker_front",
+    "side": "nuclearstation:block/locker_side",
+    "particle": "nuclearstation:block/locker_side"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "axis=y": {
+      "model": "nuclearstation:block/pipe_primary"
+    },
+    "axis=x": {
+      "model": "nuclearstation:block/pipe_primary",
+      "x": 90,
+      "y": 90
+    },
+    "axis=z": {
+      "model": "nuclearstation:block/pipe_primary",
+      "x": 90
+    }
+  }
+}

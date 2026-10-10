@@ -1,0 +1,130 @@
+{
+  "machine.turbine_hum": {
+    "subtitle": "subtitles.nuclearstation.machine.turbine_hum",
+    "sounds": [
+      {
+        "name": "nuclearstation:machine/turbine_hum"
+      }
+    ]
+  },
+  "machine.pump_hum": {
+    "subtitle": "subtitles.nuclearstation.machine.pump_hum",
+    "sounds": [
+      {
+        "name": "nuclearstation:machine/pump_hum"
+      }
+    ]
+  },
+  "machine.transformer_hum": {
+    "subtitle": "subtitles.nuclearstation.machine.transformer_hum",
+    "sounds": [
+      {
+        "name": "nuclearstation:machine/transformer_hum"
+      }
+    ]
+  },
+  "machine.ventilation": {
+    "subtitle": "subtitles.nuclearstation.machine.ventilation",
+    "sounds": [
+      {
+        "name": "nuclearstation:machine/ventilation"
+      }
+    ]
+  },
+  "machine.diesel_engine": {
+    "subtitle": "subtitles.nuclearstation.machine.diesel_engine",
+    "sounds": [
+      {
+        "name": "nuclearstation:machine/diesel_engine"
+      }
+    ]
+  },
+  "ambient.cooling_tower": {
+    "subtitle": "subtitles.nuclearstation.ambient.cooling_tower",
+    "sounds": [
+      {
+        "name": "nuclearstation:ambient/cooling_tower"
+      }
+    ]
+  },
+  "ambient.underground": {
+    "subtitle": "subtitles.nuclearstation.ambient.underground",
+    "sounds": [
+      {
+        "name": "nuclearstation:ambient/underground"
+      }
+    ]
+  },
+  "alarm.horn": {
+    "subtitle": "subtitles.nuclearstation.alarm.horn",
+    "sounds": [
+      {
+        "name": "nuclearstation:alarm/horn"
+      }
+    ]
+  },
+  "alarm.siren": {
+    "subtitle": "subtitles.nuclearstation.alarm.siren",
+    "sounds": [
+      {
+        "name": "nuclearstation:alarm/siren"
+      }
+    ]
+  },
+  "alarm.chime": {
+    "subtitle": "subtitles.nuclearstation.alarm.chime",
+    "sounds": [
+      {
+        "name": "nuclearstation:alarm/chime"
+      }
+    ]
+  },
+  "instrument.geiger_click": {
+    "subtitle": "subtitles.nuclearstation.instrument.geiger_click",
+    "sounds": [
+      {
+        "name": "nuclearstation:instrument/geiger_click"
+      }
+    ]
+  },
+  "instrument.dosimeter_alarm": {
+    "subtitle": "subtitles.nuclearstation.instrument.dosimeter_alarm",
+    "sounds": [
+      {
+        "name": "nuclearstation:instrument/dosimeter_alarm"
+      }
+    ]
+  },
+  "event.steam_release": {
+    "subtitle": "subtitles.nuclearstation.event.steam_release",
+    "sounds": [
+      {
+        "name": "nuclearstation:event/steam_release"
+      }
+    ]
+  },
+  "event.rod_drop": {
+    "subtitle": "subtitles.nuclearstation.event.rod_drop",
+    "sounds": [
+      {
+        "name": "nuclearstation:event/rod_drop"
+      }
+    ]
+  },
+  "event.breaker_trip": {
+    "subtitle": "subtitles.nuclearstation.event.breaker_trip",
+    "sounds": [
+      {
+        "name": "nuclearstation:event/breaker_trip"
+      }
+    ]
+  },
+  "event.rumble": {
+    "subtitle": "subtitles.nuclearstation.event.rumble",
+    "sounds": [
+      {
+        "name": "nuclearstation:event/rumble"
+      }
+    ]
+  }
+}

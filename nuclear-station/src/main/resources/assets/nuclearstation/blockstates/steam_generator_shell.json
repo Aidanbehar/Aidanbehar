@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "nuclearstation:block/steam_generator_shell"
+    }
+  }
+}

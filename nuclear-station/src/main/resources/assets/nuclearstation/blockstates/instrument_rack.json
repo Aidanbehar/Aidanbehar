@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "nuclearstation:block/instrument_rack"
+    },
+    "facing=east": {
+      "model": "nuclearstation:block/instrument_rack",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "nuclearstation:block/instrument_rack",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "nuclearstation:block/instrument_rack",
+      "y": 270
+    }
+  }
+}

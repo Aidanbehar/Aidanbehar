@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    "nuclearstation:colemanite_chunk",
+    "nuclearstation:colemanite_chunk",
+    "nuclearstation:graphite_flake"
+  ],
+  "result": {
+    "id": "nuclearstation:boron_carbide",
+    "count": 1
+  }
+}
