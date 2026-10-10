@@ -49,13 +49,17 @@ installed on both server and client.
 
 ## Finding and using the station
 
-* `/nps locate` prints the site centre and the control-room console position; operators can
-  `/nps tp`. Players can follow the access road and signage from the gatehouses.
+* `/nps locate` (operators / cheats) prints the site centre and the control-room console
+  position; `/nps tp` takes you there. Players can follow the access road and signage from the gatehouses.
 * The **main control room** is on the upper floor of the control building north of the
   reactor. Use a *Main Control Console* to open the plant interface. Other consoles, panels
   and the manual trip pushbuttons are wired into the same plant.
 * **Local control stations** next to plant equipment show its condition. Sneak-use to start
   or stop it locally; use while holding the right spare part to repair it.
+* The control room has the **Site Guide** (every building and where it is), the **Control
+  Room Guide** (every screen and button) and the **Reactor Operating Manual** on lecterns,
+  with copies of all manuals in the chests marked MANUALS.
+* No mobs spawn naturally anywhere in the station and its water never freezes.
 * Carry a **dosimeter**; hold a **Geiger counter** or **survey meter** to hear and see dose
   rates. Wear the hazmat suit and respirator in contaminated areas, decontaminate in the
   showers or with a kit, and put radioactive items in a waste drum.
@@ -70,11 +74,15 @@ for the version decisions and [docs/PROGRESS.md](docs/PROGRESS.md) for what is c
 | Command | Permission | Purpose |
 |---|---|---|
 | `/nps dose` | all | Your lifetime/acute dose and contamination |
-| `/nps locate` | all | Station location |
-| `/nps status` | all | One-line plant status |
+| `/nps locate` | gamemaster | Station location |
+| `/nps status` | gamemaster | Plant status (and severe-accident stages if any) |
 | `/nps tp` | gamemaster | Teleport to the control room |
 | `/nps generation` | gamemaster | Generation progress and performance |
 | `/nps generation buildall` | gamemaster | Build every station chunk now (async) |
+| `/nps meltdown` / `/nps meltdown confirm [speed]` | gamemaster | Start a real core meltdown (extended station blackout); plant time runs faster (default x60) until the vessel fails |
+| `/nps timescale <1-300>` | gamemaster | Run plant time faster or back to real time |
+| `/nps dev restore confirm` | gamemaster | After an accident: reset the plant, rebuild the damaged reactor area, clear ground contamination |
+| `/nps dev clearmobs` | gamemaster | Remove hostile mobs already inside the station |
 | `/nps dev fail <equipment>` / `repair <equipment>` | gamemaster | Inject or clear an equipment failure |
 | `/nps dev gridloss` | gamemaster | Loss of off-site power |
 | `/nps dev loca <0..1>` | gamemaster | Break in the reactor coolant system (fraction of a large break) |

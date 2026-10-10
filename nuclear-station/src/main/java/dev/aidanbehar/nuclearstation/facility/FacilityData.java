@@ -27,8 +27,13 @@ public final class FacilityData extends SavedData {
 	private int grade;
 	private int sea;
 	private String selectionNote = "";
+	private int epoch = 1;
+	/** Blueprint content revision the built chunks were painted with (see FacilityManager.upgrade). */
+	private int contentRevision = 1;
 	private final BitSet built = new BitSet(Blueprint.CHUNKS * Blueprint.CHUNKS);
 	private final BitSet skipped = new BitSet(Blueprint.CHUNKS * Blueprint.CHUNKS);
+	/** Chunks to be painted again (repairing accident damage), even if already marked. */
+	private final BitSet repair = new BitSet(Blueprint.CHUNKS * Blueprint.CHUNKS);
 
 	public FacilityData() {
 	}
@@ -106,6 +111,35 @@ public final class FacilityData extends SavedData {
 		return skipped.get(index);
 	}
 
+	public int contentRevision() {
+		return contentRevision;
+	}
+
+	public void setContentRevision(int revision) {
+		contentRevision = revision;
+		setDirty();
+	}
+
+	public void requestRepair(int index) {
+		repair.set(index);
+		skipped.clear(index);
+		setDirty();
+	}
+
+	public boolean needsRepair(int index) {
+		return repair.get(index);
+	}
+
+	public void repaired(int index) {
+		repair.clear(index);
+		setDirty();
+	}
+
+	/** Generation epoch; chunks painted in an earlier epoch are painted again. */
+	public int epoch() {
+		return epoch;
+	}
+
 	public int builtCount() {
 		return built.cardinality();
 	}
@@ -116,6 +150,7 @@ public final class FacilityData extends SavedData {
 
 	/** Development only: forget which chunks were built so they are painted again on load. */
 	public void resetBuilt() {
+		epoch++;
 		built.clear();
 		skipped.clear();
 		setDirty();
@@ -129,8 +164,11 @@ public final class FacilityData extends SavedData {
 		d.grade = tag.getIntOr("grade", 68);
 		d.sea = tag.getIntOr("sea", 63);
 		d.selectionNote = tag.getStringOr("note", "");
+		d.epoch = tag.getIntOr("epoch", 1);
+		d.contentRevision = tag.getIntOr("contentRevision", 1);
 		tag.getLongArray("built").ifPresent(a -> d.built.or(BitSet.valueOf(a)));
 		tag.getLongArray("skipped").ifPresent(a -> d.skipped.or(BitSet.valueOf(a)));
+		tag.getLongArray("repair").ifPresent(a -> d.repair.or(BitSet.valueOf(a)));
 		return d;
 	}
 
@@ -143,8 +181,11 @@ public final class FacilityData extends SavedData {
 		tag.putInt("grade", grade);
 		tag.putInt("sea", sea);
 		tag.putString("note", selectionNote);
+		tag.putInt("epoch", epoch);
+		tag.putInt("contentRevision", contentRevision);
 		tag.putLongArray("built", built.toLongArray());
 		tag.putLongArray("skipped", skipped.toLongArray());
+		tag.putLongArray("repair", repair.toLongArray());
 		return tag;
 	}
 }

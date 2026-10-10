@@ -71,8 +71,18 @@ public final class PlantService {
 		PlantData data = data(server);
 		PlantModel model = data.model();
 		PlantEnvironment env = environment(overworld, cfg);
+		double scale = data.timeScale();
+		if (scale > 1 && data.meltdownRun() && (model.vesselFailed() || model.basematMeltThrough() || model.containmentIntegrity() <= 0.5)) {
+			// the meltdown has happened: give players real time to see and survive the aftermath
+			data.setTimeScale(1);
+			data.setMeltdownRun(false);
+			scale = 1;
+			server.getPlayerList().broadcastSystemMessage(Component.literal("[Meridian Point] ").withStyle(ChatFormatting.AQUA)
+				.append(Component.literal("MELTDOWN: molten core has burned through the reactor vessel. Plant time returns to normal speed.")
+					.withStyle(ChatFormatting.RED, ChatFormatting.BOLD)), false);
+		}
 		try {
-			model.step(interval / 20.0, env);
+			model.step(interval / 20.0 * scale, env);
 			consecutiveErrors = 0;
 		} catch (RuntimeException e) {
 			if (consecutiveErrors++ < 3) {

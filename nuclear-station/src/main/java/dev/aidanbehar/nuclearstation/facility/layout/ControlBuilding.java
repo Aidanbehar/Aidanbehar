@@ -133,6 +133,14 @@ final class ControlBuilding {
 			k.lectern(mx + 8, cr + 1, cz0 + 7, Direction.SOUTH, Handbooks.emergencyProcedures());
 			k.lectern(mx - 12, cr + 1, cz0 + 4, Direction.SOUTH, Handbooks.shiftLog());
 			k.label(mx, cr + 3, cz0 + 9, Direction.SOUTH, DyeColor.BLACK, "SHIFT", "SUPERVISOR");
+			// manuals: site guide, interface guide and operating manual on lecterns, copies in the chests
+			k.lectern(mx + 12, cr + 1, cz0 + 4, Direction.SOUTH, Handbooks.siteGuide());
+			k.lectern(mx - 16, cr + 1, cz0 + 4, Direction.SOUTH, Handbooks.reactorManual());
+			k.lectern(mx + 16, cr + 1, cz0 + 4, Direction.SOUTH, Handbooks.controlRoomGuide());
+			k.itemChest(mx + 20, cr + 1, cz0, Direction.SOUTH, Handbooks.allManuals());
+			k.itemChest(mx - 20, cr + 1, cz0, Direction.SOUTH, Handbooks.allManuals());
+			k.label(mx + 20, cr + 2, cz0 + 1, Direction.SOUTH, DyeColor.BLACK, "MANUALS", "TAKE A COPY");
+			k.label(mx - 20, cr + 2, cz0 + 1, Direction.SOUTH, DyeColor.BLACK, "MANUALS", "TAKE A COPY");
 			k.lamps(cx0, cz0, cx1, cz1, cr + 5, 5);
 			k.emergencyLamp(cx0 + 2, cr + 5, cz0 + 2);
 			k.emergencyLamp(cx1 - 2, cr + 5, cz0 + 2);
@@ -155,6 +163,8 @@ final class ControlBuilding {
 				k.desk(tsc0 + 10, cr + 1, z, Direction.EAST);
 			}
 			k.lectern(tsc0 + 14, cr + 1, cz1 - 2, Direction.WEST, Handbooks.radiationProtection());
+			k.lectern(tsc0 + 14, cr + 1, cz1 - 5, Direction.WEST, Handbooks.siteGuide());
+			k.itemChest(tsc0 + 14, cr + 1, cz1 - 8, Direction.WEST, Handbooks.allManuals());
 			k.doorway(cx0 - 2, cr + 1, cz0 + 4, Direction.EAST, true);
 			k.label(tsc0 + 2, cr + 3, cz0 + 1, Direction.SOUTH, DyeColor.BLACK, "TECHNICAL", "SUPPORT", "CENTRE");
 			k.lamps(tsc0 + 1, cz0 + 1, cx0 - 3, cz1 - 1, cr + 5, 5);
@@ -293,6 +303,9 @@ final class ControlBuilding {
 					}
 					k.lectern(mid + 12, fl + 1, z0 + 46, Direction.NORTH, Handbooks.operatorHandbook());
 					k.lectern(mid + 18, fl + 1, z0 + 46, Direction.NORTH, Handbooks.radiationProtection());
+					k.lectern(mid + 24, fl + 1, z0 + 46, Direction.NORTH, Handbooks.siteGuide());
+					k.lectern(mid + 6 + 24, fl + 1, z0 + 46, Direction.NORTH, Handbooks.reactorManual());
+					k.itemChest(mid + 9, fl + 1, z0 + 46, Direction.NORTH, Handbooks.allManuals());
 					k.label(mid + 15, fl + 3, z0 + 39, Direction.SOUTH, DyeColor.BLACK, "DOCUMENT", "CONTROL", "PROCEDURES");
 				} else {
 					k.office(mid + 7, z0 + 34, x1 - 3, zEnd - 2, fl, fl + 6);

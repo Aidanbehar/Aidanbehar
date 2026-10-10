@@ -65,7 +65,7 @@ public final class RadiationManager {
 	public static final double BACKGROUND = 0.1;
 	static final int RANGE = 40;
 	static final int UPDATE_TICKS = 10;
-	static final double ACUTE_RECOVERY_HALF_LIFE = 1200;
+	static final double ACUTE_RECOVERY_HALF_LIFE = 3600;
 	/** Bq of dose-relevant activity per unit core release fraction, expressed in kBq. */
 	static final double RELEASE_KBQ = 1.0e15;
 	static final double SOIL_CONVERSION_THRESHOLD = 2.0e5;
@@ -351,6 +351,7 @@ public final class RadiationManager {
 		Vec3 body = player.position().add(0, 1.0, 0);
 		double blocks = blockDoseRate(level, body.x, body.y, body.z);
 		double zone = level.dimension() == Level.OVERWORLD ? PlantService.zoneDoseRate(level, player.blockPosition()) : 0;
+		double direct = level.dimension() == Level.OVERWORLD ? PlantZones.directDoseRate(level, player.blockPosition()) : 0;
 		double ground = 0;
 		double cell = 0;
 		if (level.dimension() == Level.OVERWORLD) {
@@ -377,7 +378,7 @@ public final class RadiationManager {
 			}
 		}
 		double skin = data(player).contamination() * 0.002;
-		double external = ((blocks + zone * 0.7 + ground) * prot.gamma + carried) * severity;
+		double external = ((blocks + direct + zone * 0.7 + ground) * prot.gamma + carried) * severity;
 		double internal = (zone * 0.3 + ground * 0.4) * prot.internal * severity;
 		double total = BACKGROUND + external + internal + skin * severity;
 		return new Reading(total, external, internal, cell);
@@ -425,27 +426,40 @@ public final class RadiationManager {
 		}
 	}
 
+	/**
+	 * Acute radiation syndrome, graded by the recent (acute) dose in mSv:
+	 * 250 nausea onset, 500 vomiting/nausea, 1000 weakness and haemorrhage damage,
+	 * 2000 severe (fatigue, frequent damage), 4000 likely lethal, 8000 rapidly lethal.
+	 * Very high dose rates also cause immediate harm (deterministic tissue damage).
+	 */
 	private static void applySickness(ServerLevel level, ServerPlayer player, PlayerRadiation rad, long time) {
 		double acute = rad.acuteDose();
-		if (acute < 200) {
+		double rate = rad.lastDoseRate();
+		if (rate > 50.0e6 && time % 20 == 0) {
+			// > 50 Sv/h: tissue is being destroyed while you stand here
+			player.hurtServer(level, ModDamage.radiation(level), (float) Math.min(6, rate / 100.0e6 * 2 + 1));
+		}
+		if (acute < 250) {
 			return;
 		}
 		if (time % 600 == 0) {
-			player.addEffect(new MobEffectInstance(MobEffects.HUNGER, 200, 0, true, false, true));
+			player.addEffect(new MobEffectInstance(MobEffects.HUNGER, 300, acute >= 1000 ? 1 : 0, true, false, true));
 		}
-		if (acute >= 1000 && time % 400 == 0) {
-			player.addEffect(new MobEffectInstance(MobEffects.NAUSEA, 200, 0, true, false, true));
-			player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 600, acute >= 2000 ? 1 : 0, true, false, true));
+		if (acute >= 500 && time % 400 == 0) {
+			player.addEffect(new MobEffectInstance(MobEffects.NAUSEA, 240, 0, true, false, true));
 		}
-		if (acute >= 2000) {
-			player.addEffect(new MobEffectInstance(MobEffects.MINING_FATIGUE, 600, 0, true, false, true));
-			int period = acute >= 8000 ? 40 : (acute >= 4000 ? 80 : 300);
+		if (acute >= 1000) {
+			if (time % 400 == 0) {
+				player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 800, acute >= 2000 ? 1 : 0, true, false, true));
+			}
+			int period = acute >= 8000 ? 30 : acute >= 4000 ? 60 : acute >= 2000 ? 160 : 400;
 			if (time % period == 0) {
-				player.hurtServer(level, ModDamage.radiation(level), acute >= 8000 ? 2.0f : 1.0f);
+				player.hurtServer(level, ModDamage.radiation(level), acute >= 8000 ? 3.0f : acute >= 4000 ? 2.0f : 1.0f);
 			}
 		}
-		if (acute >= 4000 && time % 200 == 0) {
-			player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 300, 0, true, false, true));
+		if (acute >= 2000 && time % 400 == 0) {
+			player.addEffect(new MobEffectInstance(MobEffects.MINING_FATIGUE, 800, 0, true, false, true));
+			player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 800, acute >= 4000 ? 1 : 0, true, false, true));
 		}
 	}
 

@@ -17,5 +17,7 @@ public enum MarkerType {
 	/** Operator console. */
 	CONSOLE,
 	/** Location of a major component, used for sounds, particles and damage (data = Feature ordinal). */
-	FEATURE
+	FEATURE,
+	/** Stairwell bounding box corners (data 0 = minimum, 1 = maximum), for content upgrades. */
+	STAIRWELL
 }

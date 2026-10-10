@@ -9,6 +9,11 @@ import dev.aidanbehar.nuclearstation.registry.ModBlocks;
 import dev.aidanbehar.nuclearstation.sim.EquipmentId;
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -108,8 +113,17 @@ public final class Kit {
 					msgs.add(i < lines.length ? Component.literal(lines[i]) : Component.empty());
 				}
 				SignText text = new SignText(msgs, msgs, colour, true);
-				sign.setText(text, SignTextSlot.FRONT);
-				sign.setWaxed(true);
+				if (sign.getLevel() != null) {
+					sign.setText(text, SignTextSlot.FRONT);
+					sign.setWaxed(true);
+				} else {
+					// World generation (structure pieces): the block entity has no level yet and
+					// setText would notify it. Load the text as saved data instead.
+					CompoundTag tag = new CompoundTag();
+					tag.put("front_text", SignText.CODEC.encodeStart(NbtOps.INSTANCE, text).getOrThrow());
+					tag.putBoolean("is_waxed", true);
+					sign.loadCustomOnly(TagValueInput.create(ProblemReporter.DISCARDING, RegistryAccess.EMPTY, tag));
+				}
 			}
 		});
 	}
@@ -193,6 +207,14 @@ public final class Kit {
 					}
 				}
 			}
+			// a flight shorter than the well ends before the landing: bridge the rest of its lane
+			if (h < len - 2) {
+				if (south) {
+					p.floor(lane, z0 + 1 + h, lane + 1, z0 + len - 2, yb, Pal.CONCRETE);
+				} else {
+					p.floor(lane, z0 + 1, lane + 1, z0 + len - 2 - h, yb, Pal.CONCRETE);
+				}
+			}
 			// landings at both ends of the well on the upper floor
 			p.floor(x0, z0, x0 + 3, z0, yb, Pal.CONCRETE);
 			p.floor(x0, z0 + len - 1, x0 + 3, z0 + len - 1, yb, Pal.CONCRETE);
@@ -200,6 +222,8 @@ public final class Kit {
 		}
 		p.floor(x0, z0, x0 + 3, z0 + len - 1, floors[0], Pal.CONCRETE);
 		lamp(x0 + 1, floors[0] + 4, z0 + len / 2);
+		p.marker(MarkerType.STAIRWELL, x0 - 1, floors[0], z0 - 1, 0);
+		p.marker(MarkerType.STAIRWELL, x0 + 4, top + 5, z0 + len, 1);
 	}
 
 	/** Length (z extent including walls) of a stair core for these floors. */
@@ -310,6 +334,18 @@ public final class Kit {
 		p.configure(x, y, z, be -> {
 			if (be instanceof ChestBlockEntity chest) {
 				chest.setLootTable(loot, seed);
+			}
+		});
+	}
+
+	/** Chest holding fixed items (copies of the manuals), filled when it is placed. */
+	public void itemChest(int x, int y, int z, Direction facing, ItemStack... items) {
+		p.set(x, y, z, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, facing));
+		p.configure(x, y, z, be -> {
+			if (be instanceof ChestBlockEntity chest) {
+				for (int i = 0; i < items.length && i < chest.getContainerSize(); i++) {
+					chest.setItem(i, items[i].copy());
+				}
 			}
 		});
 	}

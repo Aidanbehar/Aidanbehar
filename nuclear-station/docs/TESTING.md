@@ -19,6 +19,9 @@
 14. Load follow to 700 MW.
 15. Loss of all feedwater boils the steam generators dry.
 
+`MeltdownTest`: an extended station blackout melts the core (~3.5 h), fails the vessel
+(~7.5 h) and keeps progressing; releases stay physically bounded over two more days.
+
 `AssetConsistencyTest` (static, no game needed): every block has a block state, item model
 definition, name and loot table; every item has a model, texture and name; every described
 item has a description; every translation key in code exists; sound events, loot tables,
@@ -38,6 +41,16 @@ referenced exists.
 | `/nps status` at start | 100 % power, 15.5 MPa, 1028 MWe |
 | `/nps dev gridloss` | turbine trip above P-9 -> reactor trip, decay heat falls, diesels carry buses |
 | `/nps dev loca 0.05` | pressurizer pressure low trip, SI holds pressure ~7.7 MPa, no core damage |
+
+Version 0.2.0 additions (server):
+| Check | Result |
+|---|---|
+| Uranium mine generation (crashed in 0.1.0 when writing sign text during world generation) | pass, no errors |
+| Upgrade of a 0.1.0 world: stairwell and control-building chunks rebuilt once | pass (141 chunks) |
+| Stairwell bridges between shorter flights and landings | pass (block checks) |
+| Manuals on lecterns and in chests | pass (`data get block`) |
+| `/nps meltdown confirm 300` | core damage 100 %, vessel failure, corium in the cavity |
+| `/nps dev restore confirm` | plant back at 100 %, corium removed, vessel rebuilt (195 chunks) |
 
 Note: a vanilla server pauses after 60 s with no players (`pause-when-empty-seconds`);
 set it to -1 for unattended testing.

@@ -1,10 +1,14 @@
 package dev.aidanbehar.nuclearstation.facility;
 
+import dev.aidanbehar.nuclearstation.facility.layout.SiteLayout;
+import java.util.Set;
+import java.util.HashSet;
 import dev.aidanbehar.nuclearstation.NuclearStation;
 import dev.aidanbehar.nuclearstation.config.ModConfig;
 import dev.aidanbehar.nuclearstation.facility.layout.Blueprint;
 import dev.aidanbehar.nuclearstation.plant.PlantWorldEffects;
 import dev.aidanbehar.nuclearstation.radiation.RadiationManager;
+import dev.aidanbehar.nuclearstation.registry.ModAttachments;
 import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import java.util.ArrayList;
@@ -49,6 +53,8 @@ public final class FacilityManager {
 	private static final TicketType FORCED_BUILD = Registry.register(BuiltInRegistries.TICKET_TYPE, NuclearStation.id("facility_build"),
 		new TicketType(0L, TicketType.FLAG_LOADING));
 	private static final int FORCED_WINDOW = 24;
+	/** Increase when blueprint content changes in a way existing worlds should receive. */
+	public static final int CONTENT_REVISION = 2;
 
 	public static final class Context {
 		public final ServerLevel level;
@@ -137,6 +143,7 @@ public final class FacilityManager {
 			}
 			SiteFinder.Site site = new SiteFinder(level).find(ModConfig.get());
 			data.selectSite(site.originX(), site.originZ(), site.grade(), site.sea(), site.note());
+			data.setContentRevision(CONTENT_REVISION);
 			NuclearStation.LOG.info("Meridian Point site selected: origin ({}, {}), grade y={}, centre ({}, {}) - {}",
 				site.originX(), site.originZ(), site.grade(), site.originX() + Blueprint.SIZE / 2, site.originZ() + Blueprint.SIZE / 2, site.note());
 		} else {
@@ -150,6 +157,53 @@ public final class FacilityManager {
 		}
 		NuclearStation.LOG.info("Facility blueprint: {} components, {} markers indexed in {} ms",
 			Blueprint.get().components().size(), ctx.markers.total(), (System.nanoTime() - t) / 1_000_000);
+		if (data.contentRevision() < CONTENT_REVISION) {
+			upgrade(ctx);
+		}
+	}
+
+	/**
+	 * Brings stations built by an older version up to date by rebuilding only the chunks
+	 * whose blueprint content changed. Revision 2: stairwell landings (gaps between flights)
+	 * and the control-room manuals.
+	 */
+	private static void upgrade(Context ctx) {
+		Set<Integer> chunks = new HashSet<>();
+		List<Marker> markers = Blueprint.get().collectMarkers(ctx.data.originX(), ctx.data.originZ(), ctx.data.grade(), ctx.data.sea());
+		for (int i = 0; i + 1 < markers.size(); i++) {
+			Marker a = markers.get(i);
+			Marker b = markers.get(i + 1);
+			if (a.type() == MarkerType.STAIRWELL && a.data() == 0 && b.type() == MarkerType.STAIRWELL && b.data() == 1) {
+				addChunks(ctx, chunks, a.pos().getX(), a.pos().getZ(), b.pos().getX(), b.pos().getZ());
+			}
+		}
+		int ox = ctx.data.originX();
+		int oz = ctx.data.originZ();
+		addChunks(ctx, chunks, ox + SiteLayout.CB_X0, oz + SiteLayout.ADMIN_Z0, ox + SiteLayout.CB_X1, oz + SiteLayout.CB_Z1);
+		int requested = 0;
+		for (int idx : chunks) {
+			if (ctx.data.isBuilt(idx)) {
+				ctx.data.requestRepair(idx);
+				requested++;
+			}
+		}
+		ctx.data.setContentRevision(CONTENT_REVISION);
+		if (requested > 0) {
+			startForcedBuild(ctx);
+		}
+		NuclearStation.LOG.info("Upgrading the station to content revision {}: rebuilding {} chunks (stairwells, control building)",
+			CONTENT_REVISION, requested);
+	}
+
+	private static void addChunks(Context ctx, Set<Integer> out, int x0, int z0, int x1, int z1) {
+		for (int cx = Math.min(x0, x1) >> 4; cx <= Math.max(x0, x1) >> 4; cx++) {
+			for (int cz = Math.min(z0, z1) >> 4; cz <= Math.max(z0, z1) >> 4; cz++) {
+				int idx = ctx.data.index(cx, cz);
+				if (idx >= 0) {
+					out.add(idx);
+				}
+			}
+		}
 	}
 
 	private static void onChunkLoad(ServerLevel level, LevelChunk chunk, boolean generated) {
@@ -165,7 +219,7 @@ public final class FacilityManager {
 		if (idx < 0) {
 			return;
 		}
-		if (ctx.data.isBuilt(idx)) {
+		if (isPainted(ctx, chunk)) {
 			PlantWorldEffects.syncChunk(level, ctx, pos.x(), pos.z());
 			return;
 		}
@@ -216,7 +270,7 @@ public final class FacilityManager {
 		var source = ctx.level.getChunkSource();
 		ctx.forcedTickets.removeIf(pos -> {
 			int idx = ctx.data.index(pos.x(), pos.z());
-			boolean done = idx < 0 || ctx.data.isBuilt(idx) || ctx.data.isSkipped(idx);
+			boolean done = idx < 0 || ctx.data.isBuilt(idx) && !ctx.data.needsRepair(idx) || ctx.data.isSkipped(idx);
 			if (done) {
 				source.removeTicketWithRadius(FORCED_BUILD, pos, 0);
 			} else if (source.getChunkNow(pos.x(), pos.z()) != null) {
@@ -236,7 +290,7 @@ public final class FacilityManager {
 				break;
 			}
 			ctx.forcedNext++;
-			if (ctx.data.isBuilt(idx) || ctx.data.isSkipped(idx)) {
+			if (ctx.data.isBuilt(idx) && !ctx.data.needsRepair(idx) || ctx.data.isSkipped(idx)) {
 				continue;
 			}
 			ChunkPos pos = new ChunkPos((ctx.data.originX() >> 4) + idx / Blueprint.CHUNKS, (ctx.data.originZ() >> 4) + idx % Blueprint.CHUNKS);
@@ -248,19 +302,48 @@ public final class FacilityManager {
 		}
 	}
 
+	public static boolean isPainted(Context ctx, LevelChunk chunk) {
+		int idx = ctx.data.index(chunk.getPos().x(), chunk.getPos().z());
+		return chunk.getAttachedOrElse(ModAttachments.FACILITY_PAINTED, 0) == ctx.data.epoch() && (idx < 0 || !ctx.data.needsRepair(idx));
+	}
+
+	private static void markPainted(Context ctx, LevelChunk chunk) {
+		chunk.setAttached(ModAttachments.FACILITY_PAINTED, ctx.data.epoch());
+		chunk.markUnsaved();
+	}
+
 	/** Paints one chunk if it is still unbuilt. Returns true if painted. */
 	public static boolean paint(Context ctx, LevelChunk chunk) {
 		ChunkPos pos = chunk.getPos();
 		int idx = ctx.data.index(pos.x(), pos.z());
-		if (idx < 0 || ctx.data.isBuilt(idx)) {
+		if (idx < 0 || isPainted(ctx, chunk)) {
 			return false;
 		}
-		long protect = ModConfig.get().facility.protectInhabitedChunksTicks;
-		if (protect > 0 && chunk.getInhabitedTime() > protect) {
-			ctx.data.markSkipped(idx);
-			NuclearStation.LOG.warn("Facility chunk {} skipped: chunk has {} ticks of player activity (protecting existing builds)",
-				pos, chunk.getInhabitedTime());
-			return false;
+		boolean repair = ctx.data.needsRepair(idx);
+		if (repair) {
+			NuclearStation.LOG.info("Rebuilding facility chunk {} (accident damage repair)", pos);
+		} else if (ctx.data.isBuilt(idx)) {
+			// Recorded as built but the chunk carries no mark: either painted by an older
+			// version, or its blocks were lost (crash before the chunk was saved). Compare
+			// it with the blueprint and repaint it only if it is mostly missing.
+			VerifySink verify = new VerifySink(ctx.level, chunk);
+			Blueprint.get().paintChunk(verify, ctx.data.originX(), ctx.data.originZ(), ctx.data.grade(), ctx.data.sea(),
+				idx / Blueprint.CHUNKS, idx % Blueprint.CHUNKS);
+			if (verify.mismatchFraction() < 0.3) {
+				markPainted(ctx, chunk);
+				PlantWorldEffects.syncChunk(ctx.level, ctx, pos.x(), pos.z());
+				return false;
+			}
+			NuclearStation.LOG.warn("Facility chunk {} was recorded as built but {}% of its blocks are missing - repainting it",
+				pos, Math.round(verify.mismatchFraction() * 100));
+		} else {
+			long protect = ModConfig.get().facility.protectInhabitedChunksTicks;
+			if (protect > 0 && chunk.getInhabitedTime() > protect) {
+				ctx.data.markSkipped(idx);
+				NuclearStation.LOG.warn("Facility chunk {} skipped: chunk has {} ticks of player activity (protecting existing builds)",
+					pos, chunk.getInhabitedTime());
+				return false;
+			}
 		}
 		long t = System.nanoTime();
 		LevelSink sink = new LevelSink(ctx.level, chunk);
@@ -272,6 +355,10 @@ public final class FacilityManager {
 			return false;
 		}
 		ctx.data.markBuilt(idx);
+		if (repair) {
+			ctx.data.repaired(idx);
+		}
+		markPainted(ctx, chunk);
 		long dt = System.nanoTime() - t;
 		ctx.paintNanos += dt;
 		ctx.paintedThisSession++;

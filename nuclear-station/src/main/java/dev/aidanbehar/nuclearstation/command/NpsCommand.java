@@ -1,5 +1,9 @@
 package dev.aidanbehar.nuclearstation.command;
 
+import dev.aidanbehar.nuclearstation.facility.layout.SiteLayout;
+import net.minecraft.world.entity.monster.Enemy;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.Entity;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -56,7 +60,19 @@ public final class NpsCommand {
 			.then(Commands.literal("generation").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
 				.executes(NpsCommand::generation)
 				.then(Commands.literal("buildall").executes(NpsCommand::buildAll)))
+			.then(Commands.literal("meltdown").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+				.executes(NpsCommand::meltdownInfo)
+				.then(Commands.literal("confirm")
+					.executes(c -> meltdown(c, 60))
+					.then(Commands.argument("speed", DoubleArgumentType.doubleArg(1, PlantData.MAX_TIME_SCALE))
+						.executes(c -> meltdown(c, DoubleArgumentType.getDouble(c, "speed"))))))
+			.then(Commands.literal("timescale").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+				.executes(NpsCommand::timeScaleInfo)
+				.then(Commands.argument("speed", DoubleArgumentType.doubleArg(1, PlantData.MAX_TIME_SCALE))
+					.executes(c -> timeScale(c, DoubleArgumentType.getDouble(c, "speed")))))
 			.then(Commands.literal("dev").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+				.then(Commands.literal("clearmobs").executes(NpsCommand::clearMobs))
+				.then(Commands.literal("restore").then(Commands.literal("confirm").executes(NpsCommand::restore)))
 				.then(Commands.literal("fail").then(Commands.argument("equipment", StringArgumentType.word()).suggests((c, b) -> suggestEquipment(b))
 					.executes(c -> fail(c, StringArgumentType.getString(c, "equipment")))))
 				.then(Commands.literal("repair").then(Commands.argument("equipment", StringArgumentType.word()).suggests((c, b) -> suggestEquipment(b))
@@ -125,9 +141,16 @@ public final class NpsCommand {
 		PlantSnapshot s = PlantSnapshot.capture(m);
 		c.getSource().sendSuccess(() -> Component.literal(String.format(
 			"Reactor %s | power %.1f%% (%.0f MWt) | Tavg %.1f C | P %.2f MPa | gen %.0f MWe net %.0f | turbine %.0f rpm | alarms P%d | core damage %.1f%% | release %.3g%%",
-			m.reactorTripped() ? "TRIPPED (" + m.tripCause() + ")" : "CRITICAL", s.get(Readout.NEUTRON_POWER), m.thermalPowerMW(), m.rcsTavg(),
+			m.reactorTripped() ? "TRIPPED (" + m.tripCause() + ")" : "CRITICAL", m.neutronPower() * 100, m.thermalPowerMW(), m.rcsTavg(),
 			m.rcsPressure(), m.generatorMW(), m.netOutput(), m.turbineSpeed(), m.alarms().worstActivePriority(), m.coreDamage() * 100,
 			m.totalEnvironmentalRelease() * 100)).withStyle(ChatFormatting.AQUA), false);
+		if (m.coreDamage() > 0 || PlantService.data(server).timeScale() > 1) {
+			c.getSource().sendSuccess(() -> Component.literal(String.format(
+				"Severe accident: core melt %.0f%% | vessel %s | basemat %s | containment integrity %.0f%% (%.0f kPa, H2 %.1f%%) | plant time x%.0f",
+				m.coreMelt() * 100, m.vesselFailed() ? "FAILED" : "intact", m.basematMeltThrough() ? "MELTED THROUGH" : "holding",
+				m.containmentIntegrity() * 100, m.containmentPressure(), m.hydrogenFraction() * 100, PlantService.data(server).timeScale()))
+				.withStyle(ChatFormatting.RED), false);
+		}
 		return 1;
 	}
 
@@ -245,6 +268,98 @@ public final class NpsCommand {
 		}
 		FacilityManager.resetForRegeneration(ctx);
 		c.getSource().sendSuccess(() -> Component.literal("All facility chunks marked for repainting; they are rebuilt as they load. The site itself does not move."), true);
+		return 1;
+	}
+
+	// ================================================================== meltdown and time
+
+	private static int meltdownInfo(CommandContext<CommandSourceStack> c) {
+		c.getSource().sendSuccess(() -> Component.literal(
+			"/nps meltdown confirm [speed] starts an extended station blackout: off-site power lost for good, both diesels and the "
+				+ "turbine-driven feed pump failed. Nothing else is scripted - the core boils dry, melts, fails the reactor vessel and attacks "
+				+ "the containment, releasing radioactivity downwind. Plant time runs [speed] times faster (default 60) until the molten core "
+				+ "fails the reactor vessel, then returns to normal so you can see the aftermath. Repairing a diesel or restoring feedwater in time can still save the core. "
+				+ "Afterwards /nps dev restore confirm rebuilds the damaged area.").withStyle(ChatFormatting.GOLD), false);
+		return 1;
+	}
+
+	private static int meltdown(CommandContext<CommandSourceStack> c, double speed) {
+		if (ctx(c) == null) {
+			return noSite(c);
+		}
+		MinecraftServer server = c.getSource().getServer();
+		PlantData data = PlantService.data(server);
+		DevHooks.meltdown(data.model());
+		data.setTimeScale(speed);
+		data.setMeltdownRun(true);
+		server.getPlayerList().broadcastSystemMessage(Component.literal("[Meridian Point] ").withStyle(ChatFormatting.AQUA)
+			.append(Component.literal("STATION BLACKOUT - all AC power lost, emergency diesels failed. Core cooling is failing.")
+				.withStyle(ChatFormatting.RED, ChatFormatting.BOLD)), false);
+		c.getSource().sendSuccess(() -> Component.literal(String.format(
+			"Meltdown scenario started; plant time x%.0f. Expect core damage after ~3.5 plant hours and vessel failure after ~7.5 (about %.0f and %.0f minutes now).",
+			data.timeScale(), 3.5 * 60 / data.timeScale(), 7.5 * 60 / data.timeScale())), true);
+		return 1;
+	}
+
+	private static int timeScaleInfo(CommandContext<CommandSourceStack> c) {
+		double scale = PlantService.data(c.getSource().getServer()).timeScale();
+		c.getSource().sendSuccess(() -> Component.literal(String.format("Plant time runs x%.0f. /nps timescale <1-%.0f> to change.", scale, PlantData.MAX_TIME_SCALE)), false);
+		return 1;
+	}
+
+	private static int timeScale(CommandContext<CommandSourceStack> c, double speed) {
+		PlantData data = PlantService.data(c.getSource().getServer());
+		data.setTimeScale(speed);
+		c.getSource().sendSuccess(() -> Component.literal(String.format("Plant time now runs x%.0f", data.timeScale())), true);
+		return 1;
+	}
+
+	private static int clearMobs(CommandContext<CommandSourceStack> c) {
+		var ctx = ctx(c);
+		if (ctx == null) {
+			return noSite(c);
+		}
+		int removed = 0;
+		for (Entity e : ctx.level.getAllEntities()) {
+			if (e instanceof Enemy && e instanceof Mob mob && !mob.isPersistenceRequired() && ctx.inFootprint(e.blockPosition())) {
+				e.discard();
+				removed++;
+			}
+		}
+		int n = removed;
+		c.getSource().sendSuccess(() -> Component.literal("Removed " + n + " hostile mobs from the station"), true);
+		return n;
+	}
+
+	private static int restore(CommandContext<CommandSourceStack> c) {
+		var ctx = ctx(c);
+		if (ctx == null) {
+			return noSite(c);
+		}
+		MinecraftServer server = c.getSource().getServer();
+		PlantService.data(server).reset();
+		// rebuild every chunk accident damage can reach: the containment surroundings and the fuel building
+		int x0 = SiteLayout.CONT_X - SiteLayout.CONT_R - 48;
+		int x1 = Math.max(SiteLayout.CONT_X + SiteLayout.CONT_R + 48, SiteLayout.FUEL_X1 + 8);
+		int z0 = SiteLayout.CONT_Z - SiteLayout.CONT_R - 48;
+		int z1 = SiteLayout.CONT_Z + SiteLayout.CONT_R + 48;
+		int chunks = 0;
+		for (int cx = x0 >> 4; cx <= x1 >> 4; cx++) {
+			for (int cz = z0 >> 4; cz <= z1 >> 4; cz++) {
+				int idx = ctx.data.index((ctx.data.originX() >> 4) + cx, (ctx.data.originZ() >> 4) + cz);
+				if (idx >= 0) {
+					ctx.data.requestRepair(idx);
+					chunks++;
+				}
+			}
+		}
+		ContaminationData contamination = ContaminationData.get(ctx.level);
+		contamination.raw().clear();
+		contamination.setDirty();
+		FacilityManager.startForcedBuild(ctx);
+		int n = chunks;
+		c.getSource().sendSuccess(() -> Component.literal("Plant reset to full power; " + n
+			+ " chunks around the reactor are being rebuilt and ground contamination has been cleared. Contaminated soil blocks remain."), true);
 		return 1;
 	}
 }

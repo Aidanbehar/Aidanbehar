@@ -29,6 +29,10 @@ public final class PlantData extends SavedData {
 	private boolean seeded;
 	private int damageStages;
 	private long lastUpdateTick;
+	/** Plant time per real time (1 = real time). Raised by /nps meltdown and /nps timescale. */
+	private double timeScale = 1;
+	/** True while a /nps meltdown run is accelerating time (it returns to 1x at vessel failure). */
+	private boolean meltdownRun;
 	/** Release accumulated since the last plume deposition (not persisted; flushed every 10 s). */
 	private double pendingRelease;
 
@@ -73,6 +77,26 @@ public final class PlantData extends SavedData {
 		return r;
 	}
 
+	public double timeScale() {
+		return timeScale;
+	}
+
+	public void setTimeScale(double scale) {
+		timeScale = Math.max(1, Math.min(MAX_TIME_SCALE, scale));
+		setDirty();
+	}
+
+	public static final double MAX_TIME_SCALE = 300;
+
+	public boolean meltdownRun() {
+		return meltdownRun;
+	}
+
+	public void setMeltdownRun(boolean run) {
+		meltdownRun = run;
+		setDirty();
+	}
+
 	public long lastUpdateTick() {
 		return lastUpdateTick;
 	}
@@ -86,6 +110,8 @@ public final class PlantData extends SavedData {
 		model = new PlantModel();
 		damageStages = 0;
 		seeded = false;
+		timeScale = 1;
+		meltdownRun = false;
 		setDirty();
 	}
 
@@ -99,6 +125,8 @@ public final class PlantData extends SavedData {
 		}
 		d.seeded = tag.getBooleanOr("seeded", false);
 		d.damageStages = tag.getIntOr("damage", 0);
+		d.timeScale = Math.max(1, tag.getDoubleOr("timeScale", 1));
+		d.meltdownRun = tag.getBooleanOr("meltdownRun", false);
 		return d;
 	}
 
@@ -109,6 +137,8 @@ public final class PlantData extends SavedData {
 		tag.put("model", m);
 		tag.putBoolean("seeded", seeded);
 		tag.putInt("damage", damageStages);
+		tag.putDouble("timeScale", timeScale);
+		tag.putBoolean("meltdownRun", meltdownRun);
 		return tag;
 	}
 }

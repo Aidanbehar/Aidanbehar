@@ -169,7 +169,7 @@ public final class PlantWorldEffects {
 			LevelChunk chunk = level.getChunkSource().getChunkNow(net.minecraft.world.level.ChunkPos.getX(key), net.minecraft.world.level.ChunkPos.getZ(key));
 			if (chunk != null) {
 				int idx = ctx.data.index(chunk.getPos().x(), chunk.getPos().z());
-				if (idx >= 0 && ctx.data.isBuilt(idx)) {
+				if (idx >= 0 && FacilityManager.isPainted(ctx, chunk)) {
 					applyMarkers(level, ctx, chunk, now);
 				}
 			}
@@ -326,7 +326,7 @@ public final class PlantWorldEffects {
 			for (int cz = cz0; cz <= cz1; cz++) {
 				LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
 				int idx = ctx.data.index(cx, cz);
-				if (chunk != null && idx >= 0 && ctx.data.isBuilt(idx)) {
+				if (chunk != null && idx >= 0 && FacilityManager.isPainted(ctx, chunk)) {
 					applyDamage(level, ctx, data, chunk);
 					RadiationManager.invalidateChunk(level, cx, cz);
 				}

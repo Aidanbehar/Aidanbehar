@@ -65,15 +65,49 @@ spare part (shown when you use the station). Parts come from the warehouses and
 workshop, or can be crafted.
 
 ## Radiation protection
-* Dose rates: background ~0.1-0.3 uSv/h, plant areas a few uSv/h, near spent fuel or a
-  damaged core lethal within minutes. Distance and shielding (water, concrete, lead) are
-  computed.
+* Radiation is computed, not scripted: distance and shielding (water, concrete, lead) from
+  real sources, plus fields that exist because the reactor exists. These follow the plant
+  state:
+
+| Place | Reactor at power | Shut down |
+|---|---|---|
+| Reactor cavity (inside the primary shield) | ~300 Sv/h - fatal in under a minute | ~2 Sv/h, falling with decay heat |
+| Steam generator / RCP compartments | ~2 Sv/h (N-16) | ~5 mSv/h |
+| Rest of lower containment | ~100 mSv/h | ~1 mSv/h |
+| Containment operating deck | ~20 mSv/h | ~0.2 mSv/h |
+| Auxiliary building basement | ~2 mSv/h | ~0.6 mSv/h |
+| Main steam valve house | ~1 mSv/h | background |
+| Radwaste building | ~1 mSv/h | ~1 mSv/h |
+| Fuel building (beside the pool) | tens of uSv/h; lethal if fuel leaves the water | same |
+| Control room, offices, turbine hall | background | background |
+
+  After core damage every figure inside the nuclear island rises by orders of magnitude.
 * **Exposure** (dose from sources nearby) and **contamination** (radioactive material on
   you or your items) are different. Contamination keeps dosing you after you leave and
   spreads to items you carry.
 * Wear the full hazmat set and a respirator in contaminated areas; boots stop pickup from
-  the ground. Use a decontamination shower or kit afterwards; check yourself with a survey
-  meter. Radioactive items (ores, fuel, debris) cannot be cleaned: store them in a waste
-  drum (seals 256 items, heavily shielded).
-* Acute dose above 200 mSv causes nausea (hunger), above 1 Sv weakness, above 2 Sv
-  radiation damage that grows with dose; 8 Sv is quickly lethal. Acute dose recovers slowly; lifetime dose is a permanent record (`/nps dose`).
+  the ground. No suit stops the gamma fields above: only time, distance and shielding do.
+  Use a decontamination shower or kit afterwards. Radioactive items (ores, fuel, debris)
+  cannot be cleaned: store them in a waste drum (256 items, heavily shielded).
+* Sickness by acute dose: 250 mSv nausea, 500 mSv vomiting, 1 Sv weakness and bleeding
+  damage, 2 Sv severe, 4 Sv often fatal, 8 Sv rapidly fatal. Above 50 Sv/h you are burned
+  where you stand. Acute dose recovers with a one-hour half-life; lifetime dose is a
+  permanent record (`/nps dose`).
+
+## Meltdown
+A meltdown is not an animation: it is what the plant model does when decay heat cannot be
+removed. `/nps meltdown confirm [speed]` starts the classic initiator, an extended station
+blackout (grid lost, both diesels and the turbine-driven feed pump failed), and runs plant
+time faster (default x60, up to x300). What follows comes from the physics:
+
+1. The steam generators boil dry; primary pressure and temperature climb.
+2. The core uncovers; the cladding oxidises, generating hydrogen (about 3.5 plant hours).
+3. The fuel melts and relocates to the lower head; the vessel fails (about 7.5 hours).
+   Plant time returns to normal speed here. Corium appears in the reactor cavity.
+4. The corium attacks the concrete floor and can melt through the basemat; hydrogen burns
+   or over-pressure can fail the dome. Radioactivity leaks to the environment and settles
+   downwind as ground contamination.
+
+Repairing a diesel, restoring feedwater or injecting water before the vessel fails can
+still save the plant. `/nps status` shows each stage. `/nps dev restore confirm` resets the
+plant, rebuilds the reactor area and clears ground contamination afterwards.

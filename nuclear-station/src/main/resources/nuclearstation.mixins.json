@@ -1,0 +1,16 @@
+{
+	"required": true,
+	"package": "dev.aidanbehar.nuclearstation.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"mixins": [
+		"BiomeMixin",
+		"IceBlockMixin",
+		"MobMixin",
+		"PatrolSpawnerMixin",
+		"PhantomSpawnerMixin",
+		"VillageSiegeMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

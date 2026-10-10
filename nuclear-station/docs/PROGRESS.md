@@ -18,6 +18,10 @@ client; **partial**; **not implemented**.
 | Deterministic, seed-only site search; coastal; village/existing-chunk avoidance; staged relaxation | done |
 | Chunk-by-chunk, resumable, idempotent painting under a tick budget | done (4096/4096 chunks, 7-10 ms/chunk) |
 | Protection of inhabited chunks | done (unit of protection: chunk) |
+| Each painted chunk carries its own mark; chunks recorded as built but missing their blocks are rebuilt on load (fixes holes after a crash) | done |
+| Content upgrades for existing worlds (revision 2: stairwells and control building rebuilt once) | done (server-tested: 141 chunks) |
+| No natural mob spawns (including patrols, phantoms, sieges) and no freezing in the station; existing ice melts | done (mixins load; natural spawning needs a player to observe) |
+| Station manuals: site guide, control room guide, operating manual on lecterns and in chests | done |
 | Dev options: near spawn, fixed origin, locate, buildall, regenerate, disable | done |
 | Exterior: containment, 4 towers, turbine hall, control/admin, aux, fuel, MSIV house, tanks, water treatment, radwaste, switchyard, GSUs, diesels, CW pump house, ESW, intake/discharge, sea wall, roads, parking, rail spur, warehouses, workshop, fire station, gatehouses, met mast, water tower, fences, tunnels, research wing | done (unverified in client) |
 | Furnished interiors (control room, offices, locker rooms, labs, workshop, stores, machinery, panels, consoles, signage, lighting, loot) | done (unverified in client) |
@@ -35,6 +39,7 @@ client; **partial**; **not implemented**.
 | Accidents emerging from state (LOOP, SBO, LOCA, loss of feed, seal LOCA, H2, melt, vessel failure, MCCI, release) | done (tests) - no bomb-style explosion |
 | Persistent physical damage in the world | done (unverified in client) |
 | Spent fuel pool heat-up/boil-off | done |
+| Meltdown on demand (`/nps meltdown`), accelerated plant time, restore after an accident | done (server-tested: vessel failure, corium in cavity, restore rebuilds it) |
 | Refuelling outage / reloading fuel at end of cycle | **not implemented** - burnup accumulates; reactivity runs out after a long cycle (`/nps dev resetplant` restores) |
 
 ## Interface
@@ -53,12 +58,14 @@ client; **partial**; **not implemented**.
 | Contamination separate from exposure, ground deposition, item contamination | done |
 | PPE, instruments, decontamination, waste drums | done (unverified in client) |
 | No full-world scans (lazy section index, 40-block range, cached rays) | done |
+| Persistent plant radiation fields (reactor cavity, SG compartments, containment, aux basement, steam lines, radwaste) | done |
+| Graded acute radiation syndrome and burns at very high dose rates | done |
 
 ## Geology
 | Item | Status |
 |---|---|
 | 20 ore placements with geological placement rules | done (data validated at load) |
-| Abandoned uranium mine structures | done (registered; generation in fresh terrain not visually verified) |
+| Abandoned uranium mine structures | done (generates without errors; 0.1.0 crashed on mine signs during world generation - fixed) |
 | Reserved future materials, marked in tooltips | done |
 
 ## Content and assets

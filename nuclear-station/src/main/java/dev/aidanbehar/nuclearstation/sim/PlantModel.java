@@ -62,6 +62,8 @@ public final class PlantModel {
 	static final double NO_LOAD_TAVG = 291.7;
 	static final double FULL_LOAD_TAVG = 309.5;
 	static final double SUBSTEP = 0.05;
+	/** Releasable volatile inventory of the spent fuel pool, as a fraction of one core. */
+	static final double SFP_RELEASE_MAX = 0.15;
 
 	// decay heat groups: fraction of rated power at saturation, half-life (s), accelerated?
 	static final double[] DH_FRACTION = {0.017, 0.013, 0.012, 0.010, 0.006, 0.004};
@@ -251,6 +253,8 @@ public final class PlantModel {
 	double sfpTemp = 32;
 	double sfpLevel = 1.0;
 	double sfpDamage;
+	/** Volatile inventory already released from damaged pool fuel (fraction of a core's worth). */
+	double sfpReleased;
 	boolean sfpMakeup;
 	boolean sfpBoilingAnnounced;
 
@@ -1648,7 +1652,9 @@ public final class PlantModel {
 		double leakRate = 1.2e-8 * (containmentPressure / 101) + (1 - containmentIntegrity) * 3e-4
 			+ (basematMeltThrough ? 5e-5 : 0) + (!phaseAIsolation && coreDamage > 0 ? 2e-6 : 0);
 		double vent = filteredVentOpen ? 3e-4 : 0;
-		releaseRate = airborneActivity * (leakRate + vent * 0.01) + sfpReleaseRate();
+		double sfpRate = sfpReleaseRate();
+		sfpReleased += sfpRate * h;
+		releaseRate = airborneActivity * (leakRate + vent * 0.01) + sfpRate;
 		airborneActivity = Math.max(0, airborneActivity - airborneActivity * (leakRate + vent) * h);
 		if (filteredVentOpen) {
 			containmentEnergy *= Math.exp(-vent * 10 * h);
@@ -1660,7 +1666,8 @@ public final class PlantModel {
 	}
 
 	private double sfpReleaseRate() {
-		return sfpDamage > 0 ? sfpDamage * 2e-5 : 0;
+		// the volatile inventory of the pool fuel is finite: release slows as it is used up
+		return sfpDamage > 0 ? sfpDamage * 2e-5 * Math.max(0, 1 - sfpReleased / SFP_RELEASE_MAX) : 0;
 	}
 
 	public double hydrogenFraction() {
@@ -2131,6 +2138,7 @@ public final class PlantModel {
 		s.putDouble("sfpTemp", sfpTemp);
 		s.putDouble("sfpLevel", sfpLevel);
 		s.putDouble("sfpDamage", sfpDamage);
+		s.putDouble("sfpReleased", sfpReleased);
 		s.putBoolean("sfpMakeup", sfpMakeup);
 		s.putDouble("cwFlow", cwFlow);
 		s.putDouble("containmentTemp", containmentTemp);
@@ -2257,6 +2265,7 @@ public final class PlantModel {
 		sfpTemp = s.getDouble("sfpTemp", sfpTemp);
 		sfpLevel = s.getDouble("sfpLevel", 1);
 		sfpDamage = s.getDouble("sfpDamage", 0);
+		sfpReleased = s.getDouble("sfpReleased", 0);
 		sfpMakeup = s.getBoolean("sfpMakeup", false);
 		cwFlow = s.getDouble("cwFlow", cwFlow);
 		containmentTemp = s.getDouble("containmentTemp", containmentTemp);
