@@ -36,6 +36,7 @@ public final class SiteFinder {
 			return switch (strictness) {
 				case 0 -> ocean && land && flat && villageFree && untouched;
 				case 1 -> ocean && land && villageFree && untouched;
+				case 2 -> ocean && villageFree && untouched;
 				default -> ocean && untouched;
 			};
 		}
@@ -70,7 +71,7 @@ public final class SiteFinder {
 		int evaluated = 0;
 		Site best = null;
 		double bestValue = Double.NEGATIVE_INFINITY;
-		for (int strictness = 0; strictness <= 2; strictness++) {
+		for (int strictness = 0; strictness <= 3; strictness++) {
 			for (int r = minR; r <= maxR; r += 320) {
 				int steps = Math.max(1, (int) Math.round(2 * Math.PI * Math.max(r, 1) / 320));
 				for (int i = 0; i < steps; i++) {
@@ -82,7 +83,7 @@ public final class SiteFinder {
 					if (!nearSpawn && overlapsSpawn(ox, oz)) {
 						continue;
 					}
-					Score s = score(ox, oz, strictness < 2);
+					Score s = score(ox, oz, strictness < 3);
 					evaluated++;
 					if (s.acceptable(strictness)) {
 						logSearch(start, evaluated, strictness);
@@ -95,7 +96,7 @@ public final class SiteFinder {
 				}
 			}
 		}
-		logSearch(start, evaluated, 3);
+		logSearch(start, evaluated, 4);
 		return best != null ? best : new Site(minR & ~15, minR & ~15, grade, sea, "fallback");
 	}
 
@@ -166,9 +167,13 @@ public final class SiteFinder {
 			if (checkExisting) {
 				untouched = !hasGeneratedChunks(ox, oz);
 			}
-			value += villageFree ? 0.5 : 0;
 			value += untouched ? 2 : -5;
 		}
+		if (oceanOk && villages.isPresent() && !(oceanFrac >= 0.4 && landFrac >= 0.5)) {
+			villageFree = !level.getChunkSource().getGeneratorState().hasStructureChunkInRange(villages.get(),
+				(ox + Blueprint.SIZE / 2) >> 4, (oz + Blueprint.SIZE / 2) >> 4, 40);
+		}
+		value += villageFree ? 0.5 : 0;
 		return new Score(oceanOk, landOk, flat, villageFree, untouched, value);
 	}
 

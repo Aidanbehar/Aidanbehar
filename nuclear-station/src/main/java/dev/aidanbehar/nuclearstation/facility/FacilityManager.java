@@ -219,6 +219,12 @@ public final class FacilityManager {
 			boolean done = idx < 0 || ctx.data.isBuilt(idx) || ctx.data.isSkipped(idx);
 			if (done) {
 				source.removeTicketWithRadius(FORCED_BUILD, pos, 0);
+			} else if (source.getChunkNow(pos.x(), pos.z()) != null) {
+				// loaded but not queued (e.g. its load event was consumed earlier): queue it now
+				long key = ChunkPos.pack(pos.x(), pos.z());
+				if (ctx.queued.add(key)) {
+					ctx.queue.enqueue(key);
+				}
 			}
 			return done;
 		});
@@ -236,14 +242,6 @@ public final class FacilityManager {
 			ChunkPos pos = new ChunkPos((ctx.data.originX() >> 4) + idx / Blueprint.CHUNKS, (ctx.data.originZ() >> 4) + idx % Blueprint.CHUNKS);
 			source.addTicketWithRadius(FORCED_BUILD, pos, 0);
 			ctx.forcedTickets.add(pos);
-			// already loaded chunks fire no load event: queue them directly
-			LevelChunk loaded = source.getChunkNow(pos.x(), pos.z());
-			if (loaded != null) {
-				long key = ChunkPos.pack(pos.x(), pos.z());
-				if (ctx.queued.add(key)) {
-					ctx.queue.enqueue(key);
-				}
-			}
 		}
 		if (ctx.forcedNext < 0 && ctx.forcedTickets.isEmpty()) {
 			NuclearStation.LOG.info("Forced facility build complete: {} chunks built", ctx.data.builtCount());
