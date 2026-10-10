@@ -1,0 +1,20 @@
+{
+	"schemaVersion": 1,
+	"id": "nuclearstation",
+	"version": "${version}",
+	"name": "Meridian Point Nuclear Station",
+	"description": "One enormous, canonical pressurized-water-reactor power station per Overworld, with a server-side plant simulation, radiation and contamination, radioactive geology and an explorable experimental research wing.",
+	"authors": ["aidanbehar"],
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["dev.aidanbehar.nuclearstation.NuclearStation"],
+		"client": ["dev.aidanbehar.nuclearstation.client.NuclearStationClient"]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
