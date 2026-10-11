@@ -88,6 +88,7 @@ for the version decisions and [docs/PROGRESS.md](docs/PROGRESS.md) for what is c
 | `/nps dev fail <equipment>` / `repair <equipment>` / `repair all` | gamemaster | Inject or clear equipment failures (type the command alone for the list of equipment names, e.g. `edg_a`, `rcp_b`, `tdafw`) |
 | `/nps dev gridloss` | gamemaster | Loss of off-site power |
 | `/nps dev loca small` / `medium` / `large` / `<0..1>` | gamemaster | Break in the reactor coolant system (fraction of a large break) |
+| `/nps dev recheck` | gamemaster | Compare every station chunk with the blueprint again and rebuild any with leftover terrain or trees (loaded chunks now, others as they load) |
 | `/nps dev audit` | gamemaster | Check that every room of the station can be walked into; writes `config/nuclearstation-audit.txt` and floor plans |
 | `/nps dev parts` | gamemaster | Give one of each spare part |
 | `/nps dev resetplant confirm` | gamemaster | Reset the plant to full power steady state |

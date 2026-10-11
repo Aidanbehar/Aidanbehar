@@ -84,6 +84,17 @@ public final class NpsCommand {
 			.then(Commands.literal("dev").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
 				.then(Commands.literal("clearmobs").executes(NpsCommand::clearMobs))
 				.then(Commands.literal("audit").executes(NpsCommand::audit))
+				.then(Commands.literal("recheck").executes(NpsCommand::recheck))
+				.then(Commands.literal("light").then(Commands.argument("pos", net.minecraft.commands.arguments.coordinates.BlockPosArgument.blockPos())
+					.executes(c -> {
+						BlockPos p = net.minecraft.commands.arguments.coordinates.BlockPosArgument.getLoadedBlockPos(c, "pos");
+						var level = c.getSource().getLevel();
+						int sky = level.getBrightness(net.minecraft.world.level.LightLayer.SKY, p);
+						int block = level.getBrightness(net.minecraft.world.level.LightLayer.BLOCK, p);
+						c.getSource().sendSuccess(() -> Component.literal("Light at " + p.toShortString() + ": sky " + sky + ", block " + block
+							+ ", surface y " + level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, p.getX(), p.getZ())), false);
+						return sky;
+					})))
 				.then(Commands.literal("restore").executes(c -> confirmHelp(c, "restore", "Resets the plant to full power, rebuilds the reactor area and clears ground contamination.")).then(Commands.literal("confirm").executes(NpsCommand::restore)))
 				.then(Commands.literal("fail").executes(c -> equipmentHelp(c, "fail"))
 					.then(Commands.argument("equipment", StringArgumentType.word()).suggests((c, b) -> suggestEquipment(b))
@@ -428,6 +439,17 @@ public final class NpsCommand {
 		int n = chunks;
 		c.getSource().sendSuccess(() -> Component.literal("Plant reset to full power; " + n
 			+ " chunks around the reactor are being rebuilt and ground contamination has been cleared. Contaminated soil blocks remain."), true);
+		return 1;
+	}
+
+	private static int recheck(CommandContext<CommandSourceStack> c) {
+		FacilityManager.Context ctx = ctx(c);
+		if (ctx == null) {
+			return noSite(c);
+		}
+		int loaded = FacilityManager.recheck(ctx);
+		c.getSource().sendSuccess(() -> Component.literal("Every station chunk will be checked against the blueprint as it loads ("
+			+ loaded + " loaded now); chunks with leftover terrain are rebuilt."), true);
 		return 1;
 	}
 

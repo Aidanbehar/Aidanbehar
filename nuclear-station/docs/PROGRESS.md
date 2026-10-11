@@ -23,6 +23,7 @@ client; **partial**; **not implemented**.
 | No natural mob spawns (including patrols, phantoms, sieges) and no freezing in the station; existing ice melts | done (mixins load; natural spawning needs a player to observe) |
 | Every station chunk rebuilt once on load in 0.3.0 (removes terrain and trees left inside buildings) | done (server-tested: 3926 chunks, 0.7 ms average) |
 | Access audit: every room reachable on foot (stair landings, doors, walkways) | done (`/nps dev audit`; remaining flagged pockets are machine and tank tops) |
+| Terrain clearing reads the real column height (not the stored heightmap); chunk check compares final blocks only; revision 4 re-checks every chunk once; `/nps dev recheck` | done |
 | Hostile mobs kept out of the whole footprint (spawning blocked, intruders removed) | done |
 | Emergency siren network (20 masts, auto/on/off) | done |
 | Meltdown damage scaled by severity; `/nps meltdown force` | done |

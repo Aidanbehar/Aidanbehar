@@ -54,7 +54,7 @@ public final class FacilityManager {
 		new TicketType(0L, TicketType.FLAG_LOADING));
 	private static final int FORCED_WINDOW = 24;
 	/** Increase when blueprint content changes in a way existing worlds should receive. */
-	public static final int CONTENT_REVISION = 3;
+	public static final int CONTENT_REVISION = 4;
 
 	public static final class Context {
 		public final ServerLevel level;
@@ -168,6 +168,8 @@ public final class FacilityManager {
 	 * Revision 3: stair doors, room access, flooded refuelling cavity, siren masts and the
 	 * terrain clean-up - every built chunk is repainted once as it next loads (only blocks
 	 * that differ are written), and chunks skipped by over-eager protection are released.
+	 * Revision 4: every chunk is re-checked as it loads and rebuilt if terrain was left
+	 * floating above it (clearing used to stop at a stale heightmap).
 	 */
 	private static void upgrade(Context ctx) {
 		int from = ctx.data.contentRevision();
@@ -182,9 +184,37 @@ public final class FacilityManager {
 				}
 			}
 		}
+		if (from == 3) {
+			// revision 4: terrain left floating above the station (stale heightmaps) - every
+			// chunk is compared with the blueprint as it loads and rebuilt if terrain remains
+			ctx.data.reverifyAll();
+		}
 		ctx.data.setContentRevision(CONTENT_REVISION);
 		NuclearStation.LOG.info("Upgrading the station from content revision {} to {}: {} chunks will be rebuilt as they load",
 			from, CONTENT_REVISION, requested);
+	}
+
+	/**
+	 * Compares every station chunk with the blueprint again (loaded chunks now, the rest as
+	 * they load) and rebuilds those with terrain or vegetation left standing. Returns the
+	 * number of loaded chunks queued.
+	 */
+	public static int recheck(Context ctx) {
+		ctx.data.reverifyAll();
+		int queued = 0;
+		int total = Blueprint.CHUNKS * Blueprint.CHUNKS;
+		for (int idx = 0; idx < total; idx++) {
+			int cx = (ctx.data.originX() >> 4) + idx / Blueprint.CHUNKS;
+			int cz = (ctx.data.originZ() >> 4) + idx % Blueprint.CHUNKS;
+			if (ctx.level.getChunkSource().getChunkNow(cx, cz) != null) {
+				long key = ChunkPos.pack(cx, cz);
+				if (ctx.queued.add(key)) {
+					ctx.queue.enqueue(key);
+				}
+				queued++;
+			}
+		}
+		return queued;
 	}
 
 	private static void addChunks(Context ctx, Set<Integer> out, int x0, int z0, int x1, int z1) {
@@ -326,8 +356,8 @@ public final class FacilityManager {
 				PlantWorldEffects.syncChunk(ctx.level, ctx, pos.x(), pos.z());
 				return false;
 			}
-			NuclearStation.LOG.warn("Facility chunk {} was recorded as built but is incomplete ({}% of blocks missing, {} natural blocks left standing) - repainting it",
-				pos, Math.round(verify.mismatchFraction() * 100), verify.intrusions());
+			NuclearStation.LOG.warn("Facility chunk {} was recorded as built but is incomplete ({}% of blocks missing, {} natural blocks left standing) - repainting it {}",
+				pos, Math.round(verify.mismatchFraction() * 100), verify.intrusions(), verify.sample);
 		} else {
 			long protect = ModConfig.get().facility.protectInhabitedChunksTicks;
 			if (ctx.data.protectExisting() && protect > 0 && chunk.getInhabitedTime() > protect) {

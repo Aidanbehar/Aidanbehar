@@ -9,7 +9,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
  * Writes facility blocks into one loaded chunk. The blueprint paints in layers (terrain is
@@ -102,7 +101,30 @@ public final class LevelSink implements BlockSink {
 
 	@Override
 	public int topY(int x, int z) {
-		return chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x & 15, z & 15);
+		return surface(chunk, x, z);
+	}
+
+	/**
+	 * One above the highest non-air block of a column, found from the blocks themselves.
+	 * The stored heightmap is not trusted: where it is stale (chunks upgraded or loaded from
+	 * older saves) terrain above it was never cleared and was left floating over the station.
+	 */
+	static int surface(LevelChunk chunk, int x, int z) {
+		int lx = x & 15;
+		int lz = z & 15;
+		var sections = chunk.getSections();
+		for (int si = sections.length - 1; si >= 0; si--) {
+			var section = sections[si];
+			if (section.hasOnlyAir()) {
+				continue;
+			}
+			for (int ly = 15; ly >= 0; ly--) {
+				if (!section.getBlockState(lx, ly, lz).isAir()) {
+					return chunk.getSectionYFromSectionIndex(si) * 16 + ly + 1;
+				}
+			}
+		}
+		return chunk.getMinY();
 	}
 
 	@Override

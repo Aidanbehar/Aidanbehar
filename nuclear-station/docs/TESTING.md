@@ -64,6 +64,12 @@ Version 0.3.0 additions (server):
 | `/nps meltdown force catastrophic` | containment 8 %, release 22 %, dome breached, 663 debris blocks and 153 fires outside |
 | `/nps dev restore confirm` after catastrophic | plant 100 %, sirens quiet, 0 debris, 0 fires, 0 corium within 150 blocks |
 
+Version 0.3.1 additions (server):
+| Check | Result |
+|---|---|
+| Stone hill (16x16x18) placed over open ground in a built chunk, chunk unloaded, `/nps dev recheck`, chunk reloaded | hill detected (4352 natural blocks), chunk rebuilt, ground has full sky light again (15) |
+| `/nps dev recheck` with all 4096 chunks loaded on an intact station | 0 chunks rebuilt (before the fix, chunks with paving were wrongly reported 31 % incomplete and rebuilt every time; sea chunks were rebuilt because of kelp) |
+
 Note: a vanilla server pauses after 60 s with no players (`pause-when-empty-seconds`);
 set it to -1 for unattended testing.
 
