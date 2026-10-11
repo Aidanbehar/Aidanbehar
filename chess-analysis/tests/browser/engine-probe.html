@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8"><title>Engine probe</title>
+<pre id="log"></pre>
+<script>
+window.lines = []; window.errors = []; window.ready = null;
+const w = new Worker('../../engine/engine-worker.js');
+w.onmessage = (e) => {
+  const m = e.data;
+  if (m.type === 'line') window.lines.push(m.line);
+  else if (m.type === 'ready') window.ready = m;
+  else if (m.type === 'error') window.errors.push(m);
+  document.getElementById('log').textContent += JSON.stringify(m).slice(0, 200) + '\n';
+};
+w.onerror = (e) => window.errors.push({ code: 'worker', message: e.message });
+w.postMessage({ type: 'init', base: './stockfish-19/', arch: new URLSearchParams(location.search).get('arch') || 'auto' });
+window.send = (c) => w.postMessage({ type: 'cmd', cmd: c });
+</script>

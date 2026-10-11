@@ -1,0 +1,4 @@
+build/work/
+node_modules/
+test-results/
+*.log

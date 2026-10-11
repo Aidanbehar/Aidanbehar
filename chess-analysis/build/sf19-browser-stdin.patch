@@ -1,0 +1,70 @@
+diff --git a/src/uci.cpp b/src/uci.cpp
+index 5dd2d03..60a53b8 100644
+--- a/src/uci.cpp
++++ b/src/uci.cpp
+@@ -18,6 +18,12 @@
+ 
+ #include "uci.h"
+ 
++#ifdef SF_BROWSER_STDIN
++    #include <condition_variable>
++    #include <deque>
++    #include <mutex>
++#endif
++
+ #include <algorithm>
+ #include <cctype>
+ #include <chrono>
+@@ -44,6 +50,25 @@
+ 
+ namespace Stockfish {
+ 
++#ifdef SF_BROWSER_STDIN
++// Browser builds have no blocking stdin. Commands are queued from JavaScript
++// via sf_uci_push() and consumed by UCIEngine::loop(), which (with
++// -sPROXY_TO_PTHREAD) runs on its own pthread and may block here.
++namespace {
++std::mutex              browserInputMutex;
++std::condition_variable browserInputCv;
++std::deque<std::string> browserInputQueue;
++
++bool browser_getline(std::string& cmd) {
++    std::unique_lock<std::mutex> lock(browserInputMutex);
++    browserInputCv.wait(lock, [] { return !browserInputQueue.empty(); });
++    cmd = std::move(browserInputQueue.front());
++    browserInputQueue.pop_front();
++    return true;
++}
++}  // namespace
++#endif
++
+ using Time = std::chrono::steady_clock;
+ using ms   = std::chrono::milliseconds;
+ 
+@@ -101,7 +126,11 @@ void UCIEngine::loop() {
+     do
+     {
+         if (cli.argc == 1
++#ifdef SF_BROWSER_STDIN
++            && !browser_getline(cmd))
++#else
+             && !getline(std::cin, cmd))  // Wait for an input or an end-of-file (EOF) indication
++#endif
+             cmd = "quit";
+ 
+         currentCmd = cmd;
+@@ -702,3 +731,14 @@ void UCIEngine::terminate_on_critical_error(const std::string& message) {
+ }
+ 
+ }  // namespace Stockfish
++
++#ifdef SF_BROWSER_STDIN
++extern "C" void sf_uci_push(const char* cmd);
++extern "C" void sf_uci_push(const char* cmd) {
++    {
++        std::lock_guard<std::mutex> lock(Stockfish::browserInputMutex);
++        Stockfish::browserInputQueue.emplace_back(cmd);
++    }
++    Stockfish::browserInputCv.notify_one();
++}
++#endif
