@@ -33,6 +33,10 @@ public final class PlantData extends SavedData {
 	private double timeScale = 1;
 	/** True while a /nps meltdown run is accelerating time (it returns to 1x at vessel failure). */
 	private boolean meltdownRun;
+	/** Worst accident severity reached (0..1); world damage scales with it and never shrinks. */
+	private double severity;
+	/** Size of the containment breach (0..1). */
+	private double breach;
 	/** Release accumulated since the last plume deposition (not persisted; flushed every 10 s). */
 	private double pendingRelease;
 
@@ -88,6 +92,28 @@ public final class PlantData extends SavedData {
 
 	public static final double MAX_TIME_SCALE = 300;
 
+	public double severity() {
+		return severity;
+	}
+
+	public double breach() {
+		return breach;
+	}
+
+	/** Raises the recorded severity from the plant state; true if it grew enough to redraw the damage. */
+	public boolean updateSeverity(PlantModel m) {
+		double s = Math.min(1, 0.35 * m.coreMelt() + 0.1 * m.coreDamage() + (m.vesselFailed() ? 0.15 : 0)
+			+ 0.3 * (1 - m.containmentIntegrity()) + (m.basematMeltThrough() ? 0.1 : 0) + Math.min(0.15, m.totalEnvironmentalRelease() * 1.5));
+		double b = m.containmentIntegrity() < 0.5 ? Math.min(1, (0.5 - m.containmentIntegrity()) * 2.2 + 0.1) : 0;
+		boolean grew = s > severity + 0.05 || b > breach + 0.05;
+		if (s > severity || b > breach) {
+			severity = Math.max(severity, s);
+			breach = Math.max(breach, b);
+			setDirty();
+		}
+		return grew;
+	}
+
 	public boolean meltdownRun() {
 		return meltdownRun;
 	}
@@ -112,6 +138,8 @@ public final class PlantData extends SavedData {
 		seeded = false;
 		timeScale = 1;
 		meltdownRun = false;
+		severity = 0;
+		breach = 0;
 		setDirty();
 	}
 
@@ -127,6 +155,8 @@ public final class PlantData extends SavedData {
 		d.damageStages = tag.getIntOr("damage", 0);
 		d.timeScale = Math.max(1, tag.getDoubleOr("timeScale", 1));
 		d.meltdownRun = tag.getBooleanOr("meltdownRun", false);
+		d.severity = tag.getDoubleOr("severity", 0);
+		d.breach = tag.getDoubleOr("breach", 0);
 		return d;
 	}
 
@@ -139,6 +169,8 @@ public final class PlantData extends SavedData {
 		tag.putInt("damage", damageStages);
 		tag.putDouble("timeScale", timeScale);
 		tag.putBoolean("meltdownRun", meltdownRun);
+		tag.putDouble("severity", severity);
+		tag.putDouble("breach", breach);
 		return tag;
 	}
 }

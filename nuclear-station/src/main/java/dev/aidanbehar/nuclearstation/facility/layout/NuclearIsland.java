@@ -124,7 +124,9 @@ final class NuclearIsland {
 			k.lamps(x0 + 1, z0 + 1, x1 - 1, z1 - 1, u + 8, 8);
 			int[] floors = {g - 12, g, g + 10};
 			int len = Kit.stairCoreLength(floors);
-			k.stairCore(corr0 + 1, z1 - len - 1, floors, Pal.CONCRETE);
+			k.stairCore(corr0 + 1, z1 - len - 1, floors, Pal.CONCRETE, Direction.NORTH, Direction.SOUTH);
+			// the end pump rooms open into the stair core, which fills the corridor end
+			k.doorway(corr0 - 1, g + 1, z1 - len - 1 + Kit.landingRow(floors, 1), Direction.WEST, true);
 			p.cylinder(x0 + 10, z1 - 10, 2.5, g + 21, g + 64, Pal.DARK_CONCRETE);
 			p.cylinder(x0 + 10, z1 - 10, 1.4, g + 21, g + 64, Pal.AIR);
 			k.emergencyLamp(x0 + 10, g + 65, z1 - 10);

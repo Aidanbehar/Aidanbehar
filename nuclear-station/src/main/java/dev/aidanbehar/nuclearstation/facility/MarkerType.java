@@ -19,5 +19,7 @@ public enum MarkerType {
 	/** Location of a major component, used for sounds, particles and damage (data = Feature ordinal). */
 	FEATURE,
 	/** Stairwell bounding box corners (data 0 = minimum, 1 = maximum), for content upgrades. */
-	STAIRWELL
+	STAIRWELL,
+	/** Outdoor emergency siren. */
+	SIREN
 }

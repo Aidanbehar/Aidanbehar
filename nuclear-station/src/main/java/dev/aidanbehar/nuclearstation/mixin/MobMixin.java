@@ -10,14 +10,14 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * No natural, world-generation, reinforcement or event spawns anywhere in the station
- * footprint. Spawn eggs, spawners, commands and breeding are unaffected.
+ * No natural, world-generation, spawner, reinforcement or event spawns anywhere in the
+ * station footprint. Spawn eggs, commands and breeding are unaffected.
  */
 @Mixin(Mob.class)
 public abstract class MobMixin {
 	@Inject(method = "checkSpawnRules", at = @At("HEAD"), cancellable = true)
 	private void nuclearstation$noNaturalSpawnsInStation(LevelAccessor level, EntitySpawnReason reason, CallbackInfoReturnable<Boolean> cir) {
-		if (blocked(reason)) {
+		if (blocked(reason) && dev.aidanbehar.nuclearstation.config.ModConfig.get().facility.noHostileMobs) {
 			Mob self = (Mob) (Object) this;
 			if (StationArea.contains(level, self.getBlockX(), self.getBlockZ())) {
 				cir.setReturnValue(false);
@@ -27,7 +27,7 @@ public abstract class MobMixin {
 
 	private static boolean blocked(EntitySpawnReason reason) {
 		return switch (reason) {
-			case NATURAL, CHUNK_GENERATION, STRUCTURE, REINFORCEMENT, EVENT, PATROL, JOCKEY -> true;
+			case NATURAL, CHUNK_GENERATION, STRUCTURE, REINFORCEMENT, EVENT, PATROL, JOCKEY, SPAWNER, TRIAL_SPAWNER -> true;
 			default -> false;
 		};
 	}

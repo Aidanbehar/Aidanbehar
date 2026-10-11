@@ -70,7 +70,10 @@ public enum PlantCommand {
 	SFP_MAKEUP_OFF("Spent fuel pool makeup off"),
 	ALARM_ACK("Acknowledge alarms"),
 	ALARM_RESET("Reset cleared alarms"),
-	ALARM_SILENCE("Silence horn");
+	ALARM_SILENCE("Silence horn"),
+	SIREN_AUTO("Site sirens: automatic"),
+	SIREN_ON("Site sirens: sound"),
+	SIREN_OFF("Site sirens: silence");
 
 	public final String label;
 

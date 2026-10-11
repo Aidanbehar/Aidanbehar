@@ -1,5 +1,7 @@
 package dev.aidanbehar.nuclearstation.facility;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -10,21 +12,30 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
- * Writes facility blocks into one loaded chunk. Blocks are placed without neighbour
- * updates, shape updates, drops or onPlace callbacks, so placed water does not flow and
- * nothing cascades into neighbouring chunks. Clients receive the changes as batched
- * section updates.
+ * Writes facility blocks into one loaded chunk. The blueprint paints in layers (terrain is
+ * cleared, then buildings, then interiors), so the same cell is often set several times;
+ * every write is buffered and only the final state of each cell that differs from the
+ * world is placed, once, in {@link #flush()}. Blocks are placed without neighbour updates,
+ * drops or onPlace callbacks, so placed water does not flow and nothing cascades into
+ * neighbouring chunks. Block entity configuration runs after the blocks exist.
  */
 public final class LevelSink implements BlockSink {
 	private static final int FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_SUPPRESS_DROPS | Block.UPDATE_SKIP_ON_PLACE;
 	private final ServerLevel level;
 	private final LevelChunk chunk;
+	private final int minY;
+	private final int height;
+	private final BlockState[] buffer;
+	private final List<Runnable> configure = new ArrayList<>();
 	private final BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
 	private int writes;
 
 	public LevelSink(ServerLevel level, LevelChunk chunk) {
 		this.level = level;
 		this.chunk = chunk;
+		this.minY = level.getMinY();
+		this.height = level.getHeight();
+		this.buffer = new BlockState[16 * 16 * height];
 		// Promote block entities still stored as pending NBT (beehives, structure chests)
 		// while their block states are intact. Otherwise replacing the block leaves the
 		// pending entry behind and the next write at that position fails to create it.
@@ -33,27 +44,60 @@ public final class LevelSink implements BlockSink {
 		}
 	}
 
+	private int index(int x, int y, int z) {
+		int iy = y - minY;
+		if (iy < 0 || iy >= height) {
+			return -1;
+		}
+		return ((iy * 16) + (z & 15)) * 16 + (x & 15);
+	}
+
 	@Override
 	public BlockState get(int x, int y, int z) {
-		return chunk.getBlockState(cursor.set(x, y, z));
+		int i = index(x, y, z);
+		BlockState s = i >= 0 ? buffer[i] : null;
+		return s != null ? s : chunk.getBlockState(cursor.set(x, y, z));
 	}
 
 	@Override
 	public void set(int x, int y, int z, BlockState state) {
-		cursor.set(x, y, z);
-		if (chunk.getBlockState(cursor) != state) {
-			level.setBlock(cursor, state, FLAGS);
-			writes++;
+		int i = index(x, y, z);
+		if (i >= 0) {
+			buffer[i] = state;
 		}
 	}
 
 	@Override
 	public void configure(int x, int y, int z, Consumer<BlockEntity> action) {
-		BlockEntity be = chunk.getBlockEntity(new BlockPos(x, y, z));
-		if (be != null) {
-			action.accept(be);
-			be.setChanged();
+		BlockPos pos = new BlockPos(x, y, z);
+		configure.add(() -> {
+			BlockEntity be = chunk.getBlockEntity(pos);
+			if (be != null) {
+				action.accept(be);
+				be.setChanged();
+			}
+		});
+	}
+
+	/** Places every buffered cell whose final state differs from the world, then configures block entities. */
+	public void flush() {
+		int x0 = chunk.getPos().getMinBlockX();
+		int z0 = chunk.getPos().getMinBlockZ();
+		for (int i = 0; i < buffer.length; i++) {
+			BlockState s = buffer[i];
+			if (s == null) {
+				continue;
+			}
+			int x = x0 + (i & 15);
+			int z = z0 + ((i >> 4) & 15);
+			int y = (i >> 8) + minY;
+			cursor.set(x, y, z);
+			if (chunk.getBlockState(cursor) != s) {
+				level.setBlock(cursor, s, FLAGS);
+				writes++;
+			}
 		}
+		configure.forEach(Runnable::run);
 	}
 
 	@Override

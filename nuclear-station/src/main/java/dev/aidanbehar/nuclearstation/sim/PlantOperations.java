@@ -469,6 +469,19 @@ public final class PlantOperations {
 				m.alarms.silenceHorn();
 				return Result.ok("Horn silenced");
 			}
+			case SIREN_AUTO -> {
+				m.sirenMode = 0;
+				return Result.ok("Site sirens in AUTOMATIC (sound on core damage, release or containment failure)");
+			}
+			case SIREN_ON -> {
+				m.sirenMode = 1;
+				m.alarms.log(m.time, 1, "Site emergency sirens sounded from the control room");
+				return Result.ok("Site sirens SOUNDING");
+			}
+			case SIREN_OFF -> {
+				m.sirenMode = 2;
+				return Result.ok("Site sirens SILENCED");
+			}
 		}
 		return Result.blocked("Unsupported command");
 	}

@@ -110,6 +110,14 @@ final class ResearchWing extends Component {
 		p.fill(ccx - 1, g + UPPER + 1, hz0, ccx + 1, g + UPPER + 3, gz - 1, Pal.AIR);
 		k.door(ccx, g + UPPER + 1, hz0, Direction.SOUTH);
 		k.label(ccx - 2, g + UPPER + 3, gz + 1, Direction.SOUTH, DyeColor.PURPLE, "OBSERVATION", "GALLERY");
+		// personnel entrance from the upper-floor corridor (east) onto the lower catwalk ring
+		p.fill(ccx + 39, g + UPPER, ccz - 1, hx1, g + UPPER, ccz + 1, Pal.GRATING);
+		p.fill(ccx + 39, g + UPPER + 1, ccz - 1, hx1, g + UPPER + 3, ccz + 1, Pal.AIR);
+		p.fill(ccx + 39, g + UPPER + 1, ccz - 2, hx1 - 4, g + UPPER + 1, ccz - 2, Kit.bars(true));
+		p.fill(ccx + 39, g + UPPER + 1, ccz + 2, hx1 - 4, g + UPPER + 1, ccz + 2, Kit.bars(true));
+		k.door(hx1, g + UPPER + 1, ccz, Direction.EAST);
+		k.label(hx1 + 1, g + UPPER + 3, ccz + 2, Direction.EAST, DyeColor.PURPLE, "CHAMBER HALL", "CATWALK ACCESS", "MAGNETIC FIELD", "AREA");
+		k.sign(hx1 + 1, g + UPPER + 3, ccz - 2, SignKind.MAGNETIC, Direction.EAST);
 		// shielded personnel door at hall floor level (locked out)
 		p.fill(ccx - 2, g + HALL_FLOOR + 1, hz1 - 4, ccx + 2, g + HALL_FLOOR + 5, hz1 - 4, Pal.LEAD);
 		k.label(ccx, g + HALL_FLOOR + 3, hz1 - 5, Direction.NORTH, DyeColor.RED, "SHIELD DOOR", "LOCKED OUT", "NOT COMMISSIONED");
@@ -188,6 +196,9 @@ final class ResearchWing extends Component {
 				p.set(cellX0 + 5, g + 4, cz0 + dz, Blocks.LEVER.defaultBlockState());
 			}
 			k.sign(cellX0 + 5, g + 5, cz0 + 10, SignKind.HIGH_RADIATION, Direction.WEST);
+			// shielded access door through the 2-block lead wall (north side)
+			k.doorway(cellX0 + 15, g + 1, cz0, Direction.NORTH, true);
+			k.doorway(cellX0 + 15, g + 1, cz0 + 1, Direction.NORTH, false);
 			k.label(cellX0 + 5, g + 6, cz0 + 10, Direction.WEST, DyeColor.YELLOW, "HOT CELL " + (c + 1));
 			k.lamp(cellX0 + 12, g + UPPER - 2, cz0 + 10);
 		}

@@ -183,10 +183,6 @@ final class TurbineHall extends Component {
 		int[][] cores = {{x0 + 26, z0 + 3}, {x1 - 8, z0 + 3}, {x0 + 26, z1 - 2 - len}, {x1 - 8, z1 - 2 - len}};
 		for (int[] c : cores) {
 			k.stairCore(c[0], c[1], floors, Pal.CONCRETE);
-			for (int fl : floors) {
-				p.fill(c[0] + 4, fl + 1, c[1] + len / 2 - 1, c[0] + 4, fl + 2, c[1] + len / 2, Pal.AIR);
-				p.fill(c[0] - 1, fl + 1, c[1] + len / 2 - 1, c[0] - 1, fl + 2, c[1] + len / 2, Pal.AIR);
-			}
 			k.ladder(c[0] + 1, g + DECK + 1, g + CRANE - 1, c[1] - 1 >= z0 + 2 ? c[1] - 1 : c[1] + len, c[1] < az ? Direction.SOUTH : Direction.NORTH);
 		}
 		for (int x = x0 + 40; x < x1 - 20; x += 60) {

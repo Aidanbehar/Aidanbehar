@@ -22,6 +22,7 @@ public final class FacilityMarkers {
 	private final Map<BlockPos, EquipmentId> stations = new HashMap<>();
 	private final Set<BlockPos> scramButtons = new HashSet<>();
 	private final Set<BlockPos> consoles = new HashSet<>();
+	private final List<BlockPos> sirens = new ArrayList<>();
 	private final Map<Feature, BlockPos> features = new EnumMap<>(Feature.class);
 	private final int total;
 
@@ -33,6 +34,7 @@ public final class FacilityMarkers {
 				case STATION -> stations.put(m.pos(), EquipmentId.values()[m.data()]);
 				case SCRAM -> scramButtons.add(m.pos());
 				case CONSOLE -> consoles.add(m.pos());
+				case SIREN -> sirens.add(m.pos());
 				case FEATURE -> features.putIfAbsent(Feature.values()[m.data()], m.pos());
 				default -> {
 				}
@@ -56,6 +58,10 @@ public final class FacilityMarkers {
 
 	public boolean isScram(BlockPos pos) {
 		return scramButtons.contains(pos);
+	}
+
+	public List<BlockPos> sirens() {
+		return sirens;
 	}
 
 	public Set<BlockPos> consoles() {

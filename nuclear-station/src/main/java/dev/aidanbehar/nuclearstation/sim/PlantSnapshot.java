@@ -65,6 +65,7 @@ public final class PlantSnapshot {
 	public static final int F_VESSEL_FAILED = 1 << 28;
 	public static final int F_RUNBACK = 1 << 29;
 	public static final int F_STEAMLINE_SI_BLOCKED = 1 << 30;
+	public static final int F_SIREN = 1 << 31;
 
 	public double get(Readout r) {
 		return values[r.ordinal()];
@@ -270,6 +271,7 @@ public final class PlantSnapshot {
 		f |= m.vesselFailed ? F_VESSEL_FAILED : 0;
 		f |= m.runbackActive ? F_RUNBACK : 0;
 		f |= m.steamlineSiBlocked ? F_STEAMLINE_SI_BLOCKED : 0;
+		f |= m.sirensSounding() ? F_SIREN : 0;
 		s.flags = f;
 		s.tripCause = m.tripCause;
 		String block = m.rodWithdrawalBlocked();

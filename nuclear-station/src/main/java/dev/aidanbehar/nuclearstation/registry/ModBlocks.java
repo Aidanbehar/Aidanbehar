@@ -111,6 +111,8 @@ public final class ModBlocks {
 		glass().noOcclusion().lightLevel(s -> 9));
 	public static final Block WARNING_BEACON = register("warning_beacon", WarningBeaconBlock::new,
 		glass().noOcclusion().lightLevel(s -> s.getValue(WarningBeaconBlock.LIT) ? 13 : 0));
+	public static final Block SIREN = register("siren", dev.aidanbehar.nuclearstation.block.SirenBlock::new,
+		metal().noOcclusion().strength(3f).lightLevel(s -> s.getValue(dev.aidanbehar.nuclearstation.block.SirenBlock.ACTIVE) ? 12 : 0));
 	public static final Block CONTROL_CONSOLE = register("control_console", ControlConsoleBlock::new, metal().lightLevel(s -> 5));
 	public static final Block CONTROL_PANEL = register("control_panel", PanelBlock::new, metal().lightLevel(PanelBlock::light));
 	public static final Block ANNUNCIATOR_PANEL = register("annunciator_panel", PanelBlock::new, metal().lightLevel(PanelBlock::light));

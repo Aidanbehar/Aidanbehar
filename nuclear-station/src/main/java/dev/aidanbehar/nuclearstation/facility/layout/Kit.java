@@ -97,6 +97,15 @@ public final class Kit {
 		p.marker(MarkerType.BEACON, x, y, z, 0);
 	}
 
+	/** Emergency siren mast: steel column with the siren head on top. */
+	public void sirenMast(int x, int z, int height) {
+		int g = p.grade;
+		p.fill(x, g + 1, z, x, g + height - 1, z, Pal.STEEL_COLUMN);
+		p.set(x, g + height, z, ModBlocks.SIREN.defaultBlockState());
+		p.marker(MarkerType.SIREN, x, g + height, z, 0);
+		p.fill(x - 1, g, z - 1, x + 1, g, z + 1, Pal.CONCRETE);
+	}
+
 	// ------------------------------------------------------------------ signage
 
 	public void sign(int x, int y, int z, SignKind kind, Direction facing) {
@@ -182,7 +191,7 @@ public final class Kit {
 	 * floor surface). The well is long enough for the tallest storey; flights alternate
 	 * direction each storey and land at the well ends.
 	 */
-	public void stairCore(int x0, int z0, int[] floors, BlockState wall) {
+	public void stairCore(int x0, int z0, int[] floors, BlockState wall, Direction... endDoors) {
 		int maxH = 0;
 		for (int f = 0; f + 1 < floors.length; f++) {
 			maxH = Math.max(maxH, floors[f + 1] - floors[f]);
@@ -222,8 +231,37 @@ public final class Kit {
 		}
 		p.floor(x0, z0, x0 + 3, z0 + len - 1, floors[0], Pal.CONCRETE);
 		lamp(x0 + 1, floors[0] + 4, z0 + len / 2);
+		// Doors on every floor, but only from the landing the stairs actually reach there
+		// (flights switch back, so on upper floors only one end connects); the bottom floor
+		// is a full floor. Side walls always get doors; end walls where the caller asks.
+		for (int f = 0; f < floors.length; f++) {
+			int fl = floors[f];
+			boolean northEnd = f == 0 || (f - 1) % 2 == 1;
+			boolean southEnd = f == 0 || (f - 1) % 2 == 0;
+			if (northEnd) {
+				doorway(x0 - 1, fl + 1, z0, Direction.WEST, true);
+				doorway(x0 + 4, fl + 1, z0, Direction.EAST, true);
+			}
+			if (southEnd) {
+				doorway(x0 - 1, fl + 1, z0 + len - 1, Direction.WEST, true);
+				doorway(x0 + 4, fl + 1, z0 + len - 1, Direction.EAST, true);
+			}
+			for (Direction end : endDoors) {
+				if (end == Direction.NORTH && northEnd) {
+					doorway(x0 + 1, fl + 1, z0 - 1, Direction.NORTH, true);
+				} else if (end == Direction.SOUTH && southEnd) {
+					doorway(x0 + 1, fl + 1, z0 + len, Direction.SOUTH, true);
+				}
+			}
+		}
 		p.marker(MarkerType.STAIRWELL, x0 - 1, floors[0], z0 - 1, 0);
 		p.marker(MarkerType.STAIRWELL, x0 + 4, top + 5, z0 + len, 1);
+	}
+
+	/** Local z (relative to the core's z0) of the landing the stairs reach on floor f. */
+	public static int landingRow(int[] floors, int f) {
+		int len = stairCoreLength(floors) - 2;
+		return f == 0 || (f - 1) % 2 == 1 ? 0 : len - 1;
 	}
 
 	/** Length (z extent including walls) of a stair core for these floors. */

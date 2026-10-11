@@ -51,7 +51,7 @@ public final class PlantWorldEffects {
 	}
 
 	/** Coarse visual state of the plant; panels are only rewritten when it changes. */
-	record Visual(boolean lighting, boolean instruments, boolean beacons, long alarmBits, int damage) {
+	record Visual(boolean lighting, boolean instruments, boolean beacons, long alarmBits, int damage, boolean sirens) {
 		static Visual of(PlantModel m, int damage) {
 			boolean lighting = m.busLive(Bus.NS1) || m.busLive(Bus.NS2) || m.busLive(Bus.SA) || m.busLive(Bus.SB);
 			boolean instruments = m.busLive(Bus.DCA) || m.busLive(Bus.DCB);
@@ -65,7 +65,8 @@ public final class PlantWorldEffects {
 			boolean beacons = alarms.active(AlarmId.OFFSITE_RELEASE) || alarms.active(AlarmId.CONT_RADIATION_HIGH)
 				|| alarms.active(AlarmId.CORE_DAMAGE) || alarms.active(AlarmId.SI_ACTUATED) || alarms.active(AlarmId.STATION_BLACKOUT)
 				|| alarms.active(AlarmId.REACTOR_TRIP) && m.hornActive();
-			return new Visual(lighting, instruments, beacons, bits, damage);
+			beacons |= m.sirensSounding();
+			return new Visual(lighting, instruments, beacons, bits, damage, m.sirensSounding());
 		}
 	}
 
@@ -92,6 +93,11 @@ public final class PlantWorldEffects {
 				case LAMP -> {
 					if (s.is(ModBlocks.FACILITY_LAMP)) {
 						target = s.setValue(LampBlock.POWERED, v.lighting);
+					}
+				}
+				case SIREN -> {
+					if (s.is(ModBlocks.SIREN)) {
+						target = s.setValue(dev.aidanbehar.nuclearstation.block.SirenBlock.ACTIVE, v.sirens);
 					}
 				}
 				case BEACON -> {
@@ -157,6 +163,9 @@ public final class PlantWorldEffects {
 	}
 
 	static void periodic(ServerLevel level, FacilityManager.Context ctx, PlantData data, long tick) {
+		if (tick % 160 == 0 && data.model().sirensSounding()) {
+			soundSirens(level, ctx);
+		}
 		if (tick % 20 != 0) {
 			return;
 		}
@@ -174,8 +183,23 @@ public final class PlantWorldEffects {
 				}
 			}
 		}
+		if (before != null && !before.sirens && now.sirens) {
+			level.getServer().getPlayerList().broadcastSystemMessage(Component.literal("[Meridian Point] ").withStyle(ChatFormatting.DARK_AQUA)
+				.append(Component.literal("SITE EMERGENCY - the station sirens are sounding. Leave the area and shelter indoors.")
+					.withStyle(ChatFormatting.RED, ChatFormatting.BOLD)), false);
+		} else if (before != null && before.sirens && !now.sirens) {
+			broadcast(level, ctx, Component.literal("Site sirens stopped").withStyle(ChatFormatting.GOLD));
+		}
 		if (before != null && before.lighting && !now.lighting) {
 			broadcast(level, ctx, Component.literal("Lighting power lost - emergency lighting on batteries").withStyle(ChatFormatting.GOLD));
+		}
+	}
+
+	/** One wail of every siren (the sound lasts 8 s); heard up to about 250 blocks away. */
+	private static void soundSirens(ServerLevel level, FacilityManager.Context ctx) {
+		for (BlockPos pos : ctx.markers.sirens()) {
+			level.playSound(null, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, ModSounds.ALARM_SIREN,
+				net.minecraft.sounds.SoundSource.BLOCKS, 16.0f, 1.0f);
 		}
 	}
 
@@ -317,11 +341,18 @@ public final class PlantWorldEffects {
 
 	// ================================================================== physical accident damage
 
+	/** Re-applies accident damage to every loaded chunk it can reach (after the severity grew). */
+	static void redrawDamage(ServerLevel level, FacilityManager.Context ctx, PlantData data) {
+		reapplyDamage(level, ctx, data);
+	}
+
+	private static final int DAMAGE_REACH = 110;
+
 	private static void reapplyDamage(ServerLevel level, FacilityManager.Context ctx, PlantData data) {
-		int cx0 = ctx.local(CONT_X - CONT_R - 40, 0, 0).getX() >> 4;
-		int cx1 = ctx.local(FUEL_X1 + 10, 0, 0).getX() >> 4;
-		int cz0 = ctx.local(0, 0, CONT_Z - CONT_R - 40).getZ() >> 4;
-		int cz1 = ctx.local(0, 0, CONT_Z + CONT_R + 40).getZ() >> 4;
+		int cx0 = ctx.local(CONT_X - CONT_R - DAMAGE_REACH, 0, 0).getX() >> 4;
+		int cx1 = ctx.local(Math.max(FUEL_X1 + 10, CONT_X + CONT_R + DAMAGE_REACH), 0, 0).getX() >> 4;
+		int cz0 = ctx.local(0, 0, CONT_Z - CONT_R - DAMAGE_REACH).getZ() >> 4;
+		int cz1 = ctx.local(0, 0, CONT_Z + CONT_R + DAMAGE_REACH).getZ() >> 4;
 		for (int cx = cx0; cx <= cx1; cx++) {
 			for (int cz = cz0; cz <= cz1; cz++) {
 				LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
@@ -341,8 +372,10 @@ public final class PlantWorldEffects {
 		int wz0 = chunk.getPos().getMinBlockZ();
 		int lx0 = ctx.localX(wx0);
 		int lz0 = ctx.localZ(wz0);
-		boolean nearContainment = lx0 + 15 >= CONT_X - CONT_R - 34 && lx0 <= CONT_X + CONT_R + 34
-			&& lz0 + 15 >= CONT_Z - CONT_R - 34 && lz0 <= CONT_Z + CONT_R + 34;
+		int reach = DAMAGE_REACH;
+		boolean nearContainment = lx0 + 15 >= CONT_X - CONT_R - reach && lx0 <= CONT_X + CONT_R + reach
+			&& lz0 + 15 >= CONT_Z - CONT_R - reach && lz0 <= CONT_Z + CONT_R + reach;
+		double sev = data.severity();
 		boolean nearFuel = lx0 + 15 >= FUEL_X0 && lx0 <= FUEL_X1 && lz0 + 15 >= FUEL_Z0 && lz0 <= FUEL_Z1;
 		if (!nearContainment && !nearFuel) {
 			return;
@@ -376,23 +409,61 @@ public final class PlantWorldEffects {
 					}
 				}
 				if (data.hasDamage(PlantData.DAMAGE_CONTAINMENT_BREACH)) {
-					// a ragged opening in the dome on its south-west side, debris thrown around the building
+					// a ragged opening in the dome on its south-west side; it grows with the breach
+					double br = 9 + 18 * Math.max(0.2, data.breach());
 					double ax = rx + 18;
 					double az = rz - 14;
-					if (ax * ax + az * az < 13 * 13) {
-						for (int y = g + 64; y <= g + 64 + 40; y++) {
+					double ad = Math.sqrt(ax * ax + az * az);
+					if (ad < br) {
+						int yLow = g + 64 - (int) Math.round((br - 9) * 1.5);
+						for (int y = yLow; y <= g + 64 + 40; y++) {
 							pos.set(x, y, z);
 							BlockState s = level.getBlockState(pos);
 							if (s.is(ModBlocks.CONTAINMENT_CONCRETE) || s.is(ModBlocks.CONTAINMENT_LINER)) {
 								double h = Kit.hash(lx, y, lz, 902);
-								double edge = Math.sqrt(ax * ax + az * az) / 13.0;
-								level.setBlock(pos, h > edge ? Blocks.AIR.defaultBlockState() : ModBlocks.DAMAGED_CONCRETE.defaultBlockState(), FLAGS);
+								level.setBlock(pos, h > ad / br ? Blocks.AIR.defaultBlockState() : ModBlocks.DAMAGED_CONCRETE.defaultBlockState(), FLAGS);
 							}
 						}
 					}
-					if (r > CONT_R + 2 && r < CONT_R + 32 && Kit.hash(lx, 2, lz, 903) < 0.03) {
-						int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, x, z);
-						replaceIf(level, pos.set(x, y, z), Blocks.AIR, ModBlocks.CONTAMINATED_DEBRIS.defaultBlockState());
+				}
+				// wreckage, fires and scorching outside only once the containment has been breached;
+				// a contained meltdown shows as smoke, steam, corium and radiation instead
+				if (data.hasDamage(PlantData.DAMAGE_CONTAINMENT_BREACH) && sev > 0.05 && r > CONT_R + 2) {
+					double debrisReach = 12 + 70 * sev;
+					double t = (r - CONT_R - 2) / debrisReach;
+					if (t < 1) {
+						int top = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, x, z);
+						BlockState ground = level.getBlockState(pos.set(x, top - 1, z));
+						double h = Kit.hash(lx, 2, lz, 903);
+						// damage already applied here (re-applied whenever the chunk loads): leave it
+						boolean done = ground.is(ModBlocks.CONTAMINATED_DEBRIS) || ground.is(Blocks.CAMPFIRE) || ground.is(Blocks.HAY_BLOCK)
+							|| ground.is(ModBlocks.DAMAGED_CONCRETE) || ground.is(ModBlocks.CORIUM);
+						// debris thrown out of the building: denser and further with severity
+						if (done) {
+							// nothing more to do in this column
+						} else if (h < 0.07 * sev * (1 - t)) {
+							replaceIf(level, pos.set(x, top, z), Blocks.AIR, ModBlocks.CONTAMINATED_DEBRIS.defaultBlockState());
+						} else if (sev > 0.45 && h > 0.995 - 0.006 * sev * (1 - t) && top <= g + 3) {
+							// burning wreckage: smoke columns visible from far away
+							if (level.getBlockState(pos.set(x, top, z)).isAir() && level.getBlockState(pos.set(x, top + 1, z)).isAir()) {
+								level.setBlock(pos.set(x, top, z), Blocks.HAY_BLOCK.defaultBlockState(), FLAGS);
+								level.setBlock(pos.set(x, top + 1, z), Blocks.CAMPFIRE.defaultBlockState()
+									.setValue(net.minecraft.world.level.block.CampfireBlock.SIGNAL_FIRE, true), FLAGS);
+							}
+						} else if (sev > 0.6 && t < 0.6 && Kit.hash(lx, 3, lz, 905) < 0.5 * (1 - t / 0.6)
+							&& (ground.is(Blocks.GRASS_BLOCK) || ground.is(Blocks.DIRT))) {
+							// scorched ground near the building
+							level.setBlock(pos.set(x, top - 1, z), Blocks.COARSE_DIRT.defaultBlockState(), FLAGS);
+						}
+						// holes torn in nearby roofs by the explosion
+						if (!done && sev > 0.6 && top > g + 6 && Kit.hash(lx, 4, lz, 906) < 0.05 * sev * (1 - t)) {
+							for (int y = top - 1; y >= top - 2; y--) {
+								pos.set(x, y, z);
+								if (!level.getBlockState(pos).is(ModBlocks.CORIUM)) {
+									level.setBlock(pos, y == top - 1 ? Blocks.AIR.defaultBlockState() : ModBlocks.DAMAGED_CONCRETE.defaultBlockState(), FLAGS);
+								}
+							}
+						}
 					}
 				}
 				if (data.hasDamage(PlantData.DAMAGE_VESSEL_FAILURE) && r < 6.5) {

@@ -1,5 +1,6 @@
 package dev.aidanbehar.nuclearstation.command;
 
+import dev.aidanbehar.nuclearstation.NuclearStation;
 import dev.aidanbehar.nuclearstation.facility.layout.SiteLayout;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.Mob;
@@ -62,16 +63,27 @@ public final class NpsCommand {
 				.then(Commands.literal("buildall").executes(NpsCommand::buildAll)))
 			.then(Commands.literal("meltdown").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
 				.executes(NpsCommand::meltdownInfo)
+				.then(Commands.literal("force")
+					.executes(c -> forceInfo(c))
+					.then(Commands.literal("minor").executes(c -> forceMeltdown(c, DevHooks.Severity.MINOR)))
+					.then(Commands.literal("major").executes(c -> forceMeltdown(c, DevHooks.Severity.MAJOR)))
+					.then(Commands.literal("catastrophic").executes(c -> forceMeltdown(c, DevHooks.Severity.CATASTROPHIC))))
 				.then(Commands.literal("confirm")
 					.executes(c -> meltdown(c, 60))
 					.then(Commands.argument("speed", DoubleArgumentType.doubleArg(1, PlantData.MAX_TIME_SCALE))
 						.executes(c -> meltdown(c, DoubleArgumentType.getDouble(c, "speed"))))))
+			.then(Commands.literal("siren").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+				.executes(c -> siren(c, null))
+				.then(Commands.literal("auto").executes(c -> siren(c, PlantCommand.SIREN_AUTO)))
+				.then(Commands.literal("on").executes(c -> siren(c, PlantCommand.SIREN_ON)))
+				.then(Commands.literal("off").executes(c -> siren(c, PlantCommand.SIREN_OFF))))
 			.then(Commands.literal("timescale").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
 				.executes(NpsCommand::timeScaleInfo)
 				.then(Commands.argument("speed", DoubleArgumentType.doubleArg(1, PlantData.MAX_TIME_SCALE))
 					.executes(c -> timeScale(c, DoubleArgumentType.getDouble(c, "speed")))))
 			.then(Commands.literal("dev").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
 				.then(Commands.literal("clearmobs").executes(NpsCommand::clearMobs))
+				.then(Commands.literal("audit").executes(NpsCommand::audit))
 				.then(Commands.literal("restore").executes(c -> confirmHelp(c, "restore", "Resets the plant to full power, rebuilds the reactor area and clears ground contamination.")).then(Commands.literal("confirm").executes(NpsCommand::restore)))
 				.then(Commands.literal("fail").executes(c -> equipmentHelp(c, "fail"))
 					.then(Commands.argument("equipment", StringArgumentType.word()).suggests((c, b) -> suggestEquipment(b))
@@ -393,10 +405,12 @@ public final class NpsCommand {
 		MinecraftServer server = c.getSource().getServer();
 		PlantService.data(server).reset();
 		// rebuild every chunk accident damage can reach: the containment surroundings and the fuel building
-		int x0 = SiteLayout.CONT_X - SiteLayout.CONT_R - 48;
-		int x1 = Math.max(SiteLayout.CONT_X + SiteLayout.CONT_R + 48, SiteLayout.FUEL_X1 + 8);
-		int z0 = SiteLayout.CONT_Z - SiteLayout.CONT_R - 48;
-		int z1 = SiteLayout.CONT_Z + SiteLayout.CONT_R + 48;
+		// the reach of accident damage (debris, fires, scorching, roof holes) around the containment
+		int reach = 112;
+		int x0 = SiteLayout.CONT_X - SiteLayout.CONT_R - reach;
+		int x1 = Math.max(SiteLayout.CONT_X + SiteLayout.CONT_R + reach, SiteLayout.FUEL_X1 + 8);
+		int z0 = SiteLayout.CONT_Z - SiteLayout.CONT_R - reach;
+		int z1 = SiteLayout.CONT_Z + SiteLayout.CONT_R + reach;
 		int chunks = 0;
 		for (int cx = x0 >> 4; cx <= x1 >> 4; cx++) {
 			for (int cz = z0 >> 4; cz <= z1 >> 4; cz++) {
@@ -414,6 +428,80 @@ public final class NpsCommand {
 		int n = chunks;
 		c.getSource().sendSuccess(() -> Component.literal("Plant reset to full power; " + n
 			+ " chunks around the reactor are being rebuilt and ground contamination has been cleared. Contaminated soil blocks remain."), true);
+		return 1;
+	}
+
+	private static int audit(CommandContext<CommandSourceStack> c) {
+		CommandSourceStack source = c.getSource();
+		source.sendSuccess(() -> Component.literal("Auditing access to every room and stairwell (runs in the background)..."), false);
+		Thread t = new Thread(() -> {
+			long start = System.currentTimeMillis();
+			var pockets = dev.aidanbehar.nuclearstation.facility.AccessAudit.run(6, net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().resolve("nuclearstation-audit"));
+			StringBuilder report = new StringBuilder();
+			report.append(pockets.size()).append(" unreachable pockets\n");
+			pockets.forEach(p -> report.append(p).append('\n'));
+			try {
+				java.nio.file.Files.writeString(net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().resolve("nuclearstation-audit.txt"), report);
+			} catch (java.io.IOException e) {
+				NuclearStation.LOG.error("Could not write audit report", e);
+			}
+			NuclearStation.LOG.info("Access audit: {} unreachable pockets in {} ms (config/nuclearstation-audit.txt)", pockets.size(), System.currentTimeMillis() - start);
+			source.getServer().execute(() -> source.sendSuccess(() -> Component.literal("Access audit: " + pockets.size()
+				+ " unreachable pockets - see config/nuclearstation-audit.txt"), false));
+		}, "nuclearstation-audit");
+		t.setDaemon(true);
+		t.start();
+		return 1;
+	}
+
+	private static int siren(CommandContext<CommandSourceStack> c, PlantCommand command) {
+		if (ctx(c) == null) {
+			return noSite(c);
+		}
+		PlantModel m = PlantService.model(c.getSource().getServer());
+		if (command == null) {
+			String mode = switch (m.sirenMode()) {
+				case 1 -> "ON (manual)";
+				case 2 -> "OFF (manual)";
+				default -> "AUTO";
+			};
+			int masts = ctx(c).markers.sirens().size();
+			c.getSource().sendSuccess(() -> Component.literal("Site sirens: " + mode + (m.sirensSounding() ? ", SOUNDING" : ", quiet")
+				+ " (" + masts + " masts). /nps siren auto | on | off"), false);
+			return 1;
+		}
+		PlantCommand.Result r = PlantOperations.execute(m, command, 0, 0);
+		c.getSource().sendSuccess(() -> Component.literal(r.message()), true);
+		return 1;
+	}
+
+	private static int forceInfo(CommandContext<CommandSourceStack> c) {
+		c.getSource().sendSuccess(() -> Component.literal("/nps meltdown force minor | major | catastrophic - jump straight to the aftermath:\n"
+			+ "minor: partial core melt held inside the vessel and containment (like Three Mile Island)\n"
+			+ "major: full melt, the reactor vessel fails, corium attacks the concrete, containment leaks\n"
+			+ "catastrophic: hydrogen explosion blows open the dome, melt-through, burning pool fuel, large radioactive release")
+			.withStyle(ChatFormatting.GOLD), false);
+		return 1;
+	}
+
+	private static int forceMeltdown(CommandContext<CommandSourceStack> c, DevHooks.Severity severity) {
+		if (ctx(c) == null) {
+			return noSite(c);
+		}
+		MinecraftServer server = c.getSource().getServer();
+		PlantData data = PlantService.data(server);
+		DevHooks.forceMeltdown(data.model(), severity);
+		data.setTimeScale(1);
+		data.setMeltdownRun(false);
+		String what = switch (severity) {
+			case MINOR -> "PARTIAL CORE MELT - radioactivity contained";
+			case MAJOR -> "CORE MELTDOWN - reactor vessel breached";
+			case CATASTROPHIC -> "CATASTROPHIC MELTDOWN - containment destroyed, major radioactive release";
+		};
+		server.getPlayerList().broadcastSystemMessage(Component.literal("[Meridian Point] ").withStyle(ChatFormatting.AQUA)
+			.append(Component.literal(what).withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD)), false);
+		c.getSource().sendSuccess(() -> Component.literal("Forced " + severity.name().toLowerCase(Locale.ROOT)
+			+ " meltdown. /nps dev restore confirm undoes it."), true);
 		return 1;
 	}
 }

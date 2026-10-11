@@ -79,7 +79,7 @@ public final class Payloads {
 	 * near the site). Contains the site origin so the client can tell where it is.
 	 */
 	public record Status(int originX, int originZ, int grade, int sea, float turbineRpm, float power, float towerHeat,
-			float steamVent, float cwFlow, int flags, int alarmPriority) implements CustomPacketPayload {
+			float steamVent, float cwFlow, int flags, int alarmPriority, float severity) implements CustomPacketPayload {
 		public static final Type<Status> TYPE = payloadType("status");
 		public static final int F_HORN = 1;
 		public static final int F_LIGHTING = 1 << 1;
@@ -104,9 +104,10 @@ public final class Payloads {
 				buf.writeFloat(p.cwFlow);
 				buf.writeVarInt(p.flags);
 				buf.writeVarInt(p.alarmPriority);
+				buf.writeFloat(p.severity);
 			},
 			buf -> new Status(buf.readInt(), buf.readInt(), buf.readVarInt(), buf.readVarInt(), buf.readFloat(), buf.readFloat(),
-				buf.readFloat(), buf.readFloat(), buf.readFloat(), buf.readVarInt(), buf.readVarInt()));
+				buf.readFloat(), buf.readFloat(), buf.readFloat(), buf.readVarInt(), buf.readVarInt(), buf.readFloat()));
 
 		public boolean flag(int f) {
 			return (flags & f) != 0;

@@ -54,7 +54,7 @@ public final class FacilityManager {
 		new TicketType(0L, TicketType.FLAG_LOADING));
 	private static final int FORCED_WINDOW = 24;
 	/** Increase when blueprint content changes in a way existing worlds should receive. */
-	public static final int CONTENT_REVISION = 2;
+	public static final int CONTENT_REVISION = 3;
 
 	public static final class Context {
 		public final ServerLevel level;
@@ -163,36 +163,28 @@ public final class FacilityManager {
 	}
 
 	/**
-	 * Brings stations built by an older version up to date by rebuilding only the chunks
-	 * whose blueprint content changed. Revision 2: stairwell landings (gaps between flights)
-	 * and the control-room manuals.
+	 * Brings stations built by an older version up to date.
+	 * Revision 2: stairwell landings and the control-room manuals (targeted rebuild).
+	 * Revision 3: stair doors, room access, flooded refuelling cavity, siren masts and the
+	 * terrain clean-up - every built chunk is repainted once as it next loads (only blocks
+	 * that differ are written), and chunks skipped by over-eager protection are released.
 	 */
 	private static void upgrade(Context ctx) {
-		Set<Integer> chunks = new HashSet<>();
-		List<Marker> markers = Blueprint.get().collectMarkers(ctx.data.originX(), ctx.data.originZ(), ctx.data.grade(), ctx.data.sea());
-		for (int i = 0; i + 1 < markers.size(); i++) {
-			Marker a = markers.get(i);
-			Marker b = markers.get(i + 1);
-			if (a.type() == MarkerType.STAIRWELL && a.data() == 0 && b.type() == MarkerType.STAIRWELL && b.data() == 1) {
-				addChunks(ctx, chunks, a.pos().getX(), a.pos().getZ(), b.pos().getX(), b.pos().getZ());
-			}
-		}
-		int ox = ctx.data.originX();
-		int oz = ctx.data.originZ();
-		addChunks(ctx, chunks, ox + SiteLayout.CB_X0, oz + SiteLayout.ADMIN_Z0, ox + SiteLayout.CB_X1, oz + SiteLayout.CB_Z1);
+		int from = ctx.data.contentRevision();
 		int requested = 0;
-		for (int idx : chunks) {
-			if (ctx.data.isBuilt(idx)) {
-				ctx.data.requestRepair(idx);
-				requested++;
+		if (from < 3) {
+			ctx.data.reverifyAll();
+			int total = Blueprint.CHUNKS * Blueprint.CHUNKS;
+			for (int idx = 0; idx < total; idx++) {
+				if (ctx.data.isBuilt(idx)) {
+					ctx.data.requestRepair(idx);
+					requested++;
+				}
 			}
 		}
 		ctx.data.setContentRevision(CONTENT_REVISION);
-		if (requested > 0) {
-			startForcedBuild(ctx);
-		}
-		NuclearStation.LOG.info("Upgrading the station to content revision {}: rebuilding {} chunks (stairwells, control building)",
-			CONTENT_REVISION, requested);
+		NuclearStation.LOG.info("Upgrading the station from content revision {} to {}: {} chunks will be rebuilt as they load",
+			from, CONTENT_REVISION, requested);
 	}
 
 	private static void addChunks(Context ctx, Set<Integer> out, int x0, int z0, int x1, int z1) {
@@ -321,24 +313,24 @@ public final class FacilityManager {
 		}
 		boolean repair = ctx.data.needsRepair(idx);
 		if (repair) {
-			NuclearStation.LOG.info("Rebuilding facility chunk {} (accident damage repair)", pos);
+			NuclearStation.LOG.debug("Rebuilding facility chunk {} (repair or upgrade)", pos);
 		} else if (ctx.data.isBuilt(idx)) {
 			// Recorded as built but the chunk carries no mark: either painted by an older
 			// version, or its blocks were lost (crash before the chunk was saved). Compare
 			// it with the blueprint and repaint it only if it is mostly missing.
-			VerifySink verify = new VerifySink(ctx.level, chunk);
+			VerifySink verify = new VerifySink(ctx.level, chunk, ctx.data.grade());
 			Blueprint.get().paintChunk(verify, ctx.data.originX(), ctx.data.originZ(), ctx.data.grade(), ctx.data.sea(),
 				idx / Blueprint.CHUNKS, idx % Blueprint.CHUNKS);
-			if (verify.mismatchFraction() < 0.3) {
+			if (!verify.needsRepaint()) {
 				markPainted(ctx, chunk);
 				PlantWorldEffects.syncChunk(ctx.level, ctx, pos.x(), pos.z());
 				return false;
 			}
-			NuclearStation.LOG.warn("Facility chunk {} was recorded as built but {}% of its blocks are missing - repainting it",
-				pos, Math.round(verify.mismatchFraction() * 100));
+			NuclearStation.LOG.warn("Facility chunk {} was recorded as built but is incomplete ({}% of blocks missing, {} natural blocks left standing) - repainting it",
+				pos, Math.round(verify.mismatchFraction() * 100), verify.intrusions());
 		} else {
 			long protect = ModConfig.get().facility.protectInhabitedChunksTicks;
-			if (protect > 0 && chunk.getInhabitedTime() > protect) {
+			if (ctx.data.protectExisting() && protect > 0 && chunk.getInhabitedTime() > protect) {
 				ctx.data.markSkipped(idx);
 				NuclearStation.LOG.warn("Facility chunk {} skipped: chunk has {} ticks of player activity (protecting existing builds)",
 					pos, chunk.getInhabitedTime());
@@ -350,6 +342,7 @@ public final class FacilityManager {
 		try {
 			Blueprint.get().paintChunk(sink, ctx.data.originX(), ctx.data.originZ(), ctx.data.grade(), ctx.data.sea(),
 				idx / Blueprint.CHUNKS, idx % Blueprint.CHUNKS);
+			sink.flush();
 		} catch (RuntimeException e) {
 			NuclearStation.LOG.error("Failed to paint facility chunk {} - it will be retried on next load", pos, e);
 			return false;

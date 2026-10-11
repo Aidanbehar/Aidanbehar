@@ -21,6 +21,11 @@ client; **partial**; **not implemented**.
 | Each painted chunk carries its own mark; chunks recorded as built but missing their blocks are rebuilt on load (fixes holes after a crash) | done |
 | Content upgrades for existing worlds (revision 2: stairwells and control building rebuilt once) | done (server-tested: 141 chunks) |
 | No natural mob spawns (including patrols, phantoms, sieges) and no freezing in the station; existing ice melts | done (mixins load; natural spawning needs a player to observe) |
+| Every station chunk rebuilt once on load in 0.3.0 (removes terrain and trees left inside buildings) | done (server-tested: 3926 chunks, 0.7 ms average) |
+| Access audit: every room reachable on foot (stair landings, doors, walkways) | done (`/nps dev audit`; remaining flagged pockets are machine and tank tops) |
+| Hostile mobs kept out of the whole footprint (spawning blocked, intruders removed) | done |
+| Emergency siren network (20 masts, auto/on/off) | done |
+| Meltdown damage scaled by severity; `/nps meltdown force` | done |
 | Station manuals: site guide, control room guide, operating manual on lecterns and in chests | done |
 | Dev options: near spawn, fixed origin, locate, buildall, regenerate, disable | done |
 | Exterior: containment, 4 towers, turbine hall, control/admin, aux, fuel, MSIV house, tanks, water treatment, radwaste, switchyard, GSUs, diesels, CW pump house, ESW, intake/discharge, sea wall, roads, parking, rail spur, warehouses, workshop, fire station, gatehouses, met mast, water tower, fences, tunnels, research wing | done (unverified in client) |

@@ -242,6 +242,22 @@ def build_blocks():
     block_states["warning_beacon"] = {"variants": {"lit=true": {"model": mods["true"]}, "lit=false": {"model": mods["false"]}}}
     item_models["warning_beacon"] = mods["true"]
 
+    # outdoor emergency siren: housing with horns on four sides and a light on top
+    housing = tex("siren_housing", siren_tex(False))
+    horn = tex("siren_horn", siren_horn())
+    mods = {}
+    for act in ("true", "false"):
+        light = tex("siren_light_" + ("on" if act == "true" else "off"), tx.beacon(act == "true", "sl"))
+        mods[act] = model("siren_" + ("on" if act == "true" else "off"), {
+            "parent": "minecraft:block/block", "textures": {"housing": housing, "horn": horn, "light": light, "particle": housing},
+            "elements": [
+                {"from": [5, 0, 5], "to": [11, 6, 11], "faces": {f: {"texture": "#housing"} for f in ("north", "south", "east", "west", "up", "down")}},
+                {"from": [2, 3, 6], "to": [14, 8, 10], "faces": {f: {"texture": "#horn"} for f in ("north", "south", "east", "west", "up", "down")}},
+                {"from": [6, 3, 2], "to": [10, 8, 14], "faces": {f: {"texture": "#horn"} for f in ("north", "south", "east", "west", "up", "down")}},
+                {"from": [6, 8, 6], "to": [10, 12, 10], "faces": {f: {"texture": "#light"} for f in ("north", "south", "east", "west", "up")}}]})
+    block_states["siren"] = {"variants": {"active=true": {"model": mods["true"]}, "active=false": {"model": mods["false"]}}}
+    item_models["siren"] = mods["false"]
+
     # console and panel blocks
     console_side = tx.machine_side((70, 84, 90), "con", panel=False)
     facing("control_console", console_side, tx.front_face((70, 84, 90), "conf", "console"),
@@ -324,6 +340,23 @@ def build_blocks():
     simple("galena_ore", tx.ore("stone", (120, 124, 136), (180, 186, 200), "ga"))
     simple("resonite_ore", tx.ore("deepslate", (90, 220, 210), (180, 255, 250), "re"))
     simple("voidstone", tx.voidstone("vo"))
+
+
+def siren_tex(_):
+    a = tx.solid((150, 154, 160))
+    tx.noise(a, "siren", 3)
+    tx.bevel(a)
+    tx.rivets(a, [(2, 2), (13, 2), (2, 13), (13, 13)], (200, 200, 205))
+    return a
+
+
+def siren_horn():
+    a = tx.solid((200, 200, 196))
+    tx.noise(a, "horn", 3)
+    for i in range(0, 16, 3):
+        a[i, :, :3] *= 0.8
+    tx.rect(a, 5, 5, 10, 10, (40, 40, 44))
+    return a
 
 
 def diamond_plate():
@@ -469,7 +502,7 @@ NAME_OVERRIDES = {
     "exp_coil": "Field Coil", "exp_emitter": "Beam Emitter", "exp_console": "Experimental Chamber Console", "decon_shower": "Decontamination Shower",
     "rcp": "Reactor Coolant Pump", "radiferous_barite_ore": "Radiferous Barite Ore", "uranium_dioxide_pellet": "Uranium Dioxide Fuel Pellet",
     "voidstone": "Voidstone", "local_station": "Local Control Station", "scram_button": "Manual Reactor Trip Pushbutton",
-    "control_console": "Main Control Console", "annunciator_panel": "Annunciator Panel", "control_panel": "Control Board Section",
+    "control_console": "Main Control Console", "siren": "Emergency Siren", "annunciator_panel": "Annunciator Panel", "control_panel": "Control Board Section",
     "facility_lamp": "Facility Light Fitting", "emergency_lamp": "Emergency Light", "cherenkov_glow": "Cherenkov Glow",
     "spent_fuel_rack": "Spent Fuel Storage Rack", "geiger_counter": "Geiger Counter", "dosimeter": "Electronic Personal Dosimeter",
     "survey_meter": "Contamination Survey Meter", "decon_kit": "Decontamination Kit", "lead_apron": "Lead Apron",

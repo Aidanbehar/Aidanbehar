@@ -600,6 +600,12 @@ public final class ControlRoomScreen extends Screen {
 		values(g, s, x + 208, vy + 16, 120, Readout.CONT_PRESSURE, Readout.CONT_TEMP, Readout.CONT_HYDROGEN, Readout.CONT_INTEGRITY,
 			Readout.CONT_DOSE, Readout.AIRBORNE, Readout.RELEASE_RATE, Readout.OXIDATION, Readout.CORE_DAMAGE, Readout.CORE_MELT);
 		channels(g, s, SensorId.CONT_PRESSURE, x, vy + 126);
+		// site emergency sirens
+		int sy = vy + 150;
+		lamp(g, x, sy + 2, s.flag(PlantSnapshot.F_SIREN), RED, "SITE SIRENS");
+		cmd(g, x + 90, sy, 56, "AUTO", PlantCommand.SIREN_AUTO);
+		button(g, x + 148, sy, 56, "SOUND", RED, () -> send(PlantCommand.SIREN_ON));
+		cmd(g, x + 206, sy, 56, "SILENCE", PlantCommand.SIREN_OFF);
 		if (s.flag(PlantSnapshot.F_VESSEL_FAILED)) {
 			text(g, "REACTOR VESSEL FAILURE INDICATED", x + 220, vy + 128, frame % 20 < 10 ? RED : AMBER);
 		}

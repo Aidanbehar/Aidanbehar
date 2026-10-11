@@ -208,6 +208,7 @@ final class Infrastructure {
 			new Seg("BRANCH TO RESEARCH", 120, 270, 128, 481),
 			new Seg("BRANCH TO TOWERS", 747, 404, 860, 412),
 			new Seg("BRANCH TO PUMP HOUSE", 460, 829, 468, 845),
+			new Seg("BRANCH TO ESW", 330, 821, 387, 829),
 			new Seg("BRANCH TO ESW", 330, 829, 338, 845));
 
 		static final List<Shaft> SHAFTS = List.of(

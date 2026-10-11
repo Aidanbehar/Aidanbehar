@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "active=true": {
+      "model": "nuclearstation:block/siren_on"
+    },
+    "active=false": {
+      "model": "nuclearstation:block/siren_off"
+    }
+  }
+}

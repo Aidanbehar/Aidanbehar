@@ -45,6 +45,7 @@ public final class NuclearStation implements ModInitializer {
 		Geology.register();
 		ModNetwork.register();
 		FacilityManager.register();
+		dev.aidanbehar.nuclearstation.facility.MobControl.register();
 		PlantService.register();
 		RadiationManager.register();
 		ExperimentalSystems.register();

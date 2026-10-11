@@ -30,6 +30,11 @@ public final class FacilityData extends SavedData {
 	private int epoch = 1;
 	/** Blueprint content revision the built chunks were painted with (see FacilityManager.upgrade). */
 	private int contentRevision = 1;
+	/**
+	 * Whether chunks with player activity are protected from painting. Only needed when the
+	 * site may overlap terrain that existed (and may hold builds) before it was chosen.
+	 */
+	private boolean protectExisting = true;
 	private final BitSet built = new BitSet(Blueprint.CHUNKS * Blueprint.CHUNKS);
 	private final BitSet skipped = new BitSet(Blueprint.CHUNKS * Blueprint.CHUNKS);
 	/** Chunks to be painted again (repairing accident damage), even if already marked. */
@@ -56,6 +61,26 @@ public final class FacilityData extends SavedData {
 		this.grade = grade;
 		this.sea = sea;
 		this.selectionNote = note;
+		this.protectExisting = !verifiedUntouched(note);
+		setDirty();
+	}
+
+	/** A coastal search at strictness 0-2 only accepts sites with no previously generated chunks. */
+	static boolean verifiedUntouched(String note) {
+		var m = java.util.regex.Pattern.compile("^coastal search, strictness ([0-9])").matcher(note);
+		return m.find() && Integer.parseInt(m.group(1)) <= 2;
+	}
+
+	public boolean protectExisting() {
+		return protectExisting;
+	}
+
+	/** Bumps the epoch without forgetting progress: every chunk is re-verified when it next loads. */
+	public void reverifyAll() {
+		epoch++;
+		if (!protectExisting) {
+			skipped.clear();
+		}
 		setDirty();
 	}
 
@@ -166,6 +191,7 @@ public final class FacilityData extends SavedData {
 		d.selectionNote = tag.getStringOr("note", "");
 		d.epoch = tag.getIntOr("epoch", 1);
 		d.contentRevision = tag.getIntOr("contentRevision", 1);
+		d.protectExisting = tag.getBooleanOr("protectExisting", !verifiedUntouched(d.selectionNote));
 		tag.getLongArray("built").ifPresent(a -> d.built.or(BitSet.valueOf(a)));
 		tag.getLongArray("skipped").ifPresent(a -> d.skipped.or(BitSet.valueOf(a)));
 		tag.getLongArray("repair").ifPresent(a -> d.repair.or(BitSet.valueOf(a)));
@@ -183,6 +209,7 @@ public final class FacilityData extends SavedData {
 		tag.putString("note", selectionNote);
 		tag.putInt("epoch", epoch);
 		tag.putInt("contentRevision", contentRevision);
+		tag.putBoolean("protectExisting", protectExisting);
 		tag.putLongArray("built", built.toLongArray());
 		tag.putLongArray("skipped", skipped.toLongArray());
 		tag.putLongArray("repair", repair.toLongArray());

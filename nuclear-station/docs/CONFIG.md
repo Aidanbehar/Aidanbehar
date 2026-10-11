@@ -10,7 +10,8 @@ take their default). Changes need a restart.
 | `searchMinDistance` | `900` | Minimum distance of the site centre from world spawn. |
 | `searchMaxDistance` | `6000` | Search radius. |
 | `generationBudgetMs` | `20` | Server-thread time per tick spent painting station chunks. |
-| `protectInhabitedChunksTicks` | `12000` | Chunks with more inhabited time than this (10 min) are not overwritten. 0 disables protection. |
+| `protectInhabitedChunksTicks` | `12000` | Chunks with more inhabited time than this (10 min) are not overwritten. 0 disables protection. Applies only to sites chosen on untouched land; on sites the search had to relax onto (strictness 3+), and when a content upgrade rebuilds the station, every station chunk is rebuilt, so terrain never stays inside buildings. |
+| `noHostileMobs` | `true` | No hostile mobs anywhere in the station footprint: natural, spawner, patrol, phantom and siege spawns are blocked, and hostile mobs that walk in are removed (named, leashed and persistent mobs are kept). |
 
 ## simulation
 | Key | Default | Meaning |

@@ -151,7 +151,8 @@ public final class ModNetwork {
 		flags |= m.towersInService() > 0 ? Payloads.Status.F_TOWERS : 0;
 		return new Payloads.Status(ctx.data.originX(), ctx.data.originZ(), ctx.data.grade(), ctx.data.sea(),
 			(float) m.turbineSpeed(), (float) (m.thermalPowerMW() / PlantModel.P_NOM), (float) m.towerHeatRejection(),
-			(float) m.steamAdvFlow(), (float) m.cwFlow(), flags, m.alarms().worstActivePriority());
+			(float) m.steamAdvFlow(), (float) m.cwFlow(), flags, m.alarms().worstActivePriority(),
+			(float) PlantService.data(ctx.level.getServer()).severity());
 	}
 
 	/** True if a player currently has the control-room interface open. */

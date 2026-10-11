@@ -97,6 +97,9 @@ public final class PlantService {
 			PlantWorldEffects.handle(overworld, ctx, data, event);
 		}
 		data.addPendingRelease(model.drainEnvironmentalRelease());
+		if (data.updateSeverity(model)) {
+			PlantWorldEffects.redrawDamage(overworld, ctx, data);
+		}
 		if (tick % RELEASE_DEPOSIT_INTERVAL == 0) {
 			double release = data.takePendingRelease();
 			if (release > 1e-12) {

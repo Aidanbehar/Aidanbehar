@@ -55,6 +55,7 @@
     "nuclearstation:facility_lamp",
     "nuclearstation:emergency_lamp",
     "nuclearstation:warning_beacon",
+    "nuclearstation:siren",
     "nuclearstation:control_console",
     "nuclearstation:control_panel",
     "nuclearstation:annunciator_panel",

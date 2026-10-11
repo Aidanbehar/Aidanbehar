@@ -108,6 +108,23 @@ time faster (default x60, up to x300). What follows comes from the physics:
    or over-pressure can fail the dome. Radioactivity leaks to the environment and settles
    downwind as ground contamination.
 
+### Severity and what you see
+The damage in the world follows the severity of the accident and grows as it gets worse:
+
+| Severity | Seen in the world |
+|---|---|
+| Contained core damage | Smoke and steam above the dome, corium and debris inside the containment, radiation alarms; nothing outside is damaged |
+| Vessel failure | Corium in the reactor cavity, heavier smoke, rising dose rates around the reactor building |
+| Containment failure | A ragged hole torn in the dome (larger with a larger breach), lava glow and smoke columns visible from far away, contaminated debris thrown up to about 80 blocks, burning wreckage, scorched ground, holes in nearby roofs, and a radioactive plume downwind |
+
+`/nps meltdown force minor|major|catastrophic` jumps straight to one of these outcomes.
+
+### Sirens
+Twenty siren masts stand across the site. In automatic mode (the default) they sound as soon
+as the core is damaged, radioactivity is released, the containment fails or spent fuel is
+damaged, with a red warning light on each mast and a site-wide broadcast. The SAFETY tab of the
+control room has AUTO / SOUND / SILENCE buttons; `/nps siren auto|on|off` does the same.
+
 Repairing a diesel, restoring feedwater or injecting water before the vessel fails can
 still save the plant. `/nps status` shows each stage. `/nps dev restore confirm` resets the
 plant, rebuilds the reactor area and clears ground contamination afterwards.

@@ -96,7 +96,6 @@ final class ContainmentBuilding extends Component {
 				p.fill(cx + dx, g + 18, cz + dz, cx + dx, g + 23, cz + dz, Pal.CRDM);
 			}
 		}
-		p.fill(cx - 3, g + 24, cz - 3, cx + 3, g + 24, cz + 3, Pal.GRATING);
 		// incore instrument guide tubes in the cavity below the vessel
 		for (int dx = -2; dx <= 2; dx += 2) {
 			p.fill(cx + dx, g - 19, cz, cx + dx, g - 15, cz, Pal.CHAIN);
@@ -104,9 +103,16 @@ final class ContainmentBuilding extends Component {
 		p.floor(cx - 6, cz - 6, cx + 6, cz + 6, g - 20, Pal.LINER);
 		// refuelling cavity walls above the shield, open to the operating floor
 		p.walls(cx - 8, cz - 8, cx + 8, cz + 8, g + 21, g + 28, Pal.LINER);
-		p.fill(cx - 7, g + 21, cz - 7, cx + 7, g + 28, cz + 7, Pal.AIR);
+		p.fill(cx - 7, g + 28, cz - 7, cx + 7, g + 28, cz + 7, Pal.AIR);
+		// the cavity is kept flooded: sealed liner floor (the drive mechanisms pass through it)
+		// and shielding water up to one block below the rim
 		p.fill(cx - 7, g + 20, cz - 7, cx + 7, g + 20, cz + 7, Pal.LINER);
-		p.cylinder(cx, cz, 6.5, g + 20, g + 20, Pal.AIR);
+		p.fill(cx - 7, g + 21, cz - 7, cx + 7, g + 27, cz + 7, Pal.WATER);
+		for (int dx = -2; dx <= 2; dx += 2) {
+			for (int dz = -2; dz <= 2; dz += 2) {
+				p.fill(cx + dx, g + 18, cz + dz, cx + dx, g + 23, cz + dz, Pal.CRDM);
+			}
+		}
 		k.railing(cx - 9, cz - 9, cx + 9, cz - 9, g + 29);
 		k.railing(cx - 9, cz + 9, cx + 9, cz + 9, g + 29);
 		k.railing(cx - 9, cz - 9, cx - 9, cz + 9, g + 29);
@@ -287,9 +293,6 @@ final class ContainmentBuilding extends Component {
 		k.stairCore(cx - 40, cz - len / 2, floors, Pal.CONCRETE);
 		k.stairCore(cx + 3, cz - 40, floors, Pal.CONCRETE);
 		for (int fl : floors) {
-			// openings from the stair wells onto each level
-			p.fill(cx - 36, fl + 1, cz - 1, cx - 36, fl + 2, cz + 1, Pal.AIR);
-			p.fill(cx + 2, fl + 1, cz - 31, cx + 2, fl + 2, cz - 29, Pal.AIR);
 			k.label(cx - 35, fl + 3, cz - 2, Direction.EAST, DyeColor.WHITE, "LEVEL", fl - g >= 0 ? "EL +" + (fl - g) : "EL " + (fl - g));
 		}
 

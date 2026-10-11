@@ -82,6 +82,13 @@ final class ControlBuilding {
 			k.lamps(x0 + 1, z0 + 1, x1 - 1, z1 - 1, gr + 6, 8);
 			k.doorway(x0, gr + 1, mid, Direction.EAST, true);
 			k.doorway(x1, gr + 1, mid, Direction.WEST, true);
+			// the entrance corridor connects both entrances to the rooms north and south of it
+			k.doorway(x0 + 1, gr + 1, mid, Direction.EAST, false);
+			k.doorway(x1 - 1, gr + 1, mid, Direction.WEST, false);
+			for (int x : new int[] {x0 + 24, (x0 + x1) / 2, x1 - 24}) {
+				k.doorway(x, gr + 1, mid - 4, Direction.NORTH, true);
+				k.doorway(x, gr + 1, mid + 4, Direction.SOUTH, true);
+			}
 			// ---------------------------------------------------------------- control room level
 			int cr = g + CONTROL;
 			p.floor(x0 + 1, z0 + 1, x1 - 1, z1 - 1, cr, Pal.LAB_FLOOR);
@@ -152,6 +159,8 @@ final class ControlBuilding {
 			k.sign(mx - 2, cr + 3, cz0 - 2, SignKind.RESTRICTED, Direction.NORTH);
 			// visitors' gallery behind glass and the technical support centre
 			p.fill(cx0 + 30, cr + 1, cz0 - 1, cx1 - 30, cr + 4, cz0 - 1, Pal.GLASS);
+			p.fill(mx - 1, cr + 1, cz0 - 1, mx + 1, cr + 3, cz0 - 1, Pal.WALL);
+			k.doorway(mx, cr + 1, cz0 - 1, Direction.SOUTH, true);
 			p.floor(x0 + 1, z0 + 1, x1 - 1, cz0 - 2, cr, Pal.CARPET);
 			k.lamps(x0 + 1, z0 + 1, x1 - 1, cz0 - 2, cr + 6, 6);
 			int tsc0 = x0 + 2;
@@ -166,12 +175,14 @@ final class ControlBuilding {
 			k.lectern(tsc0 + 14, cr + 1, cz1 - 5, Direction.WEST, Handbooks.siteGuide());
 			k.itemChest(tsc0 + 14, cr + 1, cz1 - 8, Direction.WEST, Handbooks.allManuals());
 			k.doorway(cx0 - 2, cr + 1, cz0 + 4, Direction.EAST, true);
+			k.doorway(cx0 - 1, cr + 1, cz0 + 4, Direction.EAST, false);
 			k.label(tsc0 + 2, cr + 3, cz0 + 1, Direction.SOUTH, DyeColor.BLACK, "TECHNICAL", "SUPPORT", "CENTRE");
 			k.lamps(tsc0 + 1, cz0 + 1, cx0 - 3, cz1 - 1, cr + 5, 5);
 			p.walls(cx1 + 2, cz0, x1 - 2, cz1, cr + 1, cr + 6, Pal.WALL);
 			p.fill(cx1 + 3, cr + 1, cz0 + 1, x1 - 3, cr + 5, cz1 - 1, Pal.AIR);
 			k.breakRoom(cx1 + 3, cz0 + 1, x1 - 3, cz1 - 1, cr);
 			k.doorway(cx1 + 2, cr + 1, cz0 + 4, Direction.WEST, true);
+			k.doorway(cx1 + 1, cr + 1, cz0 + 4, Direction.WEST, false);
 			k.label(x1 - 4, cr + 3, cz0 + 1, Direction.SOUTH, DyeColor.BLACK, "CREW ROOM");
 			k.lamps(cx1 + 3, cz0 + 1, x1 - 3, cz1 - 1, cr + 5, 5);
 			// ---------------------------------------------------------------- relay room: four separated protection channels
@@ -204,9 +215,6 @@ final class ControlBuilding {
 			int[] floors = {g - 14, g + BASEMENT, g + GROUND, g + CONTROL, g + RELAY};
 			int len = Kit.stairCoreLength(floors);
 			k.stairCore(x0 + 39, z0 + 2 + 0, floors, Pal.CONCRETE);
-			for (int fl : floors) {
-				p.fill(x0 + 43, fl + 1, z0 + 2 + len / 2 - 1, x0 + 43, fl + 2, z0 + 2 + len / 2, Pal.AIR);
-			}
 			k.ladder(x1 - 3, g + RELAY + 1, g + ROOF - 1, z0 + 2, Direction.SOUTH);
 			p.set(x1 - 3, g + ROOF, z0 + 2, Pal.AIR);
 			// ---------------------------------------------------------------- roof: HVAC and the site siren
@@ -315,9 +323,6 @@ final class ControlBuilding {
 			int[] floors = {g, g + 6, g + 12, g + 18};
 			int len = Kit.stairCoreLength(floors);
 			k.stairCore(mid - 2, zEnd - len - 1, floors, Pal.WALL);
-			for (int fl : floors) {
-				p.fill(mid - 3, fl + 1, zEnd - len / 2 - 2, mid - 3, fl + 2, zEnd - len / 2 - 1, Pal.AIR);
-			}
 			for (int x = x0 + 6; x < x1 - 6; x += 18) {
 				p.fill(x, g + roof + 1, z0 + 10, x + 4, g + roof + 2, z0 + 14, Pal.DUCT);
 			}

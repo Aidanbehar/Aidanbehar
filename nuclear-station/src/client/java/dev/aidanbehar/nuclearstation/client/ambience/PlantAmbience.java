@@ -73,9 +73,7 @@ public final class PlantAmbience {
 			s -> s.flag(Payloads.Status.F_HORN) ? 0.8 : 0, one));
 		SOURCES.add(new Source(ModSounds.ALARM_HORN, (SiteLayout.TH_X0 + SiteLayout.TH_X1) / 2.0, 10, SiteLayout.TH_AXIS_Z, 90,
 			s -> s.flag(Payloads.Status.F_HORN) && s.alarmPriority() == 1 ? 0.6 : 0, one));
-		// site emergency siren on core damage or an off-site release
-		SOURCES.add(new Source(ModSounds.ALARM_SIREN, (SiteLayout.ADMIN_X0 + SiteLayout.ADMIN_X1) / 2.0, 30, (SiteLayout.ADMIN_Z0 + SiteLayout.ADMIN_Z1) / 2.0,
-			500, s -> s.flag(Payloads.Status.F_RELEASE) || s.flag(Payloads.Status.F_CORE_DAMAGE) ? 1 : 0, one));
+		// (site sirens are real blocks; the server plays them from each mast)
 	}
 
 	private PlantAmbience() {
@@ -223,12 +221,29 @@ public final class PlantAmbience {
 				level.addParticle(ParticleTypes.WHITE_SMOKE, outfall.x, outfall.y + 0.2, outfall.z, 0, 0.02, 0);
 			}
 		}
-		// radioactive release: dark plume above containment
-		if (s.flag(Payloads.Status.F_RELEASE) || s.flag(Payloads.Status.F_BREACH)) {
+		// severe accident: smoke from the containment scaled with the severity, a tall column
+		// from the breach, and the glow of molten core in the cavity
+		double sev = s.severity();
+		if (sev > 0.02 || s.flag(Payloads.Status.F_RELEASE) || s.flag(Payloads.Status.F_BREACH)) {
 			Vec3 dome = world(s, SiteLayout.CONT_X, 80, SiteLayout.CONT_Z);
-			if (dome.distanceToSqr(me) < 500 * 500) {
-				level.addAlwaysVisibleParticle(ParticleTypes.LARGE_SMOKE, true, dome.x + (r.nextDouble() - 0.5) * 20, dome.y, dome.z + (r.nextDouble() - 0.5) * 20,
-					0.05, 0.15, 0.02);
+			if (dome.distanceToSqr(me) < 900 * 900) {
+				int n = 1 + (int) (sev * 8);
+				double spread = 8 + 22 * sev;
+				for (int i = 0; i < n; i++) {
+					level.addAlwaysVisibleParticle(sev > 0.5 ? ParticleTypes.CAMPFIRE_SIGNAL_SMOKE : ParticleTypes.LARGE_SMOKE, true,
+						dome.x + (r.nextDouble() - 0.5) * spread, dome.y + r.nextDouble() * 10, dome.z + (r.nextDouble() - 0.5) * spread,
+						0.03, 0.08 + 0.12 * sev, 0.02);
+				}
+				if (s.flag(Payloads.Status.F_BREACH)) {
+					Vec3 breach = world(s, SiteLayout.CONT_X - 18, 72, SiteLayout.CONT_Z + 14);
+					for (int i = 0; i < 2 + (int) (sev * 6); i++) {
+						level.addAlwaysVisibleParticle(ParticleTypes.CAMPFIRE_SIGNAL_SMOKE, true, breach.x + (r.nextDouble() - 0.5) * 12,
+							breach.y + r.nextDouble() * 6, breach.z + (r.nextDouble() - 0.5) * 12, 0.04, 0.2 + 0.1 * sev, 0.02);
+					}
+					if (sev > 0.6 && r.nextInt(3) == 0) {
+						level.addAlwaysVisibleParticle(ParticleTypes.LAVA, true, breach.x + (r.nextDouble() - 0.5) * 8, breach.y, breach.z + (r.nextDouble() - 0.5) * 8, 0, 0, 0);
+					}
+				}
 			}
 		}
 		// spent fuel pool boiling

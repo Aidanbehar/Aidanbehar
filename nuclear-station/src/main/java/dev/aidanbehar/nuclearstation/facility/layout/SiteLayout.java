@@ -127,6 +127,7 @@ public final class SiteLayout {
 		list.add(new ResearchWing());
 		list.addAll(Infrastructure.tunnels());
 		list.addAll(Infrastructure.security());
+		list.add(new SirenNetwork(list));
 		return list;
 	}
 

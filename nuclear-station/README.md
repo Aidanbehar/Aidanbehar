@@ -80,12 +80,15 @@ for the version decisions and [docs/PROGRESS.md](docs/PROGRESS.md) for what is c
 | `/nps generation` | gamemaster | Generation progress and performance |
 | `/nps generation buildall` | gamemaster | Build every station chunk now (async) |
 | `/nps meltdown` / `/nps meltdown confirm [speed]` | gamemaster | Start a real core meltdown (extended station blackout); plant time runs faster (default x60) until the vessel fails |
+| `/nps meltdown force minor` / `major` / `catastrophic` | gamemaster | Jump straight to the aftermath of a meltdown of the chosen severity (minor: core damage held inside the containment; major: vessel failure; catastrophic: hydrogen explosion, containment failure, large release) |
+| `/nps siren` / `/nps siren auto` / `on` / `off` | gamemaster | Site siren status; automatic (default: sound on core damage, release or containment failure), forced on, or silenced |
 | `/nps timescale <1-300>` | gamemaster | Run plant time faster or back to real time |
 | `/nps dev restore confirm` | gamemaster | After an accident: reset the plant, rebuild the damaged reactor area, clear ground contamination |
 | `/nps dev clearmobs` | gamemaster | Remove hostile mobs already inside the station |
 | `/nps dev fail <equipment>` / `repair <equipment>` / `repair all` | gamemaster | Inject or clear equipment failures (type the command alone for the list of equipment names, e.g. `edg_a`, `rcp_b`, `tdafw`) |
 | `/nps dev gridloss` | gamemaster | Loss of off-site power |
 | `/nps dev loca small` / `medium` / `large` / `<0..1>` | gamemaster | Break in the reactor coolant system (fraction of a large break) |
+| `/nps dev audit` | gamemaster | Check that every room of the station can be walked into; writes `config/nuclearstation-audit.txt` and floor plans |
 | `/nps dev parts` | gamemaster | Give one of each spare part |
 | `/nps dev resetplant confirm` | gamemaster | Reset the plant to full power steady state |
 | `/nps dev cleardose` | gamemaster | Clear your dose record |

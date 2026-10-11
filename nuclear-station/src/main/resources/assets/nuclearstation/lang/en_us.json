@@ -56,6 +56,7 @@
   "block.nuclearstation.facility_lamp": "Facility Light Fitting",
   "block.nuclearstation.emergency_lamp": "Emergency Light",
   "block.nuclearstation.warning_beacon": "Warning Beacon",
+  "block.nuclearstation.siren": "Emergency Siren",
   "block.nuclearstation.control_console": "Main Control Console",
   "block.nuclearstation.control_panel": "Control Board Section",
   "block.nuclearstation.annunciator_panel": "Annunciator Panel",

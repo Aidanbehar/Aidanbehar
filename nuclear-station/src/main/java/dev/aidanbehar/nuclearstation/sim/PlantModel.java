@@ -255,6 +255,8 @@ public final class PlantModel {
 	double sfpDamage;
 	/** Volatile inventory already released from damaged pool fuel (fraction of a core's worth). */
 	double sfpReleased;
+	/** Site siren system: 0 automatic, 1 sounding (manual), 2 silenced (manual). */
+	int sirenMode;
 	boolean sfpMakeup;
 	boolean sfpBoilingAnnounced;
 
@@ -1958,6 +1960,24 @@ public final class PlantModel {
 		return sfpLevel;
 	}
 
+	/**
+	 * True while the site sirens sound. In automatic mode they sound for a site emergency:
+	 * core damage, an off-site release, containment failure or a severely damaged spent fuel pool.
+	 */
+	public boolean sirensSounding() {
+		if (sirenMode == 1) {
+			return true;
+		}
+		if (sirenMode == 2) {
+			return false;
+		}
+		return coreDamage > 0.01 || releaseRate > 0 && totalEnvironmentalRelease > 1e-6 || containmentIntegrity < 0.5 || sfpDamage > 0.05;
+	}
+
+	public int sirenMode() {
+		return sirenMode;
+	}
+
 	public double sfpDamage() {
 		return sfpDamage;
 	}
@@ -2139,6 +2159,7 @@ public final class PlantModel {
 		s.putDouble("sfpLevel", sfpLevel);
 		s.putDouble("sfpDamage", sfpDamage);
 		s.putDouble("sfpReleased", sfpReleased);
+		s.putDouble("sirenMode", sirenMode);
 		s.putBoolean("sfpMakeup", sfpMakeup);
 		s.putDouble("cwFlow", cwFlow);
 		s.putDouble("containmentTemp", containmentTemp);
@@ -2266,6 +2287,7 @@ public final class PlantModel {
 		sfpLevel = s.getDouble("sfpLevel", 1);
 		sfpDamage = s.getDouble("sfpDamage", 0);
 		sfpReleased = s.getDouble("sfpReleased", 0);
+		sirenMode = (int) s.getDouble("sirenMode", 0);
 		sfpMakeup = s.getBoolean("sfpMakeup", false);
 		cwFlow = s.getDouble("cwFlow", cwFlow);
 		containmentTemp = s.getDouble("containmentTemp", containmentTemp);

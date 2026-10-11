@@ -52,6 +52,18 @@ Version 0.2.0 additions (server):
 | `/nps meltdown confirm 300` | core damage 100 %, vessel failure, corium in the cavity |
 | `/nps dev restore confirm` | plant back at 100 %, corium removed, vessel rebuilt (195 chunks) |
 
+Version 0.3.0 additions (server):
+| Check | Result |
+|---|---|
+| Upgrade 2 -> 3: every built chunk re-verified and rebuilt once | pass (3926 chunks, 0.7 ms average, about 6,000 block writes in total, no errors) |
+| Access audit (`/nps dev audit`) | 662 unreachable pockets before the fixes, 90 after; all remaining are machinery, tank and roof tops (checked on the floor plans) |
+| Refuelling cavity flooded | pass (block checks) |
+| Hostile mobs | zombies summoned inside the footprint removed within 5 s; one outside kept |
+| Siren network | 20 masts; mode persists across restart; sound on forced meltdown, quiet after restore |
+| `/nps meltdown force minor` | core damage 50 %, containment intact, no debris or fires outside (area force-loaded and counted) |
+| `/nps meltdown force catastrophic` | containment 8 %, release 22 %, dome breached, 663 debris blocks and 153 fires outside |
+| `/nps dev restore confirm` after catastrophic | plant 100 %, sirens quiet, 0 debris, 0 fires, 0 corium within 150 blocks |
+
 Note: a vanilla server pauses after 60 s with no players (`pause-when-empty-seconds`);
 set it to -1 for unattended testing.
 

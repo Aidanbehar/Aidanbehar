@@ -40,6 +40,11 @@ public final class ModConfig {
 		 * territory and are not overwritten if they lie inside the footprint.
 		 */
 		public long protectInhabitedChunksTicks = 12000;
+		/**
+		 * Keep the whole station free of hostile mobs: no natural, spawner or event spawns
+		 * inside the footprint, and hostile mobs that wander in are removed.
+		 */
+		public boolean noHostileMobs = true;
 	}
 
 	public static final class Simulation {
