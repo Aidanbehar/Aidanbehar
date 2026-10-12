@@ -268,14 +268,14 @@ _TOKENS = {
               FROM1="- 8", FROML="- 7", FROMR="- 9",
               R3="RANK3", R7="RANK7", R8="RANK8", PAU="PAW",
               KEEP="12", CRU="3", CK="1", CQ="2", SIDE="",
-              ZU="ZW", ZT="ZB", WHITE="True", NWHITE="False", EPSH=">> 8"),
+              ZU="ZW", ZT="ZB", WHITE="True", OSIDE=" ^ ZBLACK", NWHITE="False", EPSH=">> 8"),
     "B": dict(C="B", O="W", PUSH1=">> 8", BACK1="<< 8", BACK2="<< 16",
               CAPL="((pp & NOT_A) >> 9)", BACKL="<< 9",
               CAPR="((pp & NOT_H) >> 7)", BACKR="<< 7",
               FROM1="+ 8", FROML="+ 9", FROMR="+ 7",
               R3="RANK6", R7="RANK2", R8="RANK1", PAU="PAB",
               KEEP="3", CRU="12", CK="4", CQ="8", SIDE=" ^ ZBLACK",
-              ZU="ZB", ZT="ZW", WHITE="False", NWHITE="True", EPSH="<< 8"),
+              ZU="ZB", ZT="ZW", WHITE="False", OSIDE="", NWHITE="True", EPSH="<< 8"),
 }
 
 _CAP = """\
@@ -326,8 +326,8 @@ def ${NAME}_$C(uP, uN, uD, uO, uK, uA, tP, tN, tD, tO, tK, tA, cr, ep, h, d):
         return v  ##P
     total = 0  ##P
     out = []  ##L
-    d1 = d - 1  ##P
-    f = ${CNT}_$O if d1 == 1 else ${NAME}_$O  ##P
+    d1 = d - 1  ##PG
+    f = ${NAME2}_$O if d1 == 2 else ${NAME}_$O  ##PG
 $PROLOGUE
     if ep:
         h0 = h ^ ZEP[(ep.bit_length() - 1) & 7]
@@ -544,12 +544,6 @@ _PAWNCAP_ONE = """\
 _CNT = """\
 def ${CNT}_$C(uP, uN, uD, uO, uK, uA, tP, tN, tD, tO, tK, tA, cr, ep, h, d):
     STATS[0] += 1  ##S
-    key = h$SIDE  ##P
-    STATS[1] += 1  ##S
-    n = T1.get(key)  ##P
-    if n is not None:  ##P
-        STATS[2] += 1  ##S
-        return n  ##P
 $PROLOGUE
     n = 0
     if not chk & (chk - 1):
@@ -632,7 +626,7 @@ $PROLOGUE
             n += 1
     if len(T1) >= CAP1:  ##P
         T1.clear()  ##P
-    T1[key] = n  ##P
+    T1[h$SIDE] = n  ##P
     return n
 """
 
@@ -641,11 +635,27 @@ _MOVE_RE = re.compile(r"^(\s*)total \+= f\((.*), d1\)  ##M (.*)$")
 _TAG_RE = re.compile(r"^(.*?)  ##([A-Z]+)$")
 
 
-def _render(template, color, variant, name, cnt):
-    """Specialise a template for a colour and a variant ('P', 'PS', 'L')."""
+def _split_args(s):
+    out, depth, cur = [], 0, ""
+    for ch in s:
+        if ch == "," and depth == 0:
+            out.append(cur.strip())
+            cur = ""
+            continue
+        depth += ch in "([" and 1 or ch in ")]" and -1 or 0
+        cur += ch
+    out.append(cur.strip())
+    return out
+
+
+def _render(template, color, variant, names):
+    """Specialise a template for a colour and a variant.
+
+    variant letters: P perft (with TT), G interior node, Q node whose
+    children are leaves (probes the leaf TT inline, then bulk counts),
+    S statistics counters, L collect children instead of counting."""
     tok = dict(_TOKENS[color])
-    tok["NAME"] = name
-    tok["CNT"] = cnt
+    tok.update(names)
     pawncaps = []
     for side in ("L", "R"):
         pawncaps.append(_PAWNCAP_ONE
@@ -671,11 +681,24 @@ def _render(template, color, variant, name, cnt):
     for line in src.split("\n"):
         m = _MOVE_RE.match(line)
         if m:
+            ind = m.group(1)
             if "L" in variant:
-                line = "%sout.append((%s, (%s)))" % (m.group(1), m.group(3), m.group(2))
+                lines.append("%sout.append((%s, (%s)))" % (ind, m.group(3), m.group(2)))
+            elif "Q" in variant:
+                a = _split_args(m.group(2))
+                assert len(a) == 15, a
+                lines.append("%shc = %s" % (ind, a[14]))
+                if "S" in variant:
+                    lines.append("%sSTATS[1] += 1" % ind)
+                lines.append("%sv = T1.get(hc%s)" % (ind, tok["OSIDE"]))
+                lines.append("%sif v is None:" % ind)
+                lines.append("%s    v = %s_%s(%s, hc, 1)" % (ind, tok["CNT"], tok["O"], ", ".join(a[:14])))
+                if "S" in variant:
+                    lines.append("%selse:" % ind)
+                    lines.append("%s    STATS[2] += 1" % ind)
+                lines.append("%stotal += v" % ind)
             else:
-                line = "%stotal += f(%s, d1)" % (m.group(1), m.group(2))
-            lines.append(line)
+                lines.append("%stotal += f(%s, d1)" % (ind, m.group(2)))
             continue
         m = _TAG_RE.match(line)
         if m:
@@ -687,17 +710,20 @@ def _render(template, color, variant, name, cnt):
 
 
 def _build_source(stats=False):
-    variant = "PS" if stats else "P"
-    gname, cname = ("sgen", "scnt") if stats else ("gen", "cnt")
+    st = "S" if stats else ""
+    p = "s" if stats else ""
+    names = dict(NAME=p + "gen", NAME2=p + "gen2", CNT=p + "cnt")
     parts = []
     for color in "WB":
-        parts.append(_render(_GEN, color, variant, gname, cname))
-        parts.append(_render(_CNT, color, variant, gname, cname))
+        parts.append(_render(_GEN, color, "PG" + st, names))
+        parts.append(_render(_GEN, color, "PQ" + st, dict(names, NAME=names["NAME2"])))
+        parts.append(_render(_CNT, color, "P" + st, names))
     return "\n\n".join(parts)
 
 
 def _build_collect_source():
-    return "\n\n".join(_render(_GEN, c, "L", "col", "col") for c in "WB")
+    names = dict(NAME="col", NAME2="col", CNT="col")
+    return "\n\n".join(_render(_GEN, c, "L", names) for c in "WB")
 
 
 # Names the generated code may reference; they are bound as closure cells
@@ -716,7 +742,13 @@ def _compile(src, func_names, env):
     factory = "def _factory(%s):\n%s\n    return (%s,)\n" % (
         ", ".join(params), body, ", ".join(func_names))
     ns = {}
-    exec(compile(factory, "<perft-generated>", "exec"), ns)
+    filename = "<perft-generated>"
+    dump = os.environ.get("PERFT_DUMP_DIR")
+    if dump:  # write the generated code out so profilers can show its lines
+        filename = os.path.join(dump, "perft_gen_%s.py" % func_names[0])
+        with open(filename, "w") as fh:
+            fh.write(factory)
+    exec(compile(factory, filename, "exec"), ns)
     return ns["_factory"](*[env[p] for p in params])
 
 
@@ -751,17 +783,18 @@ def clear_tt():
 
 
 CAP1 = 0
-gen_W = gen_B = cnt_W = cnt_B = None
-sgen_W = sgen_B = scnt_W = scnt_B = None
+_HOT = {}
 col_W = col_B = None
 
 
 def _rebuild():
     """(Re)compile the hot functions (CAP1 is baked in as a closure cell)."""
-    global gen_W, gen_B, cnt_W, cnt_B, sgen_W, sgen_B, scnt_W, scnt_B, col_W, col_B
+    global col_W, col_B
     env = globals()
-    gen_W, cnt_W, gen_B, cnt_B = _compile(_build_source(False), ["gen_W", "cnt_W", "gen_B", "cnt_B"], env)
-    sgen_W, scnt_W, sgen_B, scnt_B = _compile(_build_source(True), ["sgen_W", "scnt_W", "sgen_B", "scnt_B"], env)
+    for stats in (False, True):
+        p = "s" if stats else ""
+        names = [p + n + "_" + c for c in "WB" for n in ("gen", "gen2", "cnt")]
+        _HOT.update(zip(names, _compile(_build_source(stats), names, env)))
     col_W, col_B = _compile(_build_collect_source(), ["col_W", "col_B"], env)
 
 
@@ -912,16 +945,12 @@ def legal_moves(pos):
 
 
 def perft(pos, depth, stats=False):
+    """Number of legal move sequences of exactly `depth` plies."""
     stm, a = pos
     if depth <= 0:
         return 1
-    if stats:
-        if depth == 1:
-            return (scnt_W if stm == 0 else scnt_B)(*a, 1)
-        return (sgen_W if stm == 0 else sgen_B)(*a, depth)
-    if depth == 1:
-        return (cnt_W if stm == 0 else cnt_B)(*a, 1)
-    return (gen_W if stm == 0 else gen_B)(*a, depth)
+    name = ("s" if stats else "") + ("cnt", "gen2", "gen")[min(depth, 3) - 1] + "_" + "WB"[stm]
+    return _HOT[name](*a, depth)
 
 
 def expand(roots, plies):
