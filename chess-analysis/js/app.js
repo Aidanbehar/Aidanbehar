@@ -102,6 +102,7 @@ export const app = {
   setMarks(source, marks) { this.markSources.set(source, marks || new Map()); this.renderBoardOverlays(); },
 
   renderBoardOverlays() {
+    if (this.editing) { this.board.set({ arrows: [], marks: new Map() }); return; }
     const arrows = [];
     for (const a of this.arrowSources.values()) arrows.push(...a);
     const marks = new Map();
@@ -453,7 +454,11 @@ function sizeBoard() {
 }
 
 function bindUi() {
-  document.querySelectorAll('.tabs [role=tab]').forEach((t) => t.addEventListener('click', () => app.setView(t.dataset.view)));
+  document.querySelectorAll('.tabs [role=tab]').forEach((t) => t.addEventListener('click', (e) => {
+    app.setView(t.dataset.view);
+    // After a mouse click, give the arrow keys back to move navigation.
+    if (e.detail > 0) t.blur();
+  }));
   $('.tabs').addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
     const tabs = [...document.querySelectorAll('.tabs [role=tab]')];

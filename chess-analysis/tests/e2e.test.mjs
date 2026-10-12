@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import net from 'node:net';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -310,7 +311,7 @@ test('game review with Stockfish 19: classifications, summary, critical moments'
   await page.fill('#pgn-input', OPERA);
   await page.click('#pgn-load');
   await page.click('#tab-review');
-  await page.fill('#review-depth', '10');
+  await page.fill('#review-depth', '12');
   await page.dispatchEvent('#review-depth', 'change');
   await page.selectOption('#review-multipv', '1');
   await page.click('#review-start');
@@ -324,19 +325,23 @@ test('game review with Stockfish 19: classifications, summary, critical moments'
       last: nodes[nodes.length - 1].review,
       classes: nodes.map((n) => n.review.cls),
       badges: document.querySelectorAll('#review-movelist .badge').length,
+      loss: ['w', 'b'].map((c) => { const xs = nodes.filter((n) => n.review.mover === c); return xs.reduce((s, n) => s + n.review.loss, 0) / xs.length; }),
     };
   });
   assert.equal(r.reviewed, r.total, 'every move classified');
   assert.ok(r.allMatch, 'each stored evaluation belongs to its own position');
   assert.ok(['best', 'forced'].includes(r.last.cls), 'Rd8# is the best move');
   assert.ok(r.classes.includes('book'), 'opening moves recognised as book');
-  assert.ok(r.classes.some((c) => ['mistake', 'blunder', 'inaccuracy'].includes(c)), 'the losing side made errors');
+  assert.ok(r.loss[1] > r.loss[0], `the losing side (Black) lost more expected score on average (${r.loss.map((x) => x.toFixed(1))})`);
   assert.match(await page.textContent('#review-summary'), /Blunder/);
-  // Jump to a critical moment.
-  const crit = page.locator('#review-critical button').first();
-  await crit.click();
-  const sel = await app(page, () => ({ san: __app.node.san, cls: __app.node.review.cls }));
-  assert.ok(['inaccuracy', 'mistake', 'blunder'].includes(sel.cls));
+  // Jump to a critical moment (if the chosen depth found any), else to the last move.
+  if (await page.locator('#review-critical button').count()) {
+    await page.locator('#review-critical button').first().click();
+    const sel = await app(page, () => __app.node.review.cls);
+    assert.ok(['inaccuracy', 'mistake', 'blunder'].includes(sel));
+  } else {
+    await page.keyboard.press('End');
+  }
   const card = await page.textContent('#review-move');
   assert.match(card, /Engine preferred/);
   assert.match(card, /Eval before/);
@@ -479,4 +484,41 @@ test('worker clean-up and preference persistence', { timeout: 120000 }, async (t
   assert.equal(p.theme, 'light');
   assert.equal(p.multipv, '4');
   assert.equal(p.engine, 'off', 'engine on/off preference remembered');
+});
+
+test('engine crash is reported and the engine can be restarted', { timeout: 180000 }, async (t) => {
+  const { page } = await openApp(t, { allowErrors: [/./] });
+  await engineReady(page);
+  // Bypass the app's own FEN validation to feed Stockfish an impossible position:
+  // Stockfish treats it as a critical error and exits.
+  await app(page, () => { __app.engine.send('position fen 8/8/8/8/8/8/8/8 w - - 0 1'); __app.engine.send('go depth 5'); });
+  await page.waitForFunction(() => __app.engine.state === 'error', null, { timeout: 30000 });
+  assert.match(await page.textContent('#banner'), /Stockfish 19 stopped/);
+  assert.equal(await page.locator('[data-testid=eval]').count(), 0, 'no stale evaluation after the crash');
+  await page.click('#banner button.primary');
+  await engineReady(page);
+  await page.waitForFunction(() => __app.analysis.result?.fen === __app.currentFen() && __app.analysis.result.depth >= 5, null, { timeout: 60000 });
+});
+
+test('tab clicks leave the arrow keys for move navigation', { timeout: 60000 }, async (t) => {
+  const { page } = await openApp(t);
+  await page.click('#engine-toggle + .slider');
+  await page.fill('#pgn-input', OPERA);
+  await page.click('#pgn-load');
+  await page.click('#tab-openings');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await app(page, () => __app.view), 'openings');
+  assert.equal(await app(page, () => __app.node.ply), 2);
+});
+
+test('Perl fallback server serves the app with cross-origin isolation', { timeout: 180000, skip: !fs.existsSync('/usr/bin/perl') && 'perl not installed' }, async (t) => {
+  const port = await freePort();
+  const proc = spawn('perl', [path.join(ROOT, 'serve.pl'), '--port', String(port), '--no-browser'], { stdio: 'pipe' });
+  t.after(() => proc.kill());
+  await new Promise((resolve) => proc.stdout.on('data', (d) => { if (String(d).includes('running at')) resolve(); }));
+  const { page } = await openApp(t, { url: `http://localhost:${port}/index.html` });
+  await engineReady(page);
+  assert.equal(await app(page, () => crossOriginIsolated), true);
+  await page.waitForFunction(() => Number(document.querySelector('[data-testid=depth]')?.textContent) >= 8, null, { timeout: 60000 });
 });

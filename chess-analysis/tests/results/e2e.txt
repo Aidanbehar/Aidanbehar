@@ -1,23 +1,26 @@
-✔ app loads offline-capable, cross-origin isolated, engine identifies as Stockfish 19 (4328.534174ms)
-✔ board: click and drag moves, SAN move list, legal count, FEN sync, undo/redo, flip, promotion, check (1354.823298ms)
-✔ analysis controls: MultiPV, depth limit, stop, explore line, no stale results while navigating (13054.357426ms)
-✔ FEN and PGN: validation messages, multi-game import, navigation, export (996.438526ms)
-✔ sequence counter in the browser: 8,902 for 3 plies, cross-check with Stockfish, cancel, stale protection (5578.631678ms)
-✔ game review with Stockfish 19: classifications, summary, critical moments (6001.392378ms)
-✔ openings tab identifies the line from the move sequence (959.888129ms)
-✔ position editor: validation and applying a position (1213.497959ms)
-✔ learning center: lesson, rule-verified exercise, quiz, progress, puzzle mode (2469.278428ms)
-✔ missing NNUE file: clear error, no fake analysis, recovery offered (454.388851ms)
-✔ corrupt NNUE file is detected by its SHA-256 (894.383684ms)
-✔ missing engine script: reported as a missing file (1483.989603ms)
-✔ missing opening database: useful error instead of fake recognition (454.418503ms)
-✔ without cross-origin isolation the app explains how to start it and still works without the engine (529.647778ms)
-✔ worker clean-up and preference persistence (4223.496023ms)
-ℹ tests 15
+✔ app loads offline-capable, cross-origin isolated, engine identifies as Stockfish 19 (4152.42008ms)
+✔ board: click and drag moves, SAN move list, legal count, FEN sync, undo/redo, flip, promotion, check (1326.749648ms)
+✔ analysis controls: MultiPV, depth limit, stop, explore line, no stale results while navigating (11924.729973ms)
+✔ FEN and PGN: validation messages, multi-game import, navigation, export (1040.655185ms)
+✔ sequence counter in the browser: 8,902 for 3 plies, cross-check with Stockfish, cancel, stale protection (5599.48549ms)
+✔ game review with Stockfish 19: classifications, summary, critical moments (6330.978263ms)
+✔ openings tab identifies the line from the move sequence (876.799015ms)
+✔ position editor: validation and applying a position (1008.700307ms)
+✔ learning center: lesson, rule-verified exercise, quiz, progress, puzzle mode (2429.148382ms)
+✔ missing NNUE file: clear error, no fake analysis, recovery offered (399.009312ms)
+✔ corrupt NNUE file is detected by its SHA-256 (847.585116ms)
+✔ missing engine script: reported as a missing file (1236.576899ms)
+✔ missing opening database: useful error instead of fake recognition (428.764324ms)
+✔ without cross-origin isolation the app explains how to start it and still works without the engine (526.2274ms)
+✔ worker clean-up and preference persistence (4142.809743ms)
+✔ engine crash is reported and the engine can be restarted (8299.196812ms)
+✔ tab clicks leave the arrow keys for move navigation (723.712674ms)
+✔ Perl fallback server serves the app with cross-origin isolation (3722.958969ms)
+ℹ tests 18
 ℹ suites 0
-ℹ pass 15
+ℹ pass 18
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 44439.341116
+ℹ duration_ms 55496.743786

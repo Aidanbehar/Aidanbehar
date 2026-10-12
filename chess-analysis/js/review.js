@@ -30,7 +30,7 @@ export function initReview(app) {
     app.savePrefs({ reviewMode: ui.mode.value, reviewDepth: ui.depth.value, reviewTime: ui.time.value, reviewMultipv: ui.multipv.value });
   });
 
-  ui.method.innerHTML = `Method: each position is searched by Stockfish 19 (${'settings shown above'}); a move's class comes from the drop in the mover's expected score (win %, Lichess logistic model) between the engine's best line and the played move. Bands: Excellent &lt; ${CLASS_THRESHOLDS[0].max}, Good &lt; ${CLASS_THRESHOLDS[1].max}, Inaccuracy &lt; ${CLASS_THRESHOLDS[2].max}, Mistake &lt; ${CLASS_THRESHOLDS[3].max}, Blunder ≥ ${CLASS_THRESHOLDS[3].max} percentage points. "Best" = Stockfish's first choice, "Forced" = the only legal move, "Book" = still in the local opening database. Results depend on depth and on this method.`;
+  ui.method.innerHTML = `Method: each position is searched by Stockfish 19 with the settings shown above; a move's class comes from the drop in the mover's expected score (win %, Lichess logistic model) between the engine's best line and the played move. Bands: Excellent &lt; ${CLASS_THRESHOLDS[0].max}, Good &lt; ${CLASS_THRESHOLDS[1].max}, Inaccuracy &lt; ${CLASS_THRESHOLDS[2].max}, Mistake &lt; ${CLASS_THRESHOLDS[3].max}, Blunder ≥ ${CLASS_THRESHOLDS[3].max} percentage points. "Best" = Stockfish's first choice, "Forced" = the only legal move, "Book" = still in the local opening database. Results depend on depth and on this method.`;
 
   const st = { token: 0, running: false, settingsKey: null, handle: null, tree: null };
   app.showReviewBadges = true;

@@ -274,6 +274,12 @@
 
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
+<div id="file-warning" class="banner hidden" role="alert" style="position:fixed;inset:auto 16px 16px 16px;z-index:100">
+  <div class="grow"><strong>Please start Chess Analysis with its launcher.</strong> Browsers block the app's modules, workers and the Stockfish 19 engine on pages opened directly from disk (<code>file://</code>). On macOS double-click <code>Launch Chess Analysis.command</code>, or run <code>python3 serve.py</code> in this folder, then use the address it prints (http://localhost:8719/).</div>
+</div>
+<script>
+  if (location.protocol === 'file:') document.getElementById('file-warning').classList.remove('hidden');
+</script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

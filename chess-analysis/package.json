@@ -1,0 +1,17 @@
+{
+  "name": "chess-analysis-stockfish19",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline chess analysis app built around the official Stockfish 19 (WebAssembly).",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "start": "python3 serve.py",
+    "test": "tests/run-all.sh",
+    "test:fast": "SKIP_E2E=1 tests/run-all.sh",
+    "build:engine": "build/build-stockfish.sh",
+    "build:openings": "node tools/build-openings.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}
