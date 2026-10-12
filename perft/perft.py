@@ -295,16 +295,25 @@ else:
     cP = tP; cN = tN; cD = tD ^ tb; cO = tO; ccr = cr; hx = ${ZT}_B[ts]
 """
 
-# Shared prologue: checkers, pins, check mask.
+# Shared prologue: checkers and pinned pieces.  The king's slider rays are
+# only looked up when an enemy slider stands on one of its lines at all;
+# sliders on a line but not attacking are potential pinners ("snipers").
 _PROLOGUE = """\
     occ = uA | tA
     k = uK
-    ra = RT[k][occ & RM[k]]
-    ba = BT[k][occ & BM[k]]
-    chk = (NA[k] & tN) | ($PAU[k] & tP) | (ra & tO) | (ba & tD)
-    btk = BTW[k]
+    chk = (NA[k] & tN) | ($PAU[k] & tP)
     pinned = 0
-    sn = (RE[k] & tO & ~ra) | (BE[k] & tD & ~ba)
+    btk = BTW[k]
+    sn = RE[k] & tO
+    if sn:
+        ra = RT[k][occ & RM[k]]
+        chk |= ra & tO
+        sn &= ~ra
+    x = BE[k] & tD
+    if x:
+        ba = BT[k][occ & BM[k]]
+        chk |= ba & tD
+        sn |= x & ~ba
     while sn:
         b = sn & -sn
         sn ^= b
@@ -688,8 +697,9 @@ def _render(template, color, variant, names):
     src = string.Template("\n".join(lines)).substitute(tok)
     pau = tok["PAU"]
     src = _ATK_RE.sub(
-        lambda m: "(NA[{0}] & tN or {2}[{0}] & tP or KA[{0}] & tKb or RT[{0}][{1} & RM[{0}]] & tO"
-                  " or BT[{0}][{1} & BM[{0}]] & tD)".format(m.group(1), m.group(2), pau), src)
+        lambda m: "(NA[{0}] & tN or {2}[{0}] & tP or KA[{0}] & tKb"
+                  " or (RE[{0}] & tO and RT[{0}][{1} & RM[{0}]] & tO)"
+                  " or (BE[{0}] & tD and BT[{0}][{1} & BM[{0}]] & tD))".format(m.group(1), m.group(2), pau), src)
     lines = []
     for line in src.split("\n"):
         m = _MOVE_RE.match(line)
@@ -1106,8 +1116,10 @@ class Engine:
     in every worker."""
 
     def __init__(self, jobs=None, tt_mb=DEFAULT_TT_MB, stats=False, progress=True,
-                 parallel_min_depth=6):
+                 parallel_min_depth=6, tt_kind="auto"):
         self.jobs = max(1, jobs or os.cpu_count() or 1)
+        self.tt_kind = tt_kind
+        self.local_bytes = 0
         self.tt_mb = tt_mb
         self.stats = stats
         self.progress = progress and sys.stderr.isatty()
@@ -1150,11 +1162,7 @@ class Engine:
 
     def _table_for(self, est_leaf_parents):
         """Shared table big enough for ~est entries (power-of-two growth)."""
-        cap = max(int(self.tt_mb * 1_000_000), 1 << 20)
-        want = 1 << 24  # 16 MB minimum
-        while want < est_leaf_parents * 16 and want * 2 <= cap:
-            want *= 2
-        want = min(want, cap) // 16 * 16
+        want = self._table_bytes(est_leaf_parents)
         if self.shm_ok and (self.shm is None or self.shm_bytes < want):
             try:
                 from multiprocessing import shared_memory
@@ -1197,7 +1205,7 @@ class Engine:
             return 1
         parallel = self.jobs > 1 and depth >= self.parallel_min_depth
         if not parallel and depth < 6:
-            return self._single(pos, depth)
+            return self._single(pos, depth, "dict")
         # Split: expand breadth-first (merging transpositions) until there is
         # plenty of work to balance, keeping >= 3 plies for the workers.
         want = (self.jobs * 48) if parallel else 64
@@ -1214,20 +1222,18 @@ class Engine:
         rem = depth - ply
         t0 = time.perf_counter()
         total = 0
+        est = self._estimate(pos, depth, paths, ply)
         if not parallel:
+            kind = self._kind_for(est)
+            if kind == "array":
+                self._ensure_local_array(est)
             for i, (p, mult) in enumerate(tasks):
-                total += mult * self._single(p, rem)
+                total += mult * self._single(p, rem, kind)
                 if i % 4 == 0:
                     self._progress(i + 1, len(tasks), t0)
             self._clear_progress()
             return total
-        # Positions one ply above the leaves ~ perft(depth - 1): take it from
-        # the previous run if we have it, else extrapolate the branching.
-        est = self.last.get((pos, depth - 1))
-        if est is None:
-            b = max(paths, 2) ** (1.0 / max(ply, 1))
-            est = b ** (depth - 1)
-        table, private_bytes = self._table_for(est * 0.25)
+        table, private_bytes = self._table_for(est)
         pool = self._get_pool()
         nchunks = self.jobs * 8
         size = max(1, -(-len(tasks) // nchunks))
@@ -1243,13 +1249,48 @@ class Engine:
         self._clear_progress()
         return total
 
-    def _single(self, pos, depth):
+    def _table_bytes(self, est_leaf_parents):
+        cap = max(int(self.tt_mb * 1_000_000), 1 << 20)
+        want = 1 << 24  # 16 MB minimum
+        while want < est_leaf_parents * 16 and want * 2 <= cap:
+            want *= 2
+        return min(want, cap) // 16 * 16
+
+    def _estimate(self, pos, depth, paths=None, ply=0):
+        """~ number of positions one ply above the leaves (for TT sizing)."""
+        est = self.last.get((pos, depth - 1))
+        if est is None:
+            if paths is None:
+                paths, ply = len(legal_moves(pos)), 1
+            b = max(paths, 2) ** (1.0 / max(ply, 1))
+            est = b ** (depth - 1)
+        return est * 0.25
+
+    def _ensure_local_array(self, est):
+        want = self._table_bytes(est)
+        if self.local_bytes < want:
+            detach_array_tt()
+            attach_array_tt(bytearray(want))
+            self.local_bytes = want
+
+    def _kind_for(self, est):
+        """auto: dicts while the working set fits the budget, else the array
+        table (16 instead of ~120 bytes per entry)."""
+        if self.tt_kind != "auto":
+            return self.tt_kind
+        return "dict" if est * 1.2 * BYTES_PER_ENTRY <= self.tt_mb * 1_000_000 else "array"
+
+    def _single(self, pos, depth, kind=None):
+        if kind is None:
+            kind = self._kind_for(self._estimate(pos, depth))
+        if kind == "array" and TA1 is None:
+            self._ensure_local_array(self._estimate(pos, depth))
         if self.stats:
             STATS[0] = STATS[1] = STATS[2] = 0
-            r = perft(pos, depth, True)
+            r = perft(pos, depth, True, kind)
             self._account(STATS)
             return r
-        return perft(pos, depth)
+        return perft(pos, depth, False, kind)
 
 
 # ---------------------------------------------------------------------------
@@ -1324,6 +1365,9 @@ def main(argv=None):
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1, help="worker processes (default: all cores)")
     ap.add_argument("--tt-size", type=float, default=DEFAULT_TT_MB,
                     help="transposition table budget in MB, total over all processes (default %d)" % DEFAULT_TT_MB)
+    ap.add_argument("--tt-kind", choices=["auto", "dict", "array"], default="auto",
+                    help="single-process TT: dicts, a flat array, or auto (dicts while they fit "
+                         "in --tt-size); parallel workers always share one array table")
     ap.add_argument("--backend", choices=["python", "numba"], default="python",
                     help="move generator backend (numba is optional; falls back to python)")
     ap.add_argument("--selftest", action="store_true", help="run known-answer tests")
@@ -1343,7 +1387,7 @@ def main(argv=None):
         return 0 if selftest() else 1
 
     engine = Engine(jobs=args.jobs, tt_mb=args.tt_size, stats=args.stats,
-                    progress=not args.no_progress)
+                    progress=not args.no_progress, tt_kind=args.tt_kind)
     try:
         if args.bench:
             bench(engine)
