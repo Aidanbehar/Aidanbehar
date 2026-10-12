@@ -1116,7 +1116,7 @@ class Engine:
     in every worker."""
 
     def __init__(self, jobs=None, tt_mb=DEFAULT_TT_MB, stats=False, progress=True,
-                 parallel_min_depth=6, tt_kind="auto"):
+                 parallel_min_depth=6, tt_kind="auto", shared_tt=True):
         self.jobs = max(1, jobs or os.cpu_count() or 1)
         self.tt_kind = tt_kind
         self.local_bytes = 0
@@ -1127,7 +1127,8 @@ class Engine:
         self.pool = None
         self.shm = None
         self.shm_bytes = 0
-        self.shm_ok = True
+        self.shm_ok = shared_tt
+        self.peak_shm = 0
         self.nodes = self.probes = self.hits = 0
         self.worker_rss = {}
         self.last = {}  # (position, depth) -> count, used for sizing the table
@@ -1181,8 +1182,10 @@ class Engine:
             else:
                 self._free_shm()  # workers keep their mapping until they switch
                 self.shm, self.shm_bytes = new, want
-        if self.shm is None:
-            return None, max(want // self.jobs // 16 * 16, 1 << 20)
+                self.peak_shm = max(self.peak_shm, want)
+        if self.shm is None:  # private table per worker, budget split evenly
+            private = max(self._table_bytes(est_leaf_parents / self.jobs) // self.jobs * self.jobs, 1 << 20)
+            return None, min(private, max(int(self.tt_mb * 1_000_000) // self.jobs, 1 << 20)) // 16 * 16
         return self.shm.name, 0
 
     def _progress(self, done, total, t0):
@@ -1376,6 +1379,8 @@ def main(argv=None):
     ap.add_argument("--tt-kind", choices=["auto", "dict", "array"], default="auto",
                     help="single-process TT: dicts, a flat array, or auto (dicts while they fit "
                          "in --tt-size); parallel workers always share one array table")
+    ap.add_argument("--private-tt", action="store_true",
+                    help="give each worker its own table instead of one shared table (for comparison)")
     ap.add_argument("--backend", choices=["python", "numba"], default="python",
                     help="move generator backend (numba is optional; falls back to python)")
     ap.add_argument("--selftest", action="store_true", help="run known-answer tests")
@@ -1395,7 +1400,8 @@ def main(argv=None):
         return 0 if selftest() else 1
 
     engine = Engine(jobs=args.jobs, tt_mb=args.tt_size, stats=args.stats,
-                    progress=not args.no_progress, tt_kind=args.tt_kind)
+                    progress=not args.no_progress, tt_kind=args.tt_kind,
+                    shared_tt=not args.private_tt)
     try:
         if args.bench:
             bench(engine)
@@ -1451,10 +1457,18 @@ def _table(engine, pos, n_max, stats):
         print("Leaf sequences/sec:  %s" % format(int(grand / total_t) if total_t else 0, ","))
         print("TT probes / hits:    %s / %s  (hit rate %.1f%%)" % (
             format(engine.probes, ","), format(engine.hits, ","), 100 * rate))
-        print("Peak memory (main):  %s" % _fmt_bytes(_peak_rss_bytes()))
-        if engine.worker_rss:
-            print("Peak memory (workers, sum of %d): %s" % (
-                len(engine.worker_rss), _fmt_bytes(sum(engine.worker_rss.values()))))
+        main_rss = _peak_rss_bytes()
+        print("Peak memory (main):  %s" % _fmt_bytes(main_rss))
+        if getattr(engine, "worker_rss", None):
+            shm = getattr(engine, "peak_shm", 0)
+            rss = engine.worker_rss.values()
+            # Each worker's RSS includes the pages of the shared table it
+            # touched; count that table once.
+            total = main_rss + shm + sum(max(0, r - shm) for r in rss)
+            print("Peak memory (workers): %d x up to %s RSS each%s"
+                  % (len(engine.worker_rss), _fmt_bytes(max(rss)),
+                     ", incl. a %s shared TT" % _fmt_bytes(shm) if shm else ""))
+            print("Peak memory (total):  ~%s" % _fmt_bytes(total))
     return 0
 
 
