@@ -26,13 +26,16 @@ Design (see README.md for the full story and measurements):
 * Leaves are bulk counted with popcounts; a transposition table keyed on an
   incrementally updated 128-bit Zobrist key stores exact subtree counts.
 * Work is split across processes at a shallow ply after merging identical
-  positions (breadth-first with multiplicities), then each worker runs
-  depth-first with its own transposition table.
+  positions (breadth-first with multiplicities); workers run depth-first and
+  share one lock-free array transposition table in shared memory.
 """
 
 import os
 import re
 import sys
+
+if sys.version_info < (3, 10):
+    sys.exit("perft.py needs Python 3.10+ (for int.bit_count); this is %s" % sys.version.split()[0])
 import time
 import random
 import string

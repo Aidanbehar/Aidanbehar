@@ -12,11 +12,11 @@ N (moves) |         Sequences | Time (s)
         2 |               400 |     0.00
         3 |             8,902 |     0.00
         4 |           197,281 |     0.04
-        5 |         4,865,609 |     0.51
-        6 |       119,060,324 |     3.12
-        7 |     3,195,901,860 |    @@M7@@
+        5 |         4,865,609 |     0.55
+        6 |       119,060,324 |     3.05
+        7 |     3,195,901,860 |    26.98
 
-Total elapsed: @@M7T@@s
+Total elapsed: 30.62s
 ```
 
 Each row is printed as soon as that depth finishes. Long depths show a live
@@ -24,9 +24,11 @@ progress line (percentage, elapsed, estimated time left) on stderr.
 
 ## Running it on a Mac
 
-Nothing to install: it is a single file that needs only Python 3.8+ (the
-Python that ships with the Xcode command line tools works; 3.11+ is
-noticeably faster).
+Nothing to install beyond Python **3.10 or newer** (it uses
+`int.bit_count()`; 3.11+ is noticeably faster). The `python3` that comes with
+Apple's command line tools is 3.9, so install a current one first:
+`brew install python` (or the python.org installer), then check `python3
+--version`.
 
 ```sh
 cd perft
@@ -68,7 +70,8 @@ brew install pypy3.10        # or whatever `brew search pypy` lists as newest
 pypy3 perft.py 7
 ```
 
-It runs and passes every test under PyPy, but **PyPy is not faster for this
+It runs under PyPy and passes the self-test and the test suite (43 passed;
+the python-chess and Numba tests skip when those packages are absent), but **PyPy is not faster for this
 program** (see the benchmarks and the explanation below). Use CPython with
 all cores, or the Numba backend.
 
@@ -123,8 +126,10 @@ Counts grow about **30× per ply** in the opening (20, 400, 8,902, 197,281,
   node of several 2-ply trees.
 * The Numba backend is checked move by move and child by child against the
   Python engine on ~1,300 positions, and on all known counts.
-* Transposition tables use 128-bit keys (two independent 64-bit keys in the
-  Numba backend), so a false hit has probability ~2⁻¹²⁸ per probe.
+* Transposition-table keys are wide enough that a false hit is not a practical
+  concern: the dict tables compare the full 128-bit Zobrist key; the array
+  table checks 64 key bits plus the ~20–27 bits that pick the slot (~2⁻⁸⁵
+  per probe); the Numba table checks two independent 64-bit keys.
 
 ## How it works / optimization techniques
 
@@ -272,7 +277,23 @@ results there. Times vary ±10% run to run on this VM.
 
 ### Runtime per depth (start position)
 
-@@RUNTIME_TABLE@@
+Seconds for that depth alone (the table's "Time" column). `4 proc` = 4
+worker processes / threads. N = 1–4 take under 0.05 s (PyPy: up to 0.3 s
+while its JIT warms up).
+
+| N | sequences | CPython 1 proc | CPython 4 proc | PyPy 1 proc | PyPy 4 proc | Numba 1 thread | Numba 4 threads |
+|---|---|---|---|---|---|---|---|
+| 5 | 4,865,609 | 0.79 | 0.51 | 1.35 | 1.33 | 0.03 | 0.02 |
+| 6 | 119,060,324 | 8.99 | 3.12 | 12.2 | 5.49 | 0.36 | 0.12 |
+| 7 | 3,195,901,860 | 108 | 28.9 | 126 | 40.5 | 5.2 | 1.6 |
+| 8 | 84,998,978,956 | 1,568 (26 min) | 412 (6.9 min) | – | – | 72 | 17–26 |
+| 9 | 2,439,530,234,167 | – | – | – | – | – | 222 (`--tt-size 4096`) |
+
+All of these counts were produced by the program and match the published
+values. CPython 4 proc at N = 8 used the default 2 GB shared table; peak
+total memory was about 4 GB.
+Small depths (≤ 5) always run in one process, so the 4-proc column there
+mostly shows run-to-run noise.
 
 ### What each optimization bought (CPython, one process)
 
@@ -299,7 +320,28 @@ already avoids make-and-test legality checking). Parallel, N = 7 on 4 cores:
 
 ### `--bench`
 
-@@BENCH@@
+CPython 3.13, `python3 perft.py --bench` (4 workers; depth 6 is the only
+row big enough to go parallel), "leaves/s" = counted sequences per second:
+
+```
+position  depth           count  time (s)       leaves/s
+start         1              20     0.000        460,617
+start         2             400     0.000      2,240,143
+start         3           8,902     0.002      3,981,839
+start         4         197,281     0.044      4,517,174
+start         5       4,865,609     0.518      9,398,923
+start         6     119,060,324     3.293     36,154,480
+kiwipete      1              48     0.000        736,851
+kiwipete      2           2,039     0.001      3,659,959
+kiwipete      3          97,862     0.029      3,403,285
+kiwipete      4       4,085,603     0.654      6,247,400
+total 4.54s
+```
+
+With `--jobs 1` the start-position depth 6 row is 8.5 s (14 M leaves/s) and
+the whole suite 9.7 s. Nodes visited per second (`--stats`) is ~0.3 M/s
+per core: almost every node is a bulk-counted leaf parent worth ~25–30
+sequences, and the TT skips about half of them.
 
 ### Why PyPy is not faster here
 
@@ -318,10 +360,10 @@ route to compiled speed.
 
 | | practical limit |
 |---|---|
-| CPython, 1 process | N = 7 in ~2 minutes; N = 8 in ~@@S8M@@ min |
-| CPython, all cores | N = 8 in ~@@M8M@@ min on 4 cores (a few minutes on an 8–10-core Mac). N = 9 would take many hours and needs far more TT than a laptop has. |
+| CPython, 1 process | N = 7 in ~2 minutes; N = 8 in ~26 min |
+| CPython, all cores | N = 8 in ~7 min on 4 cores (a few minutes on an 8–10-core Mac). N = 9 would take many hours and needs far more TT than a laptop has. |
 | PyPy | about the same as CPython or slower; not recommended |
-| Numba backend | N = 8 in @@N8@@; N = 9 (2.4 × 10¹²) is a long but feasible run |
+| Numba backend | N = 8 in ~20 s, N = 9 in ~4 min on 4 cores; N = 10 is hours and wants a much larger table |
 
 Rule of thumb: each ply is ~25–30× more work, so if N takes t, N+1 takes
 ~25t.
