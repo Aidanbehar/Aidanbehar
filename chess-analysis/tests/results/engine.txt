@@ -1,0 +1,39 @@
+▶ Stockfish 19 (simd build) acceptance
+  ✔ engine loads, identifies as Stockfish 19, uci -> uciok, isready -> readyok (2228.280839ms)
+  ✔ position startpos + go depth 10: genuine info output and a legal bestmove (91.85293ms)
+  ✔ NNUE network loaded (nn-1a298aa575a0.nnue) (0.478982ms)
+  ✔ FEN analysis (Kiwipete) gives legal moves and a valid PV (168.553229ms)
+  ✔ mate scores: mate in 1 is reported as "score mate 1" (9.671505ms)
+  ✔ MultiPV 3 returns three distinct candidate lines (118.262906ms)
+  ✔ search cancellation: go infinite + stop returns a legal bestmove promptly (703.769223ms)
+  ✔ a new search after stop works, and output belongs to the new position (372.428779ms)
+  ✔ rapid position changes: 25 short searches with stop, no hang, all results legal (154.331293ms)
+  ✔ repeated depth searches (10x) complete without hanging (56.098392ms)
+  ✔ go perft (independent move generator) matches published counts (11.556411ms)
+  ✔ multi-threaded search (Threads=2) works (204.869688ms)
+✔ Stockfish 19 (simd build) acceptance (4553.646299ms)
+▶ Stockfish 19 (relaxed build) acceptance
+  ✔ engine loads, identifies as Stockfish 19, uci -> uciok, isready -> readyok (2410.921872ms)
+  ✔ position startpos + go depth 10: genuine info output and a legal bestmove (65.031099ms)
+  ✔ NNUE network loaded (nn-1a298aa575a0.nnue) (0.195165ms)
+  ✔ FEN analysis (Kiwipete) gives legal moves and a valid PV (125.563708ms)
+  ✔ mate scores: mate in 1 is reported as "score mate 1" (4.382875ms)
+  ✔ MultiPV 3 returns three distinct candidate lines (120.776324ms)
+  ✔ search cancellation: go infinite + stop returns a legal bestmove promptly (702.402953ms)
+  ✔ a new search after stop works, and output belongs to the new position (326.924381ms)
+  ✔ rapid position changes: 25 short searches with stop, no hang, all results legal (130.612765ms)
+  ✔ repeated depth searches (10x) complete without hanging (35.859056ms)
+  ✔ go perft (independent move generator) matches published counts (12.363927ms)
+Engine output without network: info string ERROR: Network evaluation parameters compatible with the engine must be available.
+  ✔ multi-threaded search (Threads=2) works (139.325803ms)
+✔ Stockfish 19 (relaxed build) acceptance (4487.787953ms)
+✔ missing NNUE file is reported, not silently ignored (20155.165143ms)
+✔ shipped files: NNUE parts reassemble to the SHA-256 recorded in nnue.sha256 (421.248442ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 29801.038225

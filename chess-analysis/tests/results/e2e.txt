@@ -1,0 +1,23 @@
+✔ app loads offline-capable, cross-origin isolated, engine identifies as Stockfish 19 (4328.534174ms)
+✔ board: click and drag moves, SAN move list, legal count, FEN sync, undo/redo, flip, promotion, check (1354.823298ms)
+✔ analysis controls: MultiPV, depth limit, stop, explore line, no stale results while navigating (13054.357426ms)
+✔ FEN and PGN: validation messages, multi-game import, navigation, export (996.438526ms)
+✔ sequence counter in the browser: 8,902 for 3 plies, cross-check with Stockfish, cancel, stale protection (5578.631678ms)
+✔ game review with Stockfish 19: classifications, summary, critical moments (6001.392378ms)
+✔ openings tab identifies the line from the move sequence (959.888129ms)
+✔ position editor: validation and applying a position (1213.497959ms)
+✔ learning center: lesson, rule-verified exercise, quiz, progress, puzzle mode (2469.278428ms)
+✔ missing NNUE file: clear error, no fake analysis, recovery offered (454.388851ms)
+✔ corrupt NNUE file is detected by its SHA-256 (894.383684ms)
+✔ missing engine script: reported as a missing file (1483.989603ms)
+✔ missing opening database: useful error instead of fake recognition (454.418503ms)
+✔ without cross-origin isolation the app explains how to start it and still works without the engine (529.647778ms)
+✔ worker clean-up and preference persistence (4223.496023ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 44439.341116

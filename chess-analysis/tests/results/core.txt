@@ -1,0 +1,40 @@
+✔ starting position: 20 legal moves, correct FEN (11.857978ms)
+✔ checkmate: Fool's Mate (3.054068ms)
+✔ stalemate (0.434599ms)
+✔ castling rules (2.652822ms)
+✔ en passant (1.698235ms)
+✔ promotion generates four moves per destination (2.705646ms)
+✔ pinned pieces and check evasions (0.574776ms)
+✔ FEN validation explains problems (2.29409ms)
+✔ FEN import/export round trip (1.119965ms)
+✔ sequence counter: start position 20 / 400 / 8,902 (and 197,281) (1308.599427ms)
+✔ sequence counter: N2 equals sum over moves of legal replies (definition) (54.895672ms)
+✔ sequence counter matches published perft: Kiwipete (597.862373ms)
+✔ sequence counter matches published perft: Position 3 (154.736023ms)
+✔ sequence counter matches published perft: Position 4 (62.529539ms)
+✔ sequence counter matches published perft: Position 5 (372.172433ms)
+✔ sequence counter: terminal positions and forced moves (45.286487ms)
+✔ sequence counter: special moves are counted separately (26.580513ms)
+✔ BigInt formatting and exact arithmetic (3.096869ms)
+✔ PGN: headers, moves, comments, NAGs, result (16.222338ms)
+✔ PGN: nested variations, suffix annotations, multiple games (3.108889ms)
+✔ PGN: malformed input is reported clearly (2.287138ms)
+✔ PGN: FEN header and export round trip with variations (2.228869ms)
+✔ game tree navigation and synchronisation helpers (12.051003ms)
+✔ openings: exact sequence match (4.449742ms)
+✔ openings: broader classification after leaving the book (3.21322ms)
+✔ openings: identification follows the move sequence, not just the position (5.367614ms)
+✔ openings: custom start positions and database errors (4.430936ms)
+✔ openings database: every entry replays legally and is unique (5875.722738ms)
+✔ score conversion to White's point of view and formatting (0.463404ms)
+✔ move classification thresholds, perspective and mates (0.474214ms)
+✔ UCI info parsing (0.35266ms)
+✔ PV to SAN stops at the first illegal move (stale-line protection) (0.668375ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8762.808782

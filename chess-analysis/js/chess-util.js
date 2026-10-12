@@ -146,7 +146,22 @@ function countCheckers(c) {
   return c.attackers(kingSq, turn === 'w' ? 'b' : 'w').length;
 }
 
+const FEN_MESSAGES = [
+  [/pawns are on the edge rows/i, 'Pawns cannot stand on the first or eighth rank'],
+  [/must contain six space-delimited fields/i, 'A FEN needs 6 space-separated fields'],
+  [/does not contain 8 '\/'-delimited rows/i, 'The piece-placement field must have 8 ranks separated by "/"'],
+  [/too many squares in rank|sum of fields in rank/i, 'Each rank in the piece-placement field must describe exactly 8 squares'],
+  [/consecutive number/i, 'Two digits in a row in the piece-placement field (write "8", not "53")'],
+  [/piece data is invalid/i, 'The piece-placement field contains an invalid character (use pnbrqk / PNBRQK and digits 1–8)'],
+  [/side-to-move is invalid/i, 'The side to move must be "w" or "b"'],
+  [/castling availability is invalid/i, 'The castling field must be "-" or a combination of K, Q, k, q'],
+  [/en-passant square is invalid/i, 'The en passant field must be "-" or a square on the 3rd or 6th rank'],
+  [/move number must be a positive integer/i, 'The fullmove number must be a positive integer'],
+  [/half move counter/i, 'The half-move clock must be a non-negative integer'],
+];
+
 function friendlyFenError(msg) {
-  const m = String(msg || '').replace(/^Invalid FEN:\s*/i, '');
+  let m = String(msg || '').replace(/^Invalid FEN:\s*/i, '');
+  for (const [re, text] of FEN_MESSAGES) if (re.test(m)) { m = text; break; }
   return `Invalid FEN: ${m.charAt(0).toUpperCase()}${m.slice(1)}${/[.!]$/.test(m) ? '' : '.'}`;
 }
