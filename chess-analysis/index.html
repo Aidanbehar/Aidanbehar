@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chess Analysis — Stockfish 19</title>
+<link rel="icon" href="assets/pieces/wN.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+<script>
+  try { const t = localStorage.getItem('ca.theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* ignore */ }
+</script>
+</head>
+<body>
+<a class="skip-link" href="#side">Skip to analysis panel</a>
+<header class="topbar">
+  <div class="brand"><img src="assets/pieces/wN.svg" alt="" width="28" height="28"><span>Chess Analysis</span></div>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-analysis" data-view="analysis" aria-selected="true">Analysis</button>
+    <button role="tab" id="tab-review" data-view="review" aria-selected="false">Game Review</button>
+    <button role="tab" id="tab-openings" data-view="openings" aria-selected="false">Openings</button>
+    <button role="tab" id="tab-learn" data-view="learn" aria-selected="false">Learn</button>
+  </nav>
+  <div class="topbar-right">
+    <button id="engine-pill" class="pill" title="Engine status — click for details" aria-live="polite"><span class="dot"></span><span class="pill-text">Engine off</span></button>
+    <button id="theme-toggle" class="icon-btn" title="Toggle light/dark theme" aria-label="Toggle light or dark theme">◐</button>
+    <button id="help-btn" class="icon-btn" title="Keyboard shortcuts and help" aria-label="Help">?</button>
+  </div>
+</header>
+
+<div id="banner" class="banner hidden" role="alert"></div>
+
+<main id="workspace" class="workspace">
+  <section class="board-area" aria-label="Board">
+    <div class="players" id="player-top"></div>
+    <div class="board-row">
+      <div id="evalbar" class="evalbar" aria-label="Evaluation bar" role="img">
+        <div class="evalbar-fill"></div>
+        <span class="evalbar-label top"></span><span class="evalbar-label bottom"></span>
+      </div>
+      <div class="board-wrap"><div id="board"></div></div>
+    </div>
+    <div class="players" id="player-bottom"></div>
+    <div id="preview-bar" class="preview-bar hidden" aria-live="polite"></div>
+    <div class="board-controls" role="toolbar" aria-label="Board controls">
+      <button data-act="first" title="First move (Home / ↑)" aria-label="First move">⏮</button>
+      <button data-act="prev" title="Previous move (←)" aria-label="Previous move">◀</button>
+      <button data-act="next" title="Next move (→)" aria-label="Next move">▶</button>
+      <button data-act="last" title="Last move (End / ↓)" aria-label="Last move">⏭</button>
+      <span class="sep"></span>
+      <button data-act="flip" title="Flip board (F)" aria-label="Flip board">⇅</button>
+      <button data-act="undo" title="Undo (take back) the last move (Ctrl+Z)" aria-label="Undo">↶</button>
+      <button data-act="redo" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
+      <button data-act="reset" title="Reset to the starting position" aria-label="Reset">⟲</button>
+      <button data-act="edit" title="Edit position" aria-label="Edit position">✎</button>
+    </div>
+    <div class="progress-wrap" title="Game progress"><div id="game-progress" class="game-progress"><div></div></div><span id="game-progress-text"></span></div>
+    <form id="move-entry" class="move-entry" autocomplete="off">
+      <label for="move-input" class="sr-only">Enter a move</label>
+      <input id="move-input" placeholder="Type a move (e.g. Nf3, e2e4) and press Enter" spellcheck="false">
+    </form>
+  </section>
+
+  <aside id="side" class="side" tabindex="-1">
+    <!-- ANALYSIS -->
+    <div class="view" data-view="analysis">
+      <section class="card engine-card" aria-labelledby="eng-h">
+        <div class="card-head">
+          <h2 id="eng-h">Stockfish 19</h2>
+          <label class="switch" title="Engine on/off"><input type="checkbox" id="engine-toggle"><span class="slider"></span><span class="sr-only">Engine on</span></label>
+        </div>
+        <div id="engine-status" class="engine-status muted">Engine is off. Switch it on to analyse positions.</div>
+        <div class="engine-controls">
+          <label>Limit
+            <select id="limit-mode">
+              <option value="infinite">Infinite</option>
+              <option value="depth">Depth</option>
+              <option value="time">Time</option>
+            </select>
+          </label>
+          <label id="depth-wrap">Depth <input id="depth-input" type="number" min="1" max="99" value="22"></label>
+          <label id="time-wrap">Seconds <input id="time-input" type="number" min="0.1" max="3600" step="0.1" value="5"></label>
+          <label>Lines <select id="multipv-input"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+          <label>Threads <select id="threads-input"></select></label>
+          <label>Hash <select id="hash-input"><option value="16">16 MB</option><option value="32">32 MB</option><option value="64" selected>64 MB</option><option value="128">128 MB</option><option value="256">256 MB</option></select></label>
+        </div>
+        <div class="engine-buttons">
+          <button id="analyze-btn" class="primary">Analyze</button>
+          <button id="stop-btn">Stop</button>
+          <button id="reanalyze-btn" title="Clear cached results and analyse this position again">Reanalyze</button>
+          <label class="check"><input type="checkbox" id="continuous-input" checked> Continuous</label>
+        </div>
+        <div id="engine-summary" class="engine-summary" aria-live="polite"></div>
+        <ol id="pv-lines" class="pv-lines" aria-label="Candidate moves"></ol>
+      </section>
+
+      <section class="card" aria-labelledby="pos-h">
+        <h2 id="pos-h" class="sr-only">Position</h2>
+        <div class="pos-facts">
+          <div><span class="label">Legal moves</span> <strong id="legal-count" data-testid="legal-count">20</strong></div>
+          <div id="pos-status" class="pos-status"></div>
+        </div>
+        <div id="opening-line" class="opening-line"></div>
+      </section>
+
+      <section class="card movelist-card" aria-labelledby="moves-h">
+        <div class="card-head"><h2 id="moves-h">Moves</h2>
+          <div class="small-actions">
+            <button id="promote-var" title="Make the current variation the main line">Promote line</button>
+            <button id="delete-var" title="Delete the current move and everything after it">Delete from here</button>
+          </div>
+        </div>
+        <div id="game-header" class="game-header"></div>
+        <div id="movelist" class="movelist" aria-label="Move list"></div>
+      </section>
+
+      <details class="card tool" open>
+        <summary><h2>FEN &amp; PGN</h2></summary>
+        <label for="fen-input" class="label">FEN</label>
+        <div class="row"><input id="fen-input" class="mono" spellcheck="false" aria-describedby="fen-error"><button id="fen-load">Load</button><button id="fen-copy">Copy</button></div>
+        <div id="fen-error" class="error-text" role="alert"></div>
+        <label for="pgn-input" class="label">PGN</label>
+        <textarea id="pgn-input" class="mono" rows="5" spellcheck="false" placeholder="Paste one or more PGN games here"></textarea>
+        <div class="row wrap">
+          <button id="pgn-load">Import PGN</button>
+          <label class="file-btn">Open .pgn file<input type="file" id="pgn-file" accept=".pgn,.txt,application/x-chess-pgn"></label>
+          <button id="pgn-export">Export current game</button>
+          <button id="pgn-copy">Copy PGN</button>
+        </div>
+        <div id="pgn-error" class="error-text" role="alert"></div>
+        <div id="game-picker" class="game-picker"></div>
+      </details>
+
+      <details class="card tool" id="counter-card">
+        <summary><h2>Exact move-sequence counter</h2></summary>
+        <p class="muted small">Counts every distinct legal move sequence of exactly <em>N</em> plies from the current position by exhaustive enumeration with the rules library (exact <code>BigInt</code> arithmetic, no estimates). Sequences reaching the same position are counted separately.</p>
+        <div class="row">
+          <label>Plies <select id="counter-depth"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5 (slow)</option><option value="6">6 (very slow)</option></select></label>
+          <button id="counter-run" class="primary">Count</button>
+          <button id="counter-cancel" disabled>Cancel</button>
+          <button id="counter-verify" title="Independently re-count with Stockfish 19's own move generator (go perft)">Cross-check with Stockfish</button>
+        </div>
+        <div id="counter-warning" class="muted small"></div>
+        <div class="progress hidden" id="counter-progress"><div></div></div>
+        <div id="counter-result" class="counter-result" aria-live="polite"></div>
+        <details id="counter-divide-wrap" class="hidden"><summary>Per-move breakdown</summary><div id="counter-divide" class="divide"></div></details>
+      </details>
+    </div>
+
+    <!-- REVIEW -->
+    <div class="view hidden" data-view="review">
+      <section class="card">
+        <div class="card-head"><h2>Game Review</h2></div>
+        <div id="review-game-info" class="game-header"></div>
+        <p class="muted small" id="review-intro">Import a game in <strong>Analysis → FEN &amp; PGN</strong> (or play moves on the board), then run a full-game review with Stockfish 19. The main line is reviewed.</p>
+        <div class="engine-controls">
+          <label>Per position
+            <select id="review-mode"><option value="depth">Depth</option><option value="time">Time</option></select>
+          </label>
+          <label id="review-depth-wrap">Depth <input id="review-depth" type="number" min="6" max="40" value="16"></label>
+          <label id="review-time-wrap">Seconds <input id="review-time" type="number" min="0.2" max="60" step="0.1" value="1"></label>
+          <label>Lines <select id="review-multipv"><option>1</option><option selected>2</option><option>3</option></select></label>
+        </div>
+        <div class="engine-buttons">
+          <button id="review-start" class="primary">Start review</button>
+          <button id="review-pause" disabled>Pause</button>
+          <button id="review-restart" disabled>Restart</button>
+        </div>
+        <div class="progress hidden" id="review-progress"><div></div></div>
+        <div id="review-status" class="muted small" aria-live="polite"></div>
+      </section>
+      <section class="card hidden" id="review-summary-card">
+        <h2>Summary</h2>
+        <div id="review-graph" class="review-graph" aria-label="Evaluation graph"></div>
+        <div id="review-summary"></div>
+        <h3>Critical moments</h3>
+        <ol id="review-critical" class="critical"></ol>
+        <p class="muted small" id="review-method"></p>
+      </section>
+      <section class="card" id="review-move-card">
+        <h2>Selected move</h2>
+        <div id="review-move" class="review-move"><p class="muted">Select a move in the list to see its assessment.</p></div>
+      </section>
+      <section class="card movelist-card">
+        <h2>Moves</h2>
+        <div id="review-movelist" class="movelist"></div>
+      </section>
+    </div>
+
+    <!-- OPENINGS -->
+    <div class="view hidden" data-view="openings">
+      <section class="card">
+        <h2>Opening</h2>
+        <div id="opening-detail" aria-live="polite"></div>
+      </section>
+      <section class="card">
+        <h2>Book continuations</h2>
+        <p class="muted small">Database lines that continue the current move sequence. Click to play.</p>
+        <div id="opening-continuations" class="continuations"></div>
+      </section>
+      <section class="card">
+        <h2>Browse the database</h2>
+        <div class="row"><label for="opening-search" class="sr-only">Search openings</label><input id="opening-search" placeholder="Search by name, ECO (e.g. B90) or moves"></div>
+        <ol id="opening-results" class="opening-results"></ol>
+        <p class="muted small" id="opening-source"></p>
+      </section>
+    </div>
+  </aside>
+</main>
+
+<!-- LEARN (full view) -->
+<main id="learn" class="learn hidden" aria-label="Learning center">
+  <nav class="learn-nav" aria-label="Lessons">
+    <div class="learn-progress" id="learn-progress"></div>
+    <button id="puzzle-mode-btn" class="primary wide">Puzzle mode</button>
+    <div id="learn-toc"></div>
+  </nav>
+  <section class="learn-main" id="learn-main" tabindex="-1"></section>
+</main>
+
+<!-- POSITION EDITOR (overlays the side panel) -->
+<div id="editor-panel" class="editor-panel hidden" role="dialog" aria-labelledby="editor-h">
+  <h2 id="editor-h">Position editor</h2>
+  <p class="muted small">Pick a piece and click squares to place it (click again to remove). Drag pieces to move them; drag off the board or right-click to delete.</p>
+  <div class="palette" id="palette"></div>
+  <div class="editor-grid">
+    <fieldset><legend>Side to move</legend>
+      <label><input type="radio" name="ed-turn" value="w" checked> White</label>
+      <label><input type="radio" name="ed-turn" value="b"> Black</label>
+    </fieldset>
+    <fieldset><legend>Castling rights</legend>
+      <label><input type="checkbox" id="ed-K"> White O-O</label>
+      <label><input type="checkbox" id="ed-Q"> White O-O-O</label>
+      <label><input type="checkbox" id="ed-k"> Black O-O</label>
+      <label><input type="checkbox" id="ed-q"> Black O-O-O</label>
+    </fieldset>
+    <fieldset><legend>En passant</legend>
+      <select id="ed-ep" aria-label="En passant target square"><option value="-">none</option></select>
+    </fieldset>
+    <fieldset><legend>Counters</legend>
+      <label>Half-move clock <input type="number" id="ed-half" min="0" max="150" value="0"></label>
+      <label>Move number <input type="number" id="ed-full" min="1" max="999" value="1"></label>
+    </fieldset>
+  </div>
+  <label class="label" for="ed-fen">FEN</label>
+  <div class="row"><input id="ed-fen" class="mono" spellcheck="false"><button id="ed-fen-load">Load</button><button id="ed-fen-copy">Copy</button></div>
+  <div id="ed-error" class="error-text" role="alert"></div>
+  <div class="row wrap">
+    <button id="ed-start">Starting position</button>
+    <button id="ed-clear">Clear board</button>
+    <button id="ed-flip">Flip board</button>
+    <span class="spacer"></span>
+    <button id="ed-cancel">Cancel</button>
+    <button id="ed-apply" class="primary">Done — analyse</button>
+  </div>
+</div>
+
+<dialog id="help-dialog" aria-labelledby="help-h">
+  <h2 id="help-h">Help &amp; shortcuts</h2>
+  <table class="keys">
+    <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Previous / next move</td></tr>
+    <tr><td><kbd>Home</kbd> or <kbd>↑</kbd></td><td>Go to the start</td></tr>
+    <tr><td><kbd>End</kbd> or <kbd>↓</kbd></td><td>Go to the end of the line</td></tr>
+    <tr><td><kbd>F</kbd></td><td>Flip the board</td></tr>
+    <tr><td><kbd>Space</kbd></td><td>Start / stop analysis</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Undo / redo</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Leave a previewed engine line</td></tr>
+  </table>
+  <p>Moves can be made by clicking a piece and then a highlighted square, by dragging, or by typing SAN/UCI into the move box.</p>
+  <p>Engine: official <strong>Stockfish 19</strong> compiled to WebAssembly from the <code>sf_19</code> tag. Evaluations are shown from White's point of view (+ = White better). <em>M3</em> means mate in 3.</p>
+  <h3>Engine log</h3>
+  <pre id="engine-log" class="engine-log"></pre>
+  <form method="dialog"><button class="primary">Close</button></form>
+</dialog>
+
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

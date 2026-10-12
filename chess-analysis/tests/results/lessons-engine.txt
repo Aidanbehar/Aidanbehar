@@ -1,0 +1,66 @@
+piece-movement Nxd5: cp 0 (best e1e2 cp -12)
+en-passant exd6: cp 1 (best e5d6 cp 0)
+promotion c8=N+: cp 547 (best c7c8n cp 543)
+forks Nc7+: cp 383 (best b5c7 cp 364)
+forks Nxa8: cp 455 (best c7a8 cp 432)
+pins Re1: cp 628 (best a1e1 cp 633)
+skewers Ra4+: cp 695 (best a1a4 cp 692)
+skewers Rxh4: cp 692 (best a4h4 cp 692)
+discovered-attacks Bxh7+: cp 689 (best d3h7 cp 713)
+discovered-attacks Rxd8: cp 655 (best d1d8 cp 674)
+removing-defender Bxc6: cp 698 (best b5c6 cp 679)
+removing-defender Rxe5: cp 679 (best e1e5 cp 678)
+deflection Qb8+: mate 2 (best b3b8 mate 2)
+deflection Rd8#: mate 1 (best d1d8 mate 1)
+decoy Qg8+: mate 2 (best e6g8 mate 2)
+decoy Nf7#: mate 1 (best h6f7 mate 1)
+zwischenzug Bb4+: cp 538 (best f8b4 cp 559)
+zwischenzug Bxd2+: cp 541 (best e8d8 cp 543)
+zwischenzug Kxd8: cp 515 (best e8d8 cp 511)
+back-rank Qxe8+: mate 2 (best e2e8 mate 2)
+back-rank Rxe8#: mate 1 (best e1e8 mate 1)
+early-queen g6: cp 30 (best g7g6 cp 28)
+early-queen Qe7: cp 0 (best g7g6 cp 28)
+early-queen Qf6: cp -29 (best g7g6 cp 28)
+opening-traps Bxf7+: mate 2 (best c4f7 mate 2)
+opening-traps Nd5#: mate 1 (best c3d5 mate 1)
+kp-fundamentals Kd6: cp 1063 (best e6d6 cp 680)
+kp-fundamentals Kf6: cp 639 (best e6d6 cp 680)
+opposition Ke3: cp 642 (best f2e3 cp 642)
+passed-pawns b6: cp 611 (best b5b6 cp 619)
+passed-pawns c6: cp 677 (best c5c6 cp 632)
+passed-pawns a6: cp 679 (best a5a6 cp 675)
+rook-endings Rd1+: cp 425 (best c1d1 cp 459)
+rook-endings Rc4: cp 410 (best c1d1 cp 459)
+rook-endings Rb1: cp 418 (best c1d1 cp 459)
+converting Rxd8: cp 633 (best d1d8 cp 618)
+forcing-variations Qd5+: mate 6 (best d1b3 mate 6)
+forcing-variations Qb3+: mate 6 (best d1b3 mate 6)
+forcing-variations Nf7+: mate 4 (best d5d3 mate 5)
+forcing-variations Nh6+: mate 3 (best f7h6 mate 3)
+forcing-variations Qg8+: mate 2 (best d5g8 mate 2)
+forcing-variations Nf7#: mate 1 (best h6f7 mate 1)
+puzzle:smothered Qg8+: mate 2 (best e6g8 mate 2)
+puzzle:smothered Nf7#: mate 1 (best h6f7 mate 1)
+puzzle:legal Bxf7+: mate 2 (best c4f7 mate 2)
+puzzle:legal Nd5#: mate 1 (best c3d5 mate 1)
+puzzle:opposition Ke3: cp 643 (best f2e3 cp 642)
+puzzle:elephant Bb4+: cp 522 (best f8b4 cp 527)
+puzzle:elephant Bxd2+: cp 534 (best e8d8 cp 575)
+puzzle:elephant Kxd8: cp 510 (best e8d8 cp 523)
+puzzle:skewer Ra4+: cp 754 (best a1a4 cp 742)
+puzzle:skewer Rxh4: cp 749 (best a4h4 cp 752)
+puzzle:underpromotion c8=N+: cp 630 (best c7c8n cp 630)
+square-of-pawn Ke1: cp 0
+square-of-pawn Ke2: cp 0
+square-of-pawn Ke3: cp 0
+square-of-pawn Kg3 (outside the square): cp -1049
+✔ line exercises and puzzles are confirmed by Stockfish 19 (26184.832092ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26399.818218
