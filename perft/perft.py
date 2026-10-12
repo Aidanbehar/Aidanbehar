@@ -1063,13 +1063,10 @@ def _attach_shared(name):
     try:
         return shared_memory.SharedMemory(name=name, track=False)  # 3.13+
     except TypeError:
-        shm = shared_memory.SharedMemory(name=name)
-        try:  # older Pythons: stop the tracker from unlinking it at exit
-            from multiprocessing import resource_tracker
-            resource_tracker.unregister(shm._name, "shared_memory")
-        except Exception:
-            pass
-        return shm
+        # Older Pythons register the segment with the resource tracker again.
+        # Spawned workers share the parent's tracker and registration is a
+        # set, so that is harmless; the parent unlinks it in Engine.close().
+        return shared_memory.SharedMemory(name=name)
 
 
 def _worker_init():

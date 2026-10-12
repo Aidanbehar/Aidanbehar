@@ -728,7 +728,15 @@ class NumbaEngine:
         self.nodes = self.probes = self.hits = 0
         self.worker_rss = {}
         self.T = tables()
-        slots = 1 << max(int(tt_mb * 1_000_000 // 24).bit_length() - 1, 10)
+        # Largest power-of-two slot count within the budget (24 bytes/slot).
+        self.max_slots = 1 << max(int(tt_mb * 1_000_000 // 24).bit_length() - 1, 10)
+        self.last = {}
+        self._alloc(1 << 16)
+
+    def _alloc(self, slots):
+        # Sized to the job and grown on demand: zeroed pages are faulted in
+        # on first touch, so a needlessly huge table costs real time.
+        slots = min(slots, self.max_slots)
         self.mask = U(slots - 1)
         self.TK1 = np.zeros(slots, dtype=np.uint64)
         self.TK2 = np.zeros(slots, dtype=np.uint64)
@@ -743,8 +751,20 @@ class NumbaEngine:
         self.TV[:] = 0
 
     def run(self, pos, depth):
+        n = self._run(pos, depth)
+        self.last[(pos, depth)] = n
+        return n
+
+    def _run(self, pos, depth):
         if depth <= 0:
             return 1
+        # Interior entries ~ positions two plies above the leaves.
+        est = self.last.get((pos, depth - 2)) or 30 ** max(depth - 2, 0)
+        want = 1 << 16
+        while want < est * 0.5:
+            want *= 2
+        if want > self.TV.shape[0] and self.TV.shape[0] < self.max_slots:
+            self._alloc(want)
         # Same split as perft.Engine: breadth-first, merging transpositions.
         frontier = {pos: 1}
         ply = 0
