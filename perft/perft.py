@@ -317,13 +317,19 @@ _PROLOGUE = """\
 _GEN = """\
 def ${NAME}_$C(uP, uN, uD, uO, uK, uA, tP, tN, tD, tO, tK, tA, cr, ep, h, d):
     STATS[0] += 1  ##S
-    key = h$SIDE  ##P
-    t = TT[d]  ##P
     STATS[1] += 1  ##S
-    v = t.get(key)  ##P
-    if v is not None:  ##P
-        STATS[2] += 1  ##S
-        return v  ##P
+    key = h$SIDE  ##PD
+    t = TT[d]  ##PD
+    v = t.get(key)  ##PD
+    if v is not None:  ##PD
+        STATS[2] += 1  ##SD
+        return v  ##PD
+    key = h ^ ZD_$C[d]  ##PA
+    ti = key & IM2  ##PA
+    v = TA2[ti + 1]  ##PA
+    if TA2[ti] ^ v == key >> 64:  ##PA
+        STATS[2] += 1  ##SA
+        return v  ##PA
     total = 0  ##P
     out = []  ##L
     d1 = d - 1  ##PG
@@ -507,9 +513,11 @@ $PAWNCAPS
             total += f(tP, tN, tD, tO, tK, tA, uP, uN, uD, uO ^ KSR_$C, KST_$C, uA ^ KSA_$C, cr & $KEEP, 0, h0 ^ KSH_$C ^ ZCR[cr] ^ ZCR[cr & $KEEP], d1)  ##M k | KST_$C << 6 | 16 << 12
         if cr & $CQ and not occ & QSE_$C and not @ATK(QS1_$C,occ) and not @ATK(QS2_$C,occ):
             total += f(tP, tN, tD, tO, tK, tA, uP, uN, uD, uO ^ QSR_$C, QST_$C, uA ^ QSA_$C, cr & $KEEP, 0, h0 ^ QSH_$C ^ ZCR[cr] ^ ZCR[cr & $KEEP], d1)  ##M k | QST_$C << 6 | 16 << 12
-    if len(t) >= CAPS[d]:  ##P
-        t.clear()  ##P
-    t[key] = total  ##P
+    if len(t) >= CAPS[d]:  ##PD
+        t.clear()  ##PD
+    t[key] = total  ##PD
+    TA2[ti + 1] = total  ##PA
+    TA2[ti] = (key >> 64) ^ total  ##PA
     return total  ##P
     return out  ##L
 """
@@ -624,9 +632,13 @@ $PROLOGUE
             n += 1
         if cr & $CQ and not occ & QSE_$C and not @ATK(QS1_$C,occ) and not @ATK(QS2_$C,occ):
             n += 1
-    if len(T1) >= CAP1:  ##P
-        T1.clear()  ##P
-    T1[h$SIDE] = n  ##P
+    if len(T1) >= CAP1:  ##PD
+        T1.clear()  ##PD
+    T1[h$SIDE] = n  ##PD
+    key = h ^ Z1_$C  ##PA
+    ti = key & IM1  ##PA
+    TA1[ti + 1] = n  ##PA
+    TA1[ti] = (key >> 64) ^ n  ##PA
     return n
 """
 
@@ -653,7 +665,8 @@ def _render(template, color, variant, names):
 
     variant letters: P perft (with TT), G interior node, Q node whose
     children are leaves (probes the leaf TT inline, then bulk counts),
-    S statistics counters, L collect children instead of counting."""
+    S statistics counters, L collect children instead of counting,
+    D / A transposition table in dicts / in a flat (shareable) array."""
     tok = dict(_TOKENS[color])
     tok.update(names)
     pawncaps = []
@@ -690,8 +703,14 @@ def _render(template, color, variant, names):
                 lines.append("%shc = %s" % (ind, a[14]))
                 if "S" in variant:
                     lines.append("%sSTATS[1] += 1" % ind)
-                lines.append("%sv = T1.get(hc%s)" % (ind, tok["OSIDE"]))
-                lines.append("%sif v is None:" % ind)
+                if "A" in variant:
+                    lines.append("%sk1 = hc ^ Z1_%s" % (ind, tok["O"]))
+                    lines.append("%stj = k1 & IM1" % ind)
+                    lines.append("%sv = TA1[tj + 1]" % ind)
+                    lines.append("%sif TA1[tj] ^ v != k1 >> 64:" % ind)
+                else:
+                    lines.append("%sv = T1.get(hc%s)" % (ind, tok["OSIDE"]))
+                    lines.append("%sif v is None:" % ind)
                 lines.append("%s    v = %s_%s(%s, hc, 1)" % (ind, tok["CNT"], tok["O"], ", ".join(a[:14])))
                 if "S" in variant:
                     lines.append("%selse:" % ind)
@@ -709,15 +728,19 @@ def _render(template, color, variant, names):
     return "\n".join(lines)
 
 
-def _build_source(stats=False):
-    st = "S" if stats else ""
-    p = "s" if stats else ""
+def _prefix(stats, kind):
+    return ("s" if stats else "") + ("a" if kind == "array" else "")
+
+
+def _build_source(stats=False, kind="dict"):
+    v = "P" + ("S" if stats else "") + ("A" if kind == "array" else "D")
+    p = _prefix(stats, kind)
     names = dict(NAME=p + "gen", NAME2=p + "gen2", CNT=p + "cnt")
     parts = []
     for color in "WB":
-        parts.append(_render(_GEN, color, "PG" + st, names))
-        parts.append(_render(_GEN, color, "PQ" + st, dict(names, NAME=names["NAME2"])))
-        parts.append(_render(_CNT, color, "P" + st, names))
+        parts.append(_render(_GEN, color, v + "G", names))
+        parts.append(_render(_GEN, color, v + "Q", dict(names, NAME=names["NAME2"])))
+        parts.append(_render(_CNT, color, v, names))
     return "\n\n".join(parts)
 
 
@@ -733,7 +756,8 @@ RANK1 RANK2 RANK3 RANK6 RANK7 RANK8 ZW_P ZW_N ZW_B ZW_R ZW_Q ZW_K ZB_P ZB_N
 ZB_B ZB_R ZB_Q ZB_K ZCR ZEP ZBLACK ZPUSH_W ZPUSH2_W ZCAPL_W ZCAPR_W ZPUSH_B
 ZPUSH2_B ZCAPL_B ZCAPR_B KSE_W KS1_W KS2_W KST_W KSR_W KSA_W KSH_W QSE_W QS1_W
 QS2_W QST_W QSR_W QSA_W QSH_W KSE_B KS1_B KS2_B KST_B KSR_B KSA_B KSH_B QSE_B
-QS1_B QS2_B QST_B QSR_B QSA_B QSH_B ep_captures TT T1 CAPS CAP1 STATS""".split()
+QS1_B QS2_B QST_B QSR_B QSA_B QSH_B ep_captures TT T1 CAPS CAP1 STATS
+ZD_W ZD_B Z1_W Z1_B TA1 TA2 IM1 IM2""".split()
 
 
 def _compile(src, func_names, env):
@@ -786,16 +810,55 @@ CAP1 = 0
 _HOT = {}
 col_W = col_B = None
 
+# Array TT: two regions of 16-byte slots (check word, count) - one for
+# depth-1 entries, one for deeper ones so leaves never evict subtrees.  The
+# check word is (key >> 64) ^ count (Hyatt's lockless hashing): a slot torn
+# by a concurrent write from another process simply reads as a miss.
+ZD_W = [_rand() for _ in range(MAXD + 1)]
+ZD_B = [_rand() for _ in range(MAXD + 1)]
+Z1_W, Z1_B = ZD_W[1], ZD_B[1]
+TA1 = TA2 = None
+IM1 = IM2 = 0
+
+
+def _compile_hot(stats, kind):
+    p = _prefix(stats, kind)
+    names = [p + n + "_" + c for c in "WB" for n in ("gen", "gen2", "cnt")]
+    _HOT.update(zip(names, _compile(_build_source(stats, kind), names, globals())))
+
 
 def _rebuild():
     """(Re)compile the hot functions (CAP1 is baked in as a closure cell)."""
     global col_W, col_B
-    env = globals()
     for stats in (False, True):
-        p = "s" if stats else ""
-        names = [p + n + "_" + c for c in "WB" for n in ("gen", "gen2", "cnt")]
-        _HOT.update(zip(names, _compile(_build_source(stats), names, env)))
-    col_W, col_B = _compile(_build_collect_source(), ["col_W", "col_B"], env)
+        _compile_hot(stats, "dict")
+    col_W, col_B = _compile(_build_collect_source(), ["col_W", "col_B"], globals())
+
+
+def attach_array_tt(buf):
+    """Use `buf` (bytearray / shared memory) as the array transposition table."""
+    global TA1, TA2, IM1, IM2
+    slots = len(buf) // 16
+    n1 = 1 << max((slots * 3 // 4).bit_length() - 1, 4)
+    n2 = 1 << max((slots - n1).bit_length() - 1, 4)
+    if (n1 + n2) * 16 > len(buf):
+        raise ValueError("array TT buffer too small")
+    mv = memoryview(buf)
+    TA1 = mv[:n1 * 16].cast("Q")
+    TA2 = mv[n1 * 16:(n1 + n2) * 16].cast("Q")
+    IM1, IM2 = (n1 - 1) << 1, (n2 - 1) << 1
+    for stats in (False, True):
+        _compile_hot(stats, "array")
+
+
+def detach_array_tt():
+    global TA1, TA2
+    for k in [k for k in _HOT if k.startswith(("a", "sa"))]:
+        del _HOT[k]
+    for v in (TA1, TA2):
+        if v is not None:
+            v.release()
+    TA1 = TA2 = None
 
 
 set_tt_size(DEFAULT_TT_MB)
@@ -944,12 +1007,12 @@ def legal_moves(pos):
     return [m for m, _ in children(pos)]
 
 
-def perft(pos, depth, stats=False):
+def perft(pos, depth, stats=False, kind="dict"):
     """Number of legal move sequences of exactly `depth` plies."""
     stm, a = pos
     if depth <= 0:
         return 1
-    name = ("s" if stats else "") + ("cnt", "gen2", "gen")[min(depth, 3) - 1] + "_" + "WB"[stm]
+    name = _prefix(stats, kind) + ("cnt", "gen2", "gen")[min(depth, 3) - 1] + "_" + "WB"[stm]
     return _HOT[name](*a, depth)
 
 
@@ -981,33 +1044,81 @@ def _peak_rss_bytes():
     return r if sys.platform == "darwin" else r * 1024
 
 
-def _worker_init(tt_mb):
-    set_tt_size(tt_mb)
+_SHM = None
+_SHM_NAME = None
+
+
+def _attach_shared(name):
+    from multiprocessing import shared_memory
+    try:
+        return shared_memory.SharedMemory(name=name, track=False)  # 3.13+
+    except TypeError:
+        shm = shared_memory.SharedMemory(name=name)
+        try:  # older Pythons: stop the tracker from unlinking it at exit
+            from multiprocessing import resource_tracker
+            resource_tracker.unregister(shm._name, "shared_memory")
+        except Exception:
+            pass
+        return shm
+
+
+def _worker_init():
+    set_tt_size(16)  # workers use the (shared) array table, not the dicts
+
+
+def _worker_use_table(name, private_bytes):
+    """Attach this worker to the current transposition table."""
+    global _SHM, _SHM_NAME
+    if name is not None and name == _SHM_NAME:
+        return
+    detach_array_tt()
+    if _SHM is not None:
+        _SHM.close()
+        _SHM = None
+    _SHM_NAME = name
+    if name is not None:
+        _SHM = _attach_shared(name)
+        attach_array_tt(_SHM.buf)
+    else:  # no shared memory on this platform: a private table per worker
+        if TA1 is None:
+            attach_array_tt(bytearray(private_bytes))
 
 
 def _worker_run(job):
-    tasks, depth, stats = job
+    tasks, depth, stats, table, private_bytes = job
+    _worker_use_table(table, private_bytes)
     if stats:
         STATS[0] = STATS[1] = STATS[2] = 0
     total = 0
     for pos, mult in tasks:
-        total += mult * perft(pos, depth, stats)
+        total += mult * perft(pos, depth, stats, "array")
     return total, len(tasks), tuple(STATS) if stats else (0, 0, 0), (os.getpid(), _peak_rss_bytes())
 
 
 class Engine:
-    """Runs perft, single-process or on a pool of worker processes."""
+    """Runs perft, single-process or on a pool of worker processes.
+
+    Parallel runs expand the root breadth-first (merging transpositions)
+    into a few hundred tasks per worker, which are handed out in chunks from a
+    work queue.  All workers share one lock-free array transposition table
+    in shared memory.  It is sized to the job (capped by tt_mb), because
+    touching gigabytes of fresh shared memory costs real time in page faults
+    in every worker."""
 
     def __init__(self, jobs=None, tt_mb=DEFAULT_TT_MB, stats=False, progress=True,
                  parallel_min_depth=6):
-        self.jobs = jobs or os.cpu_count() or 1
+        self.jobs = max(1, jobs or os.cpu_count() or 1)
         self.tt_mb = tt_mb
         self.stats = stats
         self.progress = progress and sys.stderr.isatty()
         self.parallel_min_depth = parallel_min_depth
         self.pool = None
+        self.shm = None
+        self.shm_bytes = 0
+        self.shm_ok = True
         self.nodes = self.probes = self.hits = 0
         self.worker_rss = {}
+        self.last = {}  # (position, depth) -> count, used for sizing the table
         set_tt_size(tt_mb)
 
     def close(self):
@@ -1015,17 +1126,48 @@ class Engine:
             self.pool.close()
             self.pool.join()
             self.pool = None
+        self._free_shm()
+
+    def _free_shm(self):
+        if self.shm is not None:
+            self.shm.close()
+            try:
+                self.shm.unlink()
+            except FileNotFoundError:
+                pass
+            self.shm = None
+            self.shm_bytes = 0
 
     def _get_pool(self):
         if self.pool is None:
             import multiprocessing as mp
             ctx = mp.get_context("spawn")  # what macOS uses anyway
-            self.pool = ctx.Pool(self.jobs, initializer=_worker_init,
-                                 initargs=(self.tt_mb / self.jobs,))
-            # The parent no longer needs a big table of its own.
+            self.pool = ctx.Pool(self.jobs, initializer=_worker_init)
+            # The parent only runs small depths now; free its big dicts.
             set_tt_size(min(self.tt_mb, 64))
             clear_tt()
         return self.pool
+
+    def _table_for(self, est_leaf_parents):
+        """Shared table big enough for ~est entries (power-of-two growth)."""
+        cap = max(int(self.tt_mb * 1_000_000), 1 << 20)
+        want = 1 << 24  # 16 MB minimum
+        while want < est_leaf_parents * 16 and want * 2 <= cap:
+            want *= 2
+        want = min(want, cap) // 16 * 16
+        if self.shm_ok and (self.shm is None or self.shm_bytes < want):
+            try:
+                from multiprocessing import shared_memory
+                new = shared_memory.SharedMemory(create=True, size=want)
+            except Exception as e:  # pragma: no cover - exotic platforms
+                sys.stderr.write("shared memory unavailable (%s); using per-worker tables\n" % e)
+                self.shm_ok = False
+            else:
+                self._free_shm()  # workers keep their mapping until they switch
+                self.shm, self.shm_bytes = new, want
+        if self.shm is None:
+            return None, max(want // self.jobs // 16 * 16, 1 << 20)
+        return self.shm.name, 0
 
     def _progress(self, done, total, t0):
         if self.progress:
@@ -1046,6 +1188,11 @@ class Engine:
         self.hits += st[2]
 
     def run(self, pos, depth):
+        n = self._run(pos, depth)
+        self.last[(pos, depth)] = n
+        return n
+
+    def _run(self, pos, depth):
         if depth <= 0:
             return 1
         parallel = self.jobs > 1 and depth >= self.parallel_min_depth
@@ -1056,9 +1203,11 @@ class Engine:
         want = (self.jobs * 48) if parallel else 64
         frontier = {pos: 1}
         ply = 0
+        paths = 1
         while ply < depth - 3 and len(frontier) < want:
             frontier = expand(frontier, 1)
             ply += 1
+            paths = sum(frontier.values())
         tasks = list(frontier.items())
         if not tasks:
             return 0
@@ -1072,10 +1221,18 @@ class Engine:
                     self._progress(i + 1, len(tasks), t0)
             self._clear_progress()
             return total
+        # Positions one ply above the leaves ~ perft(depth - 1): take it from
+        # the previous run if we have it, else extrapolate the branching.
+        est = self.last.get((pos, depth - 1))
+        if est is None:
+            b = max(paths, 2) ** (1.0 / max(ply, 1))
+            est = b ** (depth - 1)
+        table, private_bytes = self._table_for(est * 0.25)
         pool = self._get_pool()
         nchunks = self.jobs * 8
         size = max(1, -(-len(tasks) // nchunks))
-        jobs = [(tasks[i:i + size], rem, self.stats) for i in range(0, len(tasks), size)]
+        jobs = [(tasks[i:i + size], rem, self.stats, table, private_bytes)
+                for i in range(0, len(tasks), size)]
         done = 0
         for sub, n, st, (pid, rss) in pool.imap_unordered(_worker_run, jobs):
             total += sub
