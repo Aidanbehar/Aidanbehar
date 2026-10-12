@@ -285,3 +285,51 @@ def test_cli_selftest():
 def test_cli_bad_fen():
     r = _cli("2", "--fen", "not a fen")
     assert r.returncode != 0
+
+
+# --------------------------------------------------------- optional numba backend
+
+try:
+    import perft_numba as PN  # noqa: E402
+except Exception:  # pragma: no cover - numba not installed
+    PN = None
+
+needs_numba = pytest.mark.skipif(PN is None, reason="numba not installed")
+
+
+@needs_numba
+@pytest.mark.parametrize("fen,depth,expected", [
+    (P.START_FEN, 5, 4865609), (P.KIWIPETE_FEN, 4, 4085603), (P.POS3_FEN, 5, 674624),
+    (P.POS4_FEN, 4, 422333), (P.POS5_FEN, 4, 2103487), (P.POS6_FEN, 4, 3894594),
+] + TRICKY)
+def test_numba_counts(fen, depth, expected):
+    eng = PN.NumbaEngine(jobs=2, tt_mb=32)
+    assert eng.run(P.parse_fen(fen), depth) == expected
+
+
+@needs_numba
+def test_numba_moves_and_children_match_python_engine():
+    """The compiled generator and make() against the pure-Python engine,
+    move by move, on positions from random games."""
+    rng = random.Random(7)
+    T = PN.tables()
+    checked = 0
+    for start in (P.START_FEN, P.KIWIPETE_FEN, P.POS3_FEN, P.POS4_FEN, P.POS5_FEN):
+        for _game in range(8):
+            pos = P.parse_fen(start)
+            for _ply in range(80):
+                kids = dict((P.move_uci(m), ch) for m, ch in P.children(pos))
+                st = PN.to_state(pos)
+                moves = PN.legal_moves(T, st)
+                # Same move-code layout in both engines: from | to << 6 | flags << 12.
+                assert sorted(P.move_uci(int(m)) for m in moves) == sorted(kids), P.to_fen(pos)
+                for m in moves:
+                    uci = P.move_uci(int(m))
+                    got = PN.child(T, st, m)
+                    exp = PN.to_state(kids[uci])
+                    assert (got == exp).all(), (P.to_fen(pos), uci)
+                    checked += 1
+                if not kids:
+                    break
+                pos = kids[rng.choice(sorted(kids))]
+    assert checked > 10000

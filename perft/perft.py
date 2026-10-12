@@ -1140,6 +1140,14 @@ class Engine:
             self.pool = None
         self._free_shm()
 
+    def clear(self):
+        """Forget all transposition-table contents (for fair benchmarks)."""
+        clear_tt()
+        self._free_shm()  # the next parallel run allocates a fresh table
+        if self.local_bytes:
+            detach_array_tt()
+            self.local_bytes = 0
+
     def _free_shm(self):
         if self.shm is not None:
             self.shm.close()
@@ -1334,7 +1342,7 @@ def bench(engine, out=sys.stdout):
     t_all = time.perf_counter()
     for name, fen, d in rows:
         pos = parse_fen(fen)
-        clear_tt()
+        engine.clear()
         t0 = time.perf_counter()
         n = engine.run(pos, d)
         el = time.perf_counter() - t0
