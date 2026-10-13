@@ -44,6 +44,11 @@ You can also open `tests/index.html` in a browser, or use **Settings & About →
   - **Air quality:** from Copernicus CAMS.
   - **Interactive maps:** temperature, precipitation, wind (with direction arrows) and air quality, each with a colour key. Air quality uses the official US EPA AQI colours. You can view the world or the area around the selected location, zoom and pan, hover for values, click to load a point's forecast, and play through the next 48 hours. Map data is a grid of model forecast points from Open-Meteo, interpolated bicubically without overshoot. Temperature has labelled isotherms (freezing highlighted) and cities show their values. Wind can animate as particles, and wind direction is interpolated as vectors. Failed download chunks are retried, and any remaining gaps are hatched. Maps near the date line render correctly, and saved maps are stored compactly for offline use.
   - **Offline:** every download is saved in the browser and shown offline with its age. It refreshes when the page opens, every 15 minutes, and automatically when the connection returns.
+- **Live World:** an interactive 3D Earth (globe.gl, loaded on demand from a CDN, with a 2D fallback).
+  - **Day/night:** shading follows the Sun's position, computed locally. City lights glow on the night side, the terminator line is drawn, and a time preview lets you move the shading without touching anything else in Meridian.
+  - **Cameras:** about 6,400 real cameras from Caltrans (California, many with continuous HLS video), TfL (London), Hong Kong Transport Department, Singapore LTA, Fintraffic Digitraffic (Finland), the Iowa Environmental Mesonet, and 133 curated YouTube livestreams.
+  - **Honest labels:** each feed shows LIVE VIDEO, UPDATING IMAGE, RECENT IMAGE, STALE, OFFLINE, ENDED or STATUS UNKNOWN, based on playlist checks, capture times and server timestamps. Images refresh no faster than their source publishes.
+  - **Optional API keys:** a YouTube Data API key verifies which streams are live right now, and a Windy Webcams key adds more cameras.
 - **Holidays & Astronomy:** Western and Orthodox Easter, Friday the 13th, holiday finder, moon phases, equinoxes and solstices, sunrise/sunset.
 - **Utilities:** Unix timestamps, ISO 8601, date-format converter (flags ambiguous dates), countdowns, recurring dates, time-zone abbreviation reference.
 - **Time Units:** converter from nanoseconds to millennia, a searchable and sortable reference table, and calendar durations between dates.
@@ -55,6 +60,13 @@ You can also open `tests/index.html` in a browser, or use **Settings & About →
 - Calendar maths uses integer day numbers in the proleptic Gregorian calendar. It never parses locale strings.
 - Wall time → instant resolution returns 0, 1 or 2 candidates, so DST gaps and overlaps are always surfaced.
 - Elapsed time is measured between absolute instants and kept separate from calendar arithmetic.
+
+## Live World notes
+
+- **Network:** it needs an internet connection for the globe library, textures and camera feeds. Everything else in Meridian works offline.
+- **YouTube from a local file:** YouTube blocks embedded players on pages opened directly from a file (error 153). In that case Meridian links to the stream on YouTube. Hosting the HTML file on any website lets the streams play inside the app.
+- **Caltrans live video:** this needs a browser that decodes H.264. That includes Chrome, Edge, Safari and Firefox, but not some open-source Chromium builds; those get the camera's updating still image instead.
+- **Sources a browser can't reach:** some sources block browser access (no CORS) or need keys: NSW Live Traffic, NYC DOT, Ontario/Alberta 511 and NPS. They're listed in the in-app diagnostics.
 
 ## Limitations
 
