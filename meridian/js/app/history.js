@@ -153,6 +153,8 @@
     ['#hxTopic', '#hxRegion', '#hxPeriod', '#hxOrder'].forEach(s => M.$(s, el).addEventListener('change', onF));
     M.$('#hxQ', el).addEventListener('input', M.debounce(onF, 200));
     M.$('#hxClear', el).addEventListener('click', () => { ['#hxTopic', '#hxRegion', '#hxPeriod'].forEach(s => { M.$(s, el).value = ''; }); M.$('#hxQ', el).value = ''; onF(); });
+    // Offline fallback is temporary: reload the real feed as soon as the connection returns.
+    window.addEventListener('online', () => { if (current && current.local) load(true); });
     el.addEventListener('keydown', (e) => {
       if (e.target.closest('input,select,textarea')) return;
       if (e.key === 'ArrowLeft' && e.altKey) { step(-1); } if (e.key === 'ArrowRight' && e.altKey) { step(1); }

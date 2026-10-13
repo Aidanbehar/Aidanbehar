@@ -15,7 +15,8 @@ cd meridian
 python3 -m http.server 8000   # then visit http://localhost:8000
 ```
 
-Two features fetch data online and degrade gracefully when they can't:
+Three features fetch data online and degrade gracefully when they can't:
+- **Weather** uses NWS, MET Norway and Open-Meteo. The last forecast stays available offline and updates whenever you're back online.
 - **This Day in History** uses Wikipedia's “On this day” API. It caches responses for 7 days and falls back to a small, clearly labelled offline set.
 - **Holiday finder** can load 100+ extra countries from Nager.Date. Six countries have built-in rules that work offline.
 
@@ -36,6 +37,12 @@ You can also open `tests/index.html` in a browser, or use **Settings & About →
 - **Calculator:** exact elapsed time between zone-aware timestamps, date add/subtract (month-end clamping), days between dates, nth weekday, business days, time arithmetic (24 h vs. calendar day), age and anniversaries, date comparison.
 - **Date Explorer:** weekday and facts for any date (years −271,820 to 275,759), leap-year explorer, week-number conventions, Julian ↔ Gregorian conversion, historical UTC offsets.
 - **This Day in History:** month/day picker with no year needed. Filters by category, topic, region and period. Random date and prev/next day buttons, with special handling for Feb 29.
+- **Weather:** current conditions, a 24-hour and multi-day forecast, active alerts, model comparison and air quality.
+  - **US locations:** the official US National Weather Service, including measured station observations and alerts.
+  - **Worldwide:** MET Norway, the Norwegian government's weather service.
+  - **Model comparison:** ECMWF, NOAA GFS and DWD ICON side by side via Open-Meteo, with a forecast-agreement indicator.
+  - **Air quality:** from Copernicus CAMS.
+  - **Offline:** every download is saved in the browser and shown offline with its age. It refreshes when the page opens, every 15 minutes, and automatically when the connection returns.
 - **Holidays & Astronomy:** Western and Orthodox Easter, Friday the 13th, holiday finder, moon phases, equinoxes and solstices, sunrise/sunset.
 - **Utilities:** Unix timestamps, ISO 8601, date-format converter (flags ambiguous dates), countdowns, recurring dates, time-zone abbreviation reference.
 - **Time Units:** converter from nanoseconds to millennia, a searchable and sortable reference table, and calendar durations between dates.

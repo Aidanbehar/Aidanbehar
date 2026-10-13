@@ -261,6 +261,13 @@
     const a = e.target.closest('[data-act]'); if (!a || !selected) return;
     if (a.dataset.act === 'addclock') M.go('clock', { add: M.serializeRef(selected.ref) });
     if (a.dataset.act === 'convert') M.go('convert', { from: M.serializeRef(selected.ref) });
+    if (a.dataset.act === 'weather') {
+      const r = selected.ref; let c = r.lat != null ? r : null;
+      if (!c && r.kind === 'iana') { const x = M.D.CITIES.find(cc => cc.zone === r.id); if (x) c = M.cityRef(x); }
+      const ll = c ? [c.lat, c.lon] : selected.clickLL ? [selected.clickLL[1], selected.clickLL[0]] : null;
+      if (!ll) { M.toast('No coordinates for this zone — search for a place on the Weather page.'); return; }
+      M.go('weather', { lat: ll[0].toFixed(4), lon: ll[1].toFixed(4), name: c ? M.refTitle(c) : `${ll[0].toFixed(2)}, ${ll[1].toFixed(2)}`, zone: r.kind === 'iana' ? r.id : '' });
+    }
   }
   /** Compare DST rules of two zones by sampling offsets through the selected year. */
   function sameRules(a, b, year) {
@@ -323,6 +330,7 @@
         <div class="row tight" style="margin-bottom:12px">
           <button class="btn btn-sm" data-act="addclock">${M.icon('plus')} World clock</button>
           <button class="btn btn-sm" data-act="convert">${M.icon('swap')} Convert from here</button>
+          <button class="btn btn-sm" data-act="weather">${M.icon('cloud')} Weather here</button>
           <button class="btn btn-sm" data-copy="${esc(M.isoInstant(now, r))}" data-live-copy>${M.icon('copy')} Copy ISO</button>
         </div>
         <dl class="kv">

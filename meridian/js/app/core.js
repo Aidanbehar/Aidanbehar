@@ -99,6 +99,7 @@
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
     arrowR: '<path d="M5 12h14M13 6l6 6-6 6"/>',
     target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+    cloud: '<path d="M7 18a4 4 0 0 1-.6-8 6 6 0 0 1 11.5 1.5A3.5 3.5 0 0 1 17.5 18z"/>',
     hourglass: '<path d="M6 3h12M6 21h12M7 3c0 5 10 6 10 9s-10 4-10 9M17 3c0 5-10 6-10 9s10 4 10 9"/>'
   };
   M.icon = (name, cls = '') => `<svg viewBox="0 0 24 24" class="${cls}" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -412,7 +413,7 @@
   /* Navigation, routing, tick loop                                */
   /* ------------------------------------------------------------ */
   M.NAV = [
-    { group: 'Overview', items: [['home', 'Today', 'home'], ['clock', 'World Clock', 'clock'], ['map', 'Time-Zone Map', 'globe']] },
+    { group: 'Overview', items: [['home', 'Today', 'home'], ['clock', 'World Clock', 'clock'], ['map', 'Time-Zone Map', 'globe'], ['weather', 'Weather', 'cloud']] },
     { group: 'Convert & calculate', items: [['convert', 'Time-Zone Converter', 'swap'], ['calc', 'Date & Time Calculator', 'calc'], ['explorer', 'Date Explorer', 'search']] },
     { group: 'Reference', items: [['history', 'This Day in History', 'book'], ['holidays', 'Holidays & Astronomy', 'sun'], ['utils', 'Utilities', 'tools'], ['units', 'Time Units', 'ruler'], ['calendar', 'Calendar', 'calendar']] },
     { group: 'App', items: [['settings', 'Settings & About', 'settings']] }
@@ -554,6 +555,7 @@
     ['clock', 'World clock', 'world clock cities compare times', 'clock'],
     ['clock', 'Meeting planner', 'meeting planner working hours overlap business hours', 'clock', { tab: 'planner' }],
     ['map', 'Interactive time-zone map', 'map world zones regions click', 'globe'],
+    ['weather', 'Weather forecast', 'weather forecast temperature rain alerts conditions air quality nws met norway', 'cloud'],
     ['convert', 'Time-zone converter', 'convert conversion pst pdt historical timezone', 'swap'],
     ['calc', 'Elapsed time between timestamps', 'difference elapsed duration between two dates times zones', 'calc', { tab: 'elapsed' }],
     ['calc', 'Add / subtract days, weeks, months, years', 'date arithmetic add subtract days months years weeks', 'calc', { tab: 'date' }],
