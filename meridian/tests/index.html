@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meridian Tests</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; background: #f4f6fb; color: #182036; }
+  h1 { font-size: 20px; } .g { font-weight: 700; margin-top: 14px; } .p { color: #1c8f4f; } .f { color: #cf3c3c; font-weight: 600; }
+  .sum { padding: 10px 14px; border-radius: 10px; background: #fff; border: 1px solid #e0e5ef; display: inline-block; }
+</style>
+</head>
+<body>
+<h1>Meridian engine tests</h1>
+<p>Runs against this browser’s built-in IANA time-zone data. Time zone detected: <code id="tz"></code></p>
+<div id="out">Running…</div>
+<script src="../js/engine.js"></script>
+<script src="tests.js"></script>
+<script>
+  document.getElementById('tz').textContent = TE.detectLocalZone();
+  const results = MeridianTests(TE);
+  const failed = results.filter(r => !r.pass).length;
+  let html = `<p class="sum"><b>${results.length - failed}/${results.length} passed</b></p>`, group = '';
+  for (const r of results) {
+    if (r.group !== group) { group = r.group; html += `<div class="g">${group}</div>`; }
+    html += `<div class="${r.pass ? 'p' : 'f'}">${r.pass ? '✓' : '✗'} ${r.name.replace(/</g, '&lt;')}${r.pass ? '' : ' — ' + r.error.replace(/</g, '&lt;')}</div>`;
+  }
+  document.getElementById('out').innerHTML = html;
+</script>
+</body>
+</html>
