@@ -577,6 +577,21 @@ table.table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .wm-loc { fill: var(--amber); stroke: var(--text); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
 .wm-stage .country, .wm-stage .coast { stroke: rgba(20, 30, 55, .55); }
 :root[data-theme="dark"] .wm-stage .country, :root[data-theme="dark"] .wm-stage .coast { stroke: rgba(235, 240, 255, .55); }
+.wm-particles { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.wm-stage .map-zoom { z-index: 2; }
+.wm-iso path { fill: none; stroke: rgba(20, 28, 50, .55); pointer-events: none; }
+.wm-iso path.freeze { stroke: #1d4fc3; }
+.wm-iso text { fill: #1a2340; stroke: rgba(255, 255, 255, .85); paint-order: stroke; font-weight: 700; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+:root[data-theme="dark"] .wm-iso path { stroke: rgba(235, 240, 255, .6); }
+:root[data-theme="dark"] .wm-iso text { fill: #eef2ff; stroke: rgba(10, 16, 32, .85); }
+.wm-chip { pointer-events: none; }
+.wm-chip rect { fill: var(--surface); stroke-width: 2; opacity: .93; }
+.wm-chip circle { fill: var(--text); }
+.wm-chip text { font-size: 10px; font-weight: 650; fill: var(--text); stroke: none; }
+.wm-chip circle { stroke: none; }
+.wm-bar { position: relative; }
+.wm-mark { position: absolute; top: -4px; bottom: -4px; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--text); box-shadow: 0 0 0 2px var(--surface); transition: left .08s; }
+.wm-aqi > div.hit { outline: 2px solid var(--text); outline-offset: 2px; border-radius: 6px; }
 .wm-legend { margin-top: 10px; }
 .wm-key-title { font-size: .8rem; font-weight: 650; margin-bottom: 4px; }
 .wm-bar { height: 14px; border-radius: 7px; border: 1px solid var(--border); }
