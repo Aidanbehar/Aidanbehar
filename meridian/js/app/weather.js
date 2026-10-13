@@ -13,7 +13,7 @@
   'use strict';
   const M = window.M, TE = M.TE, esc = M.esc;
   const REFRESH_MS = 15 * 60000, STALE_MS = 3 * 3600000;
-  let root, loc = null, bundle = null, loading = false, lastAttempt = 0, reqId = 0;
+  let root, maps = null, loc = null, bundle = null, loading = false, lastAttempt = 0, reqId = 0;
   const units = () => M.settings.wxUnits || (navigator.language === 'en-US' ? 'us' : 'metric');
 
   /* ---------- Units ---------- */
@@ -156,7 +156,15 @@
     const c = loadCache(l);
     bundle = c || null;
     loading = false; // a refresh for the previous location is superseded (reqId guards its results)
-    render(); refresh();
+    render();
+    // Load the forecast first; the map grids (many requests to the same servers) start once it has settled,
+    // so a slow map download never delays the main forecast.
+    refresh().finally(() => mountMaps(l));
+  }
+  function mountMaps(l) {
+    if (loc !== l) return;
+    if (!maps && M.wxMaps) maps = M.wxMaps.mount(M.$('#wxMaps', root), { getLoc: () => loc, onPick: (p) => { setLoc({ name: `Map point ${Math.abs(p.lat).toFixed(2)}°${p.lat >= 0 ? 'N' : 'S'}, ${Math.abs(p.lon).toFixed(2)}°${p.lon >= 0 ? 'E' : 'W'}`, lat: p.lat, lon: p.lon, zone: null }); window.scrollTo({ top: 0, behavior: 'smooth' }); } });
+    else if (maps) maps.setLocation(l);
   }
   const nearestZone = (lat, lon) => {
     let best = null, bd = Infinity;
@@ -182,7 +190,8 @@
         <div class="row tight" id="wxRecent" style="margin-top:10px"></div>
         <div id="wxStatus" class="small" style="margin-top:10px" aria-live="polite"></div>
       </div>
-      <div id="wxBody" class="section-gap"></div>`;
+      <div id="wxBody" class="section-gap"></div>
+      <div id="wxMaps" class="section-gap"></div>`;
     const q = M.$('#wxQ', el), list = M.$('#wxList', el);
     let items = [], active = 0;
     const show = (html) => { list.innerHTML = html; list.hidden = false; q.setAttribute('aria-expanded', 'true'); };
@@ -364,6 +373,7 @@
     else if (Date.now() - lastAttempt > 60000) { render(); refresh(); } else render();
   }
   function tick(now) {
+    if (maps) maps.tick(now);
     if (loc && !loading && navigator.onLine && now - lastAttempt > REFRESH_MS) refresh();
     if (now % 60000 < 1000) renderStatus(loading ? 'Updating…' : null);
   }

@@ -567,6 +567,25 @@ table.table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .wx-hour { flex: 0 0 66px; text-align: center; padding: 8px 4px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .wx-bar { width: 6px; border-radius: 3px; background: linear-gradient(var(--amber), var(--primary)); margin: 2px 0; }
 
+/* ---------- Weather maps ---------- */
+.wm-stage { aspect-ratio: auto; min-height: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+.wm-ocean { fill: var(--ocean); }
+.wm-land { fill: var(--surface-3); stroke: none; }
+.wm-raster { image-rendering: auto; pointer-events: none; }
+.wm-arrows path { stroke: #0d1a33; fill: none; stroke-linecap: round; pointer-events: none; opacity: .8; }
+:root[data-theme="dark"] .wm-arrows path { stroke: #f2f5ff; }
+.wm-loc { fill: var(--amber); stroke: var(--text); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.wm-stage .country, .wm-stage .coast { stroke: rgba(20, 30, 55, .55); }
+:root[data-theme="dark"] .wm-stage .country, :root[data-theme="dark"] .wm-stage .coast { stroke: rgba(235, 240, 255, .55); }
+.wm-legend { margin-top: 10px; }
+.wm-key-title { font-size: .8rem; font-weight: 650; margin-bottom: 4px; }
+.wm-bar { height: 14px; border-radius: 7px; border: 1px solid var(--border); }
+.wm-ticks { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.wm-aqi { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; }
+.wm-aqi > div { display: grid; grid-template-columns: 18px 1fr; column-gap: 6px; align-items: center; font-size: .78rem; }
+.wm-aqi i { width: 18px; height: 18px; border-radius: 5px; grid-row: span 2; border: 1px solid rgba(0, 0, 0, .15); }
+.wm-aqi span { color: var(--muted); font-size: .72rem; line-height: 1.2; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1180px) {
   .map-layout { grid-template-columns: minmax(0, 1fr); }

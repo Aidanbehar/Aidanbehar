@@ -42,6 +42,7 @@ You can also open `tests/index.html` in a browser, or use **Settings & About →
   - **Worldwide:** MET Norway, the Norwegian government's weather service.
   - **Model comparison:** ECMWF, NOAA GFS and DWD ICON side by side via Open-Meteo, with a forecast-agreement indicator.
   - **Air quality:** from Copernicus CAMS.
+  - **Interactive maps:** temperature, precipitation, wind (with direction arrows) and air quality, each with a colour key. Air quality uses the official US EPA AQI colours. You can view the world or the area around the selected location, zoom and pan, hover for values, click to load a point's forecast, and play through the next 48 hours. Map data is a grid of model forecast points from Open-Meteo, smoothly interpolated between points.
   - **Offline:** every download is saved in the browser and shown offline with its age. It refreshes when the page opens, every 15 minutes, and automatically when the connection returns.
 - **Holidays & Astronomy:** Western and Orthodox Easter, Friday the 13th, holiday finder, moon phases, equinoxes and solstices, sunrise/sunset.
 - **Utilities:** Unix timestamps, ISO 8601, date-format converter (flags ambiguous dates), countdowns, recurring dates, time-zone abbreviation reference.
