@@ -535,6 +535,9 @@
   const loaded = new Map();
   M.loadScript = (src) => {
     if (loaded.has(src)) return loaded.get(src);
+    // Single-file build: lazily loaded files are embedded as functions instead of separate files.
+    const bundled = window.MERIDIAN_BUNDLED && window.MERIDIAN_BUNDLED[src];
+    if (bundled) { const p = new Promise((resolve, reject) => { try { bundled(); resolve(); } catch (e) { reject(e); } }); loaded.set(src, p); return p; }
     const p = new Promise((resolve, reject) => {
       const s = document.createElement('script'); s.src = src; s.async = true;
       s.onload = () => resolve(); s.onerror = () => reject(new Error('Failed to load ' + src));

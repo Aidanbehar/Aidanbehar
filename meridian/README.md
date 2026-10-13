@@ -4,6 +4,10 @@ A browser toolkit for world time, time-zone conversion (including historical rul
 
 ## Running
 
+**Easiest:** open `meridian.html`. It's a single self-contained file (about 1.25 MB) with all the styling, code and map data inside, so you can copy it anywhere and double-click it. Rebuild it after changing the source with `node build-single.js`.
+
+To work from the source files instead:
+
 Open `index.html` in a current browser (Chrome, Edge, Firefox or Safari). It also works from `file://`. You can serve it locally instead:
 
 ```sh
