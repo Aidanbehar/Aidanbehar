@@ -370,6 +370,7 @@
       const pov = store.get('pov', null);
       G.pointOfView(pov && Number.isFinite(pov.lat) ? pov : { lat: 25, lng: -30, altitude: 2.4 }, 0);
       installShading();
+      upgradeImagery();
       bindPicking(G.renderer().domElement);
       globeKind = 'webgl'; ok = true;
     } catch (e) {
@@ -386,6 +387,27 @@
     if (fallback) fallback.resize();
   }
 
+  /** Swap in sharper NASA Blue Marble day imagery (4096×2048 via GIBS) once it has downloaded; cached for offline use.
+   *  (GIBS' VIIRS Black Marble includes moonlit land, which looks wrong as an emissive layer, so city lights keep the three-globe night map.) */
+  async function upgradeImagery() {
+    const BM = M.basemap; if (!BM) return;
+    try {
+      const day = await BM.worldURL('day', 4096);
+      // swap the texture on the existing material (re-setting globeImageUrl would drop the day/night shader patch)
+      await new Promise((res, rej) => {
+        const wait = () => {
+          if (!G) return res();
+          const mat = G.globeMaterial(); if (!mat.map || !mat.map.image) return setTimeout(wait, 400);
+          const img = new Image();
+          img.onload = () => { const old = mat.map, t = new old.constructor(img); if ('colorSpace' in old) t.colorSpace = old.colorSpace; t.anisotropy = old.anisotropy; t.needsUpdate = true; mat.map = t; mat.needsUpdate = true; if (old.dispose) old.dispose(); S.imagery = 'NASA Blue Marble 4096×2048 via GIBS'; res(); };
+          img.onerror = () => rej(new Error('image decode failed'));
+          img.src = day;
+        };
+        wait();
+      });
+    } catch (e) { S.imagery = 'three-globe Blue Marble 2048×1024 (NASA GIBS unavailable: ' + e.message + ')'; }
+  }
+
   /** Patch the globe's Phong material: dark night hemisphere, city lights, soft twilight band, driven by the Sun's direction. */
   function installShading() {
     const mat = G.globeMaterial();
@@ -394,22 +416,24 @@
       if (!mat.map || !mat.map.image) return setTimeout(tryNight, 300);
       const Tex = mat.map.constructor, img = new Image();
       img.crossOrigin = 'anonymous';
-      img.onload = () => { const t = new Tex(img); if ('colorSpace' in mat.map) t.colorSpace = mat.map.colorSpace; t.needsUpdate = true; sunU.nightMap.value = t; mat.needsUpdate = true; };
+      img.onload = () => { const t = new Tex(img); if ('colorSpace' in mat.map) t.colorSpace = mat.map.colorSpace; t.needsUpdate = true; sunU.nightMap.value = t; mat.needsUpdate = true; updateSun(); };
       img.onerror = () => { sunU.lightsOn.value = 0; };
       img.src = CDN.night;
     };
     tryNight();
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, sunU);
-      shader.vertexShader = 'varying vec3 vObjDir;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vObjDir = normalize(position);');
+      shader.vertexShader = 'varying vec3 vObjDir;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vObjDir = normalize((modelMatrix * vec4(position, 0.0)).xyz); // world space: the globe mesh itself is rotated −90° about y');
       shader.fragmentShader = 'uniform vec3 sunDir;\nuniform sampler2D nightMap;\nuniform float shadeOn;\nuniform float lightsOn;\nvarying vec3 vObjDir;\n' +
         shader.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
   float sunDot = dot(normalize(vObjDir), normalize(sunDir));
   float dayMix = mix(1.0, smoothstep(-0.105, 0.035, sunDot), shadeOn);
-  diffuseColor.rgb *= mix(0.10, 1.0, dayMix);
+  diffuseColor.rgb *= mix(0.06, 1.0, dayMix);
   #ifdef USE_MAP
     vec3 nightTex = texture2D(nightMap, vMapUv).rgb;
-    totalEmissiveRadiance += nightTex * lightsOn * shadeOn * (1.0 - dayMix) * 1.6;
+    // the night map also shows moonlit (bluish) land; city lights are the warm, bright pixels, so mask on the red channel
+    float cityMask = smoothstep(0.03, 0.22, nightTex.r); // linear (sRGB-decoded) values
+    totalEmissiveRadiance += (nightTex * cityMask * 2.2 + nightTex * 0.15) * lightsOn * shadeOn * (1.0 - dayMix);
   #endif`);
     };
     mat.needsUpdate = true;
@@ -1017,7 +1041,7 @@
       return `<tr><td><b>${esc(p.name)}</b><div class="tiny muted">${esc(p.operator)} · ${esc(p.region)} · <a href="${esc(p.docs)}" target="_blank" rel="noopener">docs</a></div></td><td>${st}${s.error ? `<div class="tiny err-text">${esc(s.error)}</div>` : ''}${s.warnings && s.warnings.length ? `<div class="tiny warn-text">${esc(s.warnings.join('; '))}</div>` : ''}${p.id === 'youtube' && s.verifyError ? `<div class="tiny err-text">Verification: ${esc(s.verifyError)}</div>` : ''}</td><td class="num">${s.count != null ? TE.formatNumber(s.count) : '—'}</td><td class="num">${s.withCoords != null ? TE.formatNumber(s.withCoords) : '—'}</td><td class="num">${live} / ${TE.formatNumber(upd)}</td><td class="small">${s.at ? esc(fmtAgo(s.at)) + (s.cached ? ' (cached)' : '') : '—'}</td><td class="tiny">${esc(p.kinds)}<div class="muted">${esc(p.refresh)}</div></td></tr>`;
     }).join('');
     body.innerHTML = `<div class="table-wrap"><table class="table"><thead><tr><th>Provider</th><th>Status</th><th class="num">Entries</th><th class="num">With coords</th><th class="num">Live / updating</th><th>Last metadata</th><th>Media & refresh policy</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="small" style="margin-top:8px">This session: ${S.stats.imgOk} image refreshes succeeded, ${S.stats.imgFail} failed${S.stats.lastImg ? `; last successful refresh ${esc(fmtAgo(S.stats.lastImg))}` : ''}.</p>
+      <p class="small" style="margin-top:8px">This session: ${S.stats.imgOk} image refreshes succeeded, ${S.stats.imgFail} failed${S.stats.lastImg ? `; last successful refresh ${esc(fmtAgo(S.stats.lastImg))}` : ''}. Globe imagery: ${esc(S.imagery || (globeKind === 'webgl' ? 'three-globe Blue Marble 2048×1024 (loading NASA GIBS 4096×2048…)' : 'outline map'))}.</p>
       <h3 style="margin:14px 0 6px">Sources not usable from a browser</h3><ul class="small" style="margin:0;padding-left:18px">${BLOCKED.map(([n, w]) => `<li><b>${esc(n)}</b> — ${esc(w)}</li>`).join('')}</ul>
       <h3 style="margin:14px 0 6px">Optional API keys</h3>
       <p class="small muted" style="margin-top:0">Stored only in this browser and sent only to the provider. Leave blank to disable.</p>

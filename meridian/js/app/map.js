@@ -33,6 +33,7 @@
             <div id="mapSearch"></div>
             <label class="check"><input type="checkbox" id="mapNight" checked> Day/night</label>
             <label class="check"><input type="checkbox" id="mapLabels" checked> City labels</label>
+            <label class="check" title="Real satellite imagery of the Earth (NASA Blue Marble via NASA GIBS)"><input type="checkbox" id="mapSat"> Satellite</label>
           </div>
           <div class="map-stage" id="mapStage">
             <div class="empty" id="mapLoading" style="position:absolute;inset:0;display:grid;place-items:center">Loading map data…</div>
@@ -41,6 +42,7 @@
               <button class="icon-btn" id="zOut" aria-label="Zoom out">${M.icon('minus')}</button>
               <button class="icon-btn" id="zReset" aria-label="Reset view" title="Reset view">${M.icon('reset')}</button>
             </div>
+            <div class="map-attr" id="mapAttr"></div>
           </div>
           <div class="map-legend" id="mapLegend" role="group" aria-label="Legend: standard UTC offsets (click to highlight)"></div>
           <div class="map-foot">Colours show each region’s <b>standard</b> UTC offset (from the current IANA rules of the cities inside it, or the map data’s nominal offset where no city is listed). Polygons: <a href="https://www.naturalearthdata.com/downloads/10m-cultural-vectors/timezones/" target="_blank" rel="noopener">Natural Earth 1:10m time zones</a> (public domain, c. 2012, simplified) — they are nominal offset regions, so recent legal changes and small enclaves may not be reflected. Clicking resolves to the nearest listed city in the region; the panel always uses that city’s live IANA rules. Shaded area = night (approximate terminator).</div>
@@ -50,6 +52,12 @@
     picker = M.zonePicker(M.$('#mapSearch', el), { placeholder: 'Find a city, country or time zone…', noMeta: true, includeFixed: false, onChange: (r) => selectRef(r, true) });
     M.$('#mapNight', el).addEventListener('change', (e) => { showNight = e.target.checked; drawNight(true); });
     M.$('#mapLabels', el).addEventListener('change', (e) => { showLabels = e.target.checked; updateLabels(); });
+    const satBox = M.$('#mapSat', el);
+    if (M.basemap) {
+      satBox.checked = M.basemap.enabled();
+      satBox.addEventListener('change', (e) => M.basemap.setEnabled(e.target.checked));
+      M.basemap.onChange((v) => { satBox.checked = v; loadSat(); });
+    } else satBox.closest('label').hidden = true;
     M.$('#mapPanel', el).addEventListener('click', onPanelClick);
     M.bindCopy(M.$('#mapPanel', el));
     renderPanelEmpty();
@@ -110,6 +118,9 @@
     defs.append('clipPath').attr('id', 'sphereClip').append('path').attr('d', path({ type: 'Sphere' }));
     g = svg.append('g');
     g.append('path').attr('class', 'sphere').attr('d', path({ type: 'Sphere' }));
+    const satG = g.append('g').attr('clip-path', 'url(#sphereClip)');
+    satG.append('image').attr('class', 'sat').attr('x', 0).attr('y', 0).attr('width', W).attr('height', H).attr('preserveAspectRatio', 'none');
+    satG.append('image').attr('class', 'sat-detail').attr('preserveAspectRatio', 'none');
     g.append('path').attr('class', 'graticule').attr('d', path(d3.geoGraticule10()));
     const sea = g.append('g').attr('class', 'tz-sea-g').attr('clip-path', 'url(#sphereClip)');
     sea.selectAll('path').data(features).join('path').attr('class', 'tz tz-sea').attr('d', path)
@@ -128,12 +139,13 @@
       .append('title').text(d => `${d.c.name} (${d.c.zone})`);
     cityG.selectAll('text').data(cityXY.filter(d => d.xy)).join('text').attr('class', 'city-label').attr('x', d => d.xy[0] + 3.5).attr('y', d => d.xy[1] + 3).text(d => d.c.name.replace(/ \(.*\)$/, ''));
     g.append('circle').attr('class', 'sel-dot').attr('r', 4).attr('fill', 'var(--amber)').attr('stroke', 'var(--text)').attr('stroke-width', 1.2).style('vector-effect', 'non-scaling-stroke').style('display', 'none');
-    zoom = d3.zoom().scaleExtent([1, 14]).translateExtent([[0, 0], [W, H]]).on('zoom', (ev) => { g.attr('transform', ev.transform); updateLabels(ev.transform.k); });
+    zoom = d3.zoom().scaleExtent([1, 14]).translateExtent([[0, 0], [W, H]]).on('zoom', (ev) => { g.attr('transform', ev.transform); updateLabels(ev.transform.k); }).on('end', scheduleDetail);
     svg.call(zoom).on('dblclick.zoom', null);
     M.$('#zIn', root).addEventListener('click', () => svg.transition().duration(250).call(zoom.scaleBy, 1.6));
     M.$('#zOut', root).addEventListener('click', () => svg.transition().duration(250).call(zoom.scaleBy, 1 / 1.6));
     M.$('#zReset', root).addEventListener('click', () => svg.transition().duration(350).call(zoom.transform, d3.zoomIdentity));
     mapReady = true;
+    loadSat();
     recolor(); updateLabels(1); drawNight(true); renderLegend();
     if (selected) {
       if (!selected.feature) { const ff = featureFor(selected.ref); if (ff) { selected.feature = ff.f; selected.clickLL = ff.ll; } }
@@ -142,10 +154,66 @@
   }
   const etcZone = (sec) => sec % 3600 === 0 && Math.abs(sec) <= 12 * 3600 ? (sec === 0 ? 'Etc/UTC' : `Etc/GMT${sec > 0 ? '-' : '+'}${Math.abs(sec / 3600)}`) : null;
 
+  /* ---------- Satellite basemap: NASA Blue Marble (GIBS) reprojected to Natural Earth ---------- */
+  let satOk = false, satToken = 0, detailToken = 0, detailTimer = null;
+  function setSat(ok, note) {
+    satOk = ok;
+    M.$('#mapStage', root).classList.toggle('has-sat', ok);
+    M.$('#mapAttr', root).textContent = note || '';
+    recolor();
+  }
+  async function loadSat() {
+    if (!mapReady) return;
+    const tok = ++satToken;
+    g.select('.sat').attr('href', null); g.select('.sat-detail').attr('href', null);
+    if (!M.basemap || !M.basemap.enabled()) { setSat(false); return; }
+    M.$('#mapAttr', root).textContent = 'Loading satellite imagery…';
+    try {
+      const SW = 2048, src = await M.basemap.equirect([-180, -90, 180, 90], SW, SW / 2, { keep: true });
+      if (tok !== satToken) return;
+      const k = 2, out = M.basemap.reproject(src, [-180, -90, 180, 90], W * k, H * k, (x, y) => projection.invert([x / k, y / k]));
+      if (tok !== satToken) return;
+      g.select('.sat').attr('href', M.basemap.toURL(out));
+      setSat(true, M.basemap.ATTR);
+      scheduleDetail();
+    } catch (e) {
+      if (tok === satToken) setSat(false, navigator.onLine === false ? 'Satellite imagery not saved for offline use yet' : 'Satellite imagery unavailable: ' + e.message);
+    }
+  }
+  function scheduleDetail() { clearTimeout(detailTimer); detailTimer = setTimeout(loadDetail, 350); }
+  /** When zoomed in, re-render just the visible area from a sharper image so the satellite view stays crisp. */
+  async function loadDetail() {
+    if (!mapReady || !satOk) return;
+    const tok = ++detailToken, t = d3.zoomTransform(svg.node()), det = g.select('.sat-detail');
+    if (t.k < 1.8) { det.attr('href', null); return; }
+    const vx0 = -t.x / t.k, vy0 = -t.y / t.k, vw = W / t.k, vh = H / t.k;
+    let lo0 = 180, lo1 = -180, la0 = 90, la1 = -90, n = 0;
+    for (let i = 0; i <= 12; i++) for (let j = 0; j <= 12; j++) {
+      const p = [vx0 + vw * i / 12, vy0 + vh * j / 12], ll = projection.invert(p);
+      if (!ll) continue;
+      const back = projection(ll);
+      if (!back || Math.hypot(back[0] - p[0], back[1] - p[1]) > 0.5) continue; // outside the globe outline
+      lo0 = Math.min(lo0, ll[0]); lo1 = Math.max(lo1, ll[0]); la0 = Math.min(la0, ll[1]); la1 = Math.max(la1, ll[1]); n++;
+    }
+    if (!n) return;
+    const padX = (lo1 - lo0) * 0.08 + 0.5, padY = (la1 - la0) * 0.08 + 0.5;
+    lo0 = Math.max(-180, lo0 - padX); lo1 = Math.min(180, lo1 + padX); la0 = Math.max(-90, la0 - padY); la1 = Math.min(90, la1 + padY);
+    const stage = M.$('#mapStage', root), dpr = Math.min(2, window.devicePixelRatio || 1);
+    const ow = Math.min(2048, Math.round(stage.clientWidth * dpr)), oh = Math.round(ow * H / W);
+    const pw = Math.min(2048, Math.round(ow * 1.25)), ph = Math.max(8, Math.min(2048, Math.round(pw * (la1 - la0) / Math.max(0.01, lo1 - lo0))));
+    try {
+      const src = await M.basemap.equirect([lo0, la0, lo1, la1], pw, ph);
+      if (tok !== detailToken) return;
+      const out = M.basemap.reproject(src, [lo0, la0, lo1, la1], ow, oh, (x, y) => projection.invert([vx0 + x / ow * vw, vy0 + y / oh * vh]));
+      if (tok !== detailToken) return;
+      det.attr('href', M.basemap.toURL(out)).attr('x', vx0).attr('y', vy0).attr('width', vw).attr('height', vh);
+    } catch (e) { /* keep the base image */ }
+  }
+
   function recolor() {
     if (!mapReady) return;
     g.selectAll('.tz').attr('fill', d => colorFor(d.stdSec)).style('opacity', function (d) {
-      const base = this.classList.contains('tz-sea') ? .28 : 1;
+      const base = this.classList.contains('tz-sea') ? (satOk ? .14 : .28) : (satOk ? .4 : 1);
       return legendFilter == null || d.stdSec === legendFilter ? base : base * .18;
     });
   }

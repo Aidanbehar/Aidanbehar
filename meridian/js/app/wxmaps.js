@@ -243,6 +243,7 @@
           <label class="check"><input type="checkbox" id="wmIso"> Isotherms</label>
           <label class="check"><input type="checkbox" id="wmCities"> City values</label>
           <label class="check"><input type="checkbox" id="wmAnim"> Animate wind</label>
+          <label class="check" title="Real satellite imagery of the Earth (NASA Blue Marble via NASA GIBS) under the weather layer"><input type="checkbox" id="wmSat"> Satellite map</label>
         </div>
         <div class="map-stage wm-stage" id="wmStage"><canvas class="wm-particles" id="wmParticles" aria-hidden="true"></canvas><div class="empty" id="wmMsg" style="position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:16px">Loading map…</div>
           <div class="map-zoom"><button class="icon-btn" id="wmIn" aria-label="Zoom in">${M.icon('plus')}</button><button class="icon-btn" id="wmOut" aria-label="Zoom out">${M.icon('minus')}</button><button class="icon-btn" id="wmReset" aria-label="Reset view">${M.icon('reset')}</button></div></div>
@@ -258,6 +259,9 @@
       const $ = (s) => host.querySelector(s);
       const tip = () => document.getElementById('tooltip');
       $('#wmIso').checked = showIso; $('#wmCities').checked = showCities; $('#wmAnim').checked = animate;
+      const BM = M.basemap, satOn = () => !!BM && BM.enabled();
+      $('#wmSat').checked = satOn(); if (!BM) $('#wmSat').closest('label').hidden = true;
+      let satToken = 0, detailToken = 0, detailTimer = null, satState = '';
       const visible = () => { const v = host.closest('.view'); return !(v && v.hidden) && !document.hidden; };
 
       function gridOf() { return scope === 'world' ? worldGrid() : regionGrid(loc); }
@@ -310,6 +314,8 @@
         g.append('rect').attr('class', 'wm-ocean').attr('x', -W).attr('y', -H).attr('width', 3 * W).attr('height', 3 * H);
         const land = topojson.feature(C, C.objects.land);
         g.append('path').attr('class', 'wm-land').attr('d', path(land));
+        g.append('image').attr('class', 'wm-sat').attr('preserveAspectRatio', 'none');
+        g.append('image').attr('class', 'wm-sat-detail').attr('preserveAspectRatio', 'none');
         g.append('image').attr('class', 'wm-raster').attr('preserveAspectRatio', 'none');
         g.append('path').attr('class', 'country').attr('d', path(topojson.mesh(C, C.objects.countries, (a, b) => a !== b)));
         g.append('path').attr('class', 'coast').attr('d', path(land));
@@ -326,15 +332,60 @@
           g.selectAll('.wm-iso path').attr('stroke-width', function () { return (+this.dataset.w || 1) / k; });
           g.selectAll('.wm-iso text').attr('font-size', 10 / k).attr('stroke-width', 3 / k);
           if (particles) particles.clear();
-        });
+        }).on('end', () => scheduleDetail());
         svg.call(zoom).on('dblclick.zoom', null);
         svg.on('mousemove', onMove).on('mouseleave', () => { tip().hidden = true; legendMark(null); }).on('click', onClick);
         svg.attr('data-key', `${scope}|${grid.key}`);
+        loadSat(grid);
         return true;
       }
 
+      /* ---------- Satellite basemap (NASA Blue Marble via GIBS) ---------- */
+      function satBox(grid) { const [x0, y0, x1, y1] = grid.bbox, a = proj([x0, y1]), b = proj([x1, y0]); return { x0, y0, x1, y1, ax: a[0], ay: a[1], bx: b[0], by: b[1] }; }
+      function satStatus(st) { satState = st; const stage = $('#wmStage'); stage.classList.toggle('wm-has-sat', st === 'ok'); }
+      async function loadSat(grid) {
+        const tok = ++satToken, key = svg.attr('data-key');
+        g.select('.wm-sat').attr('href', null); g.select('.wm-sat-detail').attr('href', null);
+        if (!satOn()) { satStatus('off'); return; }
+        const bx = satBox(grid), pw = Math.min(2 * W, 2048), ph = Math.round(pw * (bx.by - bx.ay) / (bx.bx - bx.ax));
+        satStatus('loading');
+        try {
+          const cv = await BM.equirect(grid.bbox, pw, ph, { keep: true });
+          if (tok !== satToken || !svg || svg.attr('data-key') !== key) return;
+          g.select('.wm-sat').attr('href', BM.toURL(cv)).attr('x', bx.ax).attr('y', bx.ay).attr('width', bx.bx - bx.ax).attr('height', bx.by - bx.ay);
+          satStatus('ok'); scheduleDetail();
+        } catch (e) { if (tok === satToken) satStatus('failed:' + e.message); }
+        if (data) safeDraw();
+      }
+      function satNote() {
+        if (!BM || satState === 'off') return '';
+        if (satState === 'ok') return ` Background: ${BM.ATTR}.`;
+        if (satState === 'loading') return ' Loading satellite imagery…';
+        return ` Satellite imagery unavailable (${esc(satState.slice(7))}) — showing the outline map.`;
+      }
+      /** When zoomed in, fetch a sharper image of just the visible area. */
+      function scheduleDetail() { clearTimeout(detailTimer); detailTimer = setTimeout(loadDetail, 350); }
+      async function loadDetail() {
+        if (!svg || !satOn() || !satState.startsWith('ok')) return;
+        const tok = ++detailToken, t = d3.zoomTransform(svg.node()), det = g.select('.wm-sat-detail');
+        if (t.k < 1.8) { det.attr('href', null); return; }
+        const bx = satBox(gridOf()), sx = (bx.x1 - bx.x0) / (bx.bx - bx.ax), sy = (bx.y1 - bx.y0) / (bx.by - bx.ay);
+        const vx0 = Math.max(bx.ax, -t.x / t.k), vx1 = Math.min(bx.bx, (W - t.x) / t.k);
+        const Hs = W * (bx.by - bx.ay) / (bx.bx - bx.ax), vy0 = Math.max(bx.ay, -t.y / t.k), vy1 = Math.min(bx.by, (Hs - t.y) / t.k);
+        if (vx1 <= vx0 || vy1 <= vy0) return;
+        const lon0 = bx.x0 + (vx0 - bx.ax) * sx, lon1 = bx.x0 + (vx1 - bx.ax) * sx, lat1 = bx.y1 - (vy0 - bx.ay) * sy, lat0 = bx.y1 - (vy1 - bx.ay) * sy;
+        const stage = $('#wmStage'), dpr = Math.min(2, window.devicePixelRatio || 1);
+        const pw = Math.min(2048, Math.round(stage.clientWidth * dpr * (vx1 - vx0) / (W / t.k))), ph = Math.round(pw * (vy1 - vy0) / (vx1 - vx0));
+        try {
+          const cv = await BM.equirect([lon0, lat0, lon1, lat1], pw, ph);
+          if (tok !== detailToken) return;
+          det.attr('href', BM.toURL(cv)).attr('x', vx0).attr('y', vy0).attr('width', vx1 - vx0).attr('height', vy1 - vy0);
+        } catch (e) { /* keep the base image */ }
+      }
+
       function raster() {
-        const key = `${layer}|${hour}|${data.grid.key}|${data.at}`;
+        const satA = satState === 'ok' ? 170 : 190; // let the satellite map show through a little more
+        const key = `${layer}|${hour}|${data.grid.key}|${data.at}|${satA}`;
         if (rasterCache.has(key)) return rasterCache.get(key);
         const [x0, y0, x1, y1] = data.grid.bbox;
         const cw = scope === 'world' ? 720 : 480, ch = Math.round(cw * (y1 - y0) / (x1 - x0));
@@ -356,7 +407,7 @@
               continue;
             }
             const c = color(layer, v);
-            px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 190;
+            px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = satA;
           }
         }
         ctx.putImageData(img, 0, 0);
@@ -474,7 +525,7 @@
         if (layer === 'wind' && animate) particlesStart(); else particlesStop();
         drawArrows();
         timeLbl();
-        $('#wmNote').innerHTML = `${layer === 'aqi' ? 'US AQI computed from the Copernicus Atmosphere Monitoring Service (CAMS) model' : 'Forecast model data (“best match” of national weather-service models: ECMWF, NOAA GFS, DWD ICON and others)'} via Open-Meteo. ${scope === 'world' ? '9° × 6° grid' : '1.5° grid around the selected location'}, smoothly interpolated (bicubic, without overshoot) — a forecast field, not observations. Hatched areas = no data. ${layer === 'precip' ? 'Precipitation falling during each hour; blank means none. ' : ''}${layer === 'wind' ? 'Particles/arrows move with the 10 m wind; colour shows its speed. ' : ''}${layer === 'temp' && showIso ? `Lines are isotherms every ${units() === 'us' ? '10°F' : '5°C'}; the thicker line is freezing. ` : ''}Hover for values; click to load that point’s full forecast.`;
+        $('#wmNote').innerHTML = `${layer === 'aqi' ? 'US AQI computed from the Copernicus Atmosphere Monitoring Service (CAMS) model' : 'Forecast model data (“best match” of national weather-service models: ECMWF, NOAA GFS, DWD ICON and others)'} via Open-Meteo. ${scope === 'world' ? '9° × 6° grid' : '1.5° grid around the selected location'}, smoothly interpolated (bicubic, without overshoot) — a forecast field, not observations. Hatched areas = no data. ${layer === 'precip' ? 'Precipitation falling during each hour; blank means none. ' : ''}${layer === 'wind' ? 'Particles/arrows move with the 10 m wind; colour shows its speed. ' : ''}${layer === 'temp' && showIso ? `Lines are isotherms every ${units() === 'us' ? '10°F' : '5°C'}; the thicker line is freezing. ` : ''}Hover for values; click to load that point’s full forecast.${satNote()}`;
       }
       function timeLbl() {
         const el = $('#wmTimeLbl'); if (!data || !data.times || !data.times.length) { el.textContent = ''; return; }
@@ -577,6 +628,8 @@
       $('#wmStage').addEventListener('click', (e) => { if (e.target.id === 'wmRetry') load(true); });
       $('#wmIso').addEventListener('change', (e) => { showIso = e.target.checked; M.store.set('wxMapIso', showIso); safeDraw(); });
       $('#wmCities').addEventListener('change', (e) => { showCities = e.target.checked; M.store.set('wxMapCities', showCities); safeDraw(); });
+      $('#wmSat').addEventListener('change', (e) => BM.setEnabled(e.target.checked));
+      if (BM) BM.onChange((v) => { $('#wmSat').checked = v; if (svg && svg.node().isConnected) loadSat(gridOf()); });
       $('#wmAnim').addEventListener('change', (e) => { animate = e.target.checked; M.store.set('wxMapAnim', animate); safeDraw(); });
       $('#wmTime').addEventListener('input', (e) => { hour = +e.target.value; safeDraw(); });
       const stopPlay = () => { clearInterval(playing); playing = null; $('#wmPlay').textContent = '▶ Play'; };

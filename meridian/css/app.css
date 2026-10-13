@@ -579,6 +579,14 @@ table.table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 :root[data-theme="dark"] .wm-stage .country, :root[data-theme="dark"] .wm-stage .coast { stroke: rgba(235, 240, 255, .55); }
 .wm-particles { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
 .wm-stage .map-zoom { z-index: 2; }
+.wm-sat, .wm-sat-detail, .map-stage .sat, .map-stage .sat-detail { pointer-events: none; image-rendering: auto; }
+.wm-stage.wm-has-sat .country, .wm-stage.wm-has-sat .coast, :root[data-theme="dark"] .wm-stage.wm-has-sat .country, :root[data-theme="dark"] .wm-stage.wm-has-sat .coast { stroke: rgba(255, 255, 255, .42); }
+.wm-stage.wm-has-sat .coast { stroke-opacity: .6; }
+.map-stage.has-sat .country, .map-stage.has-sat .coast { stroke: rgba(255, 255, 255, .5); }
+.map-stage.has-sat .graticule { stroke: rgba(255, 255, 255, .5); stroke-opacity: .18; }
+.map-stage.has-sat .tz { stroke: rgba(255, 255, 255, .35); }
+.map-attr { position: absolute; left: 8px; bottom: 6px; font-size: .66rem; color: #fff; background: rgba(0, 0, 0, .45); padding: 1px 6px; border-radius: 4px; pointer-events: none; z-index: 2; }
+.map-attr:empty { display: none; }
 .wm-iso path { fill: none; stroke: rgba(20, 28, 50, .55); pointer-events: none; }
 .wm-iso path.freeze { stroke: #1d4fc3; }
 .wm-iso text { fill: #1a2340; stroke: rgba(255, 255, 255, .85); paint-order: stroke; font-weight: 700; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
