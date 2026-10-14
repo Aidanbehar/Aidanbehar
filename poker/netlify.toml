@@ -1,0 +1,20 @@
+# Feltroom: static site, no build step, no Functions, no Forms.
+# Works on Netlify's free plan. Everything lives in index.html.
+
+[build]
+  publish = "."
+  # Intentionally no build command.
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    X-Frame-Options = "DENY"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    # Always fetch the latest version of the single-page app.
+    Cache-Control = "public, max-age=0, must-revalidate"
