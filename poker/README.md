@@ -241,6 +241,43 @@ prove its work to everyone else.
   commands (start, pause, remove, stacks, end) are never accepted from the network.
 - **Flood the host.** Each connection is rate-limited.
 
+**How this was tested.** Automated attacks are run against the real code:
+
+- **A "spy" player** records everything their browser receives during dozens of hands, in every
+  game type and record mode. The test checks that no unshown hole card ever appears in that data
+  and that none can be worked out by elimination.
+- **A hostile player** sends crafted messages that try to:
+  - claim the host's or another player's seat
+  - re-send "hello" to spawn extra identities or swap identity
+  - sit in impossible seats
+  - send host-only commands
+  - act out of turn or with absurd bet amounts
+  - flood the table with fake joins
+  - pollute JavaScript objects with names such as `__proto__`
+- **A hostile host** sends script-injection payloads in every field: names, cards, seats, chat,
+  records and fairness messages.
+
+Issues found and fixed:
+
+- **Folded hands could be deduced.** In "showdown only" mode, the end-of-hand fairness check revealed
+  the burn and undealt cards, which let a player work out folded hands by elimination. It now
+  reveals only public cards.
+- **Seats could be claimed or invented.** The host's seat could in principle be claimed with its
+  token, one connection could create many players, and fractional seat numbers were accepted.
+- **Fake joins could fill the table.**
+- **Several host-supplied values reached the page unescaped.**
+
+**Page hardening:**
+
+- A strict Content-Security-Policy: only the page's own two scripts (pinned by hash) and the exact
+  PeerJS release may run.
+- Subresource Integrity on PeerJS.
+- Every update from the host is rebuilt into a known-safe shape before it is displayed.
+- Invisible and text-direction characters are stripped from names and chat, so nobody can disguise
+  themselves as another player.
+- The offline `?local` test transport only works on localhost.
+- Frame and opener isolation headers.
+
 **What the host can't do without being caught (provably fair shuffle):**
 
 1. Before every hand, the host shuffles a secret deck and publishes a SHA-256 commitment for each

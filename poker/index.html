@@ -7,14 +7,23 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer onerror="window.__peerFallback && window.__peerFallback()"></script>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-qaseCn86f2kYDB22/xT5NzCWDHhaI9tHyZ/YsviNBhY=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
-  // If unpkg is unreachable, try the jsDelivr mirror of the same free, MIT-licensed file.
-  window.__peerFallback = function () {
-    var s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
-    document.head.appendChild(s);
-  };
+  // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
+  // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
+  (function () {
+    var urls = ['https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js', 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'];
+    function load(i) {
+      if (i >= urls.length) return;
+      var s = document.createElement('script');
+      s.src = urls[i];
+      s.integrity = 'sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR';
+      s.crossOrigin = 'anonymous';
+      s.onerror = function () { s.remove(); load(i + 1); };
+      document.head.appendChild(s);
+    }
+    load(0);
+  })();
 </script>
 <style>
 /* =====================================================================
@@ -577,8 +586,19 @@ const U = {
   fmt(n) { return Number(n || 0).toLocaleString('en-US'); },
   /** Names may not contain characters the record notation uses as syntax. */
   sanitizeName(s) {
-    s = String(s || '').replace(/[;:\[\]"#,=()<>{}\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 18);
+    s = String(s || '').normalize('NFKC')
+      // invisible / direction-changing characters could disguise one player as another
+      .replace(/[\u0000-\u001F\u007F-\u009F\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, '')
+      .replace(/[;:\[\]"#,=()<>{}\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 18);
+    // names are used as keys in records and stats: never allow built-in object property names
+    const reserved = (x) => Object.prototype.hasOwnProperty.call(Object.prototype, x) || /^__.*__$/.test(x);
+    if (reserved(s)) s = s.replace(/_/g, '');
+    if (s && reserved(s)) s += ' 1';
     return s;
+  },
+  /** Same invisible-character filter for chat text. */
+  cleanText(s, max) {
+    return String(s || '').replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
   },
   sum(a) { return a.reduce((x, y) => x + y, 0); },
   esc(s) {
@@ -1141,12 +1161,14 @@ const Fair = (() => {
    * it reports 'verified', 'unverified' (not enough data, e.g. joined mid-hand) or 'failed' with reasons.
    */
   class Checker {
-    constructor(onChange) { this.hands = {}; this.onChange = onChange || (() => {}); this.latest = null; }
+    constructor(onChange) { this.hands = Object.create(null); this.onChange = onChange || (() => {}); this.latest = null; }
+    _ok(no) { return Number.isInteger(no) && no > 0 && no < 1e9; }
     _h(no) { return (this.hands[no] = this.hands[no] || { no, problems: [], notes: [], checked: new Set(), cards: new Map(), status: 'unverified', verified: 0 }); }
     _fail(f, msg) { if (!f.problems.includes(msg)) { f.problems.push(msg); f.status = 'failed'; this.latest = f; this.onChange(f, msg); } }
     _note(f, msg) { if (!f.notes.includes(msg)) f.notes.push(msg); }
 
     fair1(m) {
+      if (!this._ok(m.no)) return null;
       if (!Array.isArray(m.commits) || m.commits.length !== 52 || !m.commits.every((c) => isHex(c, 64))) return null;
       const f = this._h(m.no);
       if (f.commits) return null; // commitments can never be replaced mid-hand
@@ -1158,6 +1180,7 @@ const Fair = (() => {
       return { t: 'fairc', no: m.no, c: f.seedC };
     }
     fair2(m) {
+      if (!this._ok(m.no)) return null;
       const f = this.hands[m.no];
       if (!f || !Array.isArray(m.seedCommits) || f.seedCommits) return null;
       f.seedCommits = m.seedCommits.filter((c) => isHex(c, 64));
@@ -1165,6 +1188,7 @@ const Fair = (() => {
       return f.seedC ? { t: 'fairs', no: m.no, seed: f.seed } : null;
     }
     fair3(m) {
+      if (!this._ok(m.no)) return;
       const f = this.hands[m.no];
       if (!f || !f.commits || f.perm) return;
       const seeds = (m.seeds || []).filter((x) => isHex(x, 64));
@@ -1196,6 +1220,7 @@ const Fair = (() => {
       return r.card;
     }
     own(m, myName) {
+      if (!this._ok(m.no)) return;
       const f = this.hands[m.no];
       if (!f || !f.perm) return;
       const k = f.order.indexOf(myName);
@@ -1210,7 +1235,7 @@ const Fair = (() => {
     /** Check what a state view shows against the proofs for its hand. */
     view(v, myName) {
       const fv = v.fair;
-      if (!fv) return;
+      if (!fv || !this._ok(fv.no) || !Array.isArray(fv.reveals)) return;
       const f = this.hands[fv.no];
       if (!f || !f.perm) return;
       const byPos = new Map();
@@ -1457,7 +1482,7 @@ const Bots = (() => {
   /* ---------- opponent models from public history ---------- */
   /** Per-name tendencies from finished hands (public actions only). */
   function buildModels(hands) {
-    const M = {};
+    const M = Object.create(null);
     const get = (nm) => (M[nm] = M[nm] || { hands: 0, vpip: 0, pfr: 0, aggr: 0, passive: 0, faced: 0, folded: 0 });
     for (const h of hands) {
       const bets = h.players.map(() => 0);
@@ -1483,7 +1508,7 @@ const Bots = (() => {
       vp.forEach((i) => get(h.players[i].name).vpip++);
       pr.forEach((i) => get(h.players[i].name).pfr++);
     }
-    const out = {};
+    const out = Object.create(null);
     for (const [nm, m] of Object.entries(M)) {
       const w = Math.min(1, m.hands / 12); // shrink toward a neutral prior until we have data
       const vpip = w * (m.vpip / Math.max(1, m.hands)) + (1 - w) * 0.3;
@@ -1755,7 +1780,7 @@ const Notation = {
     const rec = {
       no: h.no, button: names[h.button],
       stacks: h.players.map((p) => [p.name, p.startStack]),
-      hole: {}, posts: [], streets: [{ board: [], actions: [] }], shows: [], results: [],
+      hole: Object.create(null), posts: [], streets: [{ board: [], actions: [] }], shows: [], results: [],
       holeCount: h.holeCount || 2,
     };
     rec.tags = Notation.handTags(rec);
@@ -1793,7 +1818,7 @@ const Notation = {
     const cardsFor = (name) => (r.hole[name] ? `[${r.hole[name].join('')}]` : `[${'??'.repeat(r.holeCount || 2)}]`);
     // Hole cards appear once per player: on their first preflop action, else on their first post.
     const placed = new Set();
-    const firstAct = {};
+    const firstAct = Object.create(null);
     r.streets[0].actions.forEach((a, k) => { if (!(a.name in firstAct)) firstAct[a.name] = k; });
     const tok = (name, verb, amt, withCards) => `${name}${withCards ? ' ' + cardsFor(name) : ''} ${verb}${amt != null ? ' ' + amt : ''}`;
     const lines = [`#${r.no} ${Notation.tagStr(r.tags)}`];
@@ -1859,7 +1884,7 @@ const Notation = {
     const tag = (k) => (g.tags.find((t) => t[0] === k) || [])[1];
     if (!g.tags.length) fail('A record starts with header tags such as [Event "..."] and [Blinds "1/2"]');
     if (!/^\d+\/\d+$/.test(tag('Blinds') || '')) fail('Missing or invalid [Blinds "SB/BB"] tag', 0);
-    const variant = VARIANTS[tag('Variant') || 'NLHE'];
+    const variant = Object.hasOwn(VARIANTS, tag('Variant') || 'NLHE') ? VARIANTS[tag('Variant') || 'NLHE'] : null;
     if (!variant) fail(`Unknown [Variant "${tag('Variant')}"] (supported: ${Object.keys(VARIANTS).join(', ')})`, 0);
     const holeCount = variant.holeCount;
     skip();
@@ -1867,7 +1892,7 @@ const Notation = {
       const handStart = pos;
       const hm = re(/#(\d+)/y);
       if (!hm) fail(`Expected a hand header like "#1 [Button ...]" but found "${peekStr()}"`);
-      const r = { no: Number(hm[1]), tags: readTags(), hole: {}, posts: [], streets: [{ board: [], actions: [] }], shows: [], results: [], holeCount };
+      const r = { no: Number(hm[1]), tags: readTags(), hole: Object.create(null), posts: [], streets: [{ board: [], actions: [] }], shows: [], results: [], holeCount };
       const ht = (k) => (r.tags.find((t) => t[0] === k) || [])[1];
       if (ht('Stacks') == null) fail(`Hand #${r.no} is missing its [Stacks "..."] tag`, handStart);
       if (ht('Button') == null) fail(`Hand #${r.no} is missing its [Button "..."] tag`, handStart);
@@ -2067,7 +2092,7 @@ const Replay = {
         Engine.settle(h, plan);
         if (h.results.showdown) snap('Showdown', { kind: 'showdown' });
         for (const i of vol) Engine.showCards(h, i);
-        const got = {}, want = {};
+        const got = Object.create(null), want = Object.create(null);
         h.log.filter((e) => e.t === 'win').forEach((e) => { got[names[e.p]] = (got[names[e.p]] || 0) + e.amt; });
         r.results.forEach((w) => { want[w.name] = (want[w.name] || 0) + w.amt; });
         const fmt = (o) => Object.keys(o).sort().map((k) => `${k} ${o[k]}`).join(', ');
@@ -2081,14 +2106,14 @@ const Replay = {
   game(g) {
     const tag = (k) => (g.tags.find((t) => t[0] === k) || [])[1];
     const [sb, bb] = (tag('Blinds') || '1/2').split('/').map(Number);
-    const v = VARIANTS[tag('Variant') || 'NLHE'] || VARIANTS.NLHE;
+    const v = (Object.hasOwn(VARIANTS, tag('Variant') || 'NLHE') && VARIANTS[tag('Variant') || 'NLHE']) || VARIANTS.NLHE;
     const cfg = { sb, bb, ante: Number(tag('Ante') || 0), game: v.game, limit: v.limit, holeCount: v.holeCount, variant: v };
     const hands = g.hands.map((r) => Replay.hand(r, cfg));
     const notes = [];
     for (let k = 1; k < hands.length; k++) {
       const prev = hands[k - 1].hand;
       if (!prev || prev.phase !== 'done') continue;
-      const end = {};
+      const end = Object.create(null);
       prev.players.forEach((p) => { end[p.name] = p.stack; });
       const diffs = hands[k].rec.stacks.filter(([n, st]) => n in end && end[n] !== st).map(([n, st]) => `${n} ${end[n]}→${st}`);
       if (diffs.length) notes.push(`Before hand #${hands[k].rec.no}: stacks changed between hands (rebuy or adjustment): ${diffs.join(', ')}`);
@@ -2099,7 +2124,7 @@ const Replay = {
   summary(rh) {
     const h = rh.hand;
     if (!h || h.phase !== 'done') return `#${rh.rec.no} · incomplete`;
-    const by = {};
+    const by = Object.create(null);
     h.log.filter((e) => e.t === 'win').forEach((e) => { by[e.p] = (by[e.p] || 0) + e.amt; });
     const parts = Object.keys(by).map((i) => {
       const p = h.players[i];
@@ -2114,7 +2139,7 @@ const Replay = {
    * Every stat has an entry in STAT_KEY explaining exactly how it is counted.
    */
   stats(replay) {
-    const P = {}, order = [];
+    const P = Object.create(null), order = [];
     const blank = (n) => ({
       name: n, hands: 0, won: 0, net: 0, bbNet: 0, vpip: 0, pfr: 0, limp: 0, foldPre: 0,
       threeBet: 0, threeBetOpp: 0, foldTo3: 0, foldTo3Opp: 0, cbet: 0, cbetOpp: 0, foldToCbet: 0, foldToCbetOpp: 0,
@@ -2124,7 +2149,7 @@ const Replay = {
     const get = (n) => { if (!P[n]) { P[n] = blank(n); order.push(n); } return P[n]; };
     let biggestPot = 0, biggestPotHand = null, potSum = 0, playersSum = 0, showdowns = 0, splits = 0, total = 0, botHandsTotal = 0;
     const cats = new Array(HAND_CATS.length).fill(0);
-    const series = {};
+    const series = Object.create(null);
     replay.hands.forEach((rh, k) => {
       const h = rh.hand;
       if (!h || h.phase !== 'done') return;
@@ -2669,10 +2694,16 @@ class HostTable {
   /** Join or reconnect. Returns {player, reconnected} or {error}. */
   addPlayer(name, token) {
     if (token && this.banned.has(token)) return { error: 'You were removed from this table by the host.' };
+    // The host's and bots' seats can never be claimed over the network.
     const existing = token && this.byToken(token);
+    if (existing && (existing.isHost || existing.isBot)) return { error: 'That seat cannot be claimed.' };
     if (existing) { existing.lastSeen = Date.now(); return { player: existing, reconnected: true, pid: existing.pid }; }
     if (this.status === 'ended') return { error: 'This game has ended.' };
-    if (this.players.size >= 24) return { error: 'This table is full.' };
+    if (this.players.size >= 24) {
+      // Make room by dropping disconnected watchers, so join spam can't lock real players out.
+      for (const q of [...this.players.values()]) if (this.players.size >= 24 && !q.connected && q.seat == null && !q.isHost && !q.isBot && !this._inLiveHand(q.pid)) this.players.delete(q.pid);
+      if (this.players.size >= 24) return { error: 'This table is full.' };
+    }
     const pid = 'p' + U.randHex(4);
     const p = {
       pid, token: token || U.randHex(16), name: this.uniqueName(name), seat: null, stack: this.s.startingStack,
@@ -2711,7 +2742,7 @@ class HostTable {
         if (this.status === 'ended') return err('The game has ended.');
         if (p.seat != null) return err('You already have a seat.');
         if (pid === this.hostPid && this.s.hostPlays === false) return err('You chose to deal without playing at this table.');
-        if (!(seat >= 0 && seat < this.seats.length) || this.seats[seat]) return err('That seat is taken.');
+        if (!Number.isInteger(seat) || seat < 0 || seat >= this.seats.length || this.seats[seat]) return err('That seat is taken.');
         this._sit(pid, seat);
         this.onEvent('info', `${p.name} sat down`, null);
         this._maybeDeal();
@@ -2764,7 +2795,7 @@ class HostTable {
         return;
       }
       case 'chat': {
-        const text = String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, 280);
+        const text = U.cleanText(m.text, 280);
         if (!text) return;
         this.chat.push({ id: ++this.chatId, from: p.name, text, ts: Date.now() });
         if (this.chat.length > 80) this.chat.shift();
@@ -2988,17 +3019,10 @@ class HostTable {
       const k = f.order.indexOf(this.handPids[i]);
       for (let r = 0; r < f.holeCount; r++) add(L.hole(k, r));
     });
-    if (h.phase === 'done') {
-      const secret = new Set();
-      if (this.s.recordHole !== 'All') {
-        h.players.forEach((p, i) => {
-          if (p.shown) return;
-          const k = f.order.indexOf(this.handPids[i]);
-          for (let r = 0; r < f.holeCount; r++) secret.add(L.hole(k, r));
-        });
-      }
-      for (let pos = 0; pos < 52; pos++) if (!secret.has(pos)) add(pos);
-    }
+    // Only in "All cards" mode is the rest of the deck revealed at the end (the record shows every hand
+    // then anyway). In "showdown only" mode, revealing burns or the undealt stub would let players
+    // deduce folded and mucked hands by elimination, so only already-public cards are ever proven.
+    if (h.phase === 'done' && this.s.recordHole === 'All') for (let pos = 0; pos < 52; pos++) add(pos);
     return { no: f.no, reveals, final: h.phase === 'done', seeds: f.seedList.length };
   }
 
@@ -3301,7 +3325,9 @@ class LocalConn {
 const Net = {
   // Free public STUN servers only (no TURN, nothing paid).
   ICE: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }],
-  local: /[?&]local\b/.test(location.search),
+  // The offline BroadcastChannel transport is a development aid: every tab of the site can read its
+  // messages, so it is only available on localhost, never on the deployed site.
+  local: /[?&]local\b/.test(location.search) && /^(localhost|127\.0\.0\.1|\[::1\]|)$/.test(location.hostname),
 
   async lib() {
     if (Net.local) return LocalPeer;
@@ -3423,7 +3449,8 @@ class HostSession {
     b.n -= 1;
     const t = this.table;
     if (m.t === 'hello') {
-      const r = t.addPlayer(String(m.name || ''), typeof m.token === 'string' ? m.token.slice(0, 64) : null);
+      if (c.pid) return; // one identity per connection: a second hello can't spawn or swap players
+      const r = t.addPlayer(String(m.name || '').slice(0, 64), typeof m.token === 'string' && /^[0-9a-f]{16,64}$/.test(m.token) ? m.token : null);
       if (r.error) { this._send(c, { t: 'reject', text: r.error }); setTimeout(() => { try { c.close(); } catch { /* ignore */ } }, 500); return; }
       const old = this.conns.get(r.pid);
       if (old && old !== c) { old.replaced = true; try { old.close(); } catch { /* ignore */ } }
@@ -3492,6 +3519,79 @@ class HostSession {
 }
 
 /* ---------- Client side ---------- */
+/**
+ * Everything a player's browser shows comes from the host. A modified host could send anything,
+ * so each state update is rebuilt field by field into a known shape: numbers are numbers, cards are
+ * real cards, strings are length-limited, lists are capped. Only this cleaned copy reaches the UI.
+ */
+const Safe = (() => {
+  // Only genuine numbers count: null, booleans, strings and objects fall back to the default.
+  const num = (x, d = 0) => (typeof x === 'number' && Number.isFinite(x) ? x : d);
+  const int = (x, lo, hi, d = null) => (typeof x === 'number' && Number.isInteger(x) && x >= lo && x <= hi ? x : d);
+  const str = (x, max = 80) => (typeof x === 'string' ? x.slice(0, max) : '');
+  const bool = (x) => x === true;
+  const card = (c) => (Cards.isCard(c) ? c : null);
+  const cards = (a, max) => (Array.isArray(a) ? a.slice(0, max).map(card) : null);
+  const oneOf = (x, list, d) => (list.includes(x) ? x : d);
+  const ACTS = ['f', 'x', 'c', 'b', 'r', 'sb', 'bb'];
+  function view(v) {
+    if (!v || typeof v !== 'object') return null;
+    const t = v.table || {};
+    const table = {
+      name: str(t.name, 40), sb: num(t.sb), bb: num(t.bb, 1), ante: num(t.ante), baseSb: num(t.baseSb), baseBb: num(t.baseBb),
+      maxSeats: int(t.maxSeats, 2, 9, 9), timer: int(t.timer, 0, 600, 0), rebuys: bool(t.rebuys), maxRebuys: int(t.maxRebuys, 0, 99, 0),
+      recordHole: oneOf(t.recordHole, ['All', 'Showdown'], 'Showdown'), startingStack: num(t.startingStack),
+      variant: oneOf(t.variant, Object.keys(VARIANTS), 'NLHE'), holeCount: int(t.holeCount, 2, 5, 2), limit: oneOf(t.limit, ['nl', 'pl'], 'nl'),
+      levelHands: int(t.levelHands, 0, 1000, 0), level: int(t.level, 0, 1000, 1), hostPlays: bool(t.hostPlays),
+      nextLevelIn: int(t.nextLevelIn, 0, 1000, 0), botTakeover: bool(t.botTakeover), vsBots: bool(t.vsBots),
+    };
+    table.variantName = VARIANTS[table.variant].name;
+    const seat = (s, i) => (s && typeof s === 'object' ? {
+      seat: i, pid: str(s.pid, 24), name: str(s.name, 24), stack: num(s.stack), bet: num(s.bet), cards: cards(s.cards, 5),
+      inHand: bool(s.inHand), folded: bool(s.folded), allIn: bool(s.allIn), sittingOut: bool(s.sittingOut), busted: bool(s.busted),
+      disconnected: bool(s.disconnected), isHost: bool(s.isHost), isYou: bool(s.isYou), button: bool(s.button), sb: bool(s.sb), bb: bool(s.bb),
+      toAct: bool(s.toAct), won: num(s.won), handName: str(s.handName, 60) || null, shown: bool(s.shown), mucked: bool(s.mucked),
+      lastAction: oneOf(s.lastAction, ACTS, null), lastTo: num(s.lastTo), isBot: bool(s.isBot), botPlaying: bool(s.botPlaying), botLabel: str(s.botLabel, 20) || null,
+    } : null);
+    const L = v.legal && typeof v.legal === 'object' ? v.legal : null;
+    const y = v.you && typeof v.you === 'object' ? v.you : null;
+    return {
+      t: 'state', table, shuffling: bool(v.shuffling), fair: v.fair, // fair proofs are validated by the Checker itself
+      status: oneOf(v.status, ['lobby', 'playing', 'ended'], 'lobby'), paused: bool(v.paused), waiting: bool(v.waiting),
+      handNo: int(v.handNo, 0, 1e9, 0), phase: oneOf(v.phase, ['betting', 'deal', 'showdown', 'settle', 'done'], null),
+      street: str(v.street, 20), board: (cards(v.board, 5) || []).filter(Boolean),
+      pots: Array.isArray(v.pots) ? v.pots.slice(0, 10).map((p) => ({ label: str(p && p.label, 20), amount: num(p && p.amount) })) : [],
+      potTotal: num(v.potTotal),
+      seats: Array.isArray(v.seats) ? v.seats.slice(0, table.maxSeats).map(seat) : [],
+      legal: L && {
+        player: int(L.player, 0, 9, 0), canCheck: bool(L.canCheck), toCall: num(L.toCall), callTo: num(L.callTo), canRaise: bool(L.canRaise),
+        minTo: num(L.minTo), maxTo: num(L.maxTo), isBet: bool(L.isBet), currentBet: num(L.currentBet), myBet: num(L.myBet), stack: num(L.stack),
+        pot: num(L.pot), reopenBlocked: bool(L.reopenBlocked), capped: bool(L.capped), limit: oneOf(L.limit, ['nl', 'pl'], 'nl'),
+      },
+      timer: v.timer && typeof v.timer === 'object' ? { remaining: num(v.timer.remaining), total: num(v.timer.total), paused: bool(v.timer.paused) } : null,
+      results: v.results && typeof v.results === 'object' ? {
+        showdown: bool(v.results.showdown), winCards: (cards(v.results.winCards, 10) || []).filter(Boolean),
+        lines: Array.isArray(v.results.lines) ? v.results.lines.slice(0, 12).map((l) => str(l, 160)) : [],
+      } : null,
+      you: y && {
+        pid: str(y.pid, 24), name: str(y.name, 24), seat: int(y.seat, 0, 8, null), isHost: bool(y.isHost), inHand: bool(y.inHand), dealt: bool(y.dealt),
+        sittingOut: bool(y.sittingOut), busted: bool(y.busted), stack: num(y.stack), autoMuck: bool(y.autoMuck), canShow: bool(y.canShow),
+        canRebuy: bool(y.canRebuy), toCallPreview: num(y.toCallPreview),
+      },
+      hostName: str(v.hostName, 24),
+      players: Array.isArray(v.players) ? v.players.slice(0, 30).map((p) => ({
+        pid: str(p && p.pid, 24).replace(/[^\w-]/g, ''), name: str(p && p.name, 24), seat: int(p && p.seat, 0, 8, null), stack: num(p && p.stack),
+        connected: bool(p && p.connected), sittingOut: bool(p && p.sittingOut), busted: bool(p && p.busted), isHost: bool(p && p.isHost),
+        isBot: bool(p && p.isBot), rebuys: int(p && p.rebuys, 0, 1e6, 0), net: num(p && p.net),
+      })) : [],
+      log: Array.isArray(v.log) ? v.log.slice(-150).map((l) => ({ id: num(l && l.id), text: str(l && l.text, 300), kind: oneOf(l && l.kind, ['hand', 'win', ''], '') })) : [],
+      chat: Array.isArray(v.chat) ? v.chat.slice(-80).map((c) => ({ id: num(c && c.id), from: str(c && c.from, 24), text: str(c && c.text, 300), ts: num(c && c.ts) })) : [],
+    };
+  }
+  return { view };
+})();
+
+
 class ClientSession {
   constructor(hostId, name, opts = {}) {
     this.role = 'client';
@@ -3557,6 +3657,8 @@ class ClientSession {
   _msg(m) {
     switch (m.t) {
       case 'state':
+        m = Safe.view(m);
+        if (!m) break;
         this.lastView = m;
         try { this.fair.view(m, this.name); } catch (e) { console.warn(e); }
         // The record for a hand can arrive just before the view that proves its last board card.
@@ -3838,6 +3940,7 @@ function helpOverlay(mode) {
 /* ---------- Cards, chips, avatars ---------- */
 const SUIT_NAME = { s: 'spades', h: 'hearts', d: 'diamonds', c: 'clubs' };
 function cardHtml(c, cls = '', style = '') {
+  if (!Cards.isCard(c)) c = null; // never put anything but a real card into the page
   if (!c) return `<div class="card back ${cls}" style="${style}" role="img" aria-label="Face-down card"></div>`;
   const r = c[0] === 'T' ? '10' : c[0], s = c[1];
   return `<div class="card s-${s} ${cls}" style="${style}" data-card="${c}" role="img" aria-label="${RANK_WORD[Cards.rank(c)]} of ${SUIT_NAME[s]}"><span class="cr">${r}</span><span class="cs">${SUIT_SYM[s]}</span><span class="cb">${SUIT_SYM[s]}</span></div>`;
@@ -3979,7 +4082,7 @@ class TableView {
       if (st.allIn) tags.push('<span class="tag allin">All-in</span>');
       if (st.busted) tags.push('<span class="tag off">Busted</span>');
       else if (st.sittingOut) tags.push('<span class="tag off">Sitting out</span>');
-      if (st.isBot) tags.push(`<span class="tag" title="Computer player${st.botLabel ? ' · ' + st.botLabel : ''}">🤖 Bot</span>`);
+      if (st.isBot) tags.push(`<span class="tag" title="Computer player${st.botLabel ? ' · ' + U.esc(st.botLabel) : ''}">🤖 Bot</span>`);
       if (st.botPlaying) tags.push('<span class="tag off" title="A bot is playing for this player while they are disconnected">🤖 Bot playing</span>');
       else if (st.disconnected) tags.push('<span class="tag off">Disconnected</span>');
       if (!view.results && !st.folded && !st.won && st.lastAction && ACTION_WORD[st.lastAction] && !st.allIn) tags.push(`<span class="tag last">${ACTION_WORD[st.lastAction]}</span>`);
@@ -4531,6 +4634,49 @@ const SelfTest = (() => {
     ok(r.equity > 0.8 && r.equity < 0.89, `AA vs a random hand ≈ 85% (got ${(r.equity * 100).toFixed(0)}%)`);
   });
 
+  /* ---------- Security ---------- */
+  test('Security', 'Names cannot disguise players or pollute objects', () => {
+    eq(U.sanitizeName('Al\u202Eice'), 'Alice', 'direction override removed');
+    eq(U.sanitizeName('A\u200Blice'), 'Alice', 'zero-width removed');
+    eq(U.sanitizeName('<b>x</b>'), 'bx/b', 'markup characters removed');
+    for (const n of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) ok(!(n === U.sanitizeName(n)), `${n} rejected`);
+    const g = Notation.parse('[Event "x"]\n[Blinds "1/2"]\n\n#1 [Button "__proto__"] [Stacks "__proto__:10, constructor:10"]\n__proto__ sb 1; constructor bb 2\n__proto__ f\n=> constructor wins 2\n');
+    Replay.stats(Replay.game(g));
+    ok(({}).hands === undefined && ({}).vpip === undefined, 'Object.prototype untouched by hostile record names');
+    throws(() => Notation.parse('[Event "x"]\n[Blinds "1/2"]\n[Variant "__proto__"]\n'), /Unknown \[Variant/);
+  });
+  test('Security', 'Only real cards are ever rendered', () => {
+    if (typeof cardHtml === 'undefined') return;
+    const evil = '"><img src=x onerror=alert(1)>';
+    ok(!cardHtml(evil).includes('<img') && cardHtml(evil).includes('back'), 'hostile card renders as a face-down card');
+    ok(cardHtml('Ah').includes('data-card="Ah"'));
+  });
+  test('Security', 'Host updates are cleaned before display', () => {
+    if (typeof Safe === 'undefined') return;
+    const X = '<img src=x onerror=1>';
+    const v = Safe.view({ table: { maxSeats: X, timer: X, variant: X }, seats: [{ name: 'A', cards: [X, 'Kd'], seat: X }, ...Array(50).fill({ name: 'B' })], board: [X, 'As'],
+      log: [{ text: 'hi', kind: X }], legal: { minTo: X, canRaise: 'yes' }, you: { seat: null }, players: [{ pid: X, seat: null }] });
+    eq([v.table.maxSeats, v.table.timer, v.table.variant], [9, 0, 'NLHE']);
+    eq(v.seats.length, 9, 'seat list capped');
+    eq(v.seats[0].cards, [null, 'Kd']); eq(v.board, ['As']); eq(v.log[0].kind, '');
+    eq([v.legal.minTo, v.legal.canRaise, v.you.seat, v.players[0].seat], [0, false, null, null]);
+    ok(!/[<>]/.test(v.players[0].pid), 'pid stripped to safe characters');
+  });
+  test('Security', 'Fair-play checker ignores hostile hand numbers', () => {
+    const ck = new Fair.Checker();
+    eq(ck.fair1({ no: '__proto__', commits: Array(52).fill('a'.repeat(64)) }), null);
+    eq(ck.fair1({ no: 'constructor', commits: Array(52).fill('a'.repeat(64)) }), null);
+    ok(({}).commits === undefined && ({}).seed === undefined, 'no prototype pollution');
+  });
+  test('Security', 'Showdown-only tables never reveal enough to deduce folded hands', () => {
+    if (typeof HostTable === 'undefined') return;
+    const t = new HostTable({ tableName: 'T', sb: 1, bb: 2, ante: 0, startingStack: 100, maxSeats: 4, timer: 0, rebuys: false, recordHole: 'Showdown' }, 'H', 'a'.repeat(32));
+    const sh = { no: 1, order: ['x', 'y'], holeCount: 2, layout: Fair.layout(2, 2), deck: Cards.newDeck(), perm: Array.from({ length: 52 }, (_, i) => i), salts: Array(52).fill('s'), seedList: [] };
+    t.fair = sh; t.handPids = ['x', 'y'];
+    t.hand = { no: 1, phase: 'done', board: [], players: [{ shown: false }, { shown: false }] };
+    eq(t._fairView().reveals.length, 0, 'nothing beyond public cards is proven in showdown-only mode');
+  });
+
   /* ---------- Statistical randomness checks ---------- */
   // Chi-square goodness of fit against a uniform distribution. With these thresholds an honest
   // generator fails less than about once in a million runs; a biased shuffle fails at once.
@@ -5041,7 +5187,7 @@ function GameScreen(session) {
     const ps = v.players;
     const m = openModal(`<h2>Adjust stacks</h2><p class="muted" style="margin-top:0">Changes apply before the next hand and are noted in the log.</p>
       <div class="plist">${ps.map((p) => `<label class="prow">${avatarHtml(p.name)}<span class="p-main"><span class="p-name">${U.esc(p.name)}</span><span class="p-sub">${p.seat != null ? 'Seat ' + (p.seat + 1) : 'Not seated'}</span></span>
-        <input class="input num" type="number" min="0" step="1" style="width:120px" data-pid="${p.pid}" value="${p.stack}" aria-label="Stack for ${U.esc(p.name)}"></label>`).join('')}</div>
+        <input class="input num" type="number" min="0" step="1" style="width:120px" data-pid="${U.esc(p.pid)}" value="${Number(p.stack) || 0}" aria-label="Stack for ${U.esc(p.name)}"></label>`).join('')}</div>
       <div class="modal-foot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="m-save">Save stacks</button></div>`, { label: 'Adjust stacks' });
     $('#m-save', m.el).addEventListener('click', () => {
       const stacks = {};
@@ -5127,10 +5273,10 @@ function GameScreen(session) {
       head = `<p>Your device is the dealer. Each hand it commits to a secret deck <b>before</b> the players' browsers add their own randomness, so it can't arrange the cards. Every player's browser checks every card it sees against that commitment and re-checks each hand's result against the rules.</p>
         <p class="muted">${t.hostPlays ? 'You are also playing. The dealing device can technically see every hole card, so for games where that matters, start a table with "I\'m playing too" turned off and deal from a device nobody plays on.' : 'You are dealing without playing, which is the most trustworthy setup.'}</p>`;
     } else if (st.cls === 'bad') {
-      head = `<div class="err-box">${icon('alert')}<div><b>Hand #${f.no} failed verification.</b><ul style="margin:6px 0 0;padding-left:18px">${f.problems.map((p) => `<li>${U.esc(p)}</li>`).join('')}</ul></div></div>
+      head = `<div class="err-box">${icon('alert')}<div><b>Hand #${Number(f.no)} failed verification.</b><ul style="margin:6px 0 0;padding-left:18px">${f.problems.map((p) => `<li>${U.esc(p)}</li>`).join('')}</ul></div></div>
         <p>The host's device didn't deal or score this hand the way it promised. That points to a modified game page or a tampered connection. Consider stopping play with this host.</p>`;
     } else if (f && f.status === 'verified') {
-      head = `<div class="issue ok">${icon('shieldOk')} <b>Hand #${f.no} verified.</b> The deck was locked in before shuffling, ${f.seeds ? f.seeds.length : 0} player${f.seeds && f.seeds.length === 1 ? '' : 's'} added randomness (including you), and all ${f.verified} cards you were shown matched it.${f.audited ? ' The result was re-checked against the rules.' : ''}</div>
+      head = `<div class="issue ok">${icon('shieldOk')} <b>Hand #${Number(f.no)} verified.</b> The deck was locked in before shuffling, ${f.seeds ? f.seeds.length : 0} player${f.seeds && f.seeds.length === 1 ? '' : 's'} added randomness (including you), and all ${f.verified} cards you were shown matched it.${f.audited ? ' The result was re-checked against the rules.' : ''}</div>
         ${f.notes.length ? `<p class="hint">${f.notes.map(U.esc).join(' ')}</p>` : ''}`;
     } else head = '<p>Verification starts with the next hand that you are at the table for.</p>';
     openModal(`<h2>${icon('shield')} Fair play</h2>${head}
@@ -5334,7 +5480,7 @@ function GameScreen(session) {
       const box = $('#tp-log'), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
       const fresh = v.log.filter((l) => l.id > G.logId);
       G.logId = lastLog;
-      box.innerHTML = v.log.map((l) => `<div class="log-line ${l.kind}">${l.kind === 'hand' ? '— ' : ''}${U.esc(l.text)}${l.kind === 'hand' ? ' —' : ''}</div>`).join('') || box.innerHTML;
+      box.innerHTML = v.log.map((l) => `<div class="log-line ${U.esc(l.kind)}">${l.kind === 'hand' ? '— ' : ''}${U.esc(l.text)}${l.kind === 'hand' ? ' —' : ''}</div>`).join('') || box.innerHTML;
       if (atBottom || fresh.length) box.scrollTop = box.scrollHeight;
       if (fresh.length && fresh.length < 6) announce(fresh.map((l) => l.text).join('. '));
     }
@@ -5376,7 +5522,7 @@ function GameScreen(session) {
           <div class="p-name">${p.isBot ? '🤖 ' : ''}${U.esc(p.name)}${p.isHost ? ' ★' : ''}${v.you && v.you.pid === p.pid ? ' <span class="muted">(you)</span>' : ''}</div>
           <div class="p-sub"><span class="status-dot ${p.connected ? '' : 'off'}"></span>${p.connected ? '' : 'Disconnected · '}${p.seat != null ? 'Seat ' + (p.seat + 1) : 'Watching'} · <span class="num">${U.fmt(p.stack)}</span>
             · <span class="num ${p.net > 0 ? 'net-pos' : p.net < 0 ? 'net-neg' : ''}">${p.net > 0 ? '+' : ''}${U.fmt(p.net)}</span>${p.sittingOut ? ' · sitting out' : ''}${p.rebuys ? ` · ${p.rebuys} rebuy${p.rebuys > 1 ? 's' : ''}` : ''}</div></div>
-          ${host && !p.isHost && v.status !== 'ended' ? `<button class="btn sm danger" data-kick="${p.pid}" aria-label="Remove ${U.esc(p.name)}">Remove</button>` : ''}</div>`).join('')}</div>`;
+          ${host && !p.isHost && v.status !== 'ended' ? `<button class="btn sm danger" data-kick="${U.esc(p.pid)}" aria-label="Remove ${U.esc(p.name)}">Remove</button>` : ''}</div>`).join('')}</div>`;
       const adj = $('#p-adjust'); if (adj) adj.addEventListener('click', adjustModal);
       $$('[data-kick]').forEach((b) => b.addEventListener('click', () => {
         const p = v.players.find((x) => x.pid === b.dataset.kick);
@@ -5545,7 +5691,7 @@ function ViewerScreen() {
     V.stats = Replay.stats(V.replay);
     V.order = V.stats.players.map((p) => p.name);
     // Default point of view: the player whose hole cards are known most often (the record's owner).
-    const known = {};
+    const known = Object.create(null);
     game.hands.forEach((h) => Object.entries(h.hole).forEach(([n, c]) => { if (c) known[n] = (known[n] || 0) + 1; }));
     V.persp = Object.keys(known).sort((a, b) => known[b] - known[a])[0] || V.order[0];
     V.hk = Math.max(0, V.replay.hands.findIndex((h) => h.steps.length));
@@ -5560,7 +5706,7 @@ function ViewerScreen() {
     const nIssues = V.replay.issues.length;
     App.root.innerHTML = `<div class="game" style="grid-template-rows:auto 1fr">
       <header class="topbar"><a class="btn ghost icon-btn" href="#/" aria-label="Home">${icon('home')}</a>
-        <div class="brand"><div style="min-width:0"><div class="t-name">${U.esc(tag('Event') || 'Game record')}</div><div class="t-sub">${U.esc([(VARIANTS[tag('Variant') || 'NLHE'] || {}).name, tag('Date'), `Blinds ${tag('Blinds')}`, `${V.game.hands.length} hands`, tag('HoleCards') === 'All' ? 'all hole cards' : 'showdown cards only'].filter(Boolean).join(' · '))}</div></div></div>
+        <div class="brand"><div style="min-width:0"><div class="t-name">${U.esc(tag('Event') || 'Game record')}</div><div class="t-sub">${U.esc([(Object.hasOwn(VARIANTS, tag('Variant') || 'NLHE') ? VARIANTS[tag('Variant') || 'NLHE'] : {}).name, tag('Date'), `Blinds ${tag('Blinds')}`, `${V.game.hands.length} hands`, tag('HoleCards') === 'All' ? 'all hole cards' : 'showdown cards only'].filter(Boolean).join(' · '))}</div></div></div>
         <div class="top-actions">
           <label class="row hide-sm" style="font-size:13px;color:var(--text-2)">View from <select class="input" id="v-persp" style="height:34px;width:auto">${V.order.map((n) => `<option ${n === V.persp ? 'selected' : ''}>${U.esc(n)}</option>`).join('')}</select></label>
           <button class="btn sm" id="v-new">${icon('plus')}<span class="hide-sm">Load another</span></button>
