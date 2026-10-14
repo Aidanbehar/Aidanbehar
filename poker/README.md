@@ -1,6 +1,7 @@
-# Feltroom: peer-to-peer No-Limit Hold'em
+# Feltroom: peer-to-peer Hold'em and Omaha
 
-Feltroom is a free No-Limit Texas Hold'em game that runs in the browser. One player hosts, and their
+Feltroom is a free poker game that runs in the browser. It plays No-Limit or Pot-Limit Texas
+Hold'em, Omaha and 5-Card Omaha. One player hosts, and their
 browser shuffles, deals and enforces the rules. Friends join from a link, and the cards travel
 directly between browsers over WebRTC. There is no game server, no account and no build step.
 
@@ -100,6 +101,9 @@ test suite and lists pass/fail results. The suite covers:
 - showdown order and auto-muck
 - 500 random hands checked for chip conservation
 - record round-trips, tolerant parsing, error line numbers and replay consistency
+- Omaha's two-plus-three hand rule, pot-limit maximums and per-hand blind levels
+- SHA-256 against the standard test vectors, the shuffle permutation, and fair-deal checks that
+  catch swapped cards, wrong board positions and excluded seeds
 - the QR encoder, checked against a reference encoder
 
 ---
@@ -107,12 +111,15 @@ test suite and lists pass/fail results. The suite covers:
 ## Playing
 
 - **Host settings:**
+  - game: **Texas Hold'em**, **Omaha** (4 hole cards) or **5-Card Omaha** (up to 8 seats)
+  - betting: **No limit** or **Pot limit**
   - table name and your display name
   - small blind, big blind and an optional ante
-  - starting stack
+  - starting stack, and optionally **blinds that go up** every 10, 20 or 30 hands
   - 2–9 seats
   - action timer (off, 15s, 30s or 60s)
-  - rebuys on or off
+  - rebuys: none, 1, 2 or 3 per player, or unlimited
+  - **I'm playing too:** turn this off to use the host's device only as the dealer (see Fair play)
   - **Record hole cards:**
     - *All cards*: everyone's record shows every player's cards once each hand is over.
     - *Only cards shown at showdown*: each record shows your own cards plus any cards that were shown.
@@ -142,6 +149,11 @@ test suite and lists pass/fail results. The suite covers:
 - **Hidden cards.** Each player receives a personalised state that never contains another player's
   hole cards until they are shown at showdown or the player chooses to show them.
 - **Blinds and button.** Heads-up, the button posts the small blind and acts first before the flop.
+- **Omaha.** A hand must use exactly two hole cards and exactly three board cards. Four flush
+  cards on the board with one in your hand is not a flush.
+- **Pot limit.** The largest bet is the pot. The largest raise is to the current bet plus the pot
+  after calling. For example, with blinds of 1/2 the first raise is at most to 7.
+- **Rising blinds.** Blinds and antes are multiplied by 1, 2, 3, 5, 8, 10, 15, 20, … at each level.
 - **Raises.** A raise must add at least as much as the previous full raise. An all-in that is
   less than a full raise does not reopen the betting for players who have already acted. Several
   short all-ins that add up to a full raise do reopen it.
@@ -155,6 +167,48 @@ test suite and lists pass/fail results. The suite covers:
     unless they turned auto-muck off.
   - If players were all-in and the board was run out, everyone shows.
 - **Busting.** A player who runs out of chips can rebuy when rebuys are allowed. Otherwise they sit out.
+
+---
+
+## Fair play and anti-cheat
+
+In a peer-to-peer game, somebody's device has to shuffle and deal. Feltroom makes that device
+prove its work to everyone else.
+
+**What players can't do, even with the browser's developer tools open:**
+
+- **See other players' cards.** Each player's browser only ever receives that player's own hole
+  cards, plus cards that are shown at showdown. The deck and other hands never leave the host, so
+  reading the page's code or network traffic reveals nothing.
+- **Act for someone else, or act illegally.** Players send only requests ("raise to 40"). The host
+  checks every request against the rules. Each seat is tied to a random 128-bit token, and host
+  commands (start, pause, remove, stacks, end) are never accepted from the network.
+- **Flood the host.** Each connection is rate-limited.
+
+**What the host can't do without being caught (provably fair shuffle):**
+
+1. Before every hand, the host shuffles a secret deck and publishes a SHA-256 commitment for each
+   card (the card plus a random salt).
+2. Each player's browser then commits to its own random seed, and afterwards reveals it.
+3. The final order is computed from all the seeds together, so the host can't choose who gets
+   which card: the deck was locked in before it knew the players' randomness.
+4. Each card a player sees arrives with its salt, and the player's browser checks it against the
+   commitment for that card's position. This covers their own cards, the board and shown hands.
+   When the hand ends, the burns and undealt cards are revealed and checked as well.
+5. Each player's browser also replays the hand through the rules engine and checks the result.
+
+If anything fails, the player sees a red **Check failed** badge and an alert explaining what didn't
+match. The shield button in the top bar shows the status for the latest hand.
+
+**The honest limits:**
+
+- The dealing device can still look at every card. For games where that matters, untick **I'm
+  playing too** and host from a device nobody plays on, such as a spare laptop or a TV.
+- Fully hiding the cards from the dealer as well would need "mental poker" cryptography. That would
+  require every player to stay online for every card and would be much slower.
+- No software can stop two players from telling each other their cards through another app.
+
+The SHA-256 used for these proofs is built into the page, so it works over plain HTTP too.
 
 ---
 
@@ -191,7 +245,7 @@ SD: Carol shows [ThJd]; Bob shows [5d3h]
 |---|---|
 | `Event` | Table name |
 | `Date` | `YYYY.MM.DD` |
-| `Variant` | Always `NLHE` |
+| `Variant` | `NLHE`, `PLHE`, `NLO`, `PLO`, `NLO5` or `PLO5` (No-/Pot-Limit; Hold'em, Omaha, 5-Card Omaha) |
 | `Blinds` | `SB/BB` (**required**) |
 | `Ante` | Ante per player, `0` if none |
 | `StartingStack` | Buy-in amount |
@@ -199,6 +253,7 @@ SD: Carol shows [ThJd]; Bob shows [5d3h]
 | `HoleCards` | `All` or `Showdown` (see visibility below) |
 
 **Hands.** Each hand starts with `#N [Button "Name"] [Stacks "Name:chips, Name:chips, ..."]`.
+In games with rising blinds, each hand also carries its own `[Blinds "SB/BB"] [Ante "N"]` tags.
 
 - `Stacks` lists only the players dealt into this hand, in clockwise seat order, with their chips
   at the start of the hand.
@@ -238,8 +293,9 @@ All amounts are whole chips.
 **Cards.** A card is a rank from `2 3 4 5 6 7 8 9 T J Q K A` followed by a suit from `s h d c`.
 
 **Hole cards** appear once per player. They are written on the player's first preflop action, or on
-their first post if they never act preflop. They are written as `[AhKd]`, or as `[????]` when the
-owner of this copy of the record was not allowed to see them.
+their first post if they never act preflop. They are written as `[AhKd]` (Omaha: four or five
+cards, such as `[AhKdQsJc]`), or as question marks such as `[????]` when the owner of this copy of
+the record was not allowed to see them.
 
 **Who sees which cards.** Each player's copy of the record only contains cards that player was
 allowed to see:
@@ -305,6 +361,7 @@ free plan, which needs an email sign-up but no card.
 | Cards, chips, table, icons | Drawn with CSS and inline SVG | Free; written for this project |
 | Sounds | Generated live with the Web Audio API | Free; no audio files |
 | QR code | Generated in the page by an inline encoder | Free; no remote QR service |
+| Fair-shuffle proofs | SHA-256, written into the page | Free; no service involved |
 | Charts | Hand-written SVG | Free; no chart library |
 | Ads, analytics, tracking, telemetry | None | n/a |
 

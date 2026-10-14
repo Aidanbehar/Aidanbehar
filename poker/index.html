@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Feltroom · Peer-to-peer Hold'em</title>
-<meta name="description" content="Free peer-to-peer No-Limit Texas Hold'em in your browser. No accounts, no servers, just a link.">
+<meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer onerror="window.__peerFallback && window.__peerFallback()"></script>
@@ -330,6 +330,13 @@ textarea.input { height: auto; padding: 12px; resize: vertical; font: 13px/1.5 u
 .seat.me .hole { --cw: calc(54px * var(--s)); margin-bottom: calc(-10px * var(--s)); gap: calc(5px * var(--s)); }
 .seat .hole .card:nth-child(1) { transform: rotate(-4deg); } .seat .hole .card:nth-child(2) { transform: rotate(4deg); }
 .seat .hole .card.win { transform: translateY(-4px); }
+/* Omaha: four or five overlapping hole cards */
+.seat .hole.many { --cw: calc(34px * var(--s)); gap: 0; }
+.seat.me .hole.many { --cw: calc(50px * var(--s)); }
+.seat .hole.many .card { transform: none; }
+.seat .hole.many .card + .card { margin-left: calc(var(--cw, 40px) * -0.5); }
+.seat.me .hole.many .card + .card { margin-left: calc(var(--cw, 40px) * -0.32); }
+.seat .hole.many .card.win { transform: translateY(-4px); }
 .plate {
   position: relative; z-index: 1; display: flex; align-items: center; gap: calc(8px * var(--s));
   background: var(--seat-bg); border: 1px solid var(--seat-border); border-radius: 999px;
@@ -582,9 +589,10 @@ const Cards = {
     return Cards.isCard(c) ? c : null;
   },
   pretty(c) { return c ? (c[0] === 'T' ? '10' : c[0]) + SUIT_SYM[c[1]] : '??'; },
-  /** "QQ", "AKs", "T9o" style shorthand for two hole cards. */
+  /** "QQ", "AKs", "T9o" style shorthand for two hole cards; ranks high-to-low for Omaha hands. */
   shorthand(h) {
-    if (!h || h.length !== 2) return '';
+    if (!h || !h.length) return '';
+    if (h.length !== 2) return h.map((c) => c[0]).sort((x, y) => RANKS.indexOf(y) - RANKS.indexOf(x)).join('');
     let [a, b] = h;
     if (Cards.rank(b) > Cards.rank(a)) [a, b] = [b, a];
     if (a[0] === b[0]) return a[0] + b[0];
@@ -657,6 +665,34 @@ const Eval = {
     return best;
   },
 
+  /** All k-element subsets of arr. */
+  combos(arr, k) {
+    const out = [], pick = [];
+    const rec = (start) => {
+      if (pick.length === k) { out.push(pick.slice()); return; }
+      for (let i = start; i <= arr.length - (k - pick.length); i++) { pick.push(arr[i]); rec(i + 1); pick.pop(); }
+    };
+    rec(0);
+    return out;
+  },
+
+  /**
+   * Best hand for a game. Hold'em: any five of hole + board.
+   * Omaha: exactly two hole cards plus exactly three board cards.
+   */
+  forGame(game, hole, board) {
+    hole = (hole || []).filter(Boolean);
+    board = (board || []).filter(Boolean);
+    if (game !== 'omaha') return Eval.evaluate([...hole, ...board]);
+    let best = null;
+    const keep = (e) => { if (!best || e.score > best.score) best = e; };
+    const pairs = Eval.combos(hole, 2);
+    if (board.length < 3) { for (const pr of pairs) keep(Eval.evalSmall(pr)); return best; }
+    const trips = Eval.combos(board, 3);
+    for (const pr of pairs) for (const tr of trips) { const five = [...pr, ...tr]; const e = Eval.eval5(five); e.best = five; keep(e); }
+    return best;
+  },
+
   describe(e) {
     const r = e.ranks, W = RANK_WORD, P = Eval.plural;
     switch (e.cat) {
@@ -688,7 +724,8 @@ const STREETS = ['Preflop', 'Flop', 'Turn', 'River'];
 
 const Engine = {
   /**
-   * o = {no, players:[{name, stack}], button, sb, bb, ante, hole:[[c,c]|null]}
+   * o = {no, players:[{name, stack}], button, sb, bb, ante, hole:[[c,c]|null],
+   *      game: 'holdem'|'omaha', limit: 'nl'|'pl', holeCount: 2|4|5}
    * players are in seat (clockwise) order; button is an index into players.
    */
   createHand(o) {
@@ -697,6 +734,8 @@ const Engine = {
     if (!(o.button >= 0 && o.button < n)) throw new Error('Invalid button position');
     const h = {
       no: o.no || 1, sb: o.sb, bb: o.bb, ante: o.ante || 0, button: o.button,
+      game: o.game === 'omaha' ? 'omaha' : 'holdem', limit: o.limit === 'pl' ? 'pl' : 'nl',
+      holeCount: o.holeCount || (o.game === 'omaha' ? 4 : 2),
       players: o.players.map((p, i) => ({
         name: p.name, startStack: p.stack, stack: p.stack, bet: 0, committed: 0,
         folded: false, allIn: false, acted: false, actedBet: 0,
@@ -764,7 +803,10 @@ const Engine = {
     const i = h.toAct, p = h.players[i];
     const toCall = Math.min(Math.max(0, h.currentBet - p.bet), p.stack);
     const othersAble = h.players.some((q, j) => j !== i && !q.folded && !q.allIn);
-    const maxTo = p.bet + p.stack;
+    const allInTo = p.bet + p.stack;
+    // Pot limit: the largest raise is to (current bet + the pot after calling).
+    const potCap = h.limit === 'pl' ? h.currentBet + Engine.potTotal(h) + toCall : Infinity;
+    const maxTo = Math.min(allInTo, potCap);
     // An all-in that is less than a full raise does not reopen betting for
     // players who already acted (cumulative short raises can, TDA style).
     const reopened = !p.acted || h.currentBet - p.actedBet >= h.minRaise;
@@ -775,6 +817,7 @@ const Engine = {
       minTo: Math.min(minFull, maxTo), maxTo, isBet: h.currentBet === 0,
       currentBet: h.currentBet, myBet: p.bet, stack: p.stack, pot: Engine.potTotal(h),
       reopenBlocked: othersAble && !reopened && maxTo > h.currentBet,
+      capped: maxTo < allInTo, limit: h.limit,
     };
   },
 
@@ -804,7 +847,7 @@ const Engine = {
       }
       to = Number(to);
       if (!Number.isInteger(to)) throw new Error('Amount must be a whole number of chips');
-      if (to > L.maxTo) throw new Error(`You only have ${U.fmt(L.maxTo)} in total`);
+      if (to > L.maxTo) throw new Error(L.capped ? `Pot limit: the most you can make it is ${U.fmt(L.maxTo)}` : `You only have ${U.fmt(L.maxTo)} in total`);
       if (to < L.minTo) throw new Error(`Minimum ${L.isBet ? 'bet' : 'raise'} is to ${U.fmt(L.minTo)}`);
       const inc = to - h.currentBet;
       if (inc >= h.minRaise) h.minRaise = inc;
@@ -879,7 +922,7 @@ const Engine = {
     const runout = h.players.filter((p) => !p.folded && !p.allIn).length <= 1;
     const pots = Engine.computePots(h.players.map((p) => p.committed), h.players.map((p) => p.folded)).map((p) => ({ ...p, best: -1 }));
     return order.map((i, k) => {
-      const ev = Eval.evaluate([...(h.players[i].hole || []), ...h.board]);
+      const ev = Eval.forGame(h.game, h.players[i].hole, h.board);
       const mine = pots.filter((pt) => pt.eligible.includes(i));
       const canWin = mine.some((pt) => ev.score >= pt.best);
       const show = k === 0 || runout || !(autoMuck ? autoMuck(i) : true) || canWin;
@@ -918,7 +961,7 @@ const Engine = {
         if (step.show && p.hole) { p.shown = true; h.log.push({ t: 'show', p: step.p, cards: p.hole.slice() }); }
         else { p.mucked = true; h.log.push({ t: 'muck', p: step.p }); }
       }
-      const evs = P.map((p) => (p.shown && p.hole ? Eval.evaluate([...p.hole, ...h.board]) : null));
+      const evs = P.map((p) => (p.shown && p.hole ? Eval.forGame(h.game, p.hole, h.board) : null));
       results.evals = evs.map((e) => e && { score: e.score, desc: Eval.describe(e), best: e.best });
       const pots = Engine.computePots(P.map((p) => p.committed), P.map((p) => p.folded));
       pots.forEach((pot, k) => {
@@ -961,7 +1004,7 @@ const Engine = {
       case 'act':
         return { f: `${nm} folds`, x: `${nm} checks`, c: `${nm} calls ${U.fmt(e.amt)}${ai}`, b: `${nm} bets ${U.fmt(e.to)}${ai}`, r: `${nm} raises to ${U.fmt(e.to)}${ai}` }[e.type];
       case 'deal': return `${STREETS[e.street]}: ${e.cards.map(Cards.pretty).join(' ')}`;
-      case 'show': return `${nm} shows ${e.cards.map(Cards.pretty).join(' ')}` + (h.board.length >= 3 ? ` (${Eval.describe(Eval.evaluate([...e.cards, ...h.board]))})` : '');
+      case 'show': return `${nm} shows ${e.cards.map(Cards.pretty).join(' ')}` + (h.board.length >= 3 ? ` (${Eval.describe(Eval.forGame(h.game, e.cards, h.board))})` : '');
       case 'muck': return `${nm} mucks`;
       case 'return': return `Uncalled ${U.fmt(e.amt)} returned to ${nm}`;
       case 'win': return `${nm} wins ${U.fmt(e.amt)}${e.npots > 1 ? ' from ' + Notation.potLabel(e.pot) : ''}${e.desc ? ' with ' + e.desc : ''}`;
@@ -969,6 +1012,214 @@ const Engine = {
     return '';
   },
 };
+
+/* =====================================================================
+   3b. FAIR SHUFFLE PROOFS  (pure; commit-reveal with player entropy)
+
+   Every hand:
+   1. The host shuffles a secret "pre-deck" D0, gives each card a random salt and
+      publishes 52 commitments  C[i] = SHA256(D0[i] + ":" + salt[i]).
+   2. Every dealt player picks a random seed and sends SHA256(seed) (a commitment),
+      so nobody (host included) can pick their seed after seeing someone else's.
+   3. Seeds are revealed and checked against those commitments. The final order is
+      a permutation P derived from SHA256(hand number, commitments, sorted seeds):
+      the card dealt at position j is D0[P[j]].
+   Because D0 was fixed before any player's randomness existed, the host cannot
+   choose which card lands where. Every card that becomes visible to a player
+   (their own hole cards, the board, shown hands, and at the end burns and the
+   undealt stub) arrives with its salt, and each browser checks it against the
+   commitment for its position.
+   ===================================================================== */
+const Fair = (() => {
+  const K = new Uint32Array([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
+
+  /** SHA-256 of a UTF-8 string, as lowercase hex. Pure JS so it also works on plain-HTTP LAN addresses. */
+  function sha256(str) {
+    const msg = new TextEncoder().encode(String(str));
+    const len = msg.length, bitLen = len * 8;
+    const total = ((len + 9 + 63) >> 6) << 6;
+    const buf = new Uint8Array(total);
+    buf.set(msg); buf[len] = 0x80;
+    const dv = new DataView(buf.buffer);
+    dv.setUint32(total - 8, Math.floor(bitLen / 0x100000000)); dv.setUint32(total - 4, bitLen >>> 0);
+    const H = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+    const W = new Uint32Array(64);
+    const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+    for (let off = 0; off < total; off += 64) {
+      for (let i = 0; i < 16; i++) W[i] = dv.getUint32(off + i * 4);
+      for (let i = 16; i < 64; i++) {
+        const s0 = rotr(W[i - 15], 7) ^ rotr(W[i - 15], 18) ^ (W[i - 15] >>> 3);
+        const s1 = rotr(W[i - 2], 17) ^ rotr(W[i - 2], 19) ^ (W[i - 2] >>> 10);
+        W[i] = (W[i - 16] + s0 + W[i - 7] + s1) | 0;
+      }
+      let [a, b, c, d, e, f, g, h] = H;
+      for (let i = 0; i < 64; i++) {
+        const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        const t1 = (h + S1 + ((e & f) ^ (~e & g)) + K[i] + W[i]) | 0;
+        const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        const t2 = (S0 + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      H[0] += a; H[1] += b; H[2] += c; H[3] += d; H[4] += e; H[5] += f; H[6] += g; H[7] += h;
+    }
+    return Array.from(H, (x) => x.toString(16).padStart(8, '0')).join('');
+  }
+
+  const isHex = (s, n) => typeof s === 'string' && s.length === n && /^[0-9a-f]+$/.test(s);
+  const commit = (card, salt) => sha256(card + ':' + salt);
+
+  /** The value every party derives the final order from. Seeds are sorted so order of arrival is irrelevant. */
+  function combine(no, commits, seeds) {
+    return sha256(`feltroom-v1|${no}|${sha256(commits.join(','))}|${seeds.slice().sort().join(',')}`);
+  }
+
+  /** Deterministic, unbiased Fisher-Yates permutation of 0..n-1 driven by SHA-256 in counter mode. */
+  function permutation(seedHex, n = 52) {
+    let pool = [], ctr = 0;
+    const next32 = () => {
+      if (!pool.length) {
+        const hx = sha256(`${seedHex}#${ctr++}`);
+        for (let i = 0; i < 64; i += 8) pool.push(parseInt(hx.slice(i, i + 8), 16));
+      }
+      return pool.shift();
+    };
+    const p = Array.from({ length: n }, (_, i) => i);
+    for (let i = n - 1; i > 0; i--) {
+      const m = i + 1, limit = Math.floor(0x100000000 / m) * m;
+      let x;
+      do { x = next32(); } while (x >= limit);
+      const j = x % m;
+      [p[i], p[j]] = [p[j], p[i]];
+    }
+    return p;
+  }
+
+  /** Where every card comes from: hole cards round-robin from the left of the button, then burn-and-turn. */
+  function layout(nPlayers, holeCount) {
+    const b = nPlayers * holeCount;
+    return {
+      hole: (k, r) => r * nPlayers + k,
+      board: [b + 1, b + 2, b + 3, b + 5, b + 7],
+      burns: [b, b + 4, b + 6],
+      used: b + 8,
+    };
+  }
+
+  /**
+   * Client-side checker. Feed it the host's fair1/fair2/fair3/fairown messages and every state view;
+   * it reports 'verified', 'unverified' (not enough data, e.g. joined mid-hand) or 'failed' with reasons.
+   */
+  class Checker {
+    constructor(onChange) { this.hands = {}; this.onChange = onChange || (() => {}); this.latest = null; }
+    _h(no) { return (this.hands[no] = this.hands[no] || { no, problems: [], notes: [], checked: new Set(), cards: new Map(), status: 'unverified', verified: 0 }); }
+    _fail(f, msg) { if (!f.problems.includes(msg)) { f.problems.push(msg); f.status = 'failed'; this.latest = f; this.onChange(f, msg); } }
+    _note(f, msg) { if (!f.notes.includes(msg)) f.notes.push(msg); }
+
+    fair1(m) {
+      if (!Array.isArray(m.commits) || m.commits.length !== 52 || !m.commits.every((c) => isHex(c, 64))) return null;
+      const f = this._h(m.no);
+      if (f.commits) return null; // commitments can never be replaced mid-hand
+      f.commits = m.commits.slice();
+      if (new Set(f.commits).size !== 52) this._fail(f, 'The host committed to the same card hash twice.');
+      f.seed = U.randHex(32);
+      f.seedC = sha256(f.seed);
+      this.latest = f;
+      return { t: 'fairc', no: m.no, c: f.seedC };
+    }
+    fair2(m) {
+      const f = this.hands[m.no];
+      if (!f || !Array.isArray(m.seedCommits) || f.seedCommits) return null;
+      f.seedCommits = m.seedCommits.filter((c) => isHex(c, 64));
+      if (f.seedC && !f.seedCommits.includes(f.seedC)) { this._note(f, 'Your shuffle contribution arrived too late to be used this hand.'); return null; }
+      return f.seedC ? { t: 'fairs', no: m.no, seed: f.seed } : null;
+    }
+    fair3(m) {
+      const f = this.hands[m.no];
+      if (!f || !f.commits || f.perm) return;
+      const seeds = (m.seeds || []).filter((x) => isHex(x, 64));
+      if (f.seedCommits) {
+        for (const sd of seeds) if (!f.seedCommits.includes(sha256(sd))) this._fail(f, 'The host used a shuffle seed that nobody committed to in advance.');
+        if (new Set(seeds).size !== seeds.length) this._fail(f, 'A shuffle seed was counted twice.');
+      }
+      if (f.seedC && f.seedCommits && f.seedCommits.includes(f.seedC) && !seeds.includes(f.seed)) this._fail(f, 'The host left your shuffle seed out after you revealed it.');
+      if (!seeds.length) this._note(f, 'No player randomness was available for this shuffle.');
+      f.seeds = seeds;
+      f.order = Array.isArray(m.order) ? m.order.map(String) : [];
+      f.holeCount = Number(m.holeCount) || 2;
+      f.perm = permutation(combine(m.no, f.commits, seeds), 52);
+      f.layout = layout(f.order.length, f.holeCount);
+      if (f.status !== 'failed') f.status = 'pending';
+    }
+    _reveal(f, r, where) {
+      if (!r || typeof r.pos !== 'number' || !f.perm || r.pos < 0 || r.pos > 51) return null;
+      const key = r.pos + ':' + r.card;
+      if (f.checked.has(key)) return r.card;
+      if (!Cards.isCard(r.card) || commit(r.card, String(r.salt)) !== f.commits[f.perm[r.pos]]) {
+        this._fail(f, `${where} (${Cards.pretty(r.card)}) does not match the deck the host committed to before the shuffle.`);
+        return null;
+      }
+      const prev = f.cards.get(r.card);
+      if (prev != null && prev !== r.pos) this._fail(f, `${Cards.pretty(r.card)} appeared in two places in the deck.`);
+      f.cards.set(r.card, r.pos);
+      f.checked.add(key); f.verified = f.checked.size;
+      return r.card;
+    }
+    own(m, myName) {
+      const f = this.hands[m.no];
+      if (!f || !f.perm) return;
+      const k = f.order.indexOf(myName);
+      if (k < 0) return this._fail(f, 'You were dealt cards but are missing from the dealing order.');
+      f.own = [];
+      (m.cards || []).forEach((r, i) => {
+        if (r.pos !== f.layout.hole(k, i)) this._fail(f, 'Your hole cards came from the wrong place in the deck.');
+        f.own.push(this._reveal(f, r, 'One of your hole cards'));
+      });
+      if (f.own.length !== f.holeCount) this._fail(f, 'You were dealt the wrong number of hole cards.');
+    }
+    /** Check what a state view shows against the proofs for its hand. */
+    view(v, myName) {
+      const fv = v.fair;
+      if (!fv) return;
+      const f = this.hands[fv.no];
+      if (!f || !f.perm) return;
+      const byPos = new Map();
+      for (const r of fv.reveals || []) { const c = this._reveal(f, r, `The card at deal position ${r.pos + 1}`); if (c) byPos.set(r.pos, c); }
+      v.board.forEach((c, i) => {
+        const pos = f.layout.board[i];
+        if (byPos.has(pos) ? byPos.get(pos) !== c : !f.checked.has(pos + ':' + c)) this._fail(f, `Board card ${Cards.pretty(c)} was not proven against the committed deck.`);
+      });
+      for (const s of v.seats) {
+        if (!s || !s.cards || !s.cards[0]) continue;
+        const k = f.order.indexOf(s.name);
+        if (k < 0) continue;
+        s.cards.forEach((c, r) => {
+          if (!c) return;
+          const pos = f.layout.hole(k, r);
+          if (s.name === myName && !f.own) return;
+          const ok = s.name === myName ? f.own[r] === c : byPos.get(pos) === c || f.checked.has(pos + ':' + c);
+          if (!ok) this._fail(f, `${s.name}'s ${Cards.pretty(c)} was not proven against the committed deck.`);
+        });
+      }
+      if (f.status !== 'failed' && f.verified) f.status = 'verified';
+      if (v.phase === 'done' && fv.final) f.final = true;
+      this.latest = f;
+    }
+    /** The host's record of the hand must follow the rules when re-simulated. */
+    audit(no, issues) {
+      const f = this._h(no);
+      for (const i of issues) this._fail(f, 'Rules check: ' + i);
+      if (!issues.length) f.audited = true;
+    }
+  }
+
+  return { sha256, commit, combine, permutation, layout, Checker, isHex };
+})();
 
 /* =====================================================================
    4. RECORD NOTATION  (pure)  -- "PGN for poker", spec in README.md
@@ -984,19 +1235,36 @@ class RecordError extends Error {
   constructor(line, message) { super(`Line ${line}: ${message}`); this.line = line; this.detail = message; }
 }
 
+const VARIANTS = {
+  NLHE: { game: 'holdem', limit: 'nl', holeCount: 2, name: "No-Limit Hold'em" },
+  PLHE: { game: 'holdem', limit: 'pl', holeCount: 2, name: "Pot-Limit Hold'em" },
+  NLO: { game: 'omaha', limit: 'nl', holeCount: 4, name: 'No-Limit Omaha' },
+  PLO: { game: 'omaha', limit: 'pl', holeCount: 4, name: 'Pot-Limit Omaha' },
+  NLO5: { game: 'omaha', limit: 'nl', holeCount: 5, name: 'No-Limit 5-Card Omaha' },
+  PLO5: { game: 'omaha', limit: 'pl', holeCount: 5, name: 'Pot-Limit 5-Card Omaha' },
+};
+
 const Notation = {
+  /** Variant code for the [Variant] tag, e.g. NLHE, PLO, PLO5. */
+  variantCode(game, limit, holeCount) {
+    return `${limit === 'pl' ? 'PL' : 'NL'}${game === 'omaha' ? 'O' : 'HE'}${game === 'omaha' && holeCount === 5 ? '5' : ''}`;
+  },
+
   potLabel(k) { return k === 0 ? 'main pot' : `side pot ${k}`; },
 
   /** Engine hand -> HandRecord, as seen by `viewer` (player index, or -1 for a spectator). */
-  fromHand(h, viewer, mode) {
+  fromHand(h, viewer, mode, opts = {}) {
     const names = h.players.map((p) => p.name);
     const known = (i) => mode === 'All' || i === viewer || h.players[i].shown;
     const rec = {
       no: h.no, button: names[h.button],
       stacks: h.players.map((p) => [p.name, p.startStack]),
       hole: {}, posts: [], streets: [{ board: [], actions: [] }], shows: [], results: [],
+      holeCount: h.holeCount || 2,
     };
     rec.tags = Notation.handTags(rec);
+    // Rising blinds: each hand states its own level.
+    if (opts.levels) rec.tags.push(['Blinds', `${h.sb}/${h.bb}`], ['Ante', String(h.ante || 0)]);
     h.players.forEach((p, i) => { rec.hole[p.name] = known(i) && p.hole ? p.hole.slice() : null; });
     for (const e of h.log) {
       if (e.t === 'post') rec.posts.push({ name: names[e.p], kind: e.kind, amt: e.amt });
@@ -1015,7 +1283,7 @@ const Notation = {
 
   gameTags(o) {
     return [
-      ['Event', o.event], ['Date', o.date], ['Variant', 'NLHE'], ['Blinds', `${o.sb}/${o.bb}`],
+      ['Event', o.event], ['Date', o.date], ['Variant', o.variant || 'NLHE'], ['Blinds', `${o.sb}/${o.bb}`],
       ['Ante', String(o.ante || 0)], ['StartingStack', String(o.startingStack)],
       ['Players', o.players.join(',')], ['HoleCards', o.holeCards === 'All' ? 'All' : 'Showdown'],
     ];
@@ -1024,7 +1292,7 @@ const Notation = {
   tagStr(tags) { return tags.map(([k, v]) => `[${k} "${v}"]`).join(' '); },
 
   serializeHand(r) {
-    const cardsFor = (name) => (r.hole[name] ? `[${r.hole[name].join('')}]` : '[????]');
+    const cardsFor = (name) => (r.hole[name] ? `[${r.hole[name].join('')}]` : `[${'??'.repeat(r.holeCount || 2)}]`);
     // Hole cards appear once per player: on their first preflop action, else on their first post.
     const placed = new Set();
     const firstAct = {};
@@ -1093,12 +1361,15 @@ const Notation = {
     const tag = (k) => (g.tags.find((t) => t[0] === k) || [])[1];
     if (!g.tags.length) fail('A record starts with header tags such as [Event "..."] and [Blinds "1/2"]');
     if (!/^\d+\/\d+$/.test(tag('Blinds') || '')) fail('Missing or invalid [Blinds "SB/BB"] tag', 0);
+    const variant = VARIANTS[tag('Variant') || 'NLHE'];
+    if (!variant) fail(`Unknown [Variant "${tag('Variant')}"] (supported: ${Object.keys(VARIANTS).join(', ')})`, 0);
+    const holeCount = variant.holeCount;
     skip();
     while (pos < s.length) {
       const handStart = pos;
       const hm = re(/#(\d+)/y);
       if (!hm) fail(`Expected a hand header like "#1 [Button ...]" but found "${peekStr()}"`);
-      const r = { no: Number(hm[1]), tags: readTags(), hole: {}, posts: [], streets: [{ board: [], actions: [] }], shows: [], results: [] };
+      const r = { no: Number(hm[1]), tags: readTags(), hole: {}, posts: [], streets: [{ board: [], actions: [] }], shows: [], results: [], holeCount };
       const ht = (k) => (r.tags.find((t) => t[0] === k) || [])[1];
       if (ht('Stacks') == null) fail(`Hand #${r.no} is missing its [Stacks "..."] tag`, handStart);
       if (ht('Button') == null) fail(`Hand #${r.no} is missing its [Button "..."] tag`, handStart);
@@ -1145,10 +1416,10 @@ const Notation = {
         if (!m) return undefined;
         const inner = m[1].replace(/\s+/g, '');
         if (/^\?+$/.test(inner)) return null;
-        const mm = inner.match(/^(10|[2-9TJQKA])([shdc♠♥♦♣])(10|[2-9TJQKA])([shdc♠♥♦♣])$/i);
-        if (!mm) fail(`Bad hole cards "[${m[1]}]" for ${name} (expected e.g. [AhKd] or [????])`, at);
-        const cs = [Cards.parse(mm[1] + mm[2]), Cards.parse(mm[3] + mm[4])];
-        if (cs[0] === cs[1]) fail(`${name} cannot hold ${cs[0]} twice`, at);
+        const toks = inner.match(/(10|[2-9TJQKA])([shdc♠♥♦♣])/gi) || [];
+        if (toks.join('').length !== inner.length || toks.length !== holeCount) fail(`Bad hole cards "[${m[1]}]" for ${name} (expected ${holeCount} cards, e.g. [${['Ah', 'Kd', 'Qs', 'Jc', 'Th'].slice(0, holeCount).join('')}] or [${'??'.repeat(holeCount)}])`, at);
+        const cs = toks.map(Cards.parse);
+        if (new Set(cs).size !== cs.length) fail(`${name} cannot hold the same card twice`, at);
         if (r.hole[name] && r.hole[name].join() !== cs.join()) fail(`${name} is shown with two different hands`, at);
         for (const c of cs) {
           if (seenCards.has(c) && !(r.hole[name] || []).includes(c)) fail(`Card ${c} appears twice in hand #${r.no}`, at);
@@ -1241,11 +1512,17 @@ const Replay = {
     const issue = (msg) => issues.push(`Hand #${r.no}: ${msg}`);
     const names = r.stacks.map((x) => x[0]);
     const idx = (n) => names.indexOf(n);
+    // A hand may carry its own [Blinds]/[Ante] (rising blind levels).
+    const ht = (k) => ((r.tags || []).find((t) => t[0] === k) || [])[1];
+    const lvl = { sb: cfg.sb, bb: cfg.bb, ante: cfg.ante };
+    if (/^\d+\/\d+$/.test(ht('Blinds') || '')) [lvl.sb, lvl.bb] = ht('Blinds').split('/').map(Number);
+    if (/^\d+$/.test(ht('Ante') || '')) lvl.ante = Number(ht('Ante'));
     let h;
     try {
       h = Engine.createHand({
         no: r.no, players: r.stacks.map(([name, stack]) => ({ name, stack })), button: idx(r.button),
-        sb: cfg.sb, bb: cfg.bb, ante: cfg.ante, hole: names.map((n) => r.hole[n]),
+        sb: lvl.sb, bb: lvl.bb, ante: lvl.ante, hole: names.map((n) => r.hole[n]),
+        game: cfg.game, limit: cfg.limit, holeCount: cfg.holeCount,
       });
     } catch (e) { issue(e.message); return { rec: r, steps, issues, hand: null }; }
     const snap = (label, extra = {}) => steps.push({ label, hand: U.clone(h), street: h.street, ...extra });
@@ -1306,7 +1583,8 @@ const Replay = {
   game(g) {
     const tag = (k) => (g.tags.find((t) => t[0] === k) || [])[1];
     const [sb, bb] = (tag('Blinds') || '1/2').split('/').map(Number);
-    const cfg = { sb, bb, ante: Number(tag('Ante') || 0) };
+    const v = VARIANTS[tag('Variant') || 'NLHE'] || VARIANTS.NLHE;
+    const cfg = { sb, bb, ante: Number(tag('Ante') || 0), game: v.game, limit: v.limit, holeCount: v.holeCount, variant: v };
     const hands = g.hands.map((r) => Replay.hand(r, cfg));
     const notes = [];
     for (let k = 1; k < hands.length; k++) {
@@ -1701,10 +1979,20 @@ const QR = (() => {
    ===================================================================== */
 const DISCONNECT_GRACE = 30;   // seconds a disconnected player gets on their turn when the timer is off
 const HAND_PAUSE_MS = 5200;    // results stay on screen this long before the next deal
+const SEED_WAIT_MS = 2500;     // how long the host waits for each round of shuffle randomness
+// Blind levels (multiples of the starting blinds) when "blinds go up every N hands" is on.
+const LEVEL_FACTORS = [1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 80, 100, 150, 200, 300, 500, 800, 1000];
 
 class HostTable {
   constructor(settings, hostName, hostToken) {
-    this.s = { ...settings };
+    this.s = { game: 'holdem', limit: 'nl', levelHands: 0, maxRebuys: 0, hostPlays: true, ...settings };
+    this.gameKind = this.s.game === 'holdem' ? 'holdem' : 'omaha';
+    this.holeCount = this.s.game === 'omaha5' ? 5 : this.s.game === 'omaha4' ? 4 : 2;
+    this.variant = Notation.variantCode(this.gameKind, this.s.limit, this.holeCount);
+    this.level = 0;
+    this.blinds = { sb: this.s.sb, bb: this.s.bb, ante: this.s.ante };
+    this.shuffling = null;      // commit-reveal shuffle in progress
+    this.fair = null;           // proofs for the current hand
     this.players = new Map();
     this.seats = new Array(this.s.maxSeats).fill(null);
     this.status = 'lobby';
@@ -1712,7 +2000,6 @@ class HostTable {
     this.handNo = 0;
     this.hand = null;
     this.handPids = [];
-    this.deck = [];
     this.buttonSeat = -1;
     this.finished = [];        // [{hand, pids}]
     this.names = [];           // every name ever dealt in (record [Players])
@@ -1723,11 +2010,11 @@ class HostTable {
     this.banned = new Set();
     const d = new Date();
     this.date = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
-    this.onChange = () => {}; this.onEvent = () => {}; this.onRecord = () => {}; this.onDirect = () => {};
+    this.onChange = () => {}; this.onEvent = () => {}; this.onRecord = () => {}; this.onDirect = () => {}; this.onBroadcast = () => {};
     this.hostPid = this.addPlayer(hostName, hostToken).pid;
     this.players.get(this.hostPid).isHost = true;
     this.players.get(this.hostPid).connected = true;
-    this._sit(this.hostPid, 0);
+    if (this.s.hostPlays !== false) this._sit(this.hostPid, 0);
   }
 
   /* ---------------- players ---------------- */
@@ -1783,6 +2070,7 @@ class HostTable {
         const seat = Number(m.seat);
         if (this.status === 'ended') return err('The game has ended.');
         if (p.seat != null) return err('You already have a seat.');
+        if (pid === this.hostPid && this.s.hostPlays === false) return err('You chose to deal without playing at this table.');
         if (!(seat >= 0 && seat < this.seats.length) || this.seats[seat]) return err('That seat is taken.');
         this._sit(pid, seat);
         this.onEvent('info', `${p.name} sat down`, null);
@@ -1817,6 +2105,7 @@ class HostTable {
       }
       case 'rebuy': {
         if (!this.s.rebuys) return err('Rebuys are not allowed at this table.');
+        if (this.s.maxRebuys && p.rebuys >= this.s.maxRebuys) return err(`You have used all ${this.s.maxRebuys} rebuy${this.s.maxRebuys > 1 ? 's' : ''}.`);
         if (p.stack > 0) return err('You can rebuy once you are out of chips.');
         if (this._inLiveHand(pid)) return err('Wait for this hand to finish.');
         p.stack = this.s.startingStack; p.rebuys++; p.bought += this.s.startingStack; p.busted = false; p.sittingOut = false;
@@ -1824,6 +2113,15 @@ class HostTable {
         this.onEvent('info', `${p.name} rebought`, null);
         this._maybeDeal();
         break;
+      }
+      // Shuffle randomness: a commitment first, then the seed itself (see FAIR SHUFFLE PROOFS).
+      case 'fairc': case 'fairs': {
+        const sh = this.shuffling;
+        if (!sh || m.no !== sh.no || !sh.order.includes(pid)) return;
+        if (m.t === 'fairc' && sh.stage === 1 && sh.seedC[pid] == null && Fair.isHex(m.c, 64)) sh.seedC[pid] = m.c;
+        if (m.t === 'fairs' && sh.stage === 2 && sh.seedC[pid] && sh.seeds[pid] == null && Fair.isHex(m.seed, 64)) sh.seeds[pid] = m.seed;
+        if (sh.waiter) sh.waiter();
+        return;
       }
       case 'chat': {
         const text = String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, 280);
@@ -1861,7 +2159,7 @@ class HostTable {
       }
       case 'adjust': {
         if (!isHost) return;
-        if (this.hand && this.hand.phase !== 'done') return err('Stacks can only be changed between hands.');
+        if (this.shuffling || (this.hand && this.hand.phase !== 'done')) return err('Stacks can only be changed between hands.');
         for (const [qid, val] of Object.entries(m.stacks || {})) {
           const q = this.players.get(qid), v = Math.max(0, Math.floor(Number(val)));
           if (!q || !Number.isFinite(v) || v === q.stack) continue;
@@ -1894,6 +2192,7 @@ class HostTable {
     this.players.delete(pid);
   }
   _inLiveHand(pid) {
+    if (this.shuffling && this.shuffling.order.includes(pid)) return true;
     const h = this.hand, i = this.handPids.indexOf(pid);
     return !!h && h.phase !== 'done' && i >= 0 && !h.players[i].folded;
   }
@@ -1932,12 +2231,12 @@ class HostTable {
 
   /* ---------------- hand lifecycle ---------------- */
   _maybeDeal() {
-    if (this.status === 'playing' && !this.paused && (!this.hand || this.hand.phase === 'done') && !this.nextTimer) this._startHand();
+    if (this.status === 'playing' && !this.paused && !this.shuffling && (!this.hand || this.hand.phase === 'done') && !this.nextTimer) this._startHand();
   }
 
   _startHand() {
     clearTimeout(this.nextTimer); this.nextTimer = null;
-    if (this.status !== 'playing' || this.paused) return this.changed();
+    if (this.status !== 'playing' || this.paused || this.shuffling) return this.changed();
     // Players who have been gone for two minutes are sat out automatically.
     for (const p of this.players.values()) if (!p.connected && p.disconnectedAt && Date.now() - p.disconnectedAt > 120000 && p.seat != null) p.sittingOut = true;
     const elig = this._eligible();
@@ -1947,20 +2246,115 @@ class HostTable {
     if (this.buttonSeat < 0) bi = U.randInt(elig.length);
     else { bi = elig.findIndex((e) => e.seat > this.buttonSeat); if (bi < 0) bi = 0; }
     this.buttonSeat = elig[bi].seat;
-    this.handNo++;
-    this.deck = Cards.shuffle(Cards.newDeck());
-    const n = elig.length, hole = Array.from({ length: n }, () => []);
-    for (let r = 0; r < 2; r++) for (let k = 1; k <= n; k++) hole[(bi + k) % n].push(this.deck.pop());
-    this.handPids = elig.map((e) => e.pid);
-    for (const pid of this.handPids) { const nm = this.players.get(pid).name; if (!this.names.includes(nm)) this.names.push(nm); }
+    const no = ++this.handNo;
+    // Rising blinds.
+    const lv = this.s.levelHands ? Math.min(LEVEL_FACTORS.length - 1, Math.floor((no - 1) / this.s.levelHands)) : 0;
+    const f = LEVEL_FACTORS[lv];
+    this.blinds = { sb: this.s.sb * f, bb: this.s.bb * f, ante: this.s.ante * f };
+    if (lv !== this.level) {
+      this.level = lv;
+      const b = this.blinds;
+      this._log(`Blinds go up to ${U.fmt(b.sb)}/${U.fmt(b.bb)}${b.ante ? `, ante ${U.fmt(b.ante)}` : ''}`);
+      this.onEvent('info', `Blinds are now ${U.fmt(b.sb)}/${U.fmt(b.bb)}`, null);
+    }
+    const n = elig.length, order = [];
+    for (let k = 1; k <= n; k++) order.push(elig[(bi + k) % n].pid);
+    const sh = this.shuffling = {
+      no, elig, bi, order, seedC: {}, seeds: {}, stage: 1, blinds: { ...this.blinds },
+      names: Object.fromEntries(elig.map((e) => [e.pid, this.players.get(e.pid).name])),
+      stacks: Object.fromEntries(elig.map((e) => [e.pid, this.players.get(e.pid).stack])),
+    };
+    this.changed();
+    this._fairShuffle(sh).then(() => {
+      if (this.shuffling !== sh) return;
+      this.shuffling = null;
+      if (this.status !== 'playing') return this.changed();
+      this._deal(sh);
+    }, (e) => { console.error(e); this.shuffling = null; this.changed(); });
+  }
+
+  /** Commit to a secret pre-deck, then mix in every player's committed randomness. */
+  async _fairShuffle(sh) {
+    const D0 = Cards.shuffle(Cards.newDeck());
+    const salts = D0.map(() => U.randHex(16));
+    const commits = D0.map((c, i) => Fair.commit(c, salts[i]));
+    Object.assign(sh, { D0, salts, commits });
+    const contributors = sh.order.filter((pid) => { const p = this.players.get(pid); return p && (pid === this.hostPid || p.connected); });
+    this.onBroadcast({ t: 'fair1', no: sh.no, commits });
+    if (contributors.includes(this.hostPid)) { sh.hostSeed = U.randHex(32); sh.seedC[this.hostPid] = Fair.sha256(sh.hostSeed); }
+    await this._collect(sh, 'seedC', contributors);
+    sh.stage = 2;
+    const committed = Object.keys(sh.seedC);
+    this.onBroadcast({ t: 'fair2', no: sh.no, seedCommits: committed.map((pid) => sh.seedC[pid]) });
+    if (sh.hostSeed) sh.seeds[this.hostPid] = sh.hostSeed;
+    await this._collect(sh, 'seeds', committed);
+    sh.stage = 3;
+    const seeds = committed.filter((pid) => sh.seeds[pid] && Fair.sha256(sh.seeds[pid]) === sh.seedC[pid]).map((pid) => sh.seeds[pid]);
+    sh.seedList = seeds;
+    sh.holeCount = this.holeCount;
+    sh.perm = Fair.permutation(Fair.combine(sh.no, commits, seeds), 52);
+    sh.deck = sh.perm.map((i) => D0[i]);
+    sh.layout = Fair.layout(sh.order.length, this.holeCount);
+    this.onBroadcast({ t: 'fair3', no: sh.no, seeds, order: sh.order.map((pid) => sh.names[pid]), holeCount: this.holeCount });
+  }
+
+  _collect(sh, key, pids) {
+    return new Promise((resolve) => {
+      const done = () => pids.every((pid) => sh[key][pid] != null);
+      if (done()) return resolve();
+      const t = setTimeout(() => { sh.waiter = null; resolve(); }, SEED_WAIT_MS);
+      sh.waiter = () => { if (done()) { clearTimeout(t); sh.waiter = null; resolve(); } };
+    });
+  }
+
+  /** Deal from the jointly-shuffled deck and send each player the proofs for their own cards. */
+  _deal(sh) {
+    const hc = this.holeCount, L = sh.layout;
+    const at = (pos) => ({ pos, card: sh.deck[pos], salt: sh.salts[sh.perm[pos]] });
+    const holeOf = {};
+    sh.order.forEach((pid, k) => {
+      const own = Array.from({ length: hc }, (_, r) => at(L.hole(k, r)));
+      holeOf[pid] = own.map((x) => x.card);
+      this.onDirect(pid, { t: 'fairown', no: sh.no, cards: own });
+    });
+    this.fair = sh;
+    this.handPids = sh.elig.map((e) => e.pid);
+    for (const pid of this.handPids) { const nm = sh.names[pid]; if (!this.names.includes(nm)) this.names.push(nm); }
     this.hand = Engine.createHand({
-      no: this.handNo, players: elig.map((e) => ({ name: this.players.get(e.pid).name, stack: this.players.get(e.pid).stack })),
-      button: bi, sb: this.s.sb, bb: this.s.bb, ante: this.s.ante, hole,
+      no: sh.no, players: sh.elig.map((e) => ({ name: sh.names[e.pid], stack: sh.stacks[e.pid] })),
+      button: sh.bi, sb: sh.blinds.sb, bb: sh.blinds.bb, ante: sh.blinds.ante, hole: sh.elig.map((e) => holeOf[e.pid]),
+      game: this.gameKind, limit: this.s.limit, holeCount: hc,
     });
     this.logCursor = 0;
-    this._log(`Hand #${this.handNo}`, 'hand');
+    this._log(`Hand #${sh.no}`, 'hand');
     this._syncLog();
     this._proceed();
+  }
+
+  /** Public proofs for this hand: board cards, shown hands, and at the end everything nobody needs to keep secret. */
+  _fairView() {
+    const f = this.fair, h = this.hand;
+    if (!f || !h || f.no !== h.no) return null;
+    const L = f.layout, seen = new Set(), reveals = [];
+    const add = (pos) => { if (!seen.has(pos)) { seen.add(pos); reveals.push({ pos, card: f.deck[pos], salt: f.salts[f.perm[pos]] }); } };
+    h.board.forEach((c, i) => add(L.board[i]));
+    h.players.forEach((p, i) => {
+      if (!p.shown) return;
+      const k = f.order.indexOf(this.handPids[i]);
+      for (let r = 0; r < f.holeCount; r++) add(L.hole(k, r));
+    });
+    if (h.phase === 'done') {
+      const secret = new Set();
+      if (this.s.recordHole !== 'All') {
+        h.players.forEach((p, i) => {
+          if (p.shown) return;
+          const k = f.order.indexOf(this.handPids[i]);
+          for (let r = 0; r < f.holeCount; r++) secret.add(L.hole(k, r));
+        });
+      }
+      for (let pos = 0; pos < 52; pos++) if (!secret.has(pos)) add(pos);
+    }
+    return { no: f.no, reveals, final: h.phase === 'done', seeds: f.seedList.length };
   }
 
   _afterAction() {
@@ -1986,9 +2380,9 @@ class HostTable {
             this.dealTimer = null;
             if (this.hand !== h || h.phase !== 'deal' || this.status !== 'playing') return;
             if (this.paused) return;
-            const cards = [];
-            this.deck.pop(); // burn
-            for (let i = 0; i < h.pendingDeal; i++) cards.push(this.deck.pop());
+            // Burn and turn from the committed positions (see Fair.layout).
+            const idx = h.street === 0 ? [0, 1, 2] : [h.street + 2];
+            const cards = idx.map((i) => this.fair.deck[this.fair.layout.board[i]]);
             Engine.dealBoard(h, cards);
             this._syncLog();
             this._proceed();
@@ -2062,6 +2456,7 @@ class HostTable {
     if (this.status === 'ended') return;
     this.status = 'ended';
     this._clearTurn(); clearTimeout(this.nextTimer); clearTimeout(this.dealTimer);
+    this.shuffling = null;
     this._log('The game has ended');
     this._sendRecords();
     this.onEvent('info', reason, null);
@@ -2072,9 +2467,9 @@ class HostTable {
   recordFor(pid) {
     const tags = Notation.gameTags({
       event: this.s.tableName, date: this.date, sb: this.s.sb, bb: this.s.bb, ante: this.s.ante,
-      startingStack: this.s.startingStack, players: this.names, holeCards: this.s.recordHole,
+      startingStack: this.s.startingStack, players: this.names, holeCards: this.s.recordHole, variant: this.variant,
     });
-    const hands = this.finished.map(({ hand, pids }) => Notation.fromHand(hand, pids.indexOf(pid), this.s.recordHole));
+    const hands = this.finished.map(({ hand, pids }) => Notation.fromHand(hand, pids.indexOf(pid), this.s.recordHole, { levels: !!this.s.levelHands }));
     return Notation.serialize({ tags, hands });
   }
   _sendRecords() { for (const pid of this.players.keys()) this.onRecord(pid, this.recordFor(pid)); }
@@ -2106,11 +2501,11 @@ class HostTable {
       let cards = null;
       if (hp) {
         if (qid === pid || hp.shown) cards = hp.hole.slice();
-        else if (!hp.folded && !hp.mucked) cards = [null, null];
+        else if (!hp.folded && !hp.mucked) cards = new Array(hp.hole.length).fill(null);
       }
       let handName = null;
       if (hp && cards && cards[0] && (qid === pid || hp.shown) && !(qid === pid && hp.folded && !done)) {
-        const e = Eval.evaluate([...hp.hole, ...h.board]);
+        const e = Eval.forGame(h.game, hp.hole, h.board);
         handName = Eval.describe(e);
       }
       const la = hp && curActs[i];
@@ -2141,7 +2536,14 @@ class HostTable {
     } : null;
     return {
       t: 'state',
-      table: { name: this.s.tableName, sb: this.s.sb, bb: this.s.bb, ante: this.s.ante, maxSeats: this.s.maxSeats, timer: this.s.timer, rebuys: this.s.rebuys, recordHole: this.s.recordHole, startingStack: this.s.startingStack },
+      table: {
+        name: this.s.tableName, sb: this.blinds.sb, bb: this.blinds.bb, ante: this.blinds.ante, baseSb: this.s.sb, baseBb: this.s.bb,
+        maxSeats: this.s.maxSeats, timer: this.s.timer, rebuys: this.s.rebuys, maxRebuys: this.s.maxRebuys || 0, recordHole: this.s.recordHole,
+        startingStack: this.s.startingStack, variant: this.variant, variantName: VARIANTS[this.variant].name, holeCount: this.holeCount,
+        limit: this.s.limit, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
+        nextLevelIn: this.s.levelHands ? this.s.levelHands - ((Math.max(1, this.handNo) - 1) % this.s.levelHands) : 0,
+      },
+      shuffling: !!this.shuffling, fair: this._fairView(),
       status: this.status, paused: this.paused, waiting: !!this.waiting, handNo: h ? h.no : 0,
       phase: h ? h.phase : null, street: h ? (done ? (h.results.showdown ? 'Showdown' : STREETS[h.street]) : STREETS[h.street]) : '',
       board: h ? h.board.slice() : [], pots, potTotal: h && !done ? Engine.potTotal(h) : 0,
@@ -2149,7 +2551,7 @@ class HostTable {
       you: me ? {
         pid, name: me.name, seat: me.seat, isHost: pid === this.hostPid, inHand: myIdx >= 0 && !!h && !h.players[myIdx].folded && !done,
         dealt: myIdx >= 0, sittingOut: me.sittingOut, busted: me.busted, stack: me.stack, autoMuck: me.autoMuck,
-        canShow: !!done && myIdx >= 0 && !h.players[myIdx].shown, canRebuy: !!this.s.rebuys && me.stack === 0 && !this._inLiveHand(pid),
+        canShow: !!done && myIdx >= 0 && !h.players[myIdx].shown, canRebuy: !!this.s.rebuys && me.stack === 0 && !this._inLiveHand(pid) && (!this.s.maxRebuys || me.rebuys < this.s.maxRebuys),
         toCallPreview: h && myIdx >= 0 && h.phase === 'betting' && !h.players[myIdx].folded ? Math.max(0, h.currentBet - h.players[myIdx].bet) : 0,
       } : null,
       hostName: this.players.get(this.hostPid).name,
@@ -2317,6 +2719,7 @@ class HostSession {
       this._send(c, m);
       if (m.t === 'kicked') { this.conns.delete(pid); setTimeout(() => { try { c.close(); } catch { /* ignore */ } }, 400); }
     };
+    t.onBroadcast = (m) => { for (const c of this.conns.values()) this._send(c, m); };
     this.peer.on('connection', (c) => this._attach(c));
     this.peer.on('disconnected', () => { setTimeout(() => { try { if (!this.peer.destroyed) this.peer.reconnect(); } catch { /* ignore */ } }, 1500); });
     this.peer.on('error', (e) => { if (e.type !== 'peer-unavailable') this.handlers.error(Net.friendly(e).title); });
@@ -2337,7 +2740,12 @@ class HostSession {
   }
 
   _data(c, m) {
-    if (!m || typeof m !== 'object') return;
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return;
+    // Flood protection: a token bucket per connection (bursts of 40, 15 messages/second sustained).
+    const now = Date.now(), b = c.bucket || (c.bucket = { n: 40, t: now });
+    b.n = Math.min(40, b.n + ((now - b.t) / 1000) * 15); b.t = now;
+    if (b.n < 1) return;
+    b.n -= 1;
     const t = this.table;
     if (m.t === 'hello') {
       const r = t.addPlayer(String(m.name || ''), typeof m.token === 'string' ? m.token.slice(0, 64) : null);
@@ -2416,8 +2824,9 @@ class ClientSession {
     this.id = hostId;
     this.name = name;
     this.record = Prefs.get('record.' + hostId, '');
-    this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {}, status: () => {} };
+    this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {}, status: () => {}, fair: () => {} };
     this.ended = false;
+    this.fair = new Fair.Checker((f, msg) => this.handlers.fair(f, msg));
   }
   on(ev, fn) { this.handlers[ev] = fn; return this; }
   get inviteUrl() { return `${location.origin}${location.pathname.replace(/index\.html$/, '')}${Net.local ? '?local' : ''}#join=${this.id}`; }
@@ -2468,14 +2877,43 @@ class ClientSession {
 
   _msg(m) {
     switch (m.t) {
-      case 'state': this.lastView = m; this.handlers.view(m); break;
+      case 'state':
+        this.lastView = m;
+        try { this.fair.view(m, this.name); } catch (e) { console.warn(e); }
+        // The record for a hand can arrive just before the view that proves its last board card.
+        if (this.pendingAudit) { const t = this.pendingAudit; this.pendingAudit = null; this._audit(t); }
+        this.handlers.view(m);
+        break;
       case 'event': this.handlers.event(m.kind, m.text); break;
-      case 'record': this.record = m.text; Prefs.set('record.' + this.id, m.text); break;
+      case 'record': this.record = m.text; Prefs.set('record.' + this.id, m.text); this.pendingAudit = m.text; break;
+      // Shuffle proofs: answer with our own committed randomness, then verify every card we see.
+      case 'fair1': { const r = this.fair.fair1(m); if (r) this.send(r); break; }
+      case 'fair2': { const r = this.fair.fair2(m); if (r) this.send(r); break; }
+      case 'fair3': this.fair.fair3(m); break;
+      case 'fairown': this.fair.own(m, this.name); break;
       case 'error': this.handlers.error(m.text); break;
       case 'ping': this.send({ t: 'pong' }); break;
       case 'kicked': this._end('You were removed from the table by the host.'); break;
       case 'ended': this._end(m.reason || 'Host left, game ended.'); break;
     }
+  }
+
+  /** Re-simulate the newest hand of the host's record and check it against what we saw ourselves. */
+  _audit(text) {
+    try {
+      const g = Notation.parse(text);
+      const r = g.hands[g.hands.length - 1];
+      if (!r || this.audited === r.no) return;
+      this.audited = r.no;
+      const rp = Replay.game({ tags: g.tags, hands: [r] });
+      const issues = rp.issues.slice();
+      const f = this.fair.hands[r.no];
+      if (f && f.own && r.hole[this.name] && r.hole[this.name].join() !== f.own.join()) issues.push('the record shows different hole cards from the ones you were dealt');
+      if (f && f.layout) r.streets.slice(1).flatMap((st) => st.board).forEach((c, i) => {
+        if (!f.checked.has(f.layout.board[i] + ':' + c)) issues.push(`board card ${Cards.pretty(c)} in the record was never proven`);
+      });
+      this.fair.audit(r.no, issues);
+    } catch (e) { this.fair.audit(-1, [`the host sent a record that does not parse (${e.message})`]); }
   }
 
   async _lost() {
@@ -2537,6 +2975,9 @@ const ICONS = {
   wifi: '<path d="M5 12.6a10 10 0 0 1 14 0M8.5 16.1a5 5 0 0 1 7 0M2 8.8a15 15 0 0 1 20 0M12 20h.01"/>',
   table: '<ellipse cx="12" cy="12" rx="10" ry="6"/><ellipse cx="12" cy="12" rx="6" ry="3"/>',
   flag: '<path d="M4 22V4M4 4h13l-2 4 2 4H4"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  shieldOk: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+  shieldBad: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4M12 16h.01"/>',
 };
 const icon = (n) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -2809,7 +3250,7 @@ class TableView {
       }
       const tags = [];
       if (st.won) tags.push(`<span class="tag win">+${U.fmt(st.won)}</span>`);
-      if (st.folded) tags.push('<span class="tag">Folded</span>');
+      if (st.folded) tags.push(`<span class="tag">${st.mucked ? 'Mucked' : 'Folded'}</span>`);
       if (st.allIn) tags.push('<span class="tag allin">All-in</span>');
       if (st.busted) tags.push('<span class="tag off">Busted</span>');
       else if (st.sittingOut) tags.push('<span class="tag off">Sitting out</span>');
@@ -2819,7 +3260,7 @@ class TableView {
       if (st.toAct && view.timer && view.timer.total) ring = '<svg class="ring" viewBox="0 0 50 50"><circle cx="25" cy="25" r="23" pathLength="100" stroke-dasharray="100" stroke-dashoffset="0" data-ring></circle></svg>';
       const label = `${st.name}${st.isYou ? ' (you)' : ''}, ${st.allIn ? 'all-in' : U.fmt(st.stack) + ' chips'}${st.folded ? ', folded' : ''}${st.toAct ? ', to act' : ''}`;
       parts.push(`<div class="${cls}" style="left:${x}%;top:${y}%" role="group" aria-label="${U.esc(label)}">
-        <div class="hole">${hole}</div>
+        <div class="hole${st.cards && st.cards.length > 2 ? ' many' : ''}">${hole}</div>
         <div class="plate">${avatarHtml(st.name, ring)}<div class="p-info"><div class="nm">${U.esc(st.name)}${st.isHost ? ' <span title="Host" aria-label="host">★</span>' : ''}</div><div class="stack">${st.allIn && !st.stack ? 'All-in' : U.fmt(st.stack)}</div></div></div>
         ${st.handName ? `<div class="hand-name">${U.esc(st.handName)}</div>` : ''}
         <div class="tags">${tags.join('')}</div></div>`);
@@ -2922,13 +3363,15 @@ const SelfTest = (() => {
   function play(o) {
     const deck = o.deck ? o.deck.slice() : Cards.shuffle(Cards.newDeck());
     const n = o.stacks.length;
-    const hole = o.hole || Array.from({ length: n }, () => [deck.pop(), deck.pop()]);
+    const hc = o.holeCount || (o.game === 'omaha' ? 4 : 2);
+    const hole = o.hole || Array.from({ length: n }, () => Array.from({ length: hc }, () => deck.pop()));
     for (const hc of hole) for (const c of hc || []) { const k = deck.indexOf(c); if (k >= 0) deck.splice(k, 1); }
     const board = o.board ? o.board.slice() : null;
     if (board) for (const c of board) { const k = deck.indexOf(c); if (k >= 0) deck.splice(k, 1); }
     const h = Engine.createHand({
       no: o.no || 1, players: o.stacks.map((s, i) => ({ name: (o.names || 'ABCDEFGHI')[i], stack: s })),
       button: o.button || 0, sb: o.sb || 1, bb: o.bb || 2, ante: o.ante || 0, hole,
+      game: o.game, limit: o.limit, holeCount: hc,
     });
     let k = 0;
     for (let guard = 0; guard < 500 && h.phase !== 'done'; guard++) {
@@ -3144,19 +3587,20 @@ const SelfTest = (() => {
   });
 
   /* ---------- Notation ---------- */
-  const sampleGame = (nHands, mode) => {
+  const sampleGame = (nHands, mode, variant = 'NLHE') => {
+    const V = VARIANTS[variant];
     const names = ['Alice', 'Bob', 'Big Al', 'Dee'];
     let stacks = [200, 200, 200, 200];
     const hands = [];
     for (let k = 0; k < nHands; k++) {
       const live = names.map((n, i) => i).filter((i) => stacks[i] > 0);
       if (live.length < 2) break;
-      const h = play({ no: k + 1, names: live.map((i) => names[i]), stacks: live.map((i) => stacks[i]), button: k % live.length, ante: 0, actions: randomAction });
+      const h = play({ no: k + 1, names: live.map((i) => names[i]), stacks: live.map((i) => stacks[i]), button: k % live.length, ante: 0, actions: randomAction, game: V.game, limit: V.limit, holeCount: V.holeCount });
       h.players.forEach((p) => { stacks[names.indexOf(p.name)] = p.stack; });
       if (k % 3 === 0 && h.players.length) Engine.showCards(h, 0);
       hands.push(h);
     }
-    return { tags: Notation.gameTags({ event: 'Test Night', date: '2026.10.14', sb: 1, bb: 2, ante: 0, startingStack: 200, players: names, holeCards: mode }), hands };
+    return { tags: Notation.gameTags({ event: 'Test Night', date: '2026.10.14', sb: 1, bb: 2, ante: 0, startingStack: 200, players: names, holeCards: mode, variant }), hands };
   };
   test('Notation', 'serialize → parse → serialize round-trips (60 random hands, both modes)', () => {
     for (const mode of ['All', 'Showdown']) {
@@ -3219,6 +3663,102 @@ const SelfTest = (() => {
     ok(g.hands.length >= 5);
   });
 
+  /* ---------- Omaha & pot limit ---------- */
+  const om = (hole, board) => Eval.describe(Eval.forGame('omaha', hole.split(' '), board.split(' ')));
+  test('Omaha', 'Must use exactly two hole cards and three board cards', () => {
+    eq(om('As Kd 3c 4c', '9s 9h 9d 9c 2h'), 'Three of a Kind, Nines', 'board quads only count three');
+    eq(om('Ah Td 3d 4s', 'Kh Qh Jh 2h 9c'), 'Straight, Ace high', 'one hole heart is not a flush');
+    eq(om('Ah 2h 3d 4s', 'Kh Qh Jh 5c 9c'), 'Flush, Ace high', 'two hole hearts + three board hearts');
+    eq(om('Ah Ad Kc Ks', '2c 3d 7h 8s 9c'), 'Pair of Aces', 'only one pair from the hand');
+    eq(om('5c 6d Qs Qh', 'Ah 2d 3h 4c Kd'), 'Straight, Six high', 'best straight using 5-6 from the hand');
+    eq(om('Ah Kd', ''), 'High Card, Ace', 'preflop strength');
+    eq(om('9h 9d 2c 3s 4d', '9s Kc Kd 2h 7c'), 'Full House, Nines over Kings', '5-card Omaha');
+  });
+  test('Omaha', 'Random Omaha hands conserve chips and replay cleanly (PLO, PLO5, NLO)', () => {
+    for (const v of ['PLO', 'PLO5', 'NLO', 'PLHE']) {
+      const sg = sampleGame(40, 'All', v);
+      const g = { tags: sg.tags, hands: sg.hands.map((h) => Notation.fromHand(h, 0, 'All')) };
+      const t1 = Notation.serialize(g);
+      const g2 = Notation.parse(t1);
+      eq(Notation.serialize(g2), t1, v + ' round trip');
+      eq(Replay.game(g2).issues, [], v + ' replay');
+      ok(sg.hands.every((h) => h.players.every((p) => p.hole.length === VARIANTS[v].holeCount)), 'hole card count');
+      const hidden = Notation.serialize({ tags: sg.tags, hands: sg.hands.map((h) => Notation.fromHand(h, 1, 'Showdown')) });
+      eq(Replay.game(Notation.parse(hidden)).issues, [], v + ' hidden-card replay');
+    }
+  });
+  test('Omaha', 'Pot-limit maximum bets and raises', () => {
+    const h = Engine.createHand({ players: ['A', 'B', 'C'].map((name) => ({ name, stack: 1000 })), button: 0, sb: 1, bb: 2, limit: 'pl', game: 'omaha' });
+    eq(Engine.legal(h).maxTo, 7, 'first raise: pot is 3 + call 2 → raise to 7');
+    throws(() => Engine.applyAction(h, { type: 'raise', to: 8 }), /Pot limit/);
+    Engine.applyAction(h, { type: 'allin' });
+    eq(h.players[0].bet, 7, '"all-in" is capped at the pot');
+    eq(Engine.legal(h).maxTo, 23, 'SB re-pot: 7 + (10 + 6)');
+    Engine.applyAction(h, { type: 'call' }); Engine.applyAction(h, { type: 'call' });
+    Engine.dealBoard(h, ['2c', '7d', 'Js']);
+    eq(Engine.legal(h).maxTo, 21, 'postflop pot bet');
+    Engine.applyAction(h, { type: 'bet', to: 10 });
+    eq(Engine.legal(h).maxTo, 51, 'pot raise facing 10 into 21: 21 + 3×10');
+    const short = Engine.createHand({ players: [{ name: 'A', stack: 5 }, { name: 'B', stack: 1000 }, { name: 'C', stack: 1000 }], button: 0, sb: 1, bb: 2, limit: 'pl' });
+    eq(Engine.legal(short).maxTo, 5, 'short stack all-in below the pot');
+    eq(Engine.legal(short).capped, false);
+  });
+  test('Notation', 'Per-hand blind levels are recorded and replayed', () => {
+    const h1 = play({ no: 1, stacks: [100, 100], sb: 1, bb: 2, actions: [{ type: 'fold' }] });
+    const h2 = play({ no: 2, stacks: [h1.players[0].stack, h1.players[1].stack], button: 1, sb: 5, bb: 10, ante: 1, actions: [{ type: 'call' }, { type: 'check' }, { type: 'check' }, { type: 'check' }, { type: 'check' }, { type: 'check' }, { type: 'check' }, { type: 'check' }] });
+    const tags = Notation.gameTags({ event: 'Levels', date: '2026.10.14', sb: 1, bb: 2, ante: 0, startingStack: 100, players: ['A', 'B'], holeCards: 'All' });
+    const t = Notation.serialize({ tags, hands: [h1, h2].map((h) => Notation.fromHand(h, 0, 'All', { levels: true })) });
+    ok(t.includes('#2 [Button "B"] [Stacks "A:99, B:101"] [Blinds "5/10"] [Ante "1"]'), 'level tags');
+    eq(Replay.game(Notation.parse(t)).issues, []);
+    eq(Notation.serialize(Notation.parse(t)), t);
+  });
+
+  /* ---------- Fair shuffle ---------- */
+  test('Fairness', 'SHA-256 matches the standard test vectors', () => {
+    eq(Fair.sha256(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+    eq(Fair.sha256('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+    eq(Fair.sha256('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq'), '248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1');
+    eq(Fair.sha256('a'.repeat(1000)), '41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3');
+  });
+  test('Fairness', 'Seed-driven permutation is deterministic and unbiased-looking', () => {
+    const p = Fair.permutation('00'.repeat(32));
+    eq(p.slice().sort((a, b) => a - b), Array.from({ length: 52 }, (_, i) => i), 'is a permutation');
+    eq(Fair.permutation('00'.repeat(32)), p, 'deterministic');
+    ok(Fair.permutation('01'.repeat(32)).join() !== p.join(), 'seed changes the order');
+    const counts = new Array(52).fill(0);
+    for (let k = 0; k < 2000; k++) counts[Fair.permutation(Fair.sha256('s' + k))[0]]++;
+    ok(Math.max(...counts) < 80 && Math.min(...counts) > 15, 'first card roughly uniform');
+  });
+  /** A full simulated deal between an honest (or dishonest) dealer and a checking player. */
+  function fairRound(tamper) {
+    const deck = Cards.shuffle(Cards.newDeck()), salts = deck.map(() => U.randHex(16));
+    const commits = deck.map((c, i) => Fair.commit(c, salts[i]));
+    const ck = new Fair.Checker();
+    const reply1 = ck.fair1({ no: 7, commits });
+    const hostSeed = U.randHex(32);
+    const seedCommits = [reply1.c, Fair.sha256(hostSeed)];
+    const reply2 = ck.fair2({ no: 7, seedCommits });
+    const seeds = tamper === 'dropseed' ? [hostSeed] : [reply2.seed, hostSeed];
+    ck.fair3({ no: 7, seeds, order: ['Me', 'Host'], holeCount: 2 });
+    const perm = Fair.permutation(Fair.combine(7, commits, seeds));
+    const L = Fair.layout(2, 2);
+    const at = (pos) => ({ pos, card: deck[perm[pos]], salt: salts[perm[pos]] });
+    const mine = [at(L.hole(0, 0)), at(L.hole(0, 1))];
+    if (tamper === 'swap') mine[1] = { ...at(L.hole(1, 1)), pos: L.hole(0, 1) };
+    ck.own({ no: 7, cards: mine }, 'Me');
+    const board = L.board.slice(0, 3).map(at);
+    if (tamper === 'board') board[2] = at(L.board[3]);
+    ck.view({ fair: { no: 7, reveals: board }, phase: 'betting', board: board.map((r) => r.card).concat(tamper === 'board' ? [] : []), seats: [{ name: 'Me', cards: mine.map((r) => r.card) }, { name: 'Host', cards: [null, null] }] }, 'Me');
+    return ck.hands[7];
+  }
+  test('Fairness', 'An honest deal verifies; tampering is caught', () => {
+    const okRound = fairRound();
+    eq(okRound.problems, []); eq(okRound.status, 'verified'); eq(okRound.verified, 5);
+    ok(fairRound('swap').status === 'failed', 'swapped hole card detected');
+    ok(fairRound('board').status === 'failed', 'board card from the wrong position detected');
+    ok(fairRound('dropseed').problems.some((p) => /left your shuffle seed out/.test(p)), 'excluded seed detected');
+  });
+
   /* ---------- QR ---------- */
   const QR_KNOWN_HELLO = 1773893352; // module-grid hash verified against an independent encoder (mask 2)
   test('QR', 'Encodes a URL into a valid-size symbol', () => {
@@ -3264,12 +3804,12 @@ function HomeScreen() {
       <div class="hero-felt" aria-hidden="true"><div class="mini-table"></div>
         ${cardHtml('As', '', 'left:72px;--cw:44px;transform:rotate(-8deg)')}${cardHtml('Kh', '', 'left:106px;--cw:44px;transform:rotate(7deg)')}</div>
       <h1>Hold'em with friends.<br>Just send a link.</h1>
-      <p>Free, peer-to-peer No-Limit Texas Hold'em that runs entirely in your browser. No accounts, no downloads, no game servers.</p>
+      <p>Free, peer-to-peer Texas Hold'em and Omaha that runs entirely in your browser, with a provably fair shuffle. No accounts, no downloads, no game servers.</p>
       <div class="home-actions">
         <button class="big-choice" data-go="#/host"><span class="bc-ic">${icon('plus')}</span><strong>Host a Game</strong><span>Choose blinds and stacks, share the invite link, and deal.</span></button>
         <button class="big-choice" data-go="#/viewer"><span class="bc-ic">${icon('history')}</span><strong>Hand History Viewer</strong><span>Paste a game record to replay every hand, with stats. Works offline.</span></button>
       </div>
-      <div class="pill-row"><span class="pill">100% free</span><span class="pill">No sign-up</span><span class="pill">Peer-to-peer</span><span class="pill">No ads or tracking</span></div>
+      <div class="pill-row"><span class="pill">100% free</span><span class="pill">No sign-up</span><span class="pill">Peer-to-peer</span><span class="pill">Provably fair shuffle</span><span class="pill">No ads or tracking</span></div>
     </div></section>
     <footer class="home-foot">The host's browser shuffles and deals. Cards travel directly between players; nothing is stored on a server.</footer>
   </div></div>`;
@@ -3281,13 +3821,20 @@ function HomeScreen() {
 /* ---------- Host setup ---------- */
 function HostSetupScreen() {
   document.title = TitleFlash.base = 'Host a game · Feltroom';
-  const d = Object.assign({ tableName: 'Friday Night Game', name: Prefs.get('name', ''), sb: 1, bb: 2, ante: 0, startingStack: 200, maxSeats: 9, timer: 30, rebuys: true, recordHole: 'All' }, Prefs.get('lastSettings', {}));
+  const d = Object.assign({ tableName: 'Friday Night Game', name: Prefs.get('name', ''), sb: 1, bb: 2, ante: 0, startingStack: 200, maxSeats: 9, timer: 30, rebuys: true, maxRebuys: 0, recordHole: 'All', game: 'holdem', limit: 'nl', levelHands: 0, hostPlays: true }, Prefs.get('lastSettings', {}));
   d.name = Prefs.get('name', d.name || '');
   const seg = (name, opts, val) => `<div class="seg" role="radiogroup" data-seg="${name}">${opts.map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${String(v) === String(val)}" aria-checked="${String(v) === String(val)}">${l}</button>`).join('')}</div>`;
   App.root.innerHTML = `<div class="page"><div class="page-inner">
     <div class="page-head"><a class="btn ghost icon-btn" href="#/" aria-label="Back to home">${icon('back')}</a><h2>Host a game</h2><span class="grow"></span>${topIconButtons()}</div>
     <form id="setup" novalidate>
       <div class="setup-grid">
+        <section class="card-ui setup-section" style="grid-column:1/-1"><h3>Game</h3>
+          <div class="two">
+            <div class="field"><span>Game</span>${seg('game', [['holdem', "Texas Hold'em"], ['omaha4', 'Omaha'], ['omaha5', '5-Card Omaha']], d.game)}</div>
+            <div class="field"><span>Betting</span>${seg('limit', [['nl', 'No limit'], ['pl', 'Pot limit']], d.limit)}</div>
+          </div>
+          <p class="hint" style="margin:0" id="game-hint"></p>
+        </section>
         <section class="card-ui setup-section"><h3>Table</h3>
           <label class="field"><span>Table name</span><input class="input" name="tableName" maxlength="40" value="${U.esc(d.tableName)}" required></label>
           <label class="field"><span>Your display name</span><input class="input" name="name" maxlength="18" value="${U.esc(d.name)}" placeholder="e.g. Alice" required autocomplete="nickname"></label>
@@ -3298,10 +3845,15 @@ function HostSetupScreen() {
           <label class="field"><span>Big blind</span><input class="input num" name="bb" type="number" min="1" step="1" inputmode="numeric" value="${d.bb}"></label></div>
           <div class="two"><label class="field"><span>Ante (optional)</span><input class="input num" name="ante" type="number" min="0" step="1" inputmode="numeric" value="${d.ante}"></label>
           <label class="field"><span>Starting stack</span><input class="input num" name="startingStack" type="number" min="2" step="1" inputmode="numeric" value="${d.startingStack}"></label></div>
+          <div class="field"><span>Blinds go up</span>${seg('levelHands', [[0, 'Never'], [10, 'Every 10 hands'], [20, '20'], [30, '30']], d.levelHands)}</div>
         </section>
         <section class="card-ui setup-section"><h3>Pace</h3>
           <div class="field"><span>Action timer</span>${seg('timer', [[0, 'Off'], [15, '15s'], [30, '30s'], [60, '60s']], d.timer)}</div>
-          <label class="check"><input type="checkbox" name="rebuys" ${d.rebuys ? 'checked' : ''}> Allow rebuys when a player busts</label>
+          <div class="field"><span>Rebuys when a player busts</span>${seg('rebuys', [['no', 'None'], [1, '1 each'], [2, '2 each'], [3, '3 each'], ['any', 'Unlimited']], !d.rebuys ? 'no' : d.maxRebuys ? d.maxRebuys : 'any')}</div>
+        </section>
+        <section class="card-ui setup-section"><h3>Fair play</h3>
+          <label class="check"><input type="checkbox" name="hostPlays" ${d.hostPlays !== false ? 'checked' : ''}> I'm playing too (take a seat)</label>
+          <p class="hint" style="margin:0">Every hand uses a <b>provably fair shuffle</b>: this device commits to the deck before players add their own randomness, and every player's browser checks each card dealt. The dealing device can still see all hole cards, so for a serious game, untick this box and host on a device nobody plays from (a spare laptop or TV).</p>
         </section>
         <section class="card-ui setup-section"><h3>Game record</h3>
           <div class="field"><span>Record hole cards</span>${seg('recordHole', [['All', 'All cards'], ['Showdown', 'Only cards shown at showdown']], d.recordHole)}</div>
@@ -3317,6 +3869,14 @@ function HostSetupScreen() {
     $$('button', g).forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); });
   }));
   const form = $('#setup');
+  const hint = () => {
+    const g = $('[data-seg="game"] [aria-pressed="true"]').dataset.v, l = $('[data-seg="limit"] [aria-pressed="true"]').dataset.v;
+    $('#game-hint').textContent = (g === 'holdem' ? 'Two hole cards; make the best five-card hand from any of your cards and the board.'
+      : `${g === 'omaha5' ? 'Five' : 'Four'} hole cards; your hand must use exactly two of them plus exactly three from the board.`)
+      + (l === 'pl' ? ' Pot limit: the biggest bet or raise is the size of the pot.' : ' No limit: bet any amount up to your whole stack.');
+  };
+  $$('[data-seg="game"], [data-seg="limit"]').forEach((g) => g.addEventListener('click', () => setTimeout(hint)));
+  hint();
   if (!d.name) setTimeout(() => form.name.focus(), 50);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -3325,7 +3885,8 @@ function HostSetupScreen() {
       tableName: form.tableName.value.replace(/["\[\]\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Home Game',
       sb: Math.floor(Number(form.sb.value)), bb: Math.floor(Number(form.bb.value)), ante: Math.floor(Number(form.ante.value || 0)),
       startingStack: Math.floor(Number(form.startingStack.value)), maxSeats: Number(segv('maxSeats')), timer: Number(segv('timer')),
-      rebuys: form.rebuys.checked, recordHole: segv('recordHole'),
+      rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : Number(segv('rebuys')), recordHole: segv('recordHole'),
+      game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), hostPlays: form.hostPlays.checked,
     };
     const name = U.sanitizeName(form.name.value);
     const errs = [];
@@ -3334,6 +3895,7 @@ function HostSetupScreen() {
     if (!(s.bb >= s.sb)) errs.push('Big blind must be at least the small blind.');
     if (!(s.ante >= 0)) errs.push('Ante cannot be negative.');
     if (!(s.startingStack >= s.bb * 2)) errs.push('Starting stack must be at least two big blinds.');
+    if (s.game === 'omaha5' && s.maxSeats > 8) errs.push('5-Card Omaha seats at most 8 players (a deck has only 52 cards).');
     if (s.startingStack > 10000000) errs.push('Starting stack is too large.');
     const box = $('#setup-err');
     if (errs.length) { box.innerHTML = `${icon('alert')}<div>${errs.map(U.esc).join('<br>')}</div>`; box.classList.remove('hidden'); return; }
@@ -3434,6 +3996,7 @@ function GameScreen(session) {
     <header class="topbar">
       <div class="brand"><div class="logo" aria-hidden="true">♠</div><div style="min-width:0"><div class="t-name" id="g-name">Table</div><div class="t-sub" id="g-sub"></div></div></div>
       <div class="top-actions">
+        <button class="btn sm ghost" id="g-fair" aria-label="Fair play status">${icon('shield')}<span class="hide-sm">Fair play</span></button>
         <button class="btn sm hide-sm" id="g-invite">${icon('link')}<span>Invite</span></button>
         <button class="btn sm ghost hide-sm" id="g-copy">${icon('copy')}<span>Copy Game Record</span></button>
         ${isHost ? `<button class="btn sm ghost hidden" id="g-pause"></button>` : ''}
@@ -3485,6 +4048,7 @@ function GameScreen(session) {
   $('#g-sound').addEventListener('click', () => { Sound.toggle(); soundBtn(); });
   $('#g-help').addEventListener('click', () => helpOverlay('game'));
   $('#g-invite').addEventListener('click', () => inviteModal());
+  $('#g-fair').addEventListener('click', () => fairModal());
   $('#g-copy').addEventListener('click', () => copyRecord());
   if (isHost) $('#g-pause').addEventListener('click', () => session.send({ t: 'pause', on: !G.view.paused }));
   $('#g-menu').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
@@ -3597,6 +4161,47 @@ function GameScreen(session) {
     const first = $('input, button', menuEl); if (first) first.focus();
   }
 
+  /* ----- fair play ----- */
+  function fairState() {
+    if (isHost) return { cls: 'host', label: 'You deal', icon: 'shieldOk' };
+    const ck = session.fair, f = ck && ck.latest;
+    const failed = ck && Object.values(ck.hands).find((x) => x.status === 'failed');
+    if (failed) return { cls: 'bad', label: 'Check failed', icon: 'shieldBad', f: failed };
+    if (f && f.status === 'verified') return { cls: 'ok', label: 'Verified', icon: 'shieldOk', f };
+    return { cls: '', label: 'Fair play', icon: 'shield', f };
+  }
+  function renderFairBadge() {
+    const st = fairState(), b = $('#g-fair');
+    if (!b) return;
+    b.innerHTML = `${icon(st.icon)}<span class="hide-sm">${st.label}</span>`;
+    b.style.color = st.cls === 'bad' ? 'var(--danger)' : st.cls === 'ok' || st.cls === 'host' ? 'var(--accent)' : '';
+    b.setAttribute('aria-label', `Fair play: ${st.label}`);
+  }
+  function fairModal() {
+    const st = fairState(), f = st.f, t = G.view ? G.view.table : {};
+    let head;
+    if (isHost) {
+      head = `<p>Your device is the dealer. Each hand it commits to a secret deck <b>before</b> the players' browsers add their own randomness, so it can't arrange the cards. Every player's browser checks every card it sees against that commitment and re-checks each hand's result against the rules.</p>
+        <p class="muted">${t.hostPlays ? 'You are also playing. The dealing device can technically see every hole card, so for games where that matters, start a table with "I\'m playing too" turned off and deal from a device nobody plays on.' : 'You are dealing without playing, which is the most trustworthy setup.'}</p>`;
+    } else if (st.cls === 'bad') {
+      head = `<div class="err-box">${icon('alert')}<div><b>Hand #${f.no} failed verification.</b><ul style="margin:6px 0 0;padding-left:18px">${f.problems.map((p) => `<li>${U.esc(p)}</li>`).join('')}</ul></div></div>
+        <p>The host's device didn't deal or score this hand the way it promised. That points to a modified game page or a tampered connection. Consider stopping play with this host.</p>`;
+    } else if (f && f.status === 'verified') {
+      head = `<div class="issue ok">${icon('shieldOk')} <b>Hand #${f.no} verified.</b> The deck was locked in before shuffling, ${f.seeds ? f.seeds.length : 0} player${f.seeds && f.seeds.length === 1 ? '' : 's'} added randomness (including you), and all ${f.verified} cards you were shown matched it.${f.audited ? ' The result was re-checked against the rules.' : ''}</div>
+        ${f.notes.length ? `<p class="hint">${f.notes.map(U.esc).join(' ')}</p>` : ''}`;
+    } else head = '<p>Verification starts with the next hand that you are at the table for.</p>';
+    openModal(`<h2>${icon('shield')} Fair play</h2>${head}
+      <div class="section-title">What your browser checks</div>
+      <ul class="hint" style="padding-left:18px;margin:0;line-height:1.6">
+        <li><b>No peeking:</b> you only ever receive your own hole cards. Other players' cards reach you only if they are shown.</li>
+        <li><b>No stacked decks:</b> the host commits to the deck before your random seed is added, so it can't choose who gets which card.</li>
+        <li><b>No swapped cards:</b> your cards, the board and every shown hand are checked against the committed deck. Leftover cards are checked when the hand ends.</li>
+        <li><b>No fiddled pots:</b> every hand is replayed through the rules engine on your device.</li>
+        <li><b>The limits:</b> the dealing device can see hole cards, and nothing can stop two players from sharing their cards in a chat app.</li>
+      </ul>
+      <div class="modal-foot"><button class="btn primary" data-close>Close</button></div>`, { label: 'Fair play' });
+  }
+
   function showEnded(reason) {
     if (G.ended) return;
     G.ended = reason;
@@ -3634,13 +4239,15 @@ function GameScreen(session) {
         <div class="p-sub">${p.seat != null ? 'Seat ' + (p.seat + 1) : 'Choosing a seat…'}${p.connected ? '' : ' · disconnected'}</div></div></div>`).join('')}</div>
       <h3>Settings</h3>
       <div class="summary">
-        <div class="sum-tile"><b>${U.fmt(t.sb)}/${U.fmt(t.bb)}</b><span>Blinds</span></div>
+        <div class="sum-tile" style="grid-column:span 2"><b>${U.esc(t.variantName)}</b><span>Game</span></div>
+        <div class="sum-tile"><b>${U.fmt(t.sb)}/${U.fmt(t.bb)}</b><span>Blinds${t.levelHands ? ` · up every ${t.levelHands}` : ''}</span></div>
         <div class="sum-tile"><b>${t.ante ? U.fmt(t.ante) : 'None'}</b><span>Ante</span></div>
         <div class="sum-tile"><b>${U.fmt(t.startingStack)}</b><span>Starting stack</span></div>
         <div class="sum-tile"><b>${t.maxSeats}</b><span>Seats</span></div>
         <div class="sum-tile"><b>${t.timer ? t.timer + 's' : 'Off'}</b><span>Action timer</span></div>
-        <div class="sum-tile"><b>${t.rebuys ? 'Allowed' : 'No'}</b><span>Rebuys</span></div>
-        <div class="sum-tile" style="grid-column:span 2"><b>${t.recordHole === 'All' ? 'All cards' : 'Showdown only'}</b><span>Hole cards in record</span></div>
+        <div class="sum-tile"><b>${!t.rebuys ? 'No' : t.maxRebuys ? `${t.maxRebuys} each` : 'Unlimited'}</b><span>Rebuys</span></div>
+        <div class="sum-tile"><b>${t.recordHole === 'All' ? 'All cards' : 'Showdown only'}</b><span>Hole cards in record</span></div>
+        <div class="sum-tile" style="grid-column:span 2"><b>${icon('shieldOk')} Provably fair shuffle</b><span>${t.hostPlays ? 'Host is also playing' : 'Host deals only (does not play)'}</span></div>
       </div>
       ${v.you && v.you.isHost
         ? `<button class="btn primary lg" id="l-start" ${seated.length < 2 ? 'disabled' : ''}>${icon('play')}Start Game</button><p class="hint" style="margin:0;text-align:center">${seated.length < 2 ? 'Waiting for at least one more player to sit down.' : `${seated.length} players seated. Ready when you are.`}</p>`
@@ -3654,7 +4261,9 @@ function GameScreen(session) {
   function quickSizes(L) {
     const cl = (x) => Math.max(L.minTo, Math.min(L.maxTo, Math.round(x)));
     const base = L.myBet + L.toCall, pot = L.pot + L.toCall;
-    const q = [['min', 'Min', L.minTo], ['half', '½ Pot', cl(base + pot / 2)], ['3q', '¾ Pot', cl(base + (pot * 3) / 4)], ['pot', 'Pot', cl(base + pot)], ['all', 'All-in', L.maxTo]];
+    const q = [['min', 'Min', L.minTo], ['half', '½ Pot', cl(base + pot / 2)], ['3q', '¾ Pot', cl(base + (pot * 3) / 4)], ['pot', 'Pot', cl(base + pot)]];
+    // Pot limit caps the bet at the pot, so "All-in" only appears when it is actually allowed.
+    if (!L.capped) q.push(['all', 'All-in', L.maxTo]);
     return q;
   }
   function amtNow() { const i = $('#ab-amt'); return i ? Math.round(Number(i.value)) : null; }
@@ -3682,7 +4291,10 @@ function GameScreen(session) {
       html = `<div class="ab-msg">Game over.<button class="btn primary" data-do="copy">${icon('copy')}Copy Game Record</button><button class="btn" data-do="viewer">${icon('history')}Open in viewer</button></div>`;
     } else if (!y || y.seat == null) {
       const free = v.seats.some((s) => !s);
-      html = `<div class="ab-msg">${icon('users')}${free ? 'Click an empty seat on the table to sit down.' : 'The table is full, so you are watching. A seat may open up.'}</div>`;
+      const dealer = y && y.isHost && !v.table.hostPlays;
+      html = dealer
+        ? `<div class="ab-msg">${icon('shieldOk')}You are dealing this game and not playing.${v.status === 'lobby' ? `<button class="btn primary lg" data-do="start" ${seatedCount < 2 ? 'disabled' : ''}>${icon('play')}Start Game</button>` : ''}</div>`
+        : `<div class="ab-msg">${icon('users')}${free ? 'Click an empty seat on the table to sit down.' : 'The table is full, so you are watching. A seat may open up.'}</div>`;
     } else if (v.status === 'lobby') {
       html = y.isHost
         ? `<div class="ab-msg"><span>${seatedCount} seated</span><button class="btn primary lg" data-do="start" ${seatedCount < 2 ? 'disabled' : ''}>${icon('play')}Start Game</button></div>`
@@ -3808,7 +4420,8 @@ function GameScreen(session) {
     document.title = TitleFlash.base = `${v.table.name} · Feltroom`;
     $('#g-name').textContent = v.table.name;
     const seated = v.seats.filter(Boolean).length;
-    $('#g-sub').textContent = `Blinds ${U.fmt(v.table.sb)}/${U.fmt(v.table.bb)}${v.table.ante ? ` · Ante ${U.fmt(v.table.ante)}` : ''} · ${v.status === 'lobby' ? 'Lobby' : v.handNo ? 'Hand #' + v.handNo : 'Starting'} · ${seated}/${v.table.maxSeats} seated`;
+    $('#g-sub').textContent = `${v.table.variant} · Blinds ${U.fmt(v.table.sb)}/${U.fmt(v.table.bb)}${v.table.ante ? ` · Ante ${U.fmt(v.table.ante)}` : ''}${v.table.levelHands && v.status === 'playing' ? ` · Level ${v.table.level} (up in ${v.table.nextLevelIn})` : ''} · ${v.status === 'lobby' ? 'Lobby' : v.handNo ? 'Hand #' + v.handNo : 'Starting'} · ${seated}/${v.table.maxSeats} seated`;
+    renderFairBadge();
     if (isHost) {
       const pb = $('#g-pause');
       pb.classList.toggle('hidden', v.status !== 'playing');
@@ -3825,8 +4438,9 @@ function GameScreen(session) {
     if (G.pre === 'check' && v.you && v.you.toCallPreview > 0 && !v.legal) G.pre = null;
     table.render({
       maxSeats: v.table.maxSeats, mySeat: v.you && v.you.seat != null ? v.you.seat : 0, handKey: v.handNo ? 'h' + v.handNo : '',
-      seats: v.seats, board: v.board, pots: v.pots, street: v.handNo ? v.street : v.status === 'lobby' ? 'Waiting for players' : '',
-      results: v.results, timer: v.timer, canSit: !!v.you && v.you.seat == null && v.status !== 'ended', readOnly: false, feltText: v.table.name,
+      seats: v.seats, board: v.board, pots: v.pots, street: v.shuffling ? 'Shuffling…' : v.handNo ? v.street : v.status === 'lobby' ? 'Waiting for players' : '',
+      results: v.results, timer: v.timer, readOnly: false, feltText: v.table.name,
+      canSit: !!v.you && v.you.seat == null && v.status !== 'ended' && !(v.you.isHost && !v.table.hostPlays),
     });
     renderBar();
     renderSide(v);
@@ -3851,6 +4465,10 @@ function GameScreen(session) {
   session.on('event', (kind, text) => toast(text, kind));
   session.on('error', (text) => { toast(text, 'error'); G.sending = false; G.barKey = null; if (G.view) renderBar(); });
   session.on('ended', (reason) => showEnded(reason));
+  session.on('fair', (f, msg) => {
+    if (G.alerted !== f.no) { G.alerted = f.no; toast(`Fair-play check failed on hand #${f.no}: ${msg}`, 'error', 9000); announce('Warning: fair play check failed.'); }
+    renderFairBadge();
+  });
   if (session.on && !isHost) session.on('status', (st) => { G.status = st; if (G.view) update(G.view); });
 
   /* ----- keyboard ----- */
@@ -3970,7 +4588,7 @@ function ViewerScreen() {
     const nIssues = V.replay.issues.length;
     App.root.innerHTML = `<div class="game" style="grid-template-rows:auto 1fr">
       <header class="topbar"><a class="btn ghost icon-btn" href="#/" aria-label="Home">${icon('home')}</a>
-        <div class="brand"><div style="min-width:0"><div class="t-name">${U.esc(tag('Event') || 'Game record')}</div><div class="t-sub">${U.esc([tag('Date'), `Blinds ${tag('Blinds')}`, `${V.game.hands.length} hands`, tag('HoleCards') === 'All' ? 'all hole cards' : 'showdown cards only'].filter(Boolean).join(' · '))}</div></div></div>
+        <div class="brand"><div style="min-width:0"><div class="t-name">${U.esc(tag('Event') || 'Game record')}</div><div class="t-sub">${U.esc([(VARIANTS[tag('Variant') || 'NLHE'] || {}).name, tag('Date'), `Blinds ${tag('Blinds')}`, `${V.game.hands.length} hands`, tag('HoleCards') === 'All' ? 'all hole cards' : 'showdown cards only'].filter(Boolean).join(' · '))}</div></div></div>
         <div class="top-actions">
           <label class="row hide-sm" style="font-size:13px;color:var(--text-2)">View from <select class="input" id="v-persp" style="height:34px;width:auto">${V.order.map((n) => `<option ${n === V.persp ? 'selected' : ''}>${U.esc(n)}</option>`).join('')}</select></label>
           <button class="btn sm" id="v-new">${icon('plus')}<span class="hide-sm">Load another</span></button>
@@ -4036,11 +4654,11 @@ function ViewerScreen() {
       maxSeats: h.players.length, mySeat: persp, handKey: `r${V.hk}`, readOnly: true, feltText: tag('Event') || '',
       seats: h.players.map((p, i) => ({
         seat: i, name: p.name, stack: p.stack, bet: done ? 0 : p.bet,
-        cards: p.hole ? p.hole.slice() : (p.folded || p.mucked ? null : [null, null]),
-        folded: p.folded || p.mucked, allIn: p.allIn && !done, button: i === h.button,
+        cards: p.hole ? p.hole.slice() : (p.folded || p.mucked ? null : new Array(h.holeCount || 2).fill(null)),
+        folded: p.folded || p.mucked, mucked: p.mucked && !p.folded, allIn: p.allIn && !done, button: i === h.button,
         sb: i === h.sbIdx && h.street === 0 && !done, bb: i === h.bbIdx && h.street === 0 && !done,
         toAct: h.phase === 'betting' && h.toAct === i, won: wins[i] || 0, shown: true, isYou: i === persp,
-        handName: p.hole && !p.folded && !p.mucked ? Eval.describe(Eval.evaluate([...p.hole, ...h.board])) : null,
+        handName: p.hole && !p.folded && !p.mucked ? Eval.describe(Eval.forGame(h.game, p.hole, h.board)) : null,
         lastAction: curActs[i] ? curActs[i].type : null,
       })),
       board: h.board.slice(), street: done ? (h.results.showdown ? 'Showdown' : STREETS[h.street]) : STREETS[h.street],
