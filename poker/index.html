@@ -385,6 +385,19 @@ button.seat-empty:hover { background: var(--accent-soft); border-color: var(--ac
 .marker.sb { background: #5b8def; color: #fff; }
 .marker.bb { background: #f0a43a; color: #241700; }
 .fly { position: absolute; z-index: 20; pointer-events: none; transition: transform .38s cubic-bezier(.3, .7, .3, 1), opacity .38s; }
+.chat-bubble { position: absolute; transform: translate(-50%, -100%); z-index: 26; max-width: calc(200px * var(--s)); padding: calc(5px * var(--s)) calc(10px * var(--s)); border-radius: 12px; background: #fbfaf6; color: #15181c; font-size: calc(12.5px * var(--s)); font-weight: 600; line-height: 1.3; box-shadow: 0 6px 18px rgba(0,0,0,.35); pointer-events: none; word-wrap: break-word; animation: bubbleIn .22s cubic-bezier(.2,.8,.3,1.2); }
+.chat-bubble::after { content: ""; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); border: 6px solid transparent; border-bottom: 0; border-top-color: #fbfaf6; }
+.chat-bubble.below { transform: translate(-50%, 0); }
+.chat-bubble.below::after { bottom: auto; top: -6px; border-top: 0; border-bottom: 6px solid #fbfaf6; }
+.chat-bubble.out { opacity: 0; transition: opacity .3s; }
+@keyframes bubbleIn { from { opacity: 0; transform: translate(-50%, -80%) scale(.85); } }
+.chat-bubble.below { animation-name: bubbleInBelow; }
+@keyframes bubbleInBelow { from { opacity: 0; transform: translate(-50%, -20%) scale(.85); } }
+.chat-feed { position: absolute; left: 12px; bottom: 12px; z-index: 28; display: flex; flex-direction: column; gap: 6px; max-width: min(340px, 72%); pointer-events: none; }
+.chat-feed .cf { pointer-events: auto; cursor: pointer; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 12px; padding: 6px 10px; font-size: 13px; box-shadow: var(--shadow-1); animation: toastIn .22s ease-out; word-wrap: break-word; }
+.chat-feed .cf b { margin-right: 6px; }
+.chat-feed .cf.out { animation: toastOut .3s ease-in forwards; }
+@media (max-width: 720px) { .chat-feed { left: 8px; bottom: 8px; max-width: 80%; } .chat-feed .cf { font-size: 12px; } }
 .win-amt { position: absolute; transform: translate(-50%, -50%); z-index: 22; font-weight: 900; color: var(--gold); font-size: calc(18px * var(--s)); text-shadow: 0 2px 8px rgba(0,0,0,.6); animation: rise 1.6s ease-out forwards; pointer-events: none; }
 @keyframes rise { 0% { opacity: 0; transform: translate(-50%, -20%); } 15% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -140%); } }
 .result-banner { position: absolute; left: 50%; top: 24%; transform: translate(-50%, -50%); z-index: 6; background: rgba(0,0,0,.55); color: #fff; padding: 6px 14px; border-radius: 10px; font-weight: 700; font-size: calc(14px * var(--s)); white-space: nowrap; max-width: 90%; overflow: hidden; text-overflow: ellipsis; }
@@ -3740,6 +3753,7 @@ const Sound = {
       case 'chip': this._tone(c, { f: 2300, type: 'triangle', t, dur: 0.05, vol: 0.06 }); this._tone(c, { f: 3100, type: 'triangle', t: t + 0.045, dur: 0.05, vol: 0.05 }); break;
       case 'knock': this._tone(c, { f: 150, f2: 80, t, dur: 0.12, vol: 0.4 }); this._noise(c, { t, dur: 0.04, vol: 0.12, freq: 900, type: 'lowpass' }); break;
       case 'chime': this._tone(c, { f: 660, t, dur: 0.28, vol: 0.09 }); this._tone(c, { f: 990, t: t + 0.14, dur: 0.38, vol: 0.08 }); break;
+      case 'chat': this._tone(c, { f: 1175, t, dur: 0.12, vol: 0.05 }); this._tone(c, { f: 1568, t: t + 0.08, dur: 0.16, vol: 0.04 }); break;
       case 'win': [523, 659, 784].forEach((f, i) => this._tone(c, { f, type: 'triangle', t: t + i * 0.09, dur: 0.3, vol: 0.07 })); break;
       case 'fold': this._noise(c, { t, dur: 0.09, vol: 0.06, freq: 1200, q: 0.5 }); break;
     }
@@ -4028,6 +4042,26 @@ class TableView {
         }, 420);
       }
     }
+  }
+
+  /** A speech bubble over a seat for a chat message (below the seat for players at the top of the table). */
+  bubble(seat, from, text) {
+    if (!this.view || seat == null || seat < 0) return;
+    const [x, y] = this.pos(seat);
+    const below = y < 30;
+    const el = document.createElement('div');
+    el.className = `chat-bubble${below ? ' below' : ''}`;
+    el.style.left = x + '%';
+    el.style.top = `calc(${y}% ${below ? '+' : '-'} ${below ? 46 : 58} * var(--s) * 1px)`;
+    el.setAttribute('role', 'note');
+    el.setAttribute('aria-label', `${from} says: ${text}`);
+    el.textContent = text.length > 120 ? text.slice(0, 117) + '…' : text;
+    // One bubble per seat at a time: a new message replaces the old one.
+    $$(`.chat-bubble[data-seat="${seat}"]`, this.fx).forEach((b) => b.remove());
+    el.dataset.seat = seat;
+    this.fx.appendChild(el);
+    const ms = Math.min(9000, 3500 + text.length * 60);
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 350); }, ms);
   }
 
   fly(from, to, amount) {
@@ -4909,7 +4943,7 @@ function GameScreen(session) {
     <div class="game-body">
       <div class="table-area">
         <aside class="lobby hidden" id="g-lobby" aria-label="Lobby"></aside>
-        <div class="table-stage" id="g-stage"><div class="banner hidden" id="g-banner" role="status"></div></div>
+        <div class="table-stage" id="g-stage"><div class="banner hidden" id="g-banner" role="status"></div><div class="chat-feed" id="g-feed" aria-live="polite" aria-label="Recent chat"></div></div>
       </div>
       <aside class="side" id="g-side" aria-label="Log, chat and players">
         <div class="tabs" role="tablist">
@@ -4960,7 +4994,8 @@ function GameScreen(session) {
     G.tab = name;
     $$('.tab', side).forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === name)));
     ['log', 'chat', 'players'].forEach((n) => $('#tp-' + n).classList.toggle('hidden', n !== name));
-    if (name === 'chat') { $('#g-chatdot').classList.add('hidden'); const l = $('#g-chat'); l.scrollTop = l.scrollHeight; }
+    if (name === 'chat') {
+      const f = $('#g-feed'); if (f) f.innerHTML = ''; $('#g-chatdot').classList.add('hidden'); const l = $('#g-chat'); l.scrollTop = l.scrollHeight; }
   }
   $('#g-chatform').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -5035,6 +5070,7 @@ function GameScreen(session) {
     menuEl.className = 'menu'; menuEl.setAttribute('role', 'menu');
     menuEl.innerHTML = `
       <label><input type="checkbox" id="m-4c" ${Prefs.get('fourColor', true) ? 'checked' : ''}> Four-color deck</label>
+      <label><input type="checkbox" id="m-chatpop" ${Prefs.get('chatPopups', true) ? 'checked' : ''}> Show chat on the table</label>
       ${y ? `<label><input type="checkbox" id="m-muck" ${y.autoMuck ? 'checked' : ''}> Auto-muck losing hands</label>` : ''}
       ${seated ? `<label><input type="checkbox" id="m-sitout" ${y.sittingOut ? 'checked' : ''}> Sit out next hands</label>` : ''}
       ${seated && !y.inHand ? `<button id="m-stand" role="menuitem">${icon('users')}Leave my seat</button>` : ''}
@@ -5053,6 +5089,7 @@ function GameScreen(session) {
     $('.game').appendChild(menuEl);
     const on = (id, fn) => { const el = $('#' + id, menuEl); if (el) el.addEventListener(el.type === 'checkbox' ? 'change' : 'click', (e) => { fn(e); if (el.type !== 'checkbox') closeMenu(); }); };
     on('m-4c', (e) => { Prefs.set('fourColor', e.target.checked); Theme.apply(); });
+    on('m-chatpop', (e) => Prefs.set('chatPopups', e.target.checked));
     on('m-muck', (e) => session.send({ t: 'automuck', on: e.target.checked }));
     on('m-sitout', (e) => session.send({ t: 'sitout', on: e.target.checked }));
     on('m-stand', () => session.send({ t: 'stand' }));
@@ -5277,6 +5314,19 @@ function GameScreen(session) {
     setTimeout(() => { if (G.sending) { G.sending = false; G.barKey = null; renderBar(); } }, 2500);
   }
 
+  /* ----- chat feed on the table (when the chat tab is not open) ----- */
+  const feed = $('#g-feed');
+  function showFeed(c) {
+    const el = document.createElement('div');
+    el.className = 'cf';
+    el.title = 'Open chat';
+    el.innerHTML = `<b style="color:hsl(${hueOf(c.from)} 60% 55%)">${U.esc(c.from)}</b>${U.esc(c.text)}`;
+    el.addEventListener('click', () => { setPanel(true); selectTab('chat'); $('#g-chatin').focus(); feed.innerHTML = ''; });
+    feed.appendChild(el);
+    while (feed.children.length > 4) feed.firstChild.remove();
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 320); }, Math.min(12000, 6000 + c.text.length * 50));
+  }
+
   /* ----- side panel ----- */
   function renderSide(v) {
     const lastLog = v.log.length ? v.log[v.log.length - 1].id : 0;
@@ -5296,12 +5346,27 @@ function GameScreen(session) {
       list.innerHTML = v.chat.map((c) => `<div class="chat-msg"><b style="color:hsl(${hueOf(c.from)} 60% 60%)">${U.esc(c.from)}</b>${U.esc(c.text)}</div>`).join('');
       list.scrollTop = list.scrollHeight;
       const others = fresh.filter((c) => !v.you || c.from !== v.you.name);
-      if (others.length && G.chatSeen) {
-        if (G.tab !== 'chat' || side.classList.contains('collapsed')) $('#g-chatdot').classList.remove('hidden');
-        if (side.classList.contains('collapsed')) { const b = $('#g-badge'); b.textContent = '•'; b.classList.remove('hidden'); toast(`${others[0].from}: ${others[0].text}`, 'info', 3000); }
+      if (G.chatSeen) {
+        const chatOpen = G.tab === 'chat' && !side.classList.contains('collapsed');
+        const popups = Prefs.get('chatPopups', true);
+        for (const c of fresh.slice(-4)) {
+          // A speech bubble over the sender's seat, for everyone, every time.
+          const seat = v.seats.findIndex((s) => s && s.name === c.from);
+          if (popups && seat >= 0) table.bubble(seat, c.from, c.text);
+          // Messages from others also go into the corner feed whenever the chat tab isn't open.
+          if (popups && !chatOpen && c.from !== (v.you && v.you.name)) showFeed(c);
+        }
+        if (others.length) {
+          if (!chatOpen) $('#g-chatdot').classList.remove('hidden');
+          if (side.classList.contains('collapsed')) { const b = $('#g-badge'); b.textContent = '•'; b.classList.remove('hidden'); }
+          if (!popups && !chatOpen) toast(`${others[0].from}: ${others[0].text}`, 'info', 3000);
+          Sound.play('chat');
+          if (document.hidden && !TitleFlash.timer) TitleFlash.start(`💬 ${others[others.length - 1].from}: ${others[others.length - 1].text}`.slice(0, 60));
+          announce(`${others[others.length - 1].from} says: ${others[others.length - 1].text}`);
+        }
       }
-      G.chatSeen = true;
     }
+    G.chatSeen = true; // history present on the first view is not "new"
     const pkey = JSON.stringify([v.players, v.phase, v.you && v.you.pid]);
     if (pkey !== G.pkey) {
       G.pkey = pkey;
@@ -5361,10 +5426,10 @@ function GameScreen(session) {
         if (a) { setTimeout(() => act(a), 250); return; }
       }
       Sound.play('chime');
-      TitleFlash.start('● Your turn · Feltroom');
+      TitleFlash.stop(); TitleFlash.start('● Your turn · Feltroom'); G.turnFlash = true;
       announce(`Your turn. ${L.canCheck ? 'You can check.' : U.fmt(L.toCall) + ' to call.'}`);
     }
-    if (!myTurn) TitleFlash.stop();
+    if (!myTurn && G.turnFlash) { TitleFlash.stop(); G.turnFlash = false; }
     if (v.status === 'ended' && !G.ended) showEnded(isHost ? 'You ended the game.' : 'The host ended the game.');
   }
 

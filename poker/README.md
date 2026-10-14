@@ -150,6 +150,10 @@ test suite and lists pass/fail results. The suite covers:
     **Copy Game Record** copies.
   - Those hands appear only in the **full record**, tagged `[Bots "Name"]`. Use **Copy full record
     (with bot hands)** in the ⋯ menu.
+- **Chat you can't miss:** every message pops up as a speech bubble over the sender's seat. When the
+  chat tab isn't open, recent messages also appear in a small feed in the corner of the table; click
+  one to jump to the chat. In a background tab, a soft sound plays and the tab title shows the
+  message. You can turn the on-table popups off with **Show chat on the table** in the ⋯ menu.
 - **If the host leaves:** everyone sees *"Host left, game ended"* and can still copy, download or
   replay their record up to that point. Records are also saved in each player's browser.
 - **Keyboard shortcuts:**
