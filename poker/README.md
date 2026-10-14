@@ -102,6 +102,7 @@ test suite and lists pass/fail results. The suite covers:
 - 500 random hands checked for chip conservation
 - record round-trips, tolerant parsing, error line numbers and replay consistency
 - Omaha's two-plus-three hand rule, pot-limit maximums and per-hand blind levels
+- statistical (chi-square) checks that shuffles are uniform
 - SHA-256 against the standard test vectors, the shuffle permutation, and fair-deal checks that
   catch swapped cards, wrong board positions and excluded seeds
 - the QR encoder, checked against a reference encoder
@@ -192,7 +193,9 @@ prove its work to everyone else.
 
 1. Before every hand, the host shuffles a secret deck and publishes a SHA-256 commitment for each
    card (the card plus a random salt).
-2. Each player's browser then commits to its own random seed, and afterwards reveals it.
+2. Every connected browser then commits to its own random seed, and afterwards reveals it. This
+   includes seated players, players sitting out, spectators and the dealer. The deck is
+   unpredictable as long as any one of them is honest.
 3. The final order is computed from all the seeds together, so the host can't choose who gets
    which card: the deck was locked in before it knew the players' randomness.
 4. Each card a player sees arrives with its salt, and the player's browser checks it against the
@@ -212,6 +215,20 @@ match. The shield button in the top bar shows the status for the latest hand.
 - No software can stop two players from telling each other their cards through another app.
 
 The SHA-256 used for these proofs is built into the page, so it works over plain HTTP too.
+
+**Where the randomness comes from.**
+
+- Every random choice uses the browser's cryptographically secure generator
+  (`crypto.getRandomValues`), which is fed by the operating system. This covers the shuffle,
+  seeds, salts, the first button and tokens.
+- Shuffles use Fisher–Yates with rejection sampling, so there's no modulo bias and all 52!
+  orders of the deck are possible.
+- Card salts are 256-bit, so the card commitments can't be brute-forced.
+- The host refuses to start if the secure generator is missing.
+- The `#/selftest` page runs chi-square tests showing that:
+  - every card lands in every position equally often
+  - neighbouring cards don't stick together
+  - the final deck is evenly shuffled if just the host, or just the players, are honest
 
 ---
 

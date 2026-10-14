@@ -538,6 +538,7 @@ const U = {
   clone(o) { return JSON.parse(JSON.stringify(o)); },
   /** Unbiased random integer in [0, n) from crypto.getRandomValues. */
   randInt(n) {
+    if (!(n >= 1 && n <= 0x100000000)) throw new Error('randInt range');
     const buf = new Uint32Array(1);
     const limit = Math.floor(0x100000000 / n) * n;
     let x;
@@ -2117,7 +2118,7 @@ class HostTable {
       // Shuffle randomness: a commitment first, then the seed itself (see FAIR SHUFFLE PROOFS).
       case 'fairc': case 'fairs': {
         const sh = this.shuffling;
-        if (!sh || m.no !== sh.no || !sh.order.includes(pid)) return;
+        if (!sh || m.no !== sh.no || !sh.contributors || !sh.contributors.includes(pid)) return;
         if (m.t === 'fairc' && sh.stage === 1 && sh.seedC[pid] == null && Fair.isHex(m.c, 64)) sh.seedC[pid] = m.c;
         if (m.t === 'fairs' && sh.stage === 2 && sh.seedC[pid] && sh.seeds[pid] == null && Fair.isHex(m.seed, 64)) sh.seeds[pid] = m.seed;
         if (sh.waiter) sh.waiter();
@@ -2276,12 +2277,15 @@ class HostTable {
   /** Commit to a secret pre-deck, then mix in every player's committed randomness. */
   async _fairShuffle(sh) {
     const D0 = Cards.shuffle(Cards.newDeck());
-    const salts = D0.map(() => U.randHex(16));
+    const salts = D0.map(() => U.randHex(32)); // 256-bit salts: card commitments can't be brute-forced
     const commits = D0.map((c, i) => Fair.commit(c, salts[i]));
     Object.assign(sh, { D0, salts, commits });
-    const contributors = sh.order.filter((pid) => { const p = this.players.get(pid); return p && (pid === this.hostPid || p.connected); });
+    // Everyone connected adds randomness: seated players, players sitting out, spectators and the
+    // dealer. The deck is unpredictable as long as any single one of them is honest.
+    const contributors = sh.contributors = [...this.players.values()].filter((p) => p.pid === this.hostPid || p.connected).map((p) => p.pid);
     this.onBroadcast({ t: 'fair1', no: sh.no, commits });
-    if (contributors.includes(this.hostPid)) { sh.hostSeed = U.randHex(32); sh.seedC[this.hostPid] = Fair.sha256(sh.hostSeed); }
+    sh.hostSeed = U.randHex(32);
+    sh.seedC[this.hostPid] = Fair.sha256(sh.hostSeed);
     await this._collect(sh, 'seedC', contributors);
     sh.stage = 2;
     const committed = Object.keys(sh.seedC);
@@ -2688,6 +2692,7 @@ const Net = {
       'connect-timeout': ['Connection blocked', 'The host was found but no direct connection could be opened in time. A firewall or VPN may be blocking peer-to-peer traffic. Try another network.'],
       'lib-missing': ['Could not load PeerJS', 'The free PeerJS library could not be downloaded from the CDN (unpkg / jsDelivr). Check your connection or content blocker and retry.'],
       'disconnected': ['Disconnected from the broker', 'Lost contact with the matchmaking broker. Retry to reconnect.'],
+      'no-crypto': ['This browser cannot shuffle securely', 'Hosting needs the browser\'s built-in secure random number generator (crypto.getRandomValues). Please use a current browser.'],
       'rejected': ['Could not join', (e && e.message) || 'The host declined the connection.'],
     };
     const [title, message] = map[t] || ['Something went wrong', (e && e.message) || String(e)];
@@ -2708,6 +2713,7 @@ class HostSession {
   on(ev, fn) { this.handlers[ev] = fn; return this; }
 
   async start() {
+    if (!(globalThis.crypto && typeof crypto.getRandomValues === 'function')) throw { type: 'no-crypto' };
     let lastErr;
     for (let attempt = 0; attempt < 3; attempt++) {
       try { this.peer = await Net.createPeer(Net.newHostId()); break; }
@@ -3772,6 +3778,44 @@ const SelfTest = (() => {
     ok(fairRound('swap').status === 'failed', 'swapped hole card detected');
     ok(fairRound('board').status === 'failed', 'board card from the wrong position detected');
     ok(fairRound('dropseed').problems.some((p) => /left your shuffle seed out/.test(p)), 'excluded seed detected');
+  });
+
+  /* ---------- Statistical randomness checks ---------- */
+  // Chi-square goodness of fit against a uniform distribution. With these thresholds an honest
+  // generator fails less than about once in a million runs; a biased shuffle fails at once.
+  const chi2 = (counts) => { const n = U.sum(counts), e = n / counts.length; return U.sum(counts.map((c) => ((c - e) ** 2) / e)); };
+  const CHI_51 = 112; // 51 degrees of freedom, p ≈ 1e-6
+  test('Randomness', 'Secure random integers are uniform (no modulo bias)', () => {
+    for (const n of [2, 3, 7, 52]) {
+      const counts = new Array(n).fill(0);
+      for (let k = 0; k < 6000 * Math.min(n, 10); k++) counts[U.randInt(n)]++;
+      const limit = { 2: 24, 3: 28, 7: 36, 52: CHI_51 }[n]; // p ≈ 1e-6 for n-1 degrees of freedom
+      ok(chi2(counts) < limit, `randInt(${n}) chi² ${chi2(counts).toFixed(1)}`);
+    }
+    const b = U.randHex(32);
+    ok(/^[0-9a-f]{64}$/.test(b) && b !== U.randHex(32), 'hex seeds look random and never repeat');
+  });
+  test('Randomness', 'Shuffles put every card in every position equally often', () => {
+    const N = 10400, pos = new Array(52).fill(0), top = new Array(52).fill(0), deck0 = Cards.newDeck();
+    for (let k = 0; k < N; k++) { const d = Cards.shuffle(deck0.slice()); pos[d.indexOf('As')]++; top[deck0.indexOf(d[0])]++; }
+    ok(chi2(pos) < CHI_51, `A♠ position chi² ${chi2(pos).toFixed(1)}`);
+    ok(chi2(top) < CHI_51, `top card chi² ${chi2(top).toFixed(1)}`);
+    // Neighbouring cards must not stick together (a classic weak-shuffle flaw).
+    let stuck = 0;
+    for (let k = 0; k < N / 2; k++) { const d = Cards.shuffle(deck0.slice()); if (Math.abs(d.indexOf('As') - d.indexOf('Ah')) === 1) stuck++; }
+    const expect = N / 52;
+    ok(Math.abs(stuck - expect) < 6 * Math.sqrt(expect), `adjacent pair ${stuck} vs ${expect.toFixed(0)}`);
+  });
+  test('Randomness', 'The fair-shuffle order is uniform, and one honest party is enough', () => {
+    const N = 5200;
+    // Host is dishonest (always the same unshuffled deck) but players' seeds are random.
+    const fixedDeck = Cards.newDeck(), byPlayers = new Array(52).fill(0);
+    for (let k = 0; k < N; k++) { const p = Fair.permutation(Fair.combine(k, ['x'], [U.randHex(32)])); byPlayers[p.indexOf(fixedDeck.indexOf('As'))]++; }
+    ok(chi2(byPlayers) < CHI_51, `players alone: chi² ${chi2(byPlayers).toFixed(1)}`);
+    // Every player is dishonest (fixed seeds) but the host's secret deck is random.
+    const perm = Fair.permutation(Fair.combine(1, ['x'], ['00'.repeat(32)])), byHost = new Array(52).fill(0);
+    for (let k = 0; k < N; k++) { const d0 = Cards.shuffle(Cards.newDeck()); byHost[perm.findIndex((i) => d0[i] === 'As')]++; }
+    ok(chi2(byHost) < CHI_51, `host alone: chi² ${chi2(byHost).toFixed(1)}`);
   });
 
   /* ---------- QR ---------- */
