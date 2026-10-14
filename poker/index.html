@@ -180,7 +180,8 @@ textarea.input { height: auto; padding: 12px; resize: vertical; font: 13px/1.5 u
 .hero-felt { width: 220px; height: 120px; margin: 0 auto; position: relative; }
 .hero-felt .mini-table { position: absolute; inset: 10px 0; border-radius: 999px; background: radial-gradient(ellipse at 50% 40%, var(--felt-1), var(--felt-2) 60%, var(--felt-3)); box-shadow: 0 0 0 8px var(--rail-1), 0 0 0 10px var(--rail-2), 0 18px 40px rgba(0,0,0,.4); }
 .hero-felt .card { position: absolute; top: 34px; }
-.home-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 36px auto 0; max-width: 640px; width: 100%; }
+.home-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 36px auto 0; max-width: 900px; width: 100%; }
+@media (max-width: 900px) { .home-actions { grid-template-columns: 1fr; max-width: 520px; } }
 .big-choice { text-align: left; padding: 22px; border-radius: 18px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; display: flex; flex-direction: column; gap: 8px; transition: transform .15s, border-color .15s, box-shadow .15s; color: var(--text); }
 .big-choice:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: var(--shadow-2); }
 .big-choice .bc-ic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
@@ -472,6 +473,16 @@ pre.hand-text { white-space: pre-wrap; word-break: break-word; font: 12.5px/1.6 
 .mini > div { background: var(--surface-2); border-radius: 10px; padding: 6px 8px; }
 .mini b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
 .mini span { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; }
+.stat-group { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); margin: 2px 0 -4px; }
+.mini > div[title], .tile[title] { cursor: help; }
+.mini small { font-size: 10px; font-weight: 600; }
+.stat-key { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 12.5px; }
+.stat-key dt { font-weight: 800; white-space: nowrap; }
+.stat-key dd { margin: 0; color: var(--text-2); }
+.bars { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.bar-row { display: grid; grid-template-columns: 112px 1fr 28px; gap: 8px; align-items: center; }
+.bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 4px; background: var(--series-1); }
 .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); font-weight: 700; margin: 14px 0 8px; }
 .chart { position: relative; background: var(--surface); border: 1px solid var(--border-soft); border-radius: 14px; padding: 10px 10px 6px; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
@@ -1223,6 +1234,477 @@ const Fair = (() => {
 })();
 
 /* =====================================================================
+   3c. BOTS  (decision engine, ported from the "Royal Flush Engine" AI)
+   Pipeline per decision: equity (Monte-Carlo or heuristic) -> board texture,
+   outs and blockers -> pot odds, implied odds, SPR, MDF -> opponent read ->
+   candidate EVs (fold / check-call / bet-raise at several sizes) -> strategy
+   frequencies -> deliberate mixing. Difficulty sets how much of the pipeline
+   runs and how much noise is injected; personality skews the style.
+   Bots never see hidden cards: decide() receives only the bot's own hole cards
+   and public information (board, bets, actions, models built from past public play).
+   ===================================================================== */
+const Bots = (() => {
+  /* mcIters: Monte-Carlo samples (0 = heuristic only) · noise: threshold noise ·
+     useRanges: model opponent ranges · useOdds: pot/implied odds · useFoldEq ·
+     bluff: bluff multiplier · adapt: exploit strength · mix: strategy mixing */
+  const PROFILES = {
+    beginner: { level: 0, mcIters: 0, noise: 0.34, useRanges: false, useOdds: false, useFoldEq: false, bluff: 0.15, adapt: 0, mix: 0.05, sizingIQ: 0.1, cbet: 0.3, mdf: 0.4 },
+    casual: { level: 1, mcIters: 120, noise: 0.24, useRanges: false, useOdds: true, useFoldEq: false, bluff: 0.35, adapt: 0.05, mix: 0.08, sizingIQ: 0.25, cbet: 0.42, mdf: 0.5 },
+    intermediate: { level: 2, mcIters: 320, noise: 0.16, useRanges: true, useOdds: true, useFoldEq: true, bluff: 0.6, adapt: 0.18, mix: 0.12, sizingIQ: 0.45, cbet: 0.55, mdf: 0.62 },
+    advanced: { level: 3, mcIters: 700, noise: 0.1, useRanges: true, useOdds: true, useFoldEq: true, bluff: 0.85, adapt: 0.35, mix: 0.18, sizingIQ: 0.65, cbet: 0.62, mdf: 0.72 },
+    professional: { level: 4, mcIters: 1200, noise: 0.06, useRanges: true, useOdds: true, useFoldEq: true, bluff: 1.0, adapt: 0.55, mix: 0.24, sizingIQ: 0.8, cbet: 0.65, mdf: 0.82 },
+    elite: { level: 5, mcIters: 2000, noise: 0.035, useRanges: true, useOdds: true, useFoldEq: true, bluff: 1.1, adapt: 0.7, mix: 0.3, sizingIQ: 0.92, cbet: 0.66, mdf: 0.9 },
+    extreme: { level: 6, mcIters: 3200, noise: 0.015, useRanges: true, useOdds: true, useFoldEq: true, bluff: 1.18, adapt: 0.85, mix: 0.36, sizingIQ: 1.0, cbet: 0.68, mdf: 1.0 },
+  };
+  const LABELS = { beginner: 'Beginner', casual: 'Casual', intermediate: 'Intermediate', advanced: 'Advanced', professional: 'Professional', elite: 'Elite', extreme: 'Extreme' };
+  const PERSONALITIES = {
+    balanced: { name: 'Balanced', vpip: 0.3, aggr: 1.05, bluff: 1.0, trap: 1.0, cbet: 1.0, sizing: 1.0 },
+    tightaggr: { name: 'Tight-aggressive', vpip: 0.24, aggr: 1.3, bluff: 1.0, trap: 0.55, cbet: 1.15, sizing: 1.0 },
+    looseaggr: { name: 'Loose-aggressive', vpip: 0.42, aggr: 1.55, bluff: 1.45, trap: 0.5, cbet: 1.2, sizing: 1.15 },
+    tightpassive: { name: 'Tight-passive', vpip: 0.17, aggr: 0.45, bluff: 0.35, trap: 0.45, cbet: 0.75, sizing: 0.75 },
+    loosepassive: { name: 'Loose-passive', vpip: 0.48, aggr: 0.5, bluff: 0.4, trap: 0.6, cbet: 0.6, sizing: 0.7 },
+    maniac: { name: 'Maniac', vpip: 0.72, aggr: 2.1, bluff: 2.2, trap: 0.25, cbet: 1.5, sizing: 1.5 },
+    trapper: { name: 'Trapper', vpip: 0.3, aggr: 0.85, bluff: 0.75, trap: 1.9, cbet: 0.7, sizing: 1.05 },
+    gto: { name: 'GTO-inspired', vpip: 0.33, aggr: 1.15, bluff: 1.1, trap: 1.0, cbet: 1.05, sizing: 1.0 },
+  };
+  const NAMES = ['Nova', 'Rook', 'Juniper', 'Atlas', 'Echo', 'Pixel', 'Maverick', 'Sable', 'Quinn', 'Orion', 'Wren', 'Bishop', 'Cosmo', 'Indigo', 'Lumen', 'Tango'];
+
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+  /** Fast simulation PRNG (sfc32) seeded from the secure generator. Never used for dealing. */
+  function makeRng() {
+    const s = new Uint32Array(4);
+    crypto.getRandomValues(s);
+    let [a, b, c, d] = s;
+    const next = () => {
+      a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+      let t = (a + b) | 0;
+      a = b ^ (b >>> 9); b = (c + (c << 3)) | 0; c = (c << 21) | (c >>> 11); d = (d + 1) | 0;
+      t = (t + d) | 0; c = (c + t) | 0;
+      return (t >>> 0) / 4294967296;
+    };
+    return {
+      next, int: (n) => Math.floor(next() * n),
+      gauss(m, sd) { const u = Math.max(1e-9, next()), v = next(); return m + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); },
+      weighted(ws) { const tot = ws.reduce((x, y) => x + y, 0); if (!(tot > 0)) return 0; let r = next() * tot; for (let i = 0; i < ws.length; i++) { r -= ws[i]; if (r < 0) return i; } return ws.length - 1; },
+    };
+  }
+
+  /* ---------- preflop models ---------- */
+  /** Chen formula, normalised into a rough 0..1 equity estimate (Hold'em). */
+  function chen(hole) {
+    let r1 = Cards.rank(hole[0]) - 2, r2 = Cards.rank(hole[1]) - 2;
+    if (r2 > r1) [r1, r2] = [r2, r1];
+    const val = (r) => (r === 12 ? 10 : r === 11 ? 8 : r === 10 ? 7 : r === 9 ? 6 : (r + 2) / 2);
+    const pair = r1 === r2, suited = hole[0][1] === hole[1][1];
+    let p = val(r1);
+    if (pair) p = Math.max(5, p * 2);
+    if (suited) p += 2;
+    const gap = r1 - r2 - 1;
+    if (!pair) {
+      if (gap === 1) p -= 1; else if (gap === 2) p -= 2; else if (gap === 3) p -= 4; else if (gap >= 4) p -= 5;
+      if (gap <= 1 && r1 < 10) p += 1;
+    }
+    return clamp(0.32 + (Math.ceil(p) + 2) / 26, 0.3, 0.87);
+  }
+  // Percentile of every starting-hand class (0 = best), weighted by combos.
+  const PCT = (() => {
+    const classes = [];
+    for (let a = 12; a >= 0; a--) for (let b = a; b >= 0; b--) {
+      const ra = RANKS[a], rb = RANKS[b];
+      if (a === b) classes.push({ key: ra + rb, s: chen([ra + 's', rb + 'h']), n: 6 });
+      else {
+        classes.push({ key: ra + rb + 's', s: chen([ra + 's', rb + 's']), n: 4 });
+        classes.push({ key: ra + rb + 'o', s: chen([ra + 's', rb + 'h']), n: 12 });
+      }
+    }
+    classes.sort((x, y) => y.s - x.s);
+    const out = {};
+    let acc = 0;
+    for (const c of classes) { acc += c.n; out[c.key] = acc / 1326; }
+    return out;
+  })();
+  const holdemPct = (hole) => PCT[Cards.shorthand(hole)] ?? 0.5;
+
+  /** Omaha preflop score 0..1: high cards, pairs, double-suitedness, connectivity. */
+  function omahaScore(hole) {
+    const ranks = hole.map((c) => Cards.rank(c) - 2).sort((a, b) => b - a);
+    let s = ranks.reduce((acc, r, i) => acc + (r / 12) * ([0.3, 0.22, 0.13, 0.07, 0.04][i] || 0), 0);
+    const counts = {};
+    ranks.forEach((r) => { counts[r] = (counts[r] || 0) + 1; });
+    const cv = Object.values(counts);
+    const pairs = cv.filter((c) => c === 2).length, trips = cv.filter((c) => c >= 3).length;
+    s += pairs * 0.1 + (ranks[0] >= 10 && pairs ? 0.06 : 0) - trips * 0.12;
+    const sc = {};
+    hole.forEach((c) => { sc[c[1]] = (sc[c[1]] || 0) + 1; });
+    const sv = Object.values(sc).sort((a, b) => b - a);
+    if (sv[0] === 2 && sv[1] === 2) s += 0.13; else if (sv[0] === 2) s += 0.07;
+    if (sv[0] >= 3) s -= 0.06;
+    const uniq = [...new Set(ranks)];
+    for (let i = 0; i < uniq.length - 1; i++) { const g = uniq[i] - uniq[i + 1]; if (g <= 2) s += g === 1 ? 0.055 : 0.03; }
+    return clamp(0.28 + s * 0.62, 0.18, 0.92);
+  }
+
+  /* ---------- board texture, outs, blockers ---------- */
+  function analyzeBoard(board) {
+    const out = { n: board.length, paired: false, flushPossible: false, straightPossible: false, wetness: 0, topRank: -1 };
+    if (!board.length) return out;
+    const ranks = board.map((c) => Cards.rank(c) - 2), rc = {}, sc = {};
+    ranks.forEach((r) => { rc[r] = (rc[r] || 0) + 1; });
+    board.forEach((c) => { sc[c[1]] = (sc[c[1]] || 0) + 1; });
+    const scv = Object.values(sc).sort((a, b) => b - a);
+    out.paired = Object.values(rc).some((v) => v >= 2);
+    out.flushPossible = scv[0] >= 3;
+    out.topRank = Math.max(...ranks);
+    const uniq = [...new Set(ranks)];
+    let windows = 0;
+    for (let lo = 0; lo <= 8; lo++) {
+      const inWin = uniq.filter((r) => r >= lo && r < lo + 5).length;
+      if (inWin >= 2) windows++;
+      if (inWin >= 3) out.straightPossible = true;
+    }
+    out.wetness = clamp((out.flushPossible ? 0.34 : 0) + (scv[0] === 2 ? 0.16 : 0) + (windows / 9) * 0.42 + (out.paired ? 0.1 : 0) + (out.straightPossible ? 0.16 : 0), 0, 1);
+    return out;
+  }
+  function countOuts(game, hole, board) {
+    if (board.length < 3 || board.length >= 5) return { outs: 0, pct: 0 };
+    const cur = Eval.forGame(game, hole, board), dead = new Set([...hole, ...board]);
+    let outs = 0, live = 0;
+    for (const c of Cards.newDeck()) {
+      if (dead.has(c)) continue;
+      live++;
+      const e = Eval.forGame(game, hole, [...board, c]);
+      if (e.cat > cur.cat || (e.score > cur.score && e.cat >= 2)) outs++;
+    }
+    return { outs, pct: live ? outs / live : 0 };
+  }
+  function blockerScore(hole, board, tex) {
+    let s = 0;
+    const hr = hole.map((c) => Cards.rank(c) - 2);
+    if (hr.includes(12)) s += 0.16;
+    if (hr.includes(11)) s += 0.07;
+    if (tex.flushPossible) {
+      const sc = {};
+      board.forEach((c) => { sc[c[1]] = (sc[c[1]] || 0) + 1; });
+      const fs = Object.keys(sc).find((k) => sc[k] >= 3);
+      hole.forEach((c) => { if (c[1] === fs && Cards.rank(c) - 2 >= 10) s += 0.2; });
+    }
+    if (tex.topRank >= 0 && hr.includes(tex.topRank)) s += 0.08;
+    return clamp(s, 0, 0.5);
+  }
+
+  /* ---------- opponent ranges (Hold'em) ---------- */
+  /** How wide an opponent's range is, from their public actions this hand. */
+  function rangeWidth(acts, model) {
+    const pre = acts.filter((a) => a.street === 0);
+    const raises = pre.filter((a) => a.type === 'r' || a.type === 'b').length;
+    const open = model ? model.vpip : 0.3;
+    if (raises >= 2) return clamp(open * 0.28, 0.03, 0.14);
+    if (raises === 1) return clamp(open, 0.08, 0.75);
+    if (pre.some((a) => a.type === 'c')) return clamp(open * 1.3, 0.2, 0.9);
+    return 1;
+  }
+
+  /* ---------- Monte-Carlo equity ---------- */
+  function equity(o) {
+    const { game, hole, board, widths, rng } = o;
+    const nOpp = widths.length, hc = o.holeCount;
+    const dead = new Set([...hole, ...board]);
+    const pool = Cards.newDeck().filter((c) => !dead.has(c));
+    const need = 5 - board.length;
+    let win = 0, tie = 0, n = 0;
+    const t0 = Date.now();
+    for (; n < o.iters; n++) {
+      if ((n & 31) === 31 && Date.now() - t0 > o.budgetMs) break;
+      const p = pool.slice();
+      let len = p.length;
+      const draw = () => { const j = rng.int(len); const c = p[j]; p[j] = p[--len]; return c; };
+      const opps = [];
+      for (let k = 0; k < nOpp; k++) {
+        let h;
+        // Range weighting by rejection: redraw hands that fall outside the opponent's likely range.
+        for (let tries = 0; ; tries++) {
+          h = [];
+          for (let i = 0; i < hc; i++) h.push(draw());
+          if (game !== 'holdem' || widths[k] >= 1 || tries >= 6 || holdemPct(h) <= widths[k]) break;
+          for (const c of h) p[len++] = c;
+        }
+        opps.push(h);
+      }
+      const run = board.slice();
+      for (let i = 0; i < need; i++) run.push(draw());
+      const mine = Eval.forGame(game, hole, run).score;
+      let best = -1, cnt = 0;
+      for (const h of opps) { const s = Eval.forGame(game, h, run).score; if (s > best) { best = s; cnt = 1; } else if (s === best) cnt++; }
+      if (mine > best) win++; else if (mine === best) tie += 1 / (cnt + 1);
+    }
+    return n ? { equity: (win + tie) / n, iters: n } : { equity: 0.5, iters: 0 };
+  }
+
+  /* ---------- opponent models from public history ---------- */
+  /** Per-name tendencies from finished hands (public actions only). */
+  function buildModels(hands) {
+    const M = {};
+    const get = (nm) => (M[nm] = M[nm] || { hands: 0, vpip: 0, pfr: 0, aggr: 0, passive: 0, faced: 0, folded: 0 });
+    for (const h of hands) {
+      const bets = h.players.map(() => 0);
+      let cur = 0, street = -1;
+      h.players.forEach((p) => { get(p.name).hands++; });
+      const vp = new Set(), pr = new Set();
+      for (const e of h.log) {
+        if (e.t === 'post') { if (e.kind !== 'a') { bets[e.p] += e.amt; cur = Math.max(cur, bets[e.p]); } continue; }
+        if (e.t === 'deal') { bets.fill(0); cur = 0; continue; }
+        if (e.t !== 'act') continue;
+        if (e.street !== street) { street = e.street; }
+        const m = get(h.players[e.p].name);
+        if (e.street > 0) {
+          if (cur > bets[e.p]) { m.faced++; if (e.type === 'f') m.folded++; }
+          if (e.type === 'b' || e.type === 'r') m.aggr++;
+          if (e.type === 'c') m.passive++;
+        } else {
+          if (e.type === 'c' || e.type === 'r' || e.type === 'b') vp.add(e.p);
+          if (e.type === 'r' || e.type === 'b') pr.add(e.p);
+        }
+        if (e.type === 'c' || e.type === 'b' || e.type === 'r') { bets[e.p] = e.to; cur = Math.max(cur, e.to); }
+      }
+      vp.forEach((i) => get(h.players[i].name).vpip++);
+      pr.forEach((i) => get(h.players[i].name).pfr++);
+    }
+    const out = {};
+    for (const [nm, m] of Object.entries(M)) {
+      const w = Math.min(1, m.hands / 12); // shrink toward a neutral prior until we have data
+      const vpip = w * (m.vpip / Math.max(1, m.hands)) + (1 - w) * 0.3;
+      const pfr = w * (m.pfr / Math.max(1, m.hands)) + (1 - w) * 0.18;
+      const af = w * (m.passive ? m.aggr / m.passive : m.aggr ? 3 : 1.2) + (1 - w) * 1.2;
+      const fold = (m.folded + 0.42 * 6) / (m.faced + 6);
+      out[nm] = {
+        vpip, pfr, af, fold, bluffiness: clamp((af - 1) * 0.15 + 0.15, 0.05, 0.6),
+        isStation: vpip > 0.45 && af < 1, isNit: vpip < 0.18, isLag: vpip > 0.35 && af > 2,
+        style: vpip > 0.45 && af < 1 ? 'calling station' : vpip < 0.18 ? 'nit' : vpip > 0.35 && af > 2 ? 'loose-aggressive' : 'regular',
+      };
+    }
+    return out;
+  }
+
+  /* ---------- the decision ---------- */
+  const SIZES = [0.28, 0.4, 0.55, 0.72, 1.0, 1.4, 2.0];
+  function chooseSizing(ctx, kind, eq, prof, pers, rng) {
+    const tex = ctx.tex, iq = prof.sizingIQ, w = SIZES.map(() => 0);
+    if (iq < 0.2) return 0.5;
+    if (iq < 0.35) return ctx.street === 0 ? 1.0 : 0.5;
+    if (kind === 'value') {
+      if (eq > 0.86) { w[3] = 0.7; w[4] = 1.4; w[5] = iq; w[6] = 0.45 * iq; }
+      else if (eq > 0.72) { w[2] = 1.0; w[3] = 1.3; w[4] = 1.0; w[5] = 0.3 * iq; }
+      else { w[0] = 0.9; w[1] = 1.4; w[2] = 1.1; w[3] = 0.5; }
+      if (tex.wetness > 0.6) { w[3] += 0.5; w[4] += 0.5; }
+      if (tex.wetness < 0.3) { w[0] += 0.6; w[1] += 0.6; }
+    } else if (kind === 'bluff') {
+      if (tex.wetness < 0.35) { w[0] = 1.3; w[1] = 1.2; w[2] = 0.7; } else { w[2] = 0.9; w[3] = 1.2; w[4] = 1.0; w[5] = 0.4 * iq; }
+    } else { w[1] = 1.0; w[2] = 1.3; w[3] = 1.1; w[4] = 0.5; }
+    for (let i = 0; i < w.length; i++) w[i] *= Math.pow(SIZES[i], (pers.sizing - 1) * 1.6);
+    return SIZES[rng.weighted(w)];
+  }
+
+  /**
+   * ctx: { game, holeCount, hole, board, street, legal (Engine.legal), bb, actsLast, effStack,
+   *        opponents:[{name, acts:[{street,type}]}], models, isAggressor, unopened,
+   *        difficulty, personality, rng? }
+   * Returns an Engine action {type, to}.
+   */
+  function decide(ctx) {
+    const prof = PROFILES[ctx.difficulty] || PROFILES.intermediate;
+    const pers = PERSONALITIES[ctx.personality] || PERSONALITIES.balanced;
+    const rng = ctx.rng || makeRng();
+    const L = ctx.legal, game = ctx.game, board = ctx.board;
+    const work = ctx.work || 1; // simulation budget multiplier (self-tests use a small one)
+    const nOpp = Math.max(1, ctx.opponents.length);
+    ctx.tex = analyzeBoard(board);
+    const models = ctx.opponents.map((o) => (ctx.models || {})[o.name]).filter(Boolean);
+    const pot = L.pot, toCall = L.toCall, facing = toCall > 0;
+    const stackLeft = L.stack;
+
+    // 1. equity
+    let eq;
+    const widths = ctx.opponents.map((o) => (prof.useRanges ? rangeWidth(o.acts, (ctx.models || {})[o.name]) : 1));
+    const base = game === 'holdem' ? chen(ctx.hole) : omahaScore(ctx.hole);
+    if (board.length === 0) {
+      eq = Math.pow(base, Math.pow(nOpp, 0.82));
+      if (prof.mcIters > 0 && prof.useRanges && nOpp <= 3) {
+        const r = equity({ game, holeCount: ctx.holeCount, hole: ctx.hole, board, widths, rng, iters: Math.min(prof.mcIters, 700) * work, budgetMs: 45 * work });
+        if (r.iters > 60) eq = r.equity;
+      }
+    } else if (prof.mcIters === 0) {
+      eq = clamp(0.16 + Eval.forGame(game, ctx.hole, board).cat * 0.115, 0.08, 0.96);
+    } else {
+      const hard = facing && toCall > pot * 0.5;
+      const iters = Math.round(prof.mcIters * (hard ? 1.6 : 1) * (board.length === 5 ? 0.7 : 1));
+      const r = equity({ game, holeCount: ctx.holeCount, hole: ctx.hole, board, widths, rng, iters: iters * work, budgetMs: 90 * work });
+      eq = r.iters > 25 ? r.equity : 0.5;
+    }
+    if (prof.noise > 0) eq = clamp(eq + rng.gauss(0, prof.noise * 0.42), 0.01, 0.99);
+
+    // 2. pot mathematics
+    const potOdds = facing ? toCall / (pot + toCall) : 0;
+    const spr = pot > 0 ? ctx.effStack / pot : 99;
+
+    // 3. hand shape
+    const draws = prof.level >= 2 ? countOuts(game, ctx.hole, board) : { outs: 0, pct: 0 };
+    const madeCat = board.length >= 3 ? Eval.forGame(game, ctx.hole, board).cat : -1;
+    const blockers = prof.level >= 4 && board.length >= 3 ? blockerScore(ctx.hole, board, ctx.tex) : 0;
+
+    // 4. implied / reverse implied odds
+    let implied = 0, reverse = 0;
+    if (prof.useOdds && draws.outs >= 6 && ctx.street < 3 && spr > 1.2) implied = clamp((draws.pct * ctx.effStack * 0.38) / Math.max(1, pot + toCall), 0, 0.16);
+    if (prof.level >= 4 && madeCat >= 0 && madeCat <= 1 && spr > 4 && ctx.street < 3) reverse = 0.04;
+    const effEq = clamp(eq + implied - reverse, 0, 1);
+
+    // 5. opponent read -> bounded exploit
+    const ex = { callAdj: 0, bluffAdj: 1, valueAdj: 1 };
+    if (prof.adapt > 0 && models.length) {
+      const m = models[0], A = prof.adapt;
+      if (m.isStation) { ex.bluffAdj = 1 - 0.65 * A; ex.valueAdj = 1 + 0.45 * A; ex.callAdj = -0.02 * A; }
+      else if (m.isNit) { ex.bluffAdj = 1 + 0.8 * A; ex.valueAdj = 1 - 0.25 * A; ex.callAdj = -0.05 * A; }
+      else if (m.isLag) { ex.bluffAdj = 1 - 0.15 * A; ex.callAdj = 0.07 * A; }
+      else if (m.bluffiness > 0.3) ex.callAdj = 0.06 * A;
+      if (m.fold > 0.6) ex.bluffAdj *= 1 + 0.5 * A;
+      if (m.fold < 0.32) ex.bluffAdj *= 1 - 0.4 * A;
+    }
+    const foldEquity = (sizeRatio) => {
+      if (!prof.useFoldEq) return 0.3;
+      let fe = models.length ? models.reduce((a, m) => a + m.fold, 0) / models.length : 0.42;
+      fe *= clamp(0.55 + (0.45 * Math.log(1 + sizeRatio * 2.2)) / Math.log(3.2), 0.4, 1.5);
+      fe *= clamp(1.22 - ctx.tex.wetness * 0.5, 0.65, 1.25);
+      fe *= ctx.street === 0 ? 0.72 : ctx.street === 3 ? 1.12 : 1;
+      fe = Math.pow(clamp(fe, 0.02, 0.94), nOpp);
+      return clamp(fe * (0.85 + (0.3 * pers.bluff) / 1.4), 0.02, 0.92);
+    };
+
+    // 6. candidates and EVs
+    const cands = [];
+    const realise = (ctx.actsLast ? 0.78 : 0.6) * (ctx.street === 3 ? 1.15 : 1) * (1 - 0.05 * Math.max(0, nOpp - 1));
+    const evCheck = effEq * pot * clamp(realise, 0.3, 1);
+    let evCall = 0;
+    if (facing) {
+      cands.push({ type: 'fold', w: 0 });
+      evCall = clamp(effEq + ex.callAdj, 0, 1) * (pot + toCall) - toCall;
+      cands.push({ type: 'call', isCall: true, ev: evCall, w: 0 });
+    } else cands.push({ type: 'check', ev: evCheck, w: 0 });
+    if (L.canRaise) {
+      const kinds = [];
+      if (eq >= 0.6) kinds.push('value');
+      if (eq < 0.45 && (draws.outs >= 4 || blockers > 0.12 || board.length === 0)) kinds.push('bluff');
+      if (eq >= 0.44 && eq < 0.66) kinds.push('protect');
+      if (!kinds.length) kinds.push(eq >= 0.5 ? 'value' : 'bluff');
+      for (const kind of kinds) {
+        const frac = chooseSizing(ctx, kind, eq, prof, pers, rng);
+        let to = facing ? L.callTo + frac * (pot + toCall) : L.myBet + frac * pot;
+        to = clamp(Math.round(to), L.minTo, L.maxTo);
+        const cost = to - L.myBet;
+        if (cost <= 0) continue;
+        const sizeRatio = cost / Math.max(1, pot);
+        const fe = foldEquity(sizeRatio);
+        const eqCalled = clamp(eq - (1 - eq) * (0.1 + 0.34 * Math.min(2.5, sizeRatio)) * (1 + ctx.tex.wetness * 0.35), 0.02, 0.99);
+        const potFinal = pot + cost + Math.max(0, cost - toCall);
+        cands.push({ type: L.isBet ? 'bet' : 'raise', to, kind, fe, frac, ev: fe * pot + (1 - fe) * (eqCalled * potFinal - cost), shove: cost >= stackLeft });
+      }
+    }
+
+    // 7. strategy frequencies
+    const passiveEv = facing ? Math.max(0, evCall) : evCheck;
+    const scale = Math.max(ctx.bb * 1.5, pot * 0.55, 1);
+    const tau = 0.036 + prof.noise * 0.5 + prof.mix * 0.02;
+    for (const c of cands) {
+      if (c.type === 'fold') c.w = 1;
+      else if (c.isCall) {
+        const realCall = ctx.street === 3 ? 1 : clamp((ctx.actsLast ? 0.93 : 0.82) - Math.min(0.1, spr * 0.012), 0.6, 1);
+        const edge = effEq * realCall - potOdds;
+        c.w = Math.exp(clamp(edge / tau, -9, 9));
+        if (edge > -0.06 && edge < 0.02 && prof.mdf > 0) c.w *= 1 + prof.mdf * 0.35;
+        c.w *= 1 + ex.callAdj * 7;
+      } else if (c.type === 'check') c.w = 1.15;
+      else c.w = Math.exp(clamp((c.ev - passiveEv) / scale, -9, 6));
+      const aggressive = c.type === 'bet' || c.type === 'raise';
+      if (aggressive && c.kind === 'value') c.w *= (1 + (eq - 0.6) * 2.0) * pers.aggr * ex.valueAdj;
+      if (aggressive && ctx.street >= 1 && ctx.isAggressor && !facing) c.w *= (0.8 + prof.cbet) * pers.cbet;
+      if (aggressive && c.kind === 'bluff') {
+        const profitable = c.fe > (c.frac / (1 + c.frac)) * 0.95;
+        c.w *= prof.bluff * pers.bluff * ex.bluffAdj * (profitable ? 1.15 : 0.1) * (1 + blockers * 1.5) * (ctx.actsLast ? 1.3 : 0.75);
+        if (nOpp > 1) c.w *= 0.35 / nOpp;
+        if (ctx.street === 0 && eq < 0.38) c.w *= 0.25;
+        if (draws.outs === 0 && ctx.street >= 2) c.w *= 0.55;
+      }
+      if (aggressive && c.kind === 'protect') c.w *= pers.aggr * 0.9 * (ctx.actsLast ? 1.1 : 0.95);
+      if (c.type === 'check' && eq > 0.8) c.w *= 0.45 + pers.trap * 0.75;
+      if (c.isCall && eq > 0.86) c.w *= 0.55 + pers.trap * 0.7;
+      if (aggressive && !ctx.actsLast) c.w *= 0.88;
+      if (prof.level >= 3) {
+        if (spr < 1.5 && eq > 0.55 && (c.isCall || aggressive)) c.w *= 1.5;
+        if (spr < 1.5 && eq < 0.38 && c.type === 'fold') c.w *= 1.7;
+      }
+      if (aggressive && c.shove && !(eq > 0.8 || (c.fe > 0.55 && eq > 0.42) || spr < 1.8 || draws.outs >= 12)) c.w *= 0.06;
+      // Preflop hand selection: the biggest single source of bad poker.
+      if (ctx.street === 0) {
+        const pctile = game === 'holdem' ? holdemPct(ctx.hole) : 1 - omahaScore(ctx.hole);
+        const open = clamp(pers.vpip * (ctx.actsLast ? 1.5 : 1) * (nOpp === 1 ? 2 : 1) * (1 + prof.level * 0.02), 0.06, 0.92);
+        const pressure = facing ? clamp(toCall / Math.max(ctx.bb, pot - toCall), 0, 4) : 0;
+        const cont = clamp(open / (1 + pressure * 0.55), 0.035, 0.95);
+        if (pctile > cont) {
+          const excess = (pctile - cont) / Math.max(0.05, 1 - cont);
+          if (c.type !== 'fold' && c.type !== 'check') c.w *= Math.pow(0.05, Math.min(1, excess * 2));
+          if (c.type === 'fold') c.w *= 1 + 9 * Math.min(1, excess * 2);
+        } else {
+          if (c.type === 'fold') c.w *= 0.1;
+          if (pctile < cont * 0.28 && aggressive) c.w *= 2.3;
+        }
+        if (ctx.unopened) {
+          if (c.isCall) c.w *= clamp(0.04 + 0.28 * (1 - prof.level / 6) + (1 - pers.aggr) * 0.1, 0.05, 0.6);
+          if (aggressive) c.w *= 3 * pers.aggr;
+        } else if (aggressive) c.w *= 1.15;
+      }
+      if (!isFinite(c.w) || c.w < 0) c.w = 0;
+    }
+
+    // 8. mix and choose
+    if (prof.mix > 0) {
+      const flat = prof.mix * 0.55, mx = Math.max(...cands.map((c) => c.w));
+      if (mx > 0) cands.forEach((c) => { c.w = c.w * (1 - flat) + mx * flat * (c.w > 0 ? 0.28 : 0); });
+    }
+    const ch = cands[rng.weighted(cands.map((c) => c.w))] || cands[0];
+    if (ch.type === 'fold' && L.canCheck) return { type: 'check' };
+    if (ch.type === 'bet' || ch.type === 'raise') return { type: ch.type, to: clamp(ch.to, L.minTo, L.maxTo), meta: { eq, kind: ch.kind } };
+    return { type: ch.type, meta: { eq } };
+  }
+
+  /** Build a decision context for player i of an Engine hand from public information. */
+  function contextFor(h, i, opts) {
+    const L = Engine.legal(h);
+    const n = h.players.length, me = h.players[i];
+    const acts = (j) => h.log.filter((e) => e.t === 'act' && e.p === j).map((e) => ({ street: e.street, type: e.type }));
+    const opponents = h.players.map((p, j) => ({ p, j })).filter(({ p, j }) => j !== i && !p.folded).map(({ p, j }) => ({ name: p.name, acts: acts(j) }));
+    // Last to act this street: preflop that is the big blind; afterwards the last player still able
+    // to act going clockwise from the button.
+    let actsLast = i === h.bbIdx;
+    if (h.street > 0) {
+      let last = -1;
+      for (let k = 1; k <= n; k++) { const j = (h.button + k) % n; if (!h.players[j].folded && !h.players[j].allIn) last = j; }
+      actsLast = last === i;
+    }
+    const preRaises = h.log.filter((e) => e.t === 'act' && e.street === 0 && (e.type === 'r' || e.type === 'b'));
+    const lastPre = preRaises[preRaises.length - 1];
+    const oppStacks = h.players.filter((p, j) => j !== i && !p.folded).map((p) => p.stack + p.bet);
+    return {
+      game: h.game, holeCount: h.holeCount, hole: me.hole, board: h.board.slice(), street: h.street, legal: L, bb: h.bb,
+      actsLast, effStack: Math.min(me.stack + me.bet, Math.max(0, ...oppStacks)), opponents,
+      models: opts.models, isAggressor: !!lastPre && lastPre.p === i,
+      unopened: h.street === 0 && preRaises.length === 0,
+      difficulty: opts.difficulty, personality: opts.personality, rng: opts.rng, work: opts.work,
+    };
+  }
+
+  return { PROFILES, LABELS, PERSONALITIES, NAMES, decide, contextFor, buildModels, equity, chen, holdemPct, omahaScore, analyzeBoard, makeRng };
+})();
+
+/* =====================================================================
    4. RECORD NOTATION  (pure)  -- "PGN for poker", spec in README.md
    GameRecord = { tags:[[key,value]...], hands:[HandRecord] }
    HandRecord = { no, tags:[[k,v]], button, stacks:[[name,stack]], hole:{name:[c,c]|null},
@@ -1266,6 +1748,8 @@ const Notation = {
     rec.tags = Notation.handTags(rec);
     // Rising blinds: each hand states its own level.
     if (opts.levels) rec.tags.push(['Blinds', `${h.sb}/${h.bb}`], ['Ante', String(h.ante || 0)]);
+    // Hands where a bot made decisions say so (only ever present in a "full" record).
+    if (h.botNames && h.botNames.length) rec.tags.push(['Bots', h.botNames.join(',')]);
     h.players.forEach((p, i) => { rec.hole[p.name] = known(i) && p.hole ? p.hole.slice() : null; });
     for (const e of h.log) {
       if (e.t === 'post') rec.posts.push({ name: names[e.p], kind: e.kind, amt: e.amt });
@@ -1612,55 +2096,149 @@ const Replay = {
     return `#${rh.rec.no} · ${parts.join(', ')}`;
   },
 
+  /**
+   * Per-player and table statistics from replayed hands (public record information only).
+   * Every stat has an entry in STAT_KEY explaining exactly how it is counted.
+   */
   stats(replay) {
-    const P = {};
-    const get = (n) => (P[n] = P[n] || { name: n, hands: 0, net: 0, vpip: 0, pfr: 0, agg: 0, calls: 0, sawFlop: 0, wtsd: 0, wsd: 0, biggest: 0 });
-    let biggestPot = 0, biggestPotHand = null;
+    const P = {}, order = [];
+    const blank = (n) => ({
+      name: n, hands: 0, won: 0, net: 0, bbNet: 0, vpip: 0, pfr: 0, limp: 0, foldPre: 0,
+      threeBet: 0, threeBetOpp: 0, foldTo3: 0, foldTo3Opp: 0, cbet: 0, cbetOpp: 0, foldToCbet: 0, foldToCbetOpp: 0,
+      bets: 0, raises: 0, calls: 0, folds: 0, checks: 0, checkRaise: 0, sawFlop: 0, wtsd: 0, wsd: 0, wonNoSD: 0,
+      wonSawFlop: 0, allIn: 0, allInWon: 0, biggest: 0, worst: 0, potsWonTotal: 0, streak: 0, bestStreak: 0, botHands: 0,
+    });
+    const get = (n) => { if (!P[n]) { P[n] = blank(n); order.push(n); } return P[n]; };
+    let biggestPot = 0, biggestPotHand = null, potSum = 0, playersSum = 0, showdowns = 0, splits = 0, total = 0, botHandsTotal = 0;
+    const cats = new Array(HAND_CATS.length).fill(0);
     const series = {};
-    const order = [];
     replay.hands.forEach((rh, k) => {
       const h = rh.hand;
       if (!h || h.phase !== 'done') return;
+      total++;
+      const n = h.players.length;
+      const botNames = ((rh.rec.tags || []).find((t) => t[0] === 'Bots') || [, ''])[1].split(',').filter(Boolean);
+      if (botNames.length) botHandsTotal++;
       const pot = U.sum(h.log.filter((e) => e.t === 'win').map((e) => e.amt));
+      potSum += pot; playersSum += n;
       if (pot > biggestPot) { biggestPot = pot; biggestPotHand = h.no; }
+      if (h.results.showdown) showdowns++;
+      h.results.pots.forEach((pt) => {
+        if (pt.winners.length > 1) splits++;
+        if (h.results.showdown) for (const w of pt.winners) { const ev = h.results.evals[w]; if (ev) cats[Math.floor(ev.score / 759375)]++; }
+      });
+      // Walk the action log once, tracking what each player faced.
+      const bets = new Array(n).fill(0), committed = new Array(n).fill(0), allIn = new Array(n).fill(false);
+      const vp = new Set(), pr = new Set(), limped = new Set(), foldedPre = new Set();
+      let cur = 0, raisesPre = 0, firstRaiser = -1, preRaiser = -1, flopBettor = -1;
+      const opp3 = new Set(), oppFoldC = new Set(), checked = new Set();
+      const s = h.players.map((p) => get(p.name));
+      const commit = (i, amt) => { committed[i] += amt; if (committed[i] >= h.players[i].startStack) allIn[i] = true; };
+      for (const e of h.log) {
+        if (e.t === 'post') { commit(e.p, e.amt); if (e.kind !== 'a') { bets[e.p] += e.amt; cur = Math.max(cur, bets[e.p]); } continue; }
+        if (e.t === 'deal') { bets.fill(0); cur = 0; checked.clear(); continue; }
+        if (e.t !== 'act') continue;
+        const i = e.p, me = s[i], facing = cur > bets[i];
+        if (e.street === 0) {
+          if (raisesPre === 1 && i !== firstRaiser && !opp3.has(i)) { opp3.add(i); me.threeBetOpp++; if (e.type === 'r') me.threeBet++; }
+          if (i === firstRaiser && raisesPre >= 2 && facing && !opp3.has('f' + i)) { opp3.add('f' + i); me.foldTo3Opp++; if (e.type === 'f') me.foldTo3++; }
+          if (raisesPre === 0 && e.type === 'c' && !limped.has(i)) { limped.add(i); me.limp++; }
+          if (e.type === 'c' || e.type === 'r' || e.type === 'b') vp.add(i);
+          if (e.type === 'r' || e.type === 'b') { pr.add(i); raisesPre++; if (firstRaiser < 0) firstRaiser = i; preRaiser = i; }
+          if (e.type === 'f') foldedPre.add(i);
+        } else {
+          if (e.street === 1) {
+            if (i === preRaiser && cur === 0) { me.cbetOpp++; if (e.type === 'b') me.cbet++; }
+            if (flopBettor >= 0 && flopBettor === preRaiser && i !== preRaiser && facing && !oppFoldC.has(i)) { oppFoldC.add(i); me.foldToCbetOpp++; if (e.type === 'f') me.foldToCbet++; }
+            if (e.type === 'b' && cur === 0) flopBettor = i;
+          }
+          ({ b: () => me.bets++, r: () => me.raises++, c: () => me.calls++, f: () => me.folds++, x: () => me.checks++ })[e.type]();
+          if (e.type === 'x') checked.add(i);
+          if (e.type === 'r' && checked.has(i)) { me.checkRaise++; checked.delete(i); }
+        }
+        if (e.amt) commit(i, e.amt);
+        if (e.type === 'c' || e.type === 'b' || e.type === 'r') { bets[i] = e.to; cur = Math.max(cur, e.to); }
+      }
       const flop = h.board.length >= 3;
       h.players.forEach((p, i) => {
-        const s = get(p.name);
-        if (!order.includes(p.name)) order.push(p.name);
-        s.hands++;
-        s.net += p.stack - p.startStack;
-        const acts = h.log.filter((e) => e.t === 'act' && e.p === i);
-        const pre = acts.filter((e) => e.street === 0);
-        if (pre.some((e) => e.type === 'c' || e.type === 'r' || e.type === 'b')) s.vpip++;
-        if (pre.some((e) => e.type === 'r' || e.type === 'b')) s.pfr++;
-        s.agg += acts.filter((e) => e.type === 'b' || e.type === 'r').length;
-        s.calls += acts.filter((e) => e.type === 'c').length;
-        const foldedPre = h.log.some((e) => e.t === 'act' && e.p === i && e.type === 'f' && e.street === 0);
-        if (flop && !foldedPre) {
-          s.sawFlop++;
-          if (h.results.showdown && !p.folded) {
-            s.wtsd++;
-            if (h.results.payouts[i] > 0) s.wsd++;
-          }
+        const me = s[i], won = h.results.payouts[i], net = p.stack - p.startStack;
+        me.hands++; me.net += net; me.bbNet += net / (h.bb || 1);
+        if (vp.has(i)) me.vpip++;
+        if (pr.has(i)) me.pfr++;
+        if (foldedPre.has(i)) me.foldPre++;
+        if (botNames.includes(p.name)) me.botHands++;
+        if (won > 0) { me.won++; me.potsWonTotal += won; me.streak++; me.bestStreak = Math.max(me.bestStreak, me.streak); if (!h.results.showdown) me.wonNoSD++; }
+        else me.streak = 0;
+        if (won > me.biggest) me.biggest = won;
+        if (net < me.worst) me.worst = net;
+        if (allIn[i]) { me.allIn++; if (won > 0) me.allInWon++; }
+        if (flop && !foldedPre.has(i)) {
+          me.sawFlop++;
+          if (won > 0) me.wonSawFlop++;
+          if (h.results.showdown && !p.folded) { me.wtsd++; if (won > 0) me.wsd++; }
         }
-        const won = h.results.payouts[i];
-        if (won > s.biggest) s.biggest = won;
         series[p.name] = series[p.name] || [];
       });
-      // Stack series: one point per hand (value after the hand); missing players carry nothing.
-      for (const n of Object.keys(series)) {
-        const p = h.players.find((q) => q.name === n);
-        series[n].push(p ? { x: k + 1, y: p.stack, start: p.startStack } : null);
+      for (const nm of Object.keys(series)) {
+        const p = h.players.find((q) => q.name === nm);
+        series[nm].push(p ? { x: k + 1, y: p.stack, start: p.startStack } : null);
       }
     });
-    const players = order.map((n) => {
-      const s = P[n];
-      const pct = (a, b) => (b ? Math.round((100 * a) / b) : null);
-      return { ...s, vpipPct: pct(s.vpip, s.hands), pfrPct: pct(s.pfr, s.hands), af: s.calls ? +(s.agg / s.calls).toFixed(2) : (s.agg ? Infinity : null), wtsdPct: pct(s.wtsd, s.sawFlop), wsdPct: pct(s.wsd, s.wtsd) };
+    const pct = (a, b) => (b ? Math.round((100 * a) / b) : null);
+    const players = order.map((nm) => {
+      const m = P[nm], post = m.bets + m.raises + m.calls + m.folds;
+      return {
+        ...m, winPct: pct(m.won, m.hands), vpipPct: pct(m.vpip, m.hands), pfrPct: pct(m.pfr, m.hands), limpPct: pct(m.limp, m.hands),
+        foldPrePct: pct(m.foldPre, m.hands), threeBetPct: pct(m.threeBet, m.threeBetOpp), foldTo3Pct: pct(m.foldTo3, m.foldTo3Opp),
+        cbetPct: pct(m.cbet, m.cbetOpp), foldToCbetPct: pct(m.foldToCbet, m.foldToCbetOpp),
+        af: m.calls ? +((m.bets + m.raises) / m.calls).toFixed(2) : m.bets + m.raises ? Infinity : null,
+        afqPct: pct(m.bets + m.raises, post), wtsdPct: pct(m.wtsd, m.sawFlop), wsdPct: pct(m.wsd, m.wtsd),
+        wwsfPct: pct(m.wonSawFlop, m.sawFlop), bb100: m.hands ? +((m.bbNet / m.hands) * 100).toFixed(1) : null,
+        avgWon: m.won ? Math.round(m.potsWonTotal / m.won) : 0,
+      };
     });
-    return { players, totalHands: replay.hands.filter((x) => x.hand && x.hand.phase === 'done').length, biggestPot, biggestPotHand, series };
+    return {
+      players, totalHands: total, biggestPot, biggestPotHand, series, avgPot: total ? Math.round(potSum / total) : 0,
+      avgPlayers: total ? +(playersSum / total).toFixed(1) : 0, showdownPct: pct(showdowns, total), splits, botHands: botHandsTotal,
+      winningHands: HAND_CATS.map((name, i) => ({ name, count: cats[i] })).filter((x) => x.count),
+    };
   },
 };
+
+/** Plain-English definitions for every statistic the viewer shows (the "stat key"). */
+const STAT_KEY = [
+  ['Hands', 'Hands the player was dealt into.'],
+  ['Won', 'Hands in which the player won at least part of a pot, and that as a share of hands played.'],
+  ['Net', 'Total chips won minus chips lost across all hands (rebuys and stack adjustments are not counted).'],
+  ['bb/100', 'Big blinds won per 100 hands: the standard win-rate, comparable across stakes and blind levels.'],
+  ['Avg pot won', 'Average size of the pots this player won.'],
+  ['Biggest pot', 'The most chips the player collected in a single hand.'],
+  ['Worst hand', 'The most chips the player lost in a single hand.'],
+  ['Best streak', 'Most hands won in a row.'],
+  ['VPIP', 'Voluntarily Put chips In Pot: how often the player called or raised before the flop. Posting a blind does not count. Loose players are high (35%+), tight players low (under 20%).'],
+  ['PFR', 'Pre-Flop Raise: how often the player raised before the flop. Close to VPIP means aggressive; far below VPIP means the player calls a lot.'],
+  ['3-Bet', 'How often the player re-raised when facing exactly one raise before the flop (out of the times they had the chance).'],
+  ['Fold to 3-Bet', 'After making the first raise before the flop and being re-raised, how often the player folded.'],
+  ['Limp', 'How often the player just called the big blind when nobody had raised yet.'],
+  ['Fold preflop', 'How often the player folded before the flop.'],
+  ['AF', 'Aggression Factor after the flop: (bets + raises) ÷ calls. Above 2 is aggressive, below 1 is passive. ∞ means they never called.'],
+  ['AFq', 'Aggression Frequency after the flop: bets and raises as a share of all bets, raises, calls and folds.'],
+  ['C-Bet', 'Continuation bet: when the player made the last raise before the flop and was first to bet on the flop, how often they bet.'],
+  ['Fold to C-Bet', 'When the preflop raiser bet the flop into this player, how often they folded.'],
+  ['Check-raise', 'Number of times the player checked and then raised on the same street.'],
+  ['Saw flop', 'Hands in which the player had not folded when the flop was dealt.'],
+  ['WTSD', 'Went To ShowDown: of the flops the player saw, how often they reached showdown.'],
+  ['W$SD', 'Won $ at ShowDown: of the showdowns the player reached, how often they won chips.'],
+  ['WWSF', 'Won When Saw Flop: of the flops the player saw, how often they won chips.'],
+  ['Won w/o SD', 'Pots won because everyone else folded (no showdown).'],
+  ['All-ins', 'Hands in which the player put all their chips in, and how many of those they won chips in.'],
+  ['Bot hands', 'Hands in which a bot made this seat\'s decisions (only appears in full records).'],
+  ['Avg pot', 'Average total pot size across all hands (table overview).'],
+  ['Showdowns', 'Share of hands that reached a showdown (table overview).'],
+  ['Split pots', 'Pots shared between two or more players (table overview).'],
+  ['Winning hands', 'Which hand categories won pots at showdown (table overview).'],
+];
+
 
 /* Built-in sample game for the viewer ("Load sample game") and the self-tests. */
 const SAMPLE_RECORD = `[Event "Friday Night Game"]
@@ -2016,6 +2594,51 @@ class HostTable {
     this.players.get(this.hostPid).isHost = true;
     this.players.get(this.hostPid).connected = true;
     if (this.s.hostPlays !== false) this._sit(this.hostPid, 0);
+    this.botTimer = null;
+    this.botModels = {};
+  }
+
+  /* ---------------- bots ---------------- */
+  /** Seat a computer player (Play vs Bots mode). */
+  addBot({ name, difficulty, personality }) {
+    const pid = 'b' + U.randHex(4);
+    const p = {
+      pid, token: null, name: this.uniqueName(name), seat: null, stack: this.s.startingStack, sittingOut: false, busted: false,
+      connected: true, lastSeen: Date.now(), disconnectedAt: null, autoMuck: true, rebuys: 0, bought: this.s.startingStack,
+      isHost: false, leaving: false, isBot: true, botDifficulty: difficulty || 'intermediate', botPersonality: personality || 'balanced',
+    };
+    this.players.set(pid, p);
+    const seat = this.seats.indexOf(null);
+    if (seat >= 0) this._sit(pid, seat);
+    return p;
+  }
+  /** Is a bot making this seat's decisions right now? (a real bot, or a disconnected player with takeover on) */
+  _botControlled(p) { return !!p && (p.isBot || (!!this.s.botTakeover && !p.connected && !p.leaving)); }
+  _botTurn() {
+    if (this.botTimer) return;
+    const h = this.hand, i = h.toAct, pid = this.handPids[i];
+    const speed = { fast: 0.3, normal: 1, slow: 1.8 }[this.s.botSpeed || 'normal'] || 1;
+    this.botTimer = setTimeout(() => {
+      this.botTimer = null;
+      if (this.hand !== h || h.phase !== 'betting' || h.toAct !== i || this.paused || this.status !== 'playing') return;
+      const p = this.players.get(pid);
+      if (!this._botControlled(p)) { this._proceed(); return; }
+      const ctx = Bots.contextFor(h, i, {
+        models: this.botModels,
+        difficulty: p.isBot ? p.botDifficulty : this.s.takeoverDifficulty || 'advanced',
+        personality: p.isBot ? p.botPersonality : 'balanced',
+      });
+      try { Engine.applyAction(h, Bots.decide(ctx)); }
+      catch (e) { const L = Engine.legal(h); Engine.applyAction(h, { type: L.canCheck ? 'check' : 'fold' }); }
+      h.botNames = h.botNames || [];
+      if (!h.botNames.includes(p.name)) h.botNames.push(p.name);
+      if (!p.isBot && !p.botAnnounced) {
+        p.botAnnounced = true;
+        this._log(`A bot is playing for ${p.name} until they reconnect`);
+        this.onEvent('info', `A bot is playing for ${p.name} until they reconnect`, null);
+      }
+      this._afterAction();
+    }, (350 + Math.random() * 900) * speed); // think time (cosmetic, not security-relevant randomness)
   }
 
   /* ---------------- players ---------------- */
@@ -2052,9 +2675,12 @@ class HostTable {
     if (!p || p.connected === on) return;
     p.connected = on;
     p.disconnectedAt = on ? null : Date.now();
+    if (on) p.botAnnounced = false;
     if (p.seat != null) this.onEvent(on ? 'success' : 'warn', on ? `${p.name} reconnected` : `${p.name} disconnected`, pid);
     // A disconnected player on the clock with no action timer gets a grace timer.
-    if (this.hand && this.hand.phase === 'betting' && this.handPids[this.hand.toAct] === pid) this._startTurnTimer(true);
+    if (this.hand && this.hand.phase === 'betting' && this.handPids[this.hand.toAct] === pid) {
+      if (this.s.botTakeover) this._proceed(); else this._startTurnTimer(true);
+    }
     this.changed();
   }
 
@@ -2239,7 +2865,9 @@ class HostTable {
     clearTimeout(this.nextTimer); this.nextTimer = null;
     if (this.status !== 'playing' || this.paused || this.shuffling) return this.changed();
     // Players who have been gone for two minutes are sat out automatically.
-    for (const p of this.players.values()) if (!p.connected && p.disconnectedAt && Date.now() - p.disconnectedAt > 120000 && p.seat != null) p.sittingOut = true;
+    // (With bot takeover on, a bot keeps their seat going instead.)
+    if (!this.s.botTakeover) for (const p of this.players.values()) if (!p.connected && p.disconnectedAt && Date.now() - p.disconnectedAt > 120000 && p.seat != null) p.sittingOut = true;
+    this.botModels = Bots.buildModels(this.finished.slice(-80).map((f) => f.hand));
     const elig = this._eligible();
     if (elig.length < 2) { this.waiting = true; return this.changed(); }
     this.waiting = false;
@@ -2282,7 +2910,7 @@ class HostTable {
     Object.assign(sh, { D0, salts, commits });
     // Everyone connected adds randomness: seated players, players sitting out, spectators and the
     // dealer. The deck is unpredictable as long as any single one of them is honest.
-    const contributors = sh.contributors = [...this.players.values()].filter((p) => p.pid === this.hostPid || p.connected).map((p) => p.pid);
+    const contributors = sh.contributors = [...this.players.values()].filter((p) => p.pid === this.hostPid || (p.connected && !p.isBot)).map((p) => p.pid);
     this.onBroadcast({ t: 'fair1', no: sh.no, commits });
     sh.hostSeed = U.randHex(32);
     sh.seedC[this.hostPid] = Fair.sha256(sh.hostSeed);
@@ -2374,6 +3002,7 @@ class HostTable {
       if (h.phase === 'betting') {
         const p = this.players.get(this.handPids[h.toAct]);
         if (!p || p.leaving) { Engine.applyAction(h, { type: 'fold' }); this._syncLog(); continue; }
+        if (this._botControlled(p)) { this._clearTurn(); this._botTurn(); break; }
         if (!this.turn || this.turn.idx !== h.toAct || this.turn.street !== h.street || this.turn.no !== h.no) this._startTurnTimer();
         break;
       }
@@ -2415,7 +3044,10 @@ class HostTable {
       const p = this.players.get(pid);
       if (!p) continue;
       if (p.leaving) { this._remove(pid); continue; }
-      if (p.stack === 0) {
+      if (p.stack === 0 && p.isBot && this.s.rebuys && (!this.s.maxRebuys || p.rebuys < this.s.maxRebuys)) {
+        p.stack = this.s.startingStack; p.rebuys++; p.bought += this.s.startingStack;
+        this._log(`${p.name} rebuys for ${U.fmt(this.s.startingStack)}`);
+      } else if (p.stack === 0) {
         p.busted = true;
         p.sittingOut = true;
         this._log(this.s.rebuys ? `${p.name} is out of chips (rebuy available)` : `${p.name} is out of chips`);
@@ -2459,7 +3091,7 @@ class HostTable {
   end(reason) {
     if (this.status === 'ended') return;
     this.status = 'ended';
-    this._clearTurn(); clearTimeout(this.nextTimer); clearTimeout(this.dealTimer);
+    this._clearTurn(); clearTimeout(this.nextTimer); clearTimeout(this.dealTimer); clearTimeout(this.botTimer);
     this.shuffling = null;
     this._log('The game has ended');
     this._sendRecords();
@@ -2468,15 +3100,22 @@ class HostTable {
   }
 
   /* ---------------- records ---------------- */
-  recordFor(pid) {
+  /**
+   * A player's record. By default hands in which a bot made any decision are left out (the pure
+   * player-vs-player record); full = true includes them, tagged [Bots "..."]. In Play vs Bots
+   * mode every hand has bots, so the record is always the full one.
+   */
+  recordFor(pid, full) {
+    full = full || !!this.s.vsBots;
     const tags = Notation.gameTags({
       event: this.s.tableName, date: this.date, sb: this.s.sb, bb: this.s.bb, ante: this.s.ante,
       startingStack: this.s.startingStack, players: this.names, holeCards: this.s.recordHole, variant: this.variant,
     });
-    const hands = this.finished.map(({ hand, pids }) => Notation.fromHand(hand, pids.indexOf(pid), this.s.recordHole, { levels: !!this.s.levelHands }));
+    const hands = this.finished.filter(({ hand }) => full || !(hand.botNames && hand.botNames.length))
+      .map(({ hand, pids }) => Notation.fromHand(hand, pids.indexOf(pid), this.s.recordHole, { levels: !!this.s.levelHands }));
     return Notation.serialize({ tags, hands });
   }
-  _sendRecords() { for (const pid of this.players.keys()) this.onRecord(pid, this.recordFor(pid)); }
+  _sendRecords() { for (const [pid, p] of this.players) if (!p.isBot) this.onRecord(pid, this.recordFor(pid, false), this.recordFor(pid, true)); }
 
   changed() { this.onChange(); }
 
@@ -2516,7 +3155,8 @@ class HostTable {
       return {
         seat, pid: qid, name: q.name, stack: hp ? hp.stack : q.stack, bet: hp ? hp.bet : 0, cards,
         inHand: !!hp, folded: !!hp && hp.folded, allIn: !!hp && hp.allIn && !done, sittingOut: q.sittingOut && !hp,
-        busted: q.busted && !hp, disconnected: !q.connected, isHost: q.isHost, isYou: qid === pid,
+        busted: q.busted && !hp, disconnected: !q.connected && !q.isBot, isHost: q.isHost, isYou: qid === pid,
+        isBot: !!q.isBot, botPlaying: !q.isBot && this._botControlled(q), botLabel: q.isBot ? Bots.LABELS[q.botDifficulty] : null,
         button: !!h && hp && i === h.button, sb: !!h && hp && i === h.sbIdx && !done, bb: !!h && hp && i === h.bbIdx && !done,
         toAct: !!h && h.phase === 'betting' && h.toAct === i,
         won: done && wins[i] ? wins[i] : 0, handName, shown: !!hp && hp.shown, mucked: !!hp && hp.mucked,
@@ -2545,6 +3185,7 @@ class HostTable {
         maxSeats: this.s.maxSeats, timer: this.s.timer, rebuys: this.s.rebuys, maxRebuys: this.s.maxRebuys || 0, recordHole: this.s.recordHole,
         startingStack: this.s.startingStack, variant: this.variant, variantName: VARIANTS[this.variant].name, holeCount: this.holeCount,
         limit: this.s.limit, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
+        botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots,
         nextLevelIn: this.s.levelHands ? this.s.levelHands - ((Math.max(1, this.handNo) - 1) % this.s.levelHands) : 0,
       },
       shuffling: !!this.shuffling, fair: this._fairView(),
@@ -2561,7 +3202,7 @@ class HostTable {
       hostName: this.players.get(this.hostPid).name,
       players: [...this.players.values()].map((q) => ({
         pid: q.pid, name: q.name, seat: q.seat, stack: q.stack, connected: q.connected, sittingOut: q.sittingOut, busted: q.busted,
-        isHost: q.isHost, rebuys: q.rebuys, net: (this._liveStack(q.pid) ?? q.stack) - q.bought,
+        isHost: q.isHost, isBot: !!q.isBot, rebuys: q.rebuys, net: (this._liveStack(q.pid) ?? q.stack) - q.bought,
       })),
       log: this.log.slice(-120), chat: this.chat.slice(-60),
     };
@@ -2729,9 +3370,9 @@ class HostSession {
       for (const [pid, c] of this.conns) if (pid !== about) this._send(c, { t: 'event', kind, text });
       if (about !== this.pid) this.handlers.event(kind, text);
     };
-    t.onRecord = (pid, text) => {
-      if (pid === this.pid) { this.record = text; Prefs.set('record.' + this.id, text); }
-      else { const c = this.conns.get(pid); if (c) this._send(c, { t: 'record', text }); }
+    t.onRecord = (pid, text, full) => {
+      if (pid === this.pid) { this.record = text; this.recordFull = full; Prefs.set('record.' + this.id, text); Prefs.set('recordFull.' + this.id, full); }
+      else { const c = this.conns.get(pid); if (c) this._send(c, { t: 'record', text, full }); }
     };
     t.onDirect = (pid, m) => {
       if (pid === this.pid) { if (m.t === 'error') this.handlers.error(m.text); return; }
@@ -2776,7 +3417,7 @@ class HostSession {
       c.pid = r.pid;
       this.conns.set(r.pid, c);
       this._send(c, { t: 'welcome', pid: r.pid, token: r.player.token, name: r.player.name, hostId: this.id });
-      this._send(c, { t: 'record', text: t.recordFor(r.pid) });
+      this._send(c, { t: 'record', text: t.recordFor(r.pid, false), full: t.recordFor(r.pid, true) });
       if (r.reconnected) t.setConnected(r.pid, true);
       else t.onEvent('info', `${r.player.name} joined the table`, r.pid);
       t.changed();
@@ -2845,6 +3486,7 @@ class ClientSession {
     this.id = hostId;
     this.name = name;
     this.record = Prefs.get('record.' + hostId, '');
+    this.recordFull = Prefs.get('recordFull.' + hostId, this.record);
     this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {}, status: () => {}, fair: () => {} };
     this.ended = false;
     this.fair = new Fair.Checker((f, msg) => this.handlers.fair(f, msg));
@@ -2856,6 +3498,9 @@ class ClientSession {
     if (!this.peer || this.peer.destroyed) this.peer = await Net.createPeer();
     this.peer.on('disconnected', () => { setTimeout(() => { try { if (!this.peer.destroyed) this.peer.reconnect(); } catch { /* ignore */ } }, 1000); });
     await this._open();
+    // Closing or refreshing the tab tells the host straight away (instead of after the heartbeat timeout).
+    this.unload = () => { try { if (this.conn) this.conn.close(); } catch { /* ignore */ } };
+    addEventListener('pagehide', this.unload);
     this.dog = setInterval(() => {
       if (this.ended || !this.conn) return;
       if (Date.now() - this.lastMsg > 15000) { try { this.conn.close(); } catch { /* ignore */ } this._lost(); }
@@ -2906,7 +3551,11 @@ class ClientSession {
         this.handlers.view(m);
         break;
       case 'event': this.handlers.event(m.kind, m.text); break;
-      case 'record': this.record = m.text; Prefs.set('record.' + this.id, m.text); this.pendingAudit = m.text; break;
+      case 'record':
+        this.record = m.text; this.recordFull = m.full || m.text;
+        Prefs.set('record.' + this.id, this.record); Prefs.set('recordFull.' + this.id, this.recordFull);
+        this.pendingAudit = this.recordFull;
+        break;
       // Shuffle proofs: answer with our own committed randomness, then verify every card we see.
       case 'fair1': { const r = this.fair.fair1(m); if (r) this.send(r); break; }
       case 'fair2': { const r = this.fair.fair2(m); if (r) this.send(r); break; }
@@ -2964,6 +3613,46 @@ class ClientSession {
     this.ended = true; clearInterval(this.dog); try { this.conn && this.conn.close(); this.peer.destroy(); } catch { /* ignore */ } }
 }
 
+/* ---------- Play vs Bots: the same HostTable, fully offline ---------- */
+class BotSession {
+  constructor(settings, name, bots) {
+    this.role = 'host';
+    this.offline = true;
+    this.id = 'offline';
+    this.settings = settings; this.name = name; this.bots = bots;
+    this.record = ''; this.recordFull = '';
+    this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {} };
+  }
+  on(ev, fn) { this.handlers[ev] = fn; return this; }
+  get inviteUrl() { return ''; }
+  start() {
+    const t = this.table = new HostTable({ ...this.settings, vsBots: true, hostPlays: true }, this.name, U.randHex(16));
+    this.pid = t.hostPid;
+    for (const b of this.bots) t.addBot(b);
+    t.onChange = () => {
+      if (this.bq) return;
+      this.bq = true;
+      queueMicrotask(() => {
+        this.bq = false;
+        this.handlers.view(t.viewFor(this.pid));
+        if (t.status === 'ended' && !this.endedSent) { this.endedSent = true; this.handlers.ended('Game over.'); }
+      });
+    };
+    t.onEvent = (kind, text) => this.handlers.event(kind, text);
+    t.onRecord = (pid, text, full) => { if (pid === this.pid) { this.record = full; this.recordFull = full; Prefs.set('record.offline', full); } };
+    t.onDirect = (pid, m) => { if (pid === this.pid && m.t === 'error') this.handlers.error(m.text); };
+    t.handle(this.pid, { t: 'start' });
+    return this;
+  }
+  send(m) { this.table.handle(this.pid, m); }
+  leave() {
+    if (this.closed) return;
+    this.closed = true;
+    const t = this.table;
+    if (t && t.status !== 'ended') { t.status = 'ended'; t._clearTurn(); clearTimeout(t.nextTimer); clearTimeout(t.dealTimer); clearTimeout(t.botTimer); }
+  }
+}
+
 /* =====================================================================
    7. UI CORE  (theme, sound, toasts, modals, cards, chips, table renderer)
    ===================================================================== */
@@ -2996,6 +3685,7 @@ const ICONS = {
   wifi: '<path d="M5 12.6a10 10 0 0 1 14 0M8.5 16.1a5 5 0 0 1 7 0M2 8.8a15 15 0 0 1 20 0M12 20h.01"/>',
   table: '<ellipse cx="12" cy="12" rx="10" ry="6"/><ellipse cx="12" cy="12" rx="6" ry="3"/>',
   flag: '<path d="M4 22V4M4 4h13l-2 4 2 4H4"/>',
+  bot: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 13h.01M15 13h.01M9 17h6"/><circle cx="12" cy="3" r="1"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
   shieldOk: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
   shieldBad: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4M12 16h.01"/>',
@@ -3275,7 +3965,9 @@ class TableView {
       if (st.allIn) tags.push('<span class="tag allin">All-in</span>');
       if (st.busted) tags.push('<span class="tag off">Busted</span>');
       else if (st.sittingOut) tags.push('<span class="tag off">Sitting out</span>');
-      if (st.disconnected) tags.push('<span class="tag off">Disconnected</span>');
+      if (st.isBot) tags.push(`<span class="tag" title="Computer player${st.botLabel ? ' · ' + st.botLabel : ''}">🤖 Bot</span>`);
+      if (st.botPlaying) tags.push('<span class="tag off" title="A bot is playing for this player while they are disconnected">🤖 Bot playing</span>');
+      else if (st.disconnected) tags.push('<span class="tag off">Disconnected</span>');
       if (!view.results && !st.folded && !st.won && st.lastAction && ACTION_WORD[st.lastAction] && !st.allIn) tags.push(`<span class="tag last">${ACTION_WORD[st.lastAction]}</span>`);
       let ring = '';
       if (st.toAct && view.timer && view.timer.total) ring = '<svg class="ring" viewBox="0 0 50 50"><circle cx="25" cy="25" r="23" pathLength="100" stroke-dasharray="100" stroke-dashoffset="0" data-ring></circle></svg>';
@@ -3780,6 +4472,31 @@ const SelfTest = (() => {
     ok(fairRound('dropseed').problems.some((p) => /left your shuffle seed out/.test(p)), 'excluded seed detected');
   });
 
+  test('Stats', 'Advanced stats count exactly what the key says', () => {
+    const rec = `[Event "Stats"]\n[Blinds "1/2"]\n\n#1 [Button "A"] [Stacks "A:200, B:200, C:200"]\nB sb 1; C bb 2\nA [????] r 6; B [????] r 18; C [????] f; A c 18\nF: 2c 7d Js; B x; A b 20; B r 60; A f\n=> B wins 78\n`;
+    const S = Replay.stats(Replay.game(Notation.parse(rec)));
+    const [A, B, C] = ['A', 'B', 'C'].map((n) => S.players.find((p) => p.name === n));
+    eq([A.vpip, A.pfr, A.foldTo3Opp, A.foldTo3, A.threeBetOpp], [1, 1, 1, 0, 0], 'A preflop');
+    eq([B.threeBetOpp, B.threeBet, B.cbetOpp, B.cbet, B.checkRaise, B.wonNoSD, B.won], [1, 1, 1, 0, 1, 1, 1], 'B');
+    eq([C.foldPre, C.threeBetOpp, C.vpip], [1, 0, 0], 'C');
+    eq([A.af, A.afqPct, A.net, B.net], [Infinity, 50, -38, 40], 'aggression and results');
+    eq([S.totalHands, S.biggestPot, S.showdownPct], [1, 78, 0]);
+    ok(STAT_KEY.length >= 25 && STAT_KEY.every(([k, d]) => k && d.length > 20), 'every stat has a definition');
+  });
+  test('Bots', 'Bots only take legal actions and scale with difficulty', () => {
+    const models = {};
+    for (let k = 0; k < 70; k++) {
+      const game = k % 3 === 0 ? 'omaha' : 'holdem', hc = game === 'omaha' ? 4 : 2;
+      const h = play({ no: k + 1, stacks: [200, 200, 200, 200], button: k % 4, game, limit: k % 2 ? 'pl' : 'nl', holeCount: hc,
+        actions: (hh) => Bots.decide(Bots.contextFor(hh, hh.toAct, { models, difficulty: Object.keys(Bots.PROFILES)[k % 7], personality: Object.keys(Bots.PERSONALITIES)[k % 8], work: 0.05 })) });
+      eq(h.phase, 'done', 'hand finished with bot actions only');
+    }
+    ok(Bots.chen(['As', 'Ad']) > Bots.chen(['7c', '2d']), 'AA beats 72o preflop');
+    ok(Bots.holdemPct(['As', 'Ad']) < 0.01 && Bots.holdemPct(['7c', '2d']) > 0.9, 'percentiles');
+    const r = Bots.equity({ game: 'holdem', holeCount: 2, hole: ['As', 'Ad'], board: [], widths: [1], rng: Bots.makeRng(), iters: 1500, budgetMs: 500 });
+    ok(r.equity > 0.8 && r.equity < 0.89, `AA vs a random hand ≈ 85% (got ${(r.equity * 100).toFixed(0)}%)`);
+  });
+
   /* ---------- Statistical randomness checks ---------- */
   // Chi-square goodness of fit against a uniform distribution. With these thresholds an honest
   // generator fails less than about once in a million runs; a biased shuffle fails at once.
@@ -3830,12 +4547,14 @@ const SelfTest = (() => {
     eq(QR.checksum('HELLO'), QR_KNOWN_HELLO, 'matches reference encoder');
   });
 
-  async function run() {
+  async function run(onResult) {
     const out = [];
     for (const t of T) {
+      await new Promise((r) => setTimeout(r, 0)); // let the page paint between tests
       const t0 = Date.now();
       try { await t.fn(); out.push({ ...t, pass: true, ms: Date.now() - t0 }); }
       catch (e) { out.push({ ...t, pass: false, error: e.message, ms: Date.now() - t0 }); }
+      if (onResult) onResult(out[out.length - 1], out.length, T.length);
     }
     return out;
   }
@@ -3866,6 +4585,7 @@ function HomeScreen() {
       <p>Free, peer-to-peer Texas Hold'em and Omaha that runs entirely in your browser, with a provably fair shuffle. No accounts, no downloads, no game servers.</p>
       <div class="home-actions">
         <button class="big-choice" data-go="#/host"><span class="bc-ic">${icon('plus')}</span><strong>Host a Game</strong><span>Choose blinds and stacks, share the invite link, and deal.</span></button>
+        <button class="big-choice" data-go="#/bots"><span class="bc-ic">${icon('bot')}</span><strong>Play vs Bots</strong><span>Practice offline against computer players, from Beginner to Extreme.</span></button>
         <button class="big-choice" data-go="#/viewer"><span class="bc-ic">${icon('history')}</span><strong>Hand History Viewer</strong><span>Paste a game record to replay every hand, with stats. Works offline.</span></button>
       </div>
       <div class="pill-row"><span class="pill">100% free</span><span class="pill">No sign-up</span><span class="pill">Peer-to-peer</span><span class="pill">Provably fair shuffle</span><span class="pill">No ads or tracking</span></div>
@@ -3939,6 +4659,7 @@ function HostSetupScreen() {
         </section>
         <section class="card-ui setup-section"><h3>Fair play</h3>
           <label class="check"><input type="checkbox" name="hostPlays" ${d.hostPlays !== false ? 'checked' : ''}> I'm playing too (take a seat)</label>
+          <label class="check"><input type="checkbox" name="botTakeover"> Bots replace disconnected players</label>
           <p class="hint" style="margin:0">Every hand uses a <b>provably fair shuffle</b>: this device commits to the deck before players add their own randomness, and every player's browser checks each card dealt. The dealing device can still see all hole cards, so for a serious game, untick this box and host on a device nobody plays from (a spare laptop or TV).</p>
         </section>
         <section class="card-ui setup-section"><h3>Game record</h3>
@@ -3955,6 +4676,16 @@ function HostSetupScreen() {
     $$('button', g).forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); });
   }));
   const form = $('#setup');
+  // Off by default, and turning it on asks for confirmation.
+  form.botTakeover.addEventListener('change', (e) => {
+    if (!e.target.checked) return;
+    e.target.checked = false;
+    const m = openModal(`<h2>${icon('bot')} Let bots replace disconnected players?</h2>
+      <p>If a player drops out, a bot makes their decisions using <b>their chips</b> until they reconnect. Wins and losses the bot makes count for that player.</p>
+      <p class="muted">Hands in which a bot acts are <b>left out of the player-only game record</b>. They appear only in the full record, marked with a [Bots] tag. Both can be copied from the table menu.</p>
+      <div class="modal-foot"><button class="btn" data-close>Keep it off</button><button class="btn primary" id="bt-on">Turn it on</button></div>`, { label: 'Bot takeover' });
+    $('#bt-on', m.el).addEventListener('click', () => { form.botTakeover.checked = true; m.close(); });
+  });
   const hint = () => {
     const g = $('[data-seg="game"] [aria-pressed="true"]').dataset.v, l = $('[data-seg="limit"] [aria-pressed="true"]').dataset.v;
     $('#game-hint').textContent = (g === 'holdem' ? 'Two hole cards; make the best five-card hand from any of your cards and the board.'
@@ -3972,7 +4703,7 @@ function HostSetupScreen() {
       sb: Math.floor(Number(form.sb.value)), bb: Math.floor(Number(form.bb.value)), ante: Math.floor(Number(form.ante.value || 0)),
       startingStack: Math.floor(Number(form.startingStack.value)), maxSeats: Number(segv('maxSeats')), timer: Number(segv('timer')),
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : Number(segv('rebuys')), recordHole: segv('recordHole'),
-      game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), hostPlays: form.hostPlays.checked,
+      game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), hostPlays: form.hostPlays.checked, botTakeover: form.botTakeover.checked,
     };
     const name = U.sanitizeName(form.name.value);
     const errs = [];
@@ -3988,6 +4719,88 @@ function HostSetupScreen() {
     box.classList.add('hidden');
     Prefs.set('lastSettings', s); Prefs.set('name', name);
     await startHosting(s, name);
+  });
+  return {};
+}
+
+/* ---------- Play vs Bots setup ---------- */
+function BotSetupScreen() {
+  document.title = TitleFlash.base = 'Play vs Bots · Feltroom';
+  const d = Object.assign({ name: Prefs.get('name', ''), bots: 5, difficulty: 'intermediate', personality: 'mixed', game: 'holdem', limit: 'nl', sb: 1, bb: 2, ante: 0, startingStack: 200, levelHands: 0, rebuys: 'any', botSpeed: 'normal', timer: 0 }, Prefs.get('botSettings', {}));
+  const seg = (name, opts, val) => `<div class="seg" role="radiogroup" data-seg="${name}">${opts.map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${String(v) === String(val)}" aria-checked="${String(v) === String(val)}">${l}</button>`).join('')}</div>`;
+  App.root.innerHTML = `<div class="page"><div class="page-inner">
+    <div class="page-head"><a class="btn ghost icon-btn" href="#/" aria-label="Back to home">${icon('back')}</a><h2>Play vs Bots</h2><span class="grow"></span>${topIconButtons()}</div>
+    <form id="bsetup" novalidate><div class="setup-grid">
+      <section class="card-ui setup-section" style="grid-column:1/-1"><h3>Opponents</h3>
+        <div class="field"><span>Number of bots</span>${seg('bots', [1, 2, 3, 4, 5, 6, 7, 8].map((n) => [n, n]), d.bots)}</div>
+        <div class="field"><span>Difficulty</span>${seg('difficulty', Object.keys(Bots.PROFILES).map((k) => [k, Bots.LABELS[k]]), d.difficulty)}</div>
+        <p class="hint" style="margin:0" id="diff-hint"></p>
+        <div class="two">
+          <label class="field"><span>Play style</span><select class="input" name="personality"><option value="mixed">Mixed (a different style at every seat)</option>${Object.entries(Bots.PERSONALITIES).map(([k, v]) => `<option value="${k}" ${d.personality === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></label>
+          <div class="field"><span>Bot speed</span>${seg('botSpeed', [['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']], d.botSpeed)}</div>
+        </div>
+      </section>
+      <section class="card-ui setup-section"><h3>You</h3>
+        <label class="field"><span>Your name</span><input class="input" name="name" maxlength="18" value="${U.esc(d.name)}" placeholder="e.g. Alice" autocomplete="off"></label>
+        <div class="field"><span>Game</span>${seg('game', [['holdem', "Hold'em"], ['omaha4', 'Omaha'], ['omaha5', '5-Card Omaha']], d.game)}</div>
+        <div class="field"><span>Betting</span>${seg('limit', [['nl', 'No limit'], ['pl', 'Pot limit']], d.limit)}</div>
+      </section>
+      <section class="card-ui setup-section"><h3>Stakes</h3>
+        <div class="two"><label class="field"><span>Small blind</span><input class="input num" name="sb" type="number" min="1" value="${d.sb}"></label><label class="field"><span>Big blind</span><input class="input num" name="bb" type="number" min="1" value="${d.bb}"></label></div>
+        <div class="two"><label class="field"><span>Ante</span><input class="input num" name="ante" type="number" min="0" value="${d.ante}"></label><label class="field"><span>Starting stack</span><input class="input num" name="startingStack" type="number" min="2" value="${d.startingStack}"></label></div>
+        <div class="field"><span>Blinds go up</span>${seg('levelHands', [[0, 'Never'], [10, 'Every 10 hands'], [20, '20'], [30, '30']], d.levelHands)}</div>
+        <div class="field"><span>Rebuys (bots rebuy automatically)</span>${seg('rebuys', [['no', 'None'], [1, '1 each'], [3, '3 each'], ['any', 'Unlimited']], d.rebuys)}</div>
+      </section>
+    </div>
+    <div id="bsetup-err" class="err-box hidden" role="alert" style="margin-top:16px"></div>
+    <div class="setup-foot"><span class="hint">Runs entirely on this device · no internet needed once loaded</span><button class="btn primary lg">${icon('play')}Deal me in</button></div>
+    </form></div></div>`;
+  bindThemeToggles(App.root);
+  $$('[data-seg]', App.root).forEach((g) => g.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('button', g).forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); });
+    hint();
+  }));
+  const segv = (n) => $(`[data-seg="${n}"] [aria-pressed="true"]`).dataset.v;
+  const HINTS = {
+    beginner: 'Plays on raw hand strength only; calls far too much and almost never bluffs.',
+    casual: 'Adds pot odds and simple position awareness. Still loose and predictable.',
+    intermediate: 'Simulates its equity against your likely range, continuation-bets and semi-bluffs.',
+    advanced: 'Uses fold equity, several bet sizes and positional aggression, and starts reading your tendencies.',
+    professional: 'Full opponent model with exploitative adjustments, implied odds and stack-to-pot commitment.',
+    elite: 'Adds blockers, minimum-defence-frequency defending and deliberate strategy mixing.',
+    extreme: 'GTO-inspired: deep Monte-Carlo equity, balanced value/bluff ratios and a bounded exploit layer.',
+  };
+  const hint = () => { $('#diff-hint').textContent = HINTS[segv('difficulty')] || ''; };
+  hint();
+  $('#bsetup').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const name = U.sanitizeName(f.name.value) || 'You';
+    const s = {
+      tableName: 'Practice vs Bots', sb: Math.floor(+f.sb.value), bb: Math.floor(+f.bb.value), ante: Math.floor(+f.ante.value || 0),
+      startingStack: Math.floor(+f.startingStack.value), game: segv('game'), limit: segv('limit'), levelHands: +segv('levelHands'),
+      rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : +segv('rebuys'),
+      timer: 0, recordHole: 'All', botSpeed: segv('botSpeed'),
+    };
+    const nBots = +segv('bots'), errs = [];
+    if (!(s.sb >= 1 && s.bb >= s.sb)) errs.push('Big blind must be at least the small blind (and both at least 1).');
+    if (!(s.startingStack >= s.bb * 2)) errs.push('Starting stack must be at least two big blinds.');
+    if (s.game === 'omaha5' && nBots > 7) errs.push('5-Card Omaha seats at most 8 players.');
+    const box = $('#bsetup-err');
+    if (errs.length) { box.innerHTML = `${icon('alert')}<div>${errs.join('<br>')}</div>`; box.classList.remove('hidden'); return; }
+    s.maxSeats = nBots + 1;
+    Prefs.set('botSettings', { bots: nBots, difficulty: segv('difficulty'), personality: f.personality.value, game: s.game, limit: s.limit, sb: s.sb, bb: s.bb, ante: s.ante, startingStack: s.startingStack, levelHands: s.levelHands, rebuys: segv('rebuys'), botSpeed: s.botSpeed });
+    Prefs.set('name', name);
+    const styles = Object.keys(Bots.PERSONALITIES);
+    const names = Cards.shuffle(Bots.NAMES.slice());
+    const bots = Array.from({ length: nBots }, (_, i) => ({
+      name: names[i], difficulty: segv('difficulty'),
+      personality: f.personality.value === 'mixed' ? styles[U.randInt(styles.length)] : f.personality.value,
+    }));
+    const sess = new BotSession(s, name, bots).start();
+    App.session = sess;
+    App.screen = GameScreen(sess);
   });
   return {};
 }
@@ -4082,8 +4895,8 @@ function GameScreen(session) {
     <header class="topbar">
       <div class="brand"><div class="logo" aria-hidden="true">♠</div><div style="min-width:0"><div class="t-name" id="g-name">Table</div><div class="t-sub" id="g-sub"></div></div></div>
       <div class="top-actions">
-        <button class="btn sm ghost" id="g-fair" aria-label="Fair play status">${icon('shield')}<span class="hide-sm">Fair play</span></button>
-        <button class="btn sm hide-sm" id="g-invite">${icon('link')}<span>Invite</span></button>
+        ${session.offline ? '' : `<button class="btn sm ghost" id="g-fair" aria-label="Fair play status">${icon('shield')}<span class="hide-sm">Fair play</span></button>
+        <button class="btn sm hide-sm" id="g-invite">${icon('link')}<span>Invite</span></button>`}
         <button class="btn sm ghost hide-sm" id="g-copy">${icon('copy')}<span>Copy Game Record</span></button>
         ${isHost ? `<button class="btn sm ghost hidden" id="g-pause"></button>` : ''}
         <button class="btn ghost icon-btn" id="g-sound"></button>
@@ -4133,9 +4946,11 @@ function GameScreen(session) {
   soundBtn();
   $('#g-sound').addEventListener('click', () => { Sound.toggle(); soundBtn(); });
   $('#g-help').addEventListener('click', () => helpOverlay('game'));
-  $('#g-invite').addEventListener('click', () => inviteModal());
-  $('#g-fair').addEventListener('click', () => fairModal());
-  $('#g-copy').addEventListener('click', () => copyRecord());
+  if (!session.offline) {
+    $('#g-invite').addEventListener('click', () => inviteModal());
+    $('#g-fair').addEventListener('click', () => fairModal());
+  }
+  $('#g-copy').addEventListener('click', () => copyRecord(false));
   if (isHost) $('#g-pause').addEventListener('click', () => session.send({ t: 'pause', on: !G.view.paused }));
   $('#g-menu').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
 
@@ -4155,22 +4970,25 @@ function GameScreen(session) {
   });
 
   /* ----- records ----- */
-  const record = () => session.record || '';
-  function copyRecord() {
-    const r = record();
-    if (!r || !/#\d+/.test(r)) { toast('No hands have finished yet. The record fills in after each hand.', 'info'); if (r) copyText(r, 'Record header copied'); return; }
-    copyText(r, 'Game record copied');
+  // Two versions: the player-only record (default) leaves out hands where a bot made decisions;
+  // the full record includes them, tagged [Bots "..."].
+  const record = (full) => (full ? session.recordFull || session.record : session.record) || '';
+  const twoRecords = () => G.view && G.view.table.botTakeover && !session.offline;
+  function copyRecord(full) {
+    const r = record(full === true);
+    if (!r || !/#\d+/.test(r)) { toast(twoRecords() && !full ? 'No player-only hands yet (hands a bot played are only in the full record).' : 'No hands have finished yet. The record fills in after each hand.', 'info'); if (r) copyText(r, 'Record header copied'); return; }
+    copyText(r, full === true ? 'Full game record copied (includes bot hands)' : twoRecords() ? 'Player-only game record copied' : 'Game record copied');
   }
-  function openInViewer() {
-    const r = record();
+  function openInViewer(full) {
+    const r = record(full === true);
     if (!r || !/#\d+/.test(r)) return toast('No hands to replay yet.', 'info');
     Prefs.set('viewerPending', r);
     open(location.pathname + location.search + '#/viewer', '_blank');
   }
-  function downloadRecord() {
-    const r = record();
+  function downloadRecord(full) {
+    const r = record(full === true);
     if (!r) return toast('No record yet.', 'info');
-    downloadText(`${(G.view ? G.view.table.name : 'game').replace(/[^\w-]+/g, '-')}-record.txt`, r);
+    downloadText(`${(G.view ? G.view.table.name : 'game').replace(/[^\w-]+/g, '-')}-${full === true ? 'full-' : ''}record.txt`, r);
   }
 
   /* ----- modals & menu ----- */
@@ -4221,9 +5039,10 @@ function GameScreen(session) {
       ${seated ? `<label><input type="checkbox" id="m-sitout" ${y.sittingOut ? 'checked' : ''}> Sit out next hands</label>` : ''}
       ${seated && !y.inHand ? `<button id="m-stand" role="menuitem">${icon('users')}Leave my seat</button>` : ''}
       <hr>
-      <button id="m-invite" role="menuitem">${icon('link')}Invite players</button>
-      <button id="m-copy" role="menuitem">${icon('copy')}Copy game record</button>
-      <button id="m-view" role="menuitem">${icon('history')}Open record in viewer</button>
+      ${session.offline ? '' : `<button id="m-invite" role="menuitem">${icon('link')}Invite players</button>`}
+      <button id="m-copy" role="menuitem">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy game record'}</button>
+      ${twoRecords() ? `<button id="m-copyfull" role="menuitem">${icon('bot')}Copy full record (with bot hands)</button><button id="m-viewfull" role="menuitem">${icon('history')}Open full record in viewer</button>` : ''}
+      <button id="m-view" role="menuitem">${icon('history')}${twoRecords() ? 'Open player-only record in viewer' : 'Open record in viewer'}</button>
       <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>
       <button id="m-theme" role="menuitem">${Theme.icon()}Light / dark theme</button>
       ${isHost && v && v.status !== 'ended' ? `<hr>
@@ -4237,7 +5056,8 @@ function GameScreen(session) {
     on('m-muck', (e) => session.send({ t: 'automuck', on: e.target.checked }));
     on('m-sitout', (e) => session.send({ t: 'sitout', on: e.target.checked }));
     on('m-stand', () => session.send({ t: 'stand' }));
-    on('m-invite', inviteModal); on('m-copy', copyRecord); on('m-view', openInViewer); on('m-dl', downloadRecord);
+    on('m-invite', inviteModal); on('m-copy', () => copyRecord(false)); on('m-view', () => openInViewer(false)); on('m-dl', () => downloadRecord(false));
+    on('m-copyfull', () => copyRecord(true)); on('m-viewfull', () => openInViewer(true));
     on('m-theme', () => { Theme.toggle(); $$('[data-theme-toggle]').forEach((x) => { x.innerHTML = Theme.icon(); }); });
     on('m-start', () => session.send({ t: 'start' }));
     on('m-pause', () => session.send({ t: 'pause', on: !v.paused }));
@@ -4297,8 +5117,9 @@ function GameScreen(session) {
     $('#g-banner').classList.add('hidden');
     const m = openModal(`<div class="state-ic err" style="margin-bottom:12px">${icon('flag')}</div><h2 style="text-align:center">${U.esc(reason)}</h2>
       <p class="muted" style="text-align:center">Your game record up to this point is saved in this browser. Copy it, download it, or replay it in the viewer.</p>
-      <div class="modal-foot" style="justify-content:center"><a class="btn" href="#/" data-close>${icon('home')}Home</a><button class="btn" id="e-dl">${icon('download')}Download</button><button class="btn" id="e-view">${icon('history')}Open in viewer</button><button class="btn primary" id="e-copy">${icon('copy')}Copy Game Record</button></div>`, { label: 'Game ended' });
-    $('#e-copy', m.el).addEventListener('click', copyRecord);
+      <div class="modal-foot" style="justify-content:center"><a class="btn" href="#/" data-close>${icon('home')}Home</a><button class="btn" id="e-dl">${icon('download')}Download</button><button class="btn" id="e-view">${icon('history')}Open in viewer</button><button class="btn primary" id="e-copy">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy Game Record'}</button>${twoRecords() ? `<button class="btn" id="e-full">${icon('bot')}Copy full record</button>` : ''}</div>`, { label: 'Game ended' });
+    $('#e-copy', m.el).addEventListener('click', () => copyRecord(false));
+    if ($('#e-full', m.el)) $('#e-full', m.el).addEventListener('click', () => copyRecord(true));
     $('#e-view', m.el).addEventListener('click', openInViewer);
     $('#e-dl', m.el).addEventListener('click', downloadRecord);
   }
@@ -4333,7 +5154,7 @@ function GameScreen(session) {
         <div class="sum-tile"><b>${t.timer ? t.timer + 's' : 'Off'}</b><span>Action timer</span></div>
         <div class="sum-tile"><b>${!t.rebuys ? 'No' : t.maxRebuys ? `${t.maxRebuys} each` : 'Unlimited'}</b><span>Rebuys</span></div>
         <div class="sum-tile"><b>${t.recordHole === 'All' ? 'All cards' : 'Showdown only'}</b><span>Hole cards in record</span></div>
-        <div class="sum-tile" style="grid-column:span 2"><b>${icon('shieldOk')} Provably fair shuffle</b><span>${t.hostPlays ? 'Host is also playing' : 'Host deals only (does not play)'}</span></div>
+        <div class="sum-tile" style="grid-column:span 2"><b>${icon('shieldOk')} Provably fair shuffle</b><span>${t.hostPlays ? 'Host is also playing' : 'Host deals only (does not play)'}${t.botTakeover ? ' · bots replace dropouts' : ''}</span></div>
       </div>
       ${v.you && v.you.isHost
         ? `<button class="btn primary lg" id="l-start" ${seated.length < 2 ? 'disabled' : ''}>${icon('play')}Start Game</button><p class="hint" style="margin:0;text-align:center">${seated.length < 2 ? 'Waiting for at least one more player to sit down.' : `${seated.length} players seated. Ready when you are.`}</p>`
@@ -4487,7 +5308,7 @@ function GameScreen(session) {
       const host = v.you && v.you.isHost;
       $('#tp-players').innerHTML = `${host && v.status !== 'ended' ? `<button class="btn sm" id="p-adjust" style="width:100%;margin-bottom:10px" ${v.phase && v.phase !== 'done' ? 'disabled title="Available between hands"' : ''}>${icon('users')}Adjust stacks</button>` : ''}
         <div class="plist">${v.players.map((p) => `<div class="prow">${avatarHtml(p.name)}<div class="p-main">
-          <div class="p-name">${U.esc(p.name)}${p.isHost ? ' ★' : ''}${v.you && v.you.pid === p.pid ? ' <span class="muted">(you)</span>' : ''}</div>
+          <div class="p-name">${p.isBot ? '🤖 ' : ''}${U.esc(p.name)}${p.isHost ? ' ★' : ''}${v.you && v.you.pid === p.pid ? ' <span class="muted">(you)</span>' : ''}</div>
           <div class="p-sub"><span class="status-dot ${p.connected ? '' : 'off'}"></span>${p.connected ? '' : 'Disconnected · '}${p.seat != null ? 'Seat ' + (p.seat + 1) : 'Watching'} · <span class="num">${U.fmt(p.stack)}</span>
             · <span class="num ${p.net > 0 ? 'net-pos' : p.net < 0 ? 'net-neg' : ''}">${p.net > 0 ? '+' : ''}${U.fmt(p.net)}</span>${p.sittingOut ? ' · sitting out' : ''}${p.rebuys ? ` · ${p.rebuys} rebuy${p.rebuys > 1 ? 's' : ''}` : ''}</div></div>
           ${host && !p.isHost && v.status !== 'ended' ? `<button class="btn sm danger" data-kick="${p.pid}" aria-label="Remove ${U.esc(p.name)}">Remove</button>` : ''}</div>`).join('')}</div>`;
@@ -4718,7 +5539,7 @@ function ViewerScreen() {
     $$('[data-vtab]').forEach((b) => b.addEventListener('click', () => { V.tab = b.dataset.vtab; renderSide(); }));
     V.table = new TableView($('#v-stage'), { readOnly: true });
     const list = $('#v-hands');
-    list.innerHTML = V.replay.hands.map((rh, k) => `<button class="v-hand" data-hk="${k}">${rh.issues.length ? '<span class="warn-ic" title="Inconsistency found">⚠ </span>' : ''}${U.esc(Replay.summary(rh))}</button>`).join('');
+    list.innerHTML = V.replay.hands.map((rh, k) => `<button class="v-hand" data-hk="${k}">${rh.issues.length ? '<span class="warn-ic" title="Inconsistency found">⚠ </span>' : ''}${(rh.rec.tags || []).some((t) => t[0] === 'Bots') ? '<span title="A bot made decisions in this hand">🤖 </span>' : ''}${U.esc(Replay.summary(rh))}</button>`).join('');
     list.addEventListener('click', (e) => { const b = e.target.closest('[data-hk]'); if (b) { stop(); V.hk = Number(b.dataset.hk); V.si = 0; show(true); } });
     show(true);
     renderSide();
@@ -4837,33 +5658,67 @@ function ViewerScreen() {
         ${iss.length ? iss.map((i) => `<div class="issue">⚠ ${U.esc(i)}</div>`).join('') : `<div class="issue ok">${icon('check')} All ${V.replay.hands.length} hands re-simulated through the rules engine with no inconsistencies.</div>`}
         ${notes.map((n) => `<div class="issue note">${U.esc(n)}</div>`).join('')}</div>`;
     } else p.innerHTML = statsHtml();
-    if (V.tab === 'stats') bindChart();
+    if (V.tab === 'stats') {
+      bindChart();
+      const kb = $('#v-keybtn');
+      if (kb) kb.addEventListener('click', () => $('#v-key').scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' }));
+    }
   }
 
   function statsHtml() {
     const S = V.stats;
+    const KEY = Object.fromEntries(STAT_KEY);
     const pct = (x) => (x == null ? '–' : x + '%');
     const sign = (n) => `<span class="${n > 0 ? 'net-pos' : n < 0 ? 'net-neg' : ''}">${n > 0 ? '+' : ''}${U.fmt(n)}</span>`;
-    return `<div class="section-title" style="margin-top:4px">Overview</div>
-      <div class="tiles">
-        <div class="tile"><div class="tv">${S.totalHands}</div><div class="tl">Hands</div></div>
-        <div class="tile"><div class="tv">${U.fmt(S.biggestPot)}</div><div class="tl">Biggest pot${S.biggestPotHand ? ' · #' + S.biggestPotHand : ''}</div></div>
-        <div class="tile"><div class="tv">${S.players.length}</div><div class="tl">Players</div></div>
+    // Every tile carries its definition as a tooltip; the full key is at the bottom.
+    const tile = (label, value, cls = 'tile', sub = '') => `<div class="${cls}" title="${U.esc(label + ': ' + (KEY[label] || ''))}"><${cls === 'tile' ? 'div class="tv"' : 'b'}>${value}</${cls === 'tile' ? 'div' : 'b'}><${cls === 'tile' ? 'div class="tl"' : 'span'}>${label}${sub}</${cls === 'tile' ? 'div' : 'span'}></div>`;
+    const mini = (label, value) => tile(label, value, '');
+    const ratio = (a, b) => (b ? ` <small class="muted">${a}/${b}</small>` : '');
+    const maxCat = Math.max(1, ...S.winningHands.map((w) => w.count));
+    return `<div class="row" style="margin-top:4px"><div class="section-title" style="margin:0">Overview</div><span class="grow"></span><button class="btn sm ghost" id="v-keybtn">${icon('help')}Stat key</button></div>
+      <div class="tiles" style="margin-top:8px">
+        ${tile('Hands', S.totalHands)}
+        ${tile('Biggest pot', U.fmt(S.biggestPot), 'tile', S.biggestPotHand ? ' · #' + S.biggestPotHand : '')}
+        ${tile('Avg pot', U.fmt(S.avgPot))}
+        ${tile('Showdowns', pct(S.showdownPct))}
+        ${tile('Split pots', S.splits)}
+        <div class="tile" title="Average number of players dealt into each hand"><div class="tv">${S.avgPlayers}</div><div class="tl">Players / hand</div></div>
       </div>
+      ${S.botHands ? `<p class="hint">🤖 ${S.botHands} hand${S.botHands > 1 ? 's' : ''} in this record had a bot making decisions (marked in the hand list).</p>` : ''}
+      ${S.winningHands.length ? `<div class="section-title" title="${U.esc(KEY['Winning hands'])}">Winning hands at showdown</div>
+      <div class="bars">${S.winningHands.slice().reverse().map((w) => `<div class="bar-row"><span>${w.name}</span><div class="bar"><i style="width:${(100 * w.count) / maxCat}%"></i></div><b class="num">${w.count}</b></div>`).join('')}</div>` : ''}
       <div class="section-title">Chip stacks over time</div>
       <div class="chart" id="v-chart">${chartSvg()}<div class="tip hidden" id="v-tip"></div></div>
       <div class="legend">${S.players.map((pl) => `<span><i style="background:${colorOf(pl.name)}"></i>${U.esc(pl.name)}</span>`).join('')}</div>
       <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">Show stacks as a table</summary>${stackTable()}</details>
       <div class="section-title">Players</div>
       <div style="display:flex;flex-direction:column;gap:10px">${S.players.map((pl) => `<div class="pcard">
-        <div class="pcard-head">${avatarHtml(pl.name, '', `background:${colorOf(pl.name)}`)}<div style="flex:1;min-width:0"><b>${U.esc(pl.name)}</b><div class="hint">${pl.hands} hands played</div></div><div style="font-weight:800;font-size:18px" class="num">${sign(pl.net)}</div></div>
+        <div class="pcard-head">${avatarHtml(pl.name, '', `background:${colorOf(pl.name)}`)}<div style="flex:1;min-width:0"><b>${U.esc(pl.name)}</b><div class="hint">${pl.hands} hands · ${pl.bb100 == null ? '–' : (pl.bb100 > 0 ? '+' : '') + pl.bb100} bb/100${pl.botHands ? ` · 🤖 ${pl.botHands}` : ''}</div></div><div style="font-weight:800;font-size:18px" class="num" title="${U.esc(KEY.Net)}">${sign(pl.net)}</div></div>
+        <div class="stat-group">Results</div>
         <div class="mini">
-          <div><b>${pct(pl.vpipPct)}</b><span>VPIP</span></div><div><b>${pct(pl.pfrPct)}</b><span>PFR</span></div>
-          <div><b>${pl.af == null ? '–' : pl.af === Infinity ? '∞' : pl.af}</b><span>Aggr. factor</span></div><div><b>${U.fmt(pl.biggest)}</b><span>Biggest pot</span></div>
-          <div><b>${pct(pl.wtsdPct)}</b><span>Went to SD</span></div><div><b>${pct(pl.wsdPct)}</b><span>Won at SD</span></div>
-          <div><b>${pl.sawFlop}</b><span>Saw flop</span></div><div><b>${pl.hands}</b><span>Hands</span></div>
+          ${mini('Won', `${pct(pl.winPct)}${ratio(pl.won, pl.hands)}`)}${mini('bb/100', pl.bb100 == null ? '–' : pl.bb100)}
+          ${mini('Avg pot won', U.fmt(pl.avgWon))}${mini('Biggest pot', U.fmt(pl.biggest))}
+          ${mini('Worst hand', pl.worst ? sign(pl.worst) : '0')}${mini('Best streak', pl.bestStreak)}
+          ${mini('All-ins', `${pl.allIn}${pl.allIn ? ` <small class="muted">won ${pl.allInWon}</small>` : ''}`)}${mini('Won w/o SD', pl.wonNoSD)}
+        </div>
+        <div class="stat-group">Before the flop</div>
+        <div class="mini">
+          ${mini('VPIP', pct(pl.vpipPct))}${mini('PFR', pct(pl.pfrPct))}${mini('3-Bet', `${pct(pl.threeBetPct)}${ratio(pl.threeBet, pl.threeBetOpp)}`)}${mini('Fold to 3-Bet', `${pct(pl.foldTo3Pct)}${ratio(pl.foldTo3, pl.foldTo3Opp)}`)}
+          ${mini('Limp', pct(pl.limpPct))}${mini('Fold preflop', pct(pl.foldPrePct))}
+        </div>
+        <div class="stat-group">After the flop</div>
+        <div class="mini">
+          ${mini('AF', pl.af == null ? '–' : pl.af === Infinity ? '∞' : pl.af)}${mini('AFq', pct(pl.afqPct))}
+          ${mini('C-Bet', `${pct(pl.cbetPct)}${ratio(pl.cbet, pl.cbetOpp)}`)}${mini('Fold to C-Bet', `${pct(pl.foldToCbetPct)}${ratio(pl.foldToCbet, pl.foldToCbetOpp)}`)}
+          ${mini('Check-raise', pl.checkRaise)}${mini('Saw flop', pl.sawFlop)}
+        </div>
+        <div class="stat-group">Showdown</div>
+        <div class="mini">
+          ${mini('WTSD', pct(pl.wtsdPct))}${mini('W$SD', pct(pl.wsdPct))}${mini('WWSF', pct(pl.wwsfPct))}
         </div></div>`).join('')}</div>
-      <p class="hint">VPIP: voluntarily put chips in preflop. PFR: preflop raise. Aggression factor: (bets + raises) ÷ calls. Went to SD: share of flops seen that reached showdown.</p>`;
+      <div class="section-title" id="v-key">Stat key</div>
+      <dl class="stat-key">${STAT_KEY.map(([k, d]) => `<dt>${U.esc(k)}</dt><dd>${U.esc(d)}</dd>`).join('')}</dl>
+      <p class="hint">Percentages with a small fraction (like <span class="num">3/10</span>) show how many times it happened out of the chances the player had. Hover or long-press any stat to see its definition.</p>`;
   }
 
   function chartData() {
@@ -4965,7 +5820,7 @@ function SelfTestScreen() {
     <div class="page-head"><a class="btn ghost icon-btn" href="#/" aria-label="Home">${icon('back')}</a><h2>Self-test</h2><span class="grow"></span><span id="st-sum" class="muted">Running…</span></div>
     <div class="card-ui" id="st-list" style="overflow:hidden"></div></div></div>`;
   document.body.classList.add('scroll');
-  SelfTest.run().then((res) => {
+  SelfTest.run((r, i, n) => { $('#st-sum').textContent = `Running… ${i}/${n}`; }).then((res) => {
     const pass = res.filter((r) => r.pass).length;
     window.__selftest = { pass, total: res.length, results: res };
     $('#st-sum').innerHTML = `<b style="color:${pass === res.length ? 'var(--accent)' : 'var(--danger)'}">${pass}/${res.length} passed</b>`;
@@ -4987,8 +5842,9 @@ function route(force) {
   const h = location.hash;
   const s = App.session;
   // Leaving a live hosted game by navigating away ends it, so confirm first.
-  if (!force && s && s.role === 'host' && !s.closed && lastHash.startsWith('#/host') && !h.startsWith('#/host')) {
-    if (!confirm('Leave the table? As the host, this ends the game for everyone.')) { history.replaceState(null, '', lastHash); return; }
+  const home = s && s.offline ? '#/bots' : '#/host';
+  if (!force && s && s.role === 'host' && !s.closed && lastHash.startsWith(home) && !h.startsWith(home)) {
+    if (!confirm(s.offline ? 'Leave this practice game?' : 'Leave the table? As the host, this ends the game for everyone.')) { history.replaceState(null, '', lastHash); return; }
     s.leave(); App.session = null;
   }
   if (!force && s && s.role === 'client' && !s.ended && lastHash.startsWith('#join=') && !h.startsWith('#join=')) { s.leave(); App.session = null; }
@@ -4999,7 +5855,8 @@ function route(force) {
   $$('.modal-back, .menu').forEach((m) => m.remove());
   const j = h.match(/^#join=([A-Za-z0-9_-]+)/);
   if (j) App.screen = JoinScreen(j[1]);
-  else if (h.startsWith('#/host')) App.screen = s && s.role === 'host' && !s.closed ? GameScreen(s) : HostSetupScreen();
+  else if (h.startsWith('#/host')) App.screen = s && s.role === 'host' && !s.offline && !s.closed ? GameScreen(s) : HostSetupScreen();
+  else if (h.startsWith('#/bots')) App.screen = s && s.offline && !s.closed ? GameScreen(s) : BotSetupScreen();
   else if (h.startsWith('#/viewer')) App.screen = ViewerScreen();
   else if (h.startsWith('#/selftest')) App.screen = SelfTestScreen();
   else App.screen = HomeScreen();

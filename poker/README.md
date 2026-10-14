@@ -5,12 +5,20 @@ Hold'em, Omaha and 5-Card Omaha. One player hosts, and their
 browser shuffles, deals and enforces the rules. Friends join from a link, and the cards travel
 directly between browsers over WebRTC. There is no game server, no account and no build step.
 
-The site has two parts:
+The site has three parts:
 
 - **The live game** (`#/host` and `#join=<id>`): a lobby with an invite link and QR code, the table,
   host controls, chat, a game log and a game record you can copy at any time.
+- **Play vs Bots** (`#/bots`): practise offline against 1–8 computer players. There are seven
+  difficulty levels and eight play styles, and it works in any of the game variants.
 - **The Hand History Viewer** (`#/viewer`): paste a game record and replay every hand on the same
-  table UI, with per-player stats and a chart of chip stacks over time. The viewer works offline.
+  table UI, with stats and a chart of chip stacks over time. The viewer works offline.
+  - **Per player:** hands, wins, net chips, bb/100, VPIP, PFR, 3-bet, fold to 3-bet, limp,
+    aggression factor and frequency, c-bet, fold to c-bet, check-raises, WTSD, W$SD, WWSF, all-ins,
+    streaks and more.
+  - **Table overview:** average pot, showdown rate, split pots, and which hands won.
+  - **Stat key:** a key at the bottom of the panel explains exactly how each stat is counted.
+    Hovering over any stat shows its definition too.
 
 Everything is in one file, `index.html` (HTML, CSS and JavaScript inline). The only external
 resource is the PeerJS library, loaded from a free CDN.
@@ -103,6 +111,8 @@ test suite and lists pass/fail results. The suite covers:
 - record round-trips, tolerant parsing, error line numbers and replay consistency
 - Omaha's two-plus-three hand rule, pot-limit maximums and per-hand blind levels
 - statistical (chi-square) checks that shuffles are uniform
+- bots taking only legal actions across every variant, plus sanity checks on their equity
+- the advanced stats (3-bet, c-bet, check-raise and others), checked against a hand worked out by hand
 - SHA-256 against the standard test vectors, the shuffle permutation, and fair-deal checks that
   catch swapped cards, wrong board positions and excluded seeds
 - the QR encoder, checked against a reference encoder
@@ -133,6 +143,13 @@ test suite and lists pass/fail results. The suite covers:
 - **Clear my data:** the home screen has a **Clear my data on this device** button. It removes your
   saved name, last table settings, rejoin links and saved game records. You can choose to keep or
   reset your display preferences. Name boxes also tell the browser not to remember past entries.
+- **Bots replace disconnected players** (host setting, off by default). Turning it on shows a warning
+  first. While a player is disconnected, a bot plays their seat with their chips until they come
+  back.
+  - Hands in which any bot made a decision are **left out of the player-only record**. That is what
+    **Copy Game Record** copies.
+  - Those hands appear only in the **full record**, tagged `[Bots "Name"]`. Use **Copy full record
+    (with bot hands)** in the ⋯ menu.
 - **If the host leaves:** everyone sees *"Host left, game ended"* and can still copy, download or
   replay their record up to that point. Records are also saved in each player's browser.
 - **Keyboard shortcuts:**
@@ -171,6 +188,37 @@ test suite and lists pass/fail results. The suite covers:
     unless they turned auto-muck off.
   - If players were all-in and the board was run out, everyone shows.
 - **Busting.** A player who runs out of chips can rebuy when rebuys are allowed. Otherwise they sit out.
+
+---
+
+## Bots
+
+The bot engine is adapted from the "Royal Flush Engine" AI. Each decision runs a pipeline:
+
+1. Equity: a Monte-Carlo simulation against the opponents' likely ranges, or a heuristic at
+   low levels.
+2. Board texture, outs and blockers.
+3. Pot odds, implied odds, stack-to-pot ratio and minimum defence frequency.
+4. A read on each opponent, built from their public play earlier in the game.
+5. The expected value of folding, checking or calling, and betting or raising at several sizes.
+6. Strategy frequencies, with deliberate mixing so the bot doesn't always play the same spot the
+   same way.
+
+| Level | What it adds |
+|---|---|
+| Beginner | Raw hand strength only; calls too much, rarely bluffs |
+| Casual | Pot odds and simple position awareness |
+| Intermediate | Equity against a modelled range, continuation bets, semi-bluffs |
+| Advanced | Fold equity, multiple bet sizes, starts reading opponents |
+| Professional | Exploitative adjustments, implied odds, stack-to-pot commitment |
+| Elite | Blockers, minimum-defence-frequency defending, strategy mixing |
+| Extreme | GTO-inspired: deep simulations, balanced value/bluff ratios, bounded exploits |
+
+The play styles are Balanced, Tight-aggressive, Loose-aggressive, Tight-passive, Loose-passive,
+Maniac, Trapper and GTO-inspired.
+
+Bots never see hidden cards. They get the same information a real player at that seat would have.
+In a test of 1,500 hands, Advanced bots beat Beginner bots by about 28 big blinds per 100 hands.
 
 ---
 
@@ -330,6 +378,9 @@ email wrapping and chat apps. The `;` separators are optional. Smart quotes are 
 
 **Round trip.** `serialize → parse → serialize` reproduces the text exactly. The self-test checks
 this on random games in both visibility modes.
+
+**Bots.** A hand in which a bot made any decision carries `[Bots "Name1,Name2"]` after its other
+tags. Such hands appear only in full records. Player-only records leave them out.
 
 **Validation.** The viewer replays every hand through the same rules engine that the live game
 uses. It flags these problems per hand:
