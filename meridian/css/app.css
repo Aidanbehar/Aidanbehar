@@ -585,8 +585,12 @@ table.table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .map-stage.has-sat .country, .map-stage.has-sat .coast { stroke: rgba(255, 255, 255, .5); }
 .map-stage.has-sat .graticule { stroke: rgba(255, 255, 255, .5); stroke-opacity: .18; }
 .map-stage.has-sat .tz { stroke: rgba(255, 255, 255, .35); }
+.map-stage.has-sat.deep .tz-land { opacity: .1 !important; }
+.map-stage.has-sat.deep .tz-sea { opacity: .04 !important; }
+.map-stage.has-sat.deep .graticule { display: none; }
 .map-attr { position: absolute; left: 8px; bottom: 6px; font-size: .66rem; color: #fff; background: rgba(0, 0, 0, .45); padding: 1px 6px; border-radius: 4px; pointer-events: none; z-index: 2; }
 .map-attr:empty { display: none; }
+.lw-attr { left: 50%; transform: translateX(-50%); bottom: 8px; max-width: 60%; text-align: center; }
 .wm-iso path { fill: none; stroke: rgba(20, 28, 50, .55); pointer-events: none; }
 .wm-iso path.freeze { stroke: #1d4fc3; }
 .wm-iso text { fill: #1a2340; stroke: rgba(255, 255, 255, .85); paint-order: stroke; font-weight: 700; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }

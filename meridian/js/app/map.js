@@ -139,10 +139,10 @@
       .append('title').text(d => `${d.c.name} (${d.c.zone})`);
     cityG.selectAll('text').data(cityXY.filter(d => d.xy)).join('text').attr('class', 'city-label').attr('x', d => d.xy[0] + 3.5).attr('y', d => d.xy[1] + 3).text(d => d.c.name.replace(/ \(.*\)$/, ''));
     g.append('circle').attr('class', 'sel-dot').attr('r', 4).attr('fill', 'var(--amber)').attr('stroke', 'var(--text)').attr('stroke-width', 1.2).style('vector-effect', 'non-scaling-stroke').style('display', 'none');
-    zoom = d3.zoom().scaleExtent([1, 14]).translateExtent([[0, 0], [W, H]]).on('zoom', (ev) => { g.attr('transform', ev.transform); updateLabels(ev.transform.k); }).on('end', scheduleDetail);
+    zoom = d3.zoom().scaleExtent([1, satOk || (M.basemap && M.basemap.enabled()) ? MAX_K : 14]).translateExtent([[0, 0], [W, H]]).on('zoom', (ev) => { g.attr('transform', ev.transform); updateLabels(ev.transform.k); M.$('#mapStage', root).classList.toggle('deep', ev.transform.k > 150); }).on('end', scheduleDetail);
     svg.call(zoom).on('dblclick.zoom', null);
-    M.$('#zIn', root).addEventListener('click', () => svg.transition().duration(250).call(zoom.scaleBy, 1.6));
-    M.$('#zOut', root).addEventListener('click', () => svg.transition().duration(250).call(zoom.scaleBy, 1 / 1.6));
+    M.$('#zIn', root).addEventListener('click', () => svg.transition().duration(250).call(zoom.scaleBy, 2.2));
+    M.$('#zOut', root).addEventListener('click', () => svg.transition().duration(250).call(zoom.scaleBy, 1 / 2.2));
     M.$('#zReset', root).addEventListener('click', () => svg.transition().duration(350).call(zoom.transform, d3.zoomIdentity));
     mapReady = true;
     loadSat();
@@ -155,11 +155,16 @@
   const etcZone = (sec) => sec % 3600 === 0 && Math.abs(sec) <= 12 * 3600 ? (sec === 0 ? 'Etc/UTC' : `Etc/GMT${sec > 0 ? '-' : '+'}${Math.abs(sec / 3600)}`) : null;
 
   /* ---------- Satellite basemap: NASA Blue Marble (GIBS) reprojected to Natural Earth ---------- */
+  const MAX_K = 50000; // ≈ Esri zoom 18 on a typical screen: individual buildings
   let satOk = false, satToken = 0, detailToken = 0, detailTimer = null;
   function setSat(ok, note) {
     satOk = ok;
     M.$('#mapStage', root).classList.toggle('has-sat', ok);
     M.$('#mapAttr', root).textContent = note || '';
+    if (zoom && svg) {
+      zoom.scaleExtent([1, ok ? MAX_K : 14]);
+      if (!ok && d3.zoomTransform(svg.node()).k > 14) svg.call(zoom.scaleTo, 14);
+    }
     recolor();
   }
   async function loadSat() {
@@ -185,7 +190,7 @@
   async function loadDetail() {
     if (!mapReady || !satOk) return;
     const tok = ++detailToken, t = d3.zoomTransform(svg.node()), det = g.select('.sat-detail');
-    if (t.k < 1.8) { det.attr('href', null); return; }
+    if (t.k < 1.8) { det.attr('href', null); M.$('#mapAttr', root).textContent = M.basemap.ATTR; return; }
     const vx0 = -t.x / t.k, vy0 = -t.y / t.k, vw = W / t.k, vh = H / t.k;
     let lo0 = 180, lo1 = -180, la0 = 90, la1 = -90, n = 0;
     for (let i = 0; i <= 12; i++) for (let j = 0; j <= 12; j++) {
@@ -196,17 +201,29 @@
       lo0 = Math.min(lo0, ll[0]); lo1 = Math.max(lo1, ll[0]); la0 = Math.min(la0, ll[1]); la1 = Math.max(la1, ll[1]); n++;
     }
     if (!n) return;
-    const padX = (lo1 - lo0) * 0.08 + 0.5, padY = (la1 - la0) * 0.08 + 0.5;
+    const padX = (lo1 - lo0) * 0.08 + 1e-5, padY = (la1 - la0) * 0.08 + 1e-5;
     lo0 = Math.max(-180, lo0 - padX); lo1 = Math.min(180, lo1 + padX); la0 = Math.max(-90, la0 - padY); la1 = Math.min(90, la1 + padY);
     const stage = M.$('#mapStage', root), dpr = Math.min(2, window.devicePixelRatio || 1);
     const ow = Math.min(2048, Math.round(stage.clientWidth * dpr)), oh = Math.round(ow * H / W);
-    const pw = Math.min(2048, Math.round(ow * 1.25)), ph = Math.max(8, Math.min(2048, Math.round(pw * (la1 - la0) / Math.max(0.01, lo1 - lo0))));
+    const inv = (x, y) => projection.invert([vx0 + x / ow * vw, vy0 + y / oh * vh]);
     try {
-      const src = await M.basemap.equirect([lo0, la0, lo1, la1], pw, ph);
-      if (tok !== detailToken) return;
-      const out = M.basemap.reproject(src, [lo0, la0, lo1, la1], ow, oh, (x, y) => projection.invert([vx0 + x / ow * vw, vy0 + y / oh * vh]));
+      let out, attr = M.basemap.ATTR;
+      if (t.k >= 6) {
+        // close zoom: high-resolution Esri World Imagery tiles (down to individual buildings)
+        const z = M.basemap.zoomFor((lo1 - lo0) / (ow * 0.9), lo1 - lo0, la1 - la0);
+        const mo = await M.basemap.mercMosaic(lo0, la0, lo1, la1, z);
+        if (tok !== detailToken) return;
+        out = M.basemap.reproject(mo.canvas, mo.bbox, ow, oh, inv, true);
+        attr = M.basemap.TILES.attribution;
+      } else {
+        const pw = Math.min(2048, Math.round(ow * 1.25)), ph = Math.max(8, Math.min(2048, Math.round(pw * (la1 - la0) / Math.max(0.01, lo1 - lo0))));
+        const src = await M.basemap.equirect([lo0, la0, lo1, la1], pw, ph);
+        if (tok !== detailToken) return;
+        out = M.basemap.reproject(src, [lo0, la0, lo1, la1], ow, oh, inv);
+      }
       if (tok !== detailToken) return;
       det.attr('href', M.basemap.toURL(out)).attr('x', vx0).attr('y', vy0).attr('width', vw).attr('height', vh);
+      M.$('#mapAttr', root).textContent = attr;
     } catch (e) { /* keep the base image */ }
   }
 
@@ -228,11 +245,12 @@
   function updateLabels(k) {
     if (!mapReady) return;
     k = k || d3.zoomTransform(svg.node()).k;
-    g.selectAll('.city-dot').attr('r', 2.2 / Math.sqrt(k));
+    const grow = Math.sqrt(Math.min(k, 14)) * Math.max(1, k / 14); // dots grow a little up to 14×, then keep a constant screen size
+    g.selectAll('.city-dot').attr('r', 2.2 / grow);
     g.selectAll('.city-label').style('font-size', `${10 / k}px`).style('stroke-width', `${3 / k}px`)
       .attr('x', d => d.xy[0] + 3.5 / k).attr('y', d => d.xy[1] + 3 / k)
       .style('display', d => showLabels && (d.c.rank < (k < 1.5 ? 12 : k < 3 ? 45 : k < 6 ? 140 : 999)) ? null : 'none');
-    g.select('.sel-dot').attr('r', 4.5 / Math.sqrt(k));
+    g.select('.sel-dot').attr('r', 4.5 / grow);
   }
   function drawNight(force) {
     if (!mapReady) return;

@@ -15,12 +15,19 @@
   'use strict';
   const M = window.M, TE = M.TE, esc = M.esc;
   const CDN = {
-    globe: 'https://cdn.jsdelivr.net/npm/globe.gl@2.32.0/dist/globe.gl.min.js',
+    globe: 'https://cdn.jsdelivr.net/npm/globe.gl@2.45.3/dist/globe.gl.min.js',
     hls: 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js',
     day: 'https://cdn.jsdelivr.net/npm/three-globe@2.31.0/example/img/earth-blue-marble.jpg',
     night: 'https://cdn.jsdelivr.net/npm/three-globe@2.31.0/example/img/earth-night.jpg',
     bump: 'https://cdn.jsdelivr.net/npm/three-globe@2.31.0/example/img/earth-topology.png',
     sky: 'https://cdn.jsdelivr.net/npm/three-globe@2.31.0/example/img/night-sky.png'
+  };
+  /** Close-up satellite tiles (Web Mercator, keyless, CORS-enabled): Esri World Imagery — sub-metre imagery in most cities. */
+  const TILES = {
+    url: (x, y, l) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${l}/${y}/${x}`,
+    maxLevel: 19,
+    on: 0.4, off: 0.55, // altitude (globe radii) at which the globe switches to / from tiles
+    attribution: 'Close-up imagery: Esri, Maxar, Earthstar Geographics and the GIS User Community'
   };
   const CATS = { nature: 'Nature & wildlife', city: 'Cities & streets', mountain: 'Mountains & snow', beach: 'Beaches & coasts', transport: 'Traffic & transport', weather: 'Weather', landmark: 'Landmarks' };
   const CAT_COLOR = { nature: '#4ade80', city: '#f6c35b', mountain: '#e2e8f0', beach: '#38bdf8', transport: '#fb923c', weather: '#a78bfa', landmark: '#f472b6' };
@@ -238,7 +245,7 @@
     cams: [], byId: new Map(), provState: {}, loaded: false, loading: false, loadedAt: 0,
     favs: new Set(store.get('favs', []) || []), status: new Map(), // camId -> { st, at, note, verifiedAt, capture, published, retrieved, next }
     filter: store.get('filter', 'all'), statusFilter: store.get('statusFilter', 'any'), query: '',
-    prefs: Object.assign({ shading: true, lights: true, terminator: true, atmosphere: true, markers: true, refreshFactor: 1 }, store.get('prefs', {})),
+    prefs: Object.assign({ closeup: true, shading: true, lights: true, terminator: true, atmosphere: true, markers: true, refreshFactor: 1 }, store.get('prefs', {})),
     preview: null, // epoch ms when previewing; null = real time
     sel: null, stats: { imgOk: 0, imgFail: 0, lastImg: 0 }
   };
@@ -345,6 +352,46 @@
   /* ================================================================== */
   /* Globe                                                               */
   /* ================================================================== */
+  const MIN_ALT = 0.00006; // ≈ 380 m above the ground
+  let tilesOn = false;
+  /** Per-view adjustments: tile engine on/off, camera near plane (depth precision), night dimming and city-light fade. */
+  function onPov(pov) {
+    if (!G || !pov) return;
+    const alt = pov.altitude;
+    if (typeof G.globeTileEngineUrl === 'function') {
+      if (!tilesOn && alt < TILES.on && S.prefs.closeup !== false) { tilesOn = true; G.globeTileEngineUrl(TILES.url); }
+      else if (tilesOn && (alt > TILES.off || S.prefs.closeup === false)) { tilesOn = false; G.globeTileEngineUrl(null); }
+      if (tilesOn) {
+        patchTiles();
+        // re-evaluate visible tiles once the camera matrices are current (a programmatic jump can otherwise leave old-level tiles)
+        cancelAnimationFrame(onPov.raf);
+        onPov.raf = requestAnimationFrame(() => { if (tilesOn && tileGroup && typeof tileGroup.updatePov === 'function') { const cam = G.camera(); cam.updateMatrixWorld(); tileGroup.updatePov(cam); patchTiles(); } });
+      }
+    }
+    const cam = G.camera(), near = Math.max(0.0015, Math.min(0.5, alt * 100 * 0.25));
+    if (Math.abs(cam.near - near) / near > 0.2) { cam.near = near; cam.updateProjectionMatrix(); }
+    if (sunU) {
+      const t = Math.max(0, Math.min(1, (Math.log10(alt) + 2.3) / 1.8)); // 0 at alt≈0.005 (~30 km), 1 at alt≈0.3
+      sunU.nightFloor.value = 0.4 - 0.34 * t;
+      sunU.lightsGain.value = Math.max(0, Math.min(1, (Math.log10(alt) + 2) / 1)); // fades out below ~60 km
+    }
+    const attr = M.$('#lwAttr', root);
+    if (attr) attr.textContent = tilesOn ? TILES.attribution : '';
+  }
+  /** Tiles get their own materials as they load; give each the day/night patch. */
+  let tileGroup = null, tilePatchTimer = null;
+  function patchTiles() {
+    if (!tileGroup) {
+      const gm = G.globeMaterial(); let mesh = null;
+      G.scene().traverse(o => { if (o.material === gm) mesh = o; });
+      tileGroup = mesh && mesh.parent ? mesh.parent.children.find(c => c !== mesh) : null;
+      if (!tileGroup) return;
+    }
+    tileGroup.traverse(o => { if (o.isMesh && o.material && !o.material.__lwPatched && o.material.isMeshLambertMaterial) patchMaterial(o.material); });
+    // tiles are created as the view moves; keep patching new ones while close up
+    clearTimeout(tilePatchTimer);
+    if (tilesOn) tilePatchTimer = setTimeout(patchTiles, 400);
+  }
   let root, G = null, fallback = null, globeKind = 'none', sunU = null, clusters = [], cellDeg = 0, rebuildTimer = null;
   function sunNow() { return TE.sunPosition(S.preview != null ? S.preview : Date.now()); }
   function llToVec(lat, lon) { const phi = (90 - lat) * Math.PI / 180, th = (90 - lon) * Math.PI / 180; return { x: Math.sin(phi) * Math.cos(th), y: Math.cos(phi), z: Math.sin(phi) * Math.sin(th) }; }
@@ -365,8 +412,10 @@
         .pointsMerge(true).pointsTransitionDuration(0).pointLat('lat').pointLng('lng').pointAltitude('alt').pointRadius('r').pointColor('color')
         .ringsData([]).ringColor(() => (t) => `rgba(255,198,92,${1 - t})`).ringMaxRadius(2.2).ringPropagationSpeed(2.5).ringRepeatPeriod(900)
         .pathsData([]).pathPoints('pts').pathPointLat(p => p[1]).pathPointLng(p => p[0]).pathColor(() => 'rgba(255,214,120,0.75)').pathStroke(1.2).pathTransitionDuration(0)
-        .onZoom(() => scheduleRebuild());
-      const ctr = G.controls(); ctr.enableDamping = true; ctr.dampingFactor = 0.12; ctr.rotateSpeed = 0.55; ctr.zoomSpeed = 1.4; ctr.minDistance = 101.5; ctr.maxDistance = 700;
+        .onZoom((pov) => { onPov(pov); scheduleRebuild(); });
+      if (typeof G.globeTileEngineMaxLevel === 'function') G.globeTileEngineMaxLevel(TILES.maxLevel);
+      // globe.gl scales rotate/zoom speed with altitude itself; allow zooming to a few hundred metres above the ground
+      const ctr = G.controls(); ctr.enableDamping = true; ctr.dampingFactor = 0.12; ctr.minDistance = 100 + MIN_ALT * 100; ctr.maxDistance = 700;
       const pov = store.get('pov', null);
       G.pointOfView(pov && Number.isFinite(pov.lat) ? pov : { lat: 25, lng: -30, altitude: 2.4 }, 0);
       installShading();
@@ -408,10 +457,38 @@
     } catch (e) { S.imagery = 'three-globe Blue Marble 2048×1024 (NASA GIBS unavailable: ' + e.message + ')'; }
   }
 
+  /**
+   * Day/night shader patch, shared by the globe material and the close-up satellite tiles. Works in world space and derives the
+   * night-map UV from the direction itself, so it applies to any mesh on the sphere. Up close, the night side is only dimmed
+   * (so streets stay visible) and the coarse city-lights map fades out.
+   */
+  function patchMaterial(mat) {
+    if (!mat || mat.__lwPatched) return;
+    mat.__lwPatched = true;
+    mat.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, sunU);
+      shader.vertexShader = 'varying vec3 vObjDir;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vObjDir = normalize((modelMatrix * vec4(position, 1.0)).xyz);');
+      shader.fragmentShader = 'uniform vec3 sunDir;\nuniform sampler2D nightMap;\nuniform float shadeOn;\nuniform float lightsOn;\nuniform float nightFloor;\nuniform float lightsGain;\nvarying vec3 vObjDir;\n' +
+        shader.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  vec3 lwDir = normalize(vObjDir);
+  float sunDot = dot(lwDir, normalize(sunDir));
+  float dayMix = mix(1.0, smoothstep(-0.105, 0.035, sunDot), shadeOn);
+  diffuseColor.rgb *= mix(nightFloor, 1.0, dayMix);
+  // globe.gl axes: y = north; longitude = 90° − atan2(z, x)
+  float lwLng = 1.5707963 - atan(lwDir.z, lwDir.x);
+  vec2 lwUv = vec2(fract(lwLng / 6.2831853 + 0.5), asin(clamp(lwDir.y, -1.0, 1.0)) / 3.1415927 + 0.5);
+  vec3 nightTex = texture2D(nightMap, lwUv).rgb;
+  // the night map also shows moonlit (bluish) land; city lights are the warm, bright pixels, so mask on the red channel
+  float cityMask = smoothstep(0.03, 0.22, nightTex.r); // linear (sRGB-decoded) values
+  totalEmissiveRadiance += (nightTex * cityMask * 2.2 + nightTex * 0.15) * lightsOn * lightsGain * shadeOn * (1.0 - dayMix);`);
+    };
+    mat.needsUpdate = true;
+  }
+
   /** Patch the globe's Phong material: dark night hemisphere, city lights, soft twilight band, driven by the Sun's direction. */
   function installShading() {
     const mat = G.globeMaterial();
-    sunU = { sunDir: { value: { x: 1, y: 0, z: 0 } }, nightMap: { value: null }, shadeOn: { value: S.prefs.shading ? 1 : 0 }, lightsOn: { value: S.prefs.lights ? 1 : 0 } };
+    sunU = { sunDir: { value: { x: 1, y: 0, z: 0 } }, nightMap: { value: null }, shadeOn: { value: S.prefs.shading ? 1 : 0 }, lightsOn: { value: S.prefs.lights ? 1 : 0 }, nightFloor: { value: 0.06 }, lightsGain: { value: 1 } };
     const tryNight = () => {
       if (!mat.map || !mat.map.image) return setTimeout(tryNight, 300);
       const Tex = mat.map.constructor, img = new Image();
@@ -421,21 +498,7 @@
       img.src = CDN.night;
     };
     tryNight();
-    mat.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, sunU);
-      shader.vertexShader = 'varying vec3 vObjDir;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vObjDir = normalize((modelMatrix * vec4(position, 0.0)).xyz); // world space: the globe mesh itself is rotated −90° about y');
-      shader.fragmentShader = 'uniform vec3 sunDir;\nuniform sampler2D nightMap;\nuniform float shadeOn;\nuniform float lightsOn;\nvarying vec3 vObjDir;\n' +
-        shader.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-  float sunDot = dot(normalize(vObjDir), normalize(sunDir));
-  float dayMix = mix(1.0, smoothstep(-0.105, 0.035, sunDot), shadeOn);
-  diffuseColor.rgb *= mix(0.06, 1.0, dayMix);
-  #ifdef USE_MAP
-    vec3 nightTex = texture2D(nightMap, vMapUv).rgb;
-    // the night map also shows moonlit (bluish) land; city lights are the warm, bright pixels, so mask on the red channel
-    float cityMask = smoothstep(0.03, 0.22, nightTex.r); // linear (sRGB-decoded) values
-    totalEmissiveRadiance += (nightTex * cityMask * 2.2 + nightTex * 0.15) * lightsOn * shadeOn * (1.0 - dayMix);
-  #endif`);
-    };
+    patchMaterial(mat);
     mat.needsUpdate = true;
   }
   function updateSun() {
@@ -494,8 +557,8 @@
       const fav = cl.cams.some(x => S.favs.has(x.id));
       const cat = n === 1 ? (cl.cams[0].cats || [])[0] : null;
       cl.color = fav ? '#ffc65c' : live ? '#ff4d6d' : upd ? '#34d399' : allBad ? 'rgba(160,160,170,0.55)' : n > 1 ? '#7dd3fc' : CAT_COLOR[cat] || '#cbd5e1';
-      cl.r = Math.min(1.8, (fine ? 0.14 : 0.32) + Math.sqrt(n) * (fine ? 0.05 : 0.12)) * Math.max(0.22, Math.min(1.1, pov.altitude / 1.5));
-      cl.alt = 0.006; cl.n = n;
+      cl.r = Math.min(1.8, (fine ? 0.14 : 0.32) + Math.sqrt(n) * (fine ? 0.05 : 0.12)) * Math.max(0.0015, Math.min(1.1, pov.altitude / 1.5));
+      cl.alt = Math.min(0.006, pov.altitude * 0.04); cl.n = n;
       return cl;
     });
     if (G) G.pointsData(clusters);
@@ -888,7 +951,7 @@
             <div class="lw-chips" id="lwChips" role="group" aria-label="Camera filters">${FILTERS.map(([k, l]) => `<button data-f="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}</div>
           </div>
           <div class="lw-stage" id="lwStage">
-            <div class="lw-globe" id="lwGlobe"><div class="empty" style="position:absolute;inset:0;display:grid;place-items:center;color:#cbd5e1">Loading the Earth…</div></div>
+            <div class="lw-globe" id="lwGlobe"><div class="empty" style="position:absolute;inset:0;display:grid;place-items:center;color:#cbd5e1">Loading the Earth…</div></div><div class="map-attr lw-attr" id="lwAttr"></div>
             <div class="lw-overlay lw-tl"><span class="lw-clock" id="lwClock"></span></div>
             <div class="lw-overlay lw-tr">
               <button class="icon-btn" id="lwReset" title="Reset view" aria-label="Reset globe view">${M.icon('reset')}</button>
@@ -902,6 +965,7 @@
                 <label class="check"><input type="checkbox" data-p="terminator"> Terminator line</label>
                 <label class="check"><input type="checkbox" data-p="atmosphere"> Atmosphere glow</label>
                 <label class="check"><input type="checkbox" data-p="markers"> Camera markers</label>
+                <label class="check" title="When you zoom in, switch to high-resolution satellite tiles (Esri World Imagery) — close enough to see streets and buildings"><input type="checkbox" data-p="closeup"> Street-level satellite zoom</label>
                 <select class="select" id="lwStatusF" aria-label="Status filter" style="height:32px;font-size:.82rem"><option value="any">Any status</option><option value="verified">Verified live / updating only</option><option value="hidebad">Hide stale & offline</option></select>
                 <hr class="sep" style="margin:4px 0">
                 <label class="check"><input type="checkbox" id="lwPrevOn"> Preview another time</label>
@@ -928,7 +992,7 @@
     M.$('#lwChips', el).addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (!b) return; S.filter = b.dataset.f; store.set('filter', S.filter); M.$$('#lwChips [data-f]', el).forEach(x => x.setAttribute('aria-pressed', String(x === b))); rebuildMarkers(true); renderList(); });
     const sf = M.$('#lwStatusF', el); sf.value = S.statusFilter; sf.onchange = () => { S.statusFilter = sf.value; store.set('statusFilter', S.statusFilter); rebuildMarkers(true); renderList(); };
     // layer toggles
-    M.$$('[data-p]', el).forEach(i => { i.checked = !!S.prefs[i.dataset.p]; i.onchange = () => { S.prefs[i.dataset.p] = i.checked; store.set('prefs', S.prefs); if (i.dataset.p === 'atmosphere' && G) G.showAtmosphere(i.checked); if (i.dataset.p === 'markers') rebuildMarkers(true); updateSun(); }; });
+    M.$$('[data-p]', el).forEach(i => { i.checked = !!S.prefs[i.dataset.p]; i.onchange = () => { S.prefs[i.dataset.p] = i.checked; store.set('prefs', S.prefs); if (i.dataset.p === 'atmosphere' && G) G.showAtmosphere(i.checked); if (i.dataset.p === 'markers') rebuildMarkers(true); if (i.dataset.p === 'closeup' && G) onPov(G.pointOfView()); updateSun(); }; });
     // time preview
     const pOn = M.$('#lwPrevOn', el), pBox = M.$('#lwPrevBox', el), pDT = M.$('#lwPrevDT', el), pSl = M.$('#lwPrevSlide', el);
     const toLocalInput = (ms) => { const w = TE.toZoned(M.localZone(), ms); return `${TE.isoDate(w)}T${TE.pad(w.h)}:${TE.pad(w.mi)}`; };
@@ -939,8 +1003,8 @@
     M.$('#lwPrevNow', el).onclick = () => { pOn.checked = false; pBox.hidden = true; S.preview = null; updateSun(); };
     // globe buttons
     M.$('#lwReset', el).onclick = () => { store.del('pov'); flyTo(25, -30, 2.4, 1000); };
-    M.$('#lwZoomIn', el).onclick = () => { const p = G ? G.pointOfView() : fallback && fallback.pov(); if (p) flyTo(p.lat, p.lng, Math.max(0.05, p.altitude * 0.6), 500); };
-    M.$('#lwZoomOut', el).onclick = () => { const p = G ? G.pointOfView() : fallback && fallback.pov(); if (p) flyTo(p.lat, p.lng, Math.min(4, p.altitude * 1.6), 500); };
+    M.$('#lwZoomIn', el).onclick = () => { const p = G ? G.pointOfView() : fallback && fallback.pov(); if (p) flyTo(p.lat, p.lng, Math.max(G ? MIN_ALT : 0.08, p.altitude * 0.45), 500); };
+    M.$('#lwZoomOut', el).onclick = () => { const p = G ? G.pointOfView() : fallback && fallback.pov(); if (p) flyTo(p.lat, p.lng, Math.min(4, p.altitude * 2.2), 500); };
     // search
     const q = M.$('#lwQ', el), res = M.$('#lwResults', el);
     let items = [], active = 0;
