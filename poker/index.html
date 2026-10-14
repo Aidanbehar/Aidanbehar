@@ -2579,6 +2579,21 @@ const Prefs = {
   get(k, d) { try { const v = localStorage.getItem('feltroom.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem('feltroom.' + k, JSON.stringify(v)); } catch { /* private mode */ } },
   del(k) { try { localStorage.removeItem('feltroom.' + k); } catch { /* ignore */ } },
+  /** Everything this site has stored in this browser, grouped for the "Clear my data" dialog. */
+  summary() {
+    const keys = Prefs.keys();
+    const has = (p) => keys.filter((k) => k.startsWith(p)).length;
+    return { name: Prefs.get('name', ''), settings: has('lastSettings'), tokens: has('token.'), records: has('record.') + has('viewer'), total: keys.length };
+  },
+  keys() {
+    try { return Object.keys(localStorage).filter((k) => k.startsWith('feltroom.')).map((k) => k.slice(9)); } catch { return []; }
+  },
+  /** Wipe saved names, settings, rejoin links and records; optionally keep display preferences. */
+  wipe(keepDisplay) {
+    const display = ['theme', 'muted', 'fourColor', 'panelOpen', 'vSpeed'];
+    for (const k of Prefs.keys()) if (!(keepDisplay && display.includes(k))) Prefs.del(k);
+    try { sessionStorage.removeItem('feltroom.active'); } catch { /* ignore */ }
+  },
 };
 
 /** Drop-in stand-in for the parts of the PeerJS API we use, over BroadcastChannel (same browser only). */
@@ -3811,11 +3826,38 @@ function HomeScreen() {
       </div>
       <div class="pill-row"><span class="pill">100% free</span><span class="pill">No sign-up</span><span class="pill">Peer-to-peer</span><span class="pill">Provably fair shuffle</span><span class="pill">No ads or tracking</span></div>
     </div></section>
-    <footer class="home-foot">The host's browser shuffles and deals. Cards travel directly between players; nothing is stored on a server.</footer>
+    <footer class="home-foot">The host's browser shuffles and deals. Cards travel directly between players; nothing is stored on a server.
+      <div style="margin-top:10px"><button class="btn sm ghost" id="h-wipe">${icon('x')}Clear my data on this device</button></div></footer>
   </div></div>`;
   bindThemeToggles(App.root);
   $$('[data-go]', App.root).forEach((b) => b.addEventListener('click', () => { location.hash = b.dataset.go; }));
+  $('#h-wipe').addEventListener('click', wipeModal);
   return {};
+}
+
+/** Lets a player erase everything Feltroom remembers in this browser. */
+function wipeModal() {
+  const s = Prefs.summary();
+  const items = [
+    s.name ? `Your saved name (<b>${U.esc(s.name)}</b>)` : 'Your saved name',
+    'Your last table settings',
+    `Links that let you rejoin a game in your old seat${s.tokens ? ` (${s.tokens})` : ''}`,
+    `Saved game records and the viewer's last record${s.records ? ` (${s.records})` : ''}`,
+  ];
+  const m = openModal(`<h2>Clear my data</h2>
+    <p class="muted" style="margin-top:0">Feltroom keeps a few things in this browser only. Nothing is stored on any server. Clearing removes:</p>
+    <ul style="margin:0 0 12px;padding-left:20px;line-height:1.7">${items.map((x) => `<li>${x}</li>`).join('')}</ul>
+    <label class="check"><input type="checkbox" id="w-display" checked> Keep my display preferences (theme, sound, card colours)</label>
+    <p class="hint">Copy any game records you want to keep first. This cannot be undone.</p>
+    <div class="modal-foot"><button class="btn" data-close>Cancel</button><button class="btn danger" id="w-go">Clear my data</button></div>`, { label: 'Clear my data' });
+  $('#w-go', m.el).addEventListener('click', () => {
+    if (App.session) { try { App.session.leave(); } catch { /* ignore */ } App.session = null; }
+    Prefs.wipe($('#w-display', m.el).checked);
+    m.close();
+    Theme.apply();
+    toast('Your data on this device has been cleared.', 'success');
+    route(true);
+  });
 }
 
 /* ---------- Host setup ---------- */
@@ -3837,7 +3879,7 @@ function HostSetupScreen() {
         </section>
         <section class="card-ui setup-section"><h3>Table</h3>
           <label class="field"><span>Table name</span><input class="input" name="tableName" maxlength="40" value="${U.esc(d.tableName)}" required></label>
-          <label class="field"><span>Your display name</span><input class="input" name="name" maxlength="18" value="${U.esc(d.name)}" placeholder="e.g. Alice" required autocomplete="nickname"></label>
+          <label class="field"><span>Your display name</span><input class="input" name="name" maxlength="18" value="${U.esc(d.name)}" placeholder="e.g. Alice" required autocomplete="off"></label>
           <div class="field"><span>Max seats</span>${seg('maxSeats', [2, 3, 4, 5, 6, 7, 8, 9].map((n) => [n, n]), d.maxSeats)}</div>
         </section>
         <section class="card-ui setup-section"><h3>Stakes</h3>
@@ -3946,7 +3988,7 @@ function JoinScreen(hostId) {
         <h2>You're invited to a poker game</h2>
         <p class="muted" style="margin:0">No account needed. Pick a name and you're at the table.</p>
         ${rejoinName ? `<button type="button" class="btn primary lg" id="j-rejoin">Rejoin as ${U.esc(rejoinName)}</button><div class="hint">or join as a new player:</div>` : ''}
-        <label class="field" style="text-align:left"><span>Your name</span><input class="input" name="name" maxlength="18" value="${rejoinName ? '' : U.esc(saved)}" placeholder="e.g. Bob" autocomplete="nickname" required></label>
+        <label class="field" style="text-align:left"><span>Your name</span><input class="input" name="name" maxlength="18" value="${rejoinName ? '' : U.esc(saved)}" placeholder="e.g. Bob" autocomplete="off" required></label>
         <div id="join-err" class="err-box hidden" role="alert"></div>
         <button class="btn ${rejoinName ? '' : 'primary'} lg">${rejoinName ? 'Join as new player' : 'Join game'}</button>
         <p class="hint" style="margin:0">Game <code>${U.esc(hostId)}</code> · Peer-to-peer via the free PeerJS broker</p>

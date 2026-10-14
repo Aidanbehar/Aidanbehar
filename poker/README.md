@@ -129,6 +129,9 @@ test suite and lists pass/fail results. The suite covers:
   connection, reopening the link reclaims the same seat and stack. If a disconnected player is
   first to act, the timer checks or folds for them when it runs out. With the timer off, they get a
   30-second grace period.
+- **Clear my data:** the home screen has a **Clear my data on this device** button. It removes your
+  saved name, last table settings, rejoin links and saved game records. You can choose to keep or
+  reset your display preferences. Name boxes also tell the browser not to remember past entries.
 - **If the host leaves:** everyone sees *"Host left, game ended"* and can still copy, download or
   replay their record up to that point. Records are also saved in each player's browser.
 - **Keyboard shortcuts:**
