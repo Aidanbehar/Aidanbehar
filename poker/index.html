@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-qaseCn86f2kYDB22/xT5NzCWDHhaI9tHyZ/YsviNBhY=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-oXdKT06qpfx7+DMeR+EQ2aYtJ4GC5ANBDd5gihLCris=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -189,7 +189,7 @@ textarea.input { height: auto; padding: 12px; resize: vertical; font: 13px/1.5 u
 .hero-felt { width: 220px; height: 120px; margin: 0 auto; position: relative; }
 .hero-felt .mini-table { position: absolute; inset: 10px 0; border-radius: 999px; background: radial-gradient(ellipse at 50% 40%, var(--felt-1), var(--felt-2) 60%, var(--felt-3)); box-shadow: 0 0 0 8px var(--rail-1), 0 0 0 10px var(--rail-2), 0 18px 40px rgba(0,0,0,.4); }
 .hero-felt .card { position: absolute; top: 34px; }
-.home-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 36px auto 0; max-width: 900px; width: 100%; }
+.home-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 36px auto 0; max-width: 820px; width: 100%; }
 @media (max-width: 900px) { .home-actions { grid-template-columns: 1fr; max-width: 520px; } }
 .big-choice { text-align: left; padding: 22px; border-radius: 18px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; display: flex; flex-direction: column; gap: 8px; transition: transform .15s, border-color .15s, box-shadow .15s; color: var(--text); }
 .big-choice:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: var(--shadow-2); }
@@ -556,6 +556,68 @@ pre.hand-text { white-space: pre-wrap; word-break: break-word; font: 12.5px/1.6 
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 }
 @media (forced-colors: active) { .card { border: 1px solid CanvasText; } .seat.active .plate { outline: 3px solid Highlight; } }
+
+/* =====================================================================
+   LEARN
+   ===================================================================== */
+.learn { max-width: 860px; }
+.lbody { line-height: 1.6; }
+.lbody p { margin: 10px 0; }
+.lbody code, .lform code { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.crow { display: inline-flex; gap: 4px; vertical-align: middle; flex-wrap: wrap; margin: 2px 2px; }
+.lrule { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin: 14px 0; border-radius: 12px; background: var(--accent-soft); border-left: 4px solid var(--accent); }
+.lrule > b { color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: .08em; padding-top: 3px; flex: none; }
+.lform { margin: 12px 0; padding: 10px 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 2px; overflow-x: auto; }
+.lform code { color: var(--text); font-size: 14px; white-space: pre-wrap; }
+.lform span { font-size: 12px; color: var(--text-3); }
+.lex { margin: 14px 0; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border-soft); box-shadow: var(--shadow-1); }
+.lex-t { font-weight: 700; display: flex; gap: 6px; align-items: center; color: var(--info); font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+.lex-t svg { width: 14px; height: 14px; }
+.ltip { margin: 14px 0; padding: 10px 14px; border-radius: 12px; border: 1px dashed var(--border); color: var(--text-2); font-size: 14px; }
+.ltip b { color: var(--warn); margin-right: 4px; }
+.lhand { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 8px 0; }
+.lhand > b { min-width: 44px; }
+.lres { font-weight: 700; }
+.lbest { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-3); }
+.ltable-wrap { overflow-x: auto; margin: 12px 0; }
+.ltable { border-collapse: collapse; width: 100%; font-size: 14px; }
+.ltable th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.ltable td { padding: 7px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; font-variant-numeric: tabular-nums; }
+.lsteps { padding-left: 20px; } .lsteps li { margin: 6px 0; }
+.lquiz { padding: 16px 18px; margin: 22px 0 8px; }
+.lquiz h3 { margin: 0 0 6px; display: flex; gap: 8px; align-items: center; }
+.lq { padding: 8px 0; border-top: 1px solid var(--border-soft); }
+.lq:first-of-type { border-top: 0; }
+.lopts { display: flex; flex-wrap: wrap; gap: 8px; }
+.lwhy { margin-top: 8px; font-size: 14px; color: var(--text-2); }
+.ok-text { color: var(--accent); } .err-text { color: var(--danger); }
+.lnav { display: flex; justify-content: space-between; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+.lnav .btn svg { width: 16px; height: 16px; }
+.lnav .btn { white-space: normal; height: auto; min-height: 40px; padding-top: 8px; padding-bottom: 8px; max-width: calc(50% - 5px); text-align: left; }
+.lnav .btn svg { flex: none; }
+a.btn { text-decoration: none; }
+.lprog { display: flex; align-items: center; gap: 12px; margin: 6px 0 18px; font-size: 13px; color: var(--text-2); }
+.lprog-bar { flex: 1; height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.lprog-bar span { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.lchap { margin: 18px 0; }
+.lchap h3 { display: flex; gap: 10px; align-items: center; margin: 0; }
+.lchap .hint { margin: 4px 0 10px; font-size: 13px; }
+.lnum { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 14px; }
+.llist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 640px) { .llist { grid-template-columns: 1fr; } }
+.litem { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-soft); color: var(--text); text-decoration: none; }
+.litem:hover { border-color: var(--accent); }
+.litem > span:nth-child(2) { flex: 1; }
+.litem svg { width: 16px; height: 16px; color: var(--text-3); }
+.lcheck { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); display: grid; place-items: center; flex: none; }
+.litem.done .lcheck { background: var(--accent); border-color: var(--accent); }
+.litem.done .lcheck svg { color: var(--accent-ink); width: 12px; height: 12px; }
+.ltools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 760px) { .ltools { grid-template-columns: 1fr; } }
+.ltool { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.ltool h4 { margin: 0; display: flex; gap: 8px; align-items: center; }
+.ltool h4 svg { width: 18px; height: 18px; color: var(--accent); }
+.lout { font-size: 14px; line-height: 1.6; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); min-height: 44px; }
 </style>
 </head>
 <body>
@@ -1743,6 +1805,421 @@ const Bots = (() => {
 })();
 
 /* =====================================================================
+   3d. ENCRYPTED DEAL ("mental poker" with commutative encryption)
+   With this on, no device ever holds the deck in the clear: not the
+   host's, not anyone's. Each card is a number that every player locks with
+   their own secret key. Locks commute (x^(a·b) = x^(b·a)), so they can come
+   off in any order, and a card is readable only once every lock is off.
+
+   1. Shuffle: in turn, each player locks all 52 cards with one secret key
+      and shuffles them. The host's own seat goes last.
+   2. Re-lock: in turn, each player removes that shuffle lock (with a
+      zero-knowledge proof that they removed exactly it) and puts a separate
+      lock on every card position, publishing the before/after values.
+   3. Deal: everybody gives out their keys for the other players' hole-card
+      positions, never for their own. Only you hold the last key to your
+      cards, so only your browser can read them. Board cards are unlocked
+      street by street with everyone's keys; a hand at showdown by its owner.
+   Every key anyone gives out is checked against that player's published
+   before/after values, so a wrong or doctored key is caught and named.
+   Players hand out keys; they never decrypt values someone else supplies,
+   so no message can trick a browser into unlocking its own cards.
+
+   Group: the 2048-bit safe prime of RFC 3526 (group 14), working in the
+   subgroup of squares (prime order q). Cards are hashed into that subgroup.
+   ===================================================================== */
+const SRA = (() => {
+  const P = BigInt('0x' +
+    'FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF');
+  const Q = (P - 1n) >> 1n;
+  const G = 4n; // a square, so it generates the order-q subgroup
+
+  function modPow(b, e, m = P) {
+    let r = 1n;
+    b %= m;
+    while (e > 0n) { if (e & 1n) r = (r * b) % m; b = (b * b) % m; e >>= 1n; }
+    return r;
+  }
+  function inverse(a, m) {
+    let [r0, r1] = [((a % m) + m) % m, m], [s0, s1] = [1n, 0n];
+    while (r1) { const k = r0 / r1; [r0, r1] = [r1, r0 - k * r1]; [s0, s1] = [s1, s0 - k * s1]; }
+    if (r0 !== 1n) throw new Error('not invertible');
+    return ((s0 % m) + m) % m;
+  }
+  function randBits(bits) {
+    const bytes = new Uint8Array(Math.ceil(bits / 8));
+    crypto.getRandomValues(bytes);
+    let x = 0n;
+    for (const b of bytes) x = (x << 8n) | BigInt(b);
+    return x;
+  }
+  const hex = (x) => x.toString(16);
+  const big = (h) => BigInt('0x' + h);
+  /** A group element from the wire: lowercase hex with 1 < x < p (optionally checked to be a square), else null. */
+  function el(h, square = false) {
+    if (typeof h !== 'string' || !/^[0-9a-f]{1,512}$/.test(h)) return null;
+    const x = big(h);
+    if (!(x > 1n && x < P)) return null;
+    return square && modPow(x, Q) !== 1n ? null : x;
+  }
+  /** A per-position locking exponent from the wire (at most 256 bits, odd). */
+  const exp = (h) => (typeof h === 'string' && /^[0-9a-f]{1,64}$/.test(h) && (big(h) & 1n) === 1n ? big(h) : null);
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  // Each card becomes a square mod p: SHA-256 in counter mode, reduced, squared.
+  const CARD_EL = new Map(), EL_CARD = new Map();
+  for (const c of Cards.newDeck()) {
+    let h = '';
+    for (let i = 0; h.length < 600; i++) h += Fair.sha256(`feltroom-card-v1|${c}|${i}`);
+    const x = big(h) % P;
+    const m = (x * x) % P;
+    CARD_EL.set(c, m); EL_CARD.set(hex(m), c);
+  }
+  const decode = (x) => EL_CARD.get(hex(x)) || null;
+  const plainDeck = () => Cards.newDeck().map((c) => hex(CARD_EL.get(c)));
+
+  /** A lock key: a short (fast) odd exponent e, and its inverse d mod q to unlock. */
+  function keygen() {
+    const e = randBits(256) | 1n;
+    return { e, d: inverse(e, Q) };
+  }
+
+  /** Where the cards go: hole card r of player k, then the five board cards (positions 0..K-1 of the deck). */
+  const layout = (n, hc) => ({
+    n, hc, K: n * hc + 5,
+    board: (i) => n * hc + i,
+    own: (k) => Array.from({ length: hc }, (_, r) => r * n + k),
+  });
+
+  /** Fiat–Shamir weights for the batch proof (128 bits each). */
+  function weights(ctx, ins, mids) {
+    const seed = Fair.sha256([ctx, ins.join(','), mids.join(',')].join('|'));
+    return ins.map((_, i) => big(Fair.sha256(seed + '|' + i).slice(0, 32)));
+  }
+  const challenge = (...parts) => big(Fair.sha256(parts.join('|')));
+  /**
+   * Batch Chaum–Pedersen proof that every mid[i] = in[i]^d, i.e. in[i] = mid[i]^e, for the e behind y = G^e.
+   * Positions are combined with random weights: A = Π in^w, B = Π mid^w; then it proves log_G(y) = log_B(A).
+   */
+  async function proveStrip(ctx, ins, mids, key) {
+    const w = weights(ctx, ins, mids);
+    let B = 1n;
+    for (let i = 0; i < mids.length; i++) { B = (B * modPow(big(mids[i]), w[i])) % P; if (i % 8 === 7) await tick(); }
+    const y = modPow(G, key.e), r = randBits(256 + 256 + 128);
+    const t1 = modPow(G, r), t2 = modPow(B, r);
+    const c = challenge(ctx, hex(y), hex(B), hex(t1), hex(t2));
+    return { t1: hex(t1), t2: hex(t2), s: hex(r + c * key.e) };
+  }
+  async function verifyStrip(ctx, ins, mids, yHex, pr) {
+    const y = el(yHex);
+    if (!y || !pr || ins.length !== mids.length) return false;
+    const t1 = el(pr.t1), t2 = el(pr.t2);
+    if (!t1 || !t2 || typeof pr.s !== 'string' || !/^[0-9a-f]{1,200}$/.test(pr.s)) return false;
+    const w = weights(ctx, ins, mids);
+    let A = 1n, B = 1n;
+    for (let i = 0; i < ins.length; i++) {
+      A = (A * modPow(big(ins[i]), w[i])) % P;
+      B = (B * modPow(big(mids[i]), w[i])) % P;
+      if (i % 6 === 5) await tick();
+    }
+    const s = big(pr.s);
+    const c = challenge(ctx, hex(y), hex(B), hex(t1), hex(t2));
+    return modPow(G, s) === (t1 * modPow(y, c)) % P && modPow(B, s) === (t2 * modPow(A, c)) % P;
+  }
+  /** Is e really this player's lock on this position (mid^e = out)? */
+  const keyFits = (midHex, outHex, eHex) => { const m = el(midHex), o = el(outHex), e = exp(eHex); return !!(m && o && e) && modPow(m, e) === o; };
+  /** Unlock a position with every player's lock exponent for it: one inverse and one exponentiation. */
+  function open(cHex, eHexes) {
+    const c = el(cHex);
+    if (!c || !Array.isArray(eHexes) || !eHexes.length) return null;
+    let E = 1n;
+    for (const h of eHexes) { const e = exp(h); if (!e) return null; E = (E * e) % Q; }
+    return decode(modPow(c, inverse(E, Q)));
+  }
+  const validDeck = (arr, len) => Array.isArray(arr) && arr.length === len && arr.every((h) => el(h)) && new Set(arr).size === len;
+  /** Shuffle order for a hand: the dealing order with the host's seat moved to the end. */
+  const shuffleOrder = (order, hostName) => order.filter((x) => x !== hostName).concat(order.includes(hostName) ? [hostName] : []);
+
+  return { P, Q, G, modPow, el, exp, hex, big, tick, decode, plainDeck, keygen, layout, proveStrip, verifyStrip, keyFits, open, validDeck, shuffleOrder };
+})();
+
+/**
+ * One player's side of the encrypted deal: holds this player's secret keys and cards and answers the
+ * dealer. Whatever it is asked, it never gives out the keys to its own hole cards (only when its owner
+ * shows), and gives a board card's key only once the hand has reached that street. It checks every key
+ * it is given against the published re-lock steps. Async: the maths takes a moment, so it yields often.
+ */
+class SraPlayer {
+  constructor(name, store) {
+    this.name = name;
+    this.store = store || null; // optional {get, set, getOwn, setOwn}: survives a page refresh
+    this.hands = Object.create(null);
+    this.ownLog = (this.store && this.store.getOwn && this.store.getOwn()) || {}; // hand no -> our cards (for the record)
+  }
+  _ok(no) { return Number.isInteger(no) && no > 0 && no < 1e9; }
+  _hand(no, create) {
+    if (this.hands[no]) return this.hands[no];
+    const saved = this.store && this.store.get(no);
+    if (!saved && !create) return null;
+    const f = { no, steps: [], problems: [] };
+    if (saved && saved.n) {
+      Object.assign(f, { n: saved.n, hc: saved.hc, me: saved.me, order: saved.order, game: saved.game, e: saved.e, own: saved.own, C: saved.C, ck: saved.ck, seen: saved.seen || {} });
+      f.L = SRA.layout(f.n, f.hc);
+    }
+    this.hands[no] = f;
+    const nos = Object.keys(this.hands).map(Number).sort((a, b) => a - b);
+    while (nos.length > 4) delete this.hands[nos.shift()];
+    return f;
+  }
+  _save(f) {
+    if (this.store && f.C) this.store.set(f.no, { n: f.n, hc: f.hc, me: f.me, order: f.order, game: f.game, e: f.e, own: f.own || null, C: f.C, ck: f.ck, seen: f.seen || {} });
+  }
+  _bad(f, why) { if (!f.problems.includes(why)) f.problems.push(why); return { t: 'sraBad', no: f.no, why }; }
+  /** Check a player's key for a position against their published re-lock step. */
+  _fits(f, k, pos, e) { const c = f.ck && f.ck[pos]; return !!c && Array.isArray(c[k]) && SRA.keyFits(c[k][0], c[k][1], e); }
+
+  /**
+   * Handle a dealer message; resolves to the reply to send (or null).
+   * ctx: { view: latest table view, recordAll: bool, onProblem(no, why) }
+   */
+  async handle(m, ctx = {}) {
+    if (!m || typeof m !== 'object' || !this._ok(m.no)) return null;
+    const r = await this._handle(m, ctx);
+    if (r && r.t === 'sraBad' && ctx.onProblem) ctx.onProblem(m.no, r.why);
+    return r;
+  }
+  async _handle(m, ctx) {
+    const v = ctx.view;
+    switch (m.t) {
+      // 1. Lock every card with our shuffle key and shuffle.
+      case 'sraShuf': {
+        const order = Array.isArray(m.order) ? m.order.map(String) : [];
+        const hc = m.hc, k = order.indexOf(this.name);
+        if (![2, 4, 5].includes(hc) || order.length < 2 || order.length > 9 || new Set(order).size !== order.length || k < 0) return null;
+        const f = this._hand(m.no, true);
+        if (f.key || f.C) return null; // once per hand (also after a refresh)
+        if (!SRA.validDeck(m.deck, 52)) return this._bad(f, 'The deck sent for shuffling was not 52 different locked cards.');
+        // The first to shuffle starts from the open deck: check it really is one of each card.
+        const seq = SRA.shuffleOrder(order, v ? v.hostName : null);
+        if (seq[0] === this.name) { const plain = new Set(SRA.plainDeck()); if (!m.deck.every((x) => plain.has(x))) return this._bad(f, 'The starting deck was not a normal 52-card deck.'); }
+        Object.assign(f, { order, n: order.length, hc, me: k, game: m.game === 'omaha' ? 'omaha' : 'holdem', L: SRA.layout(order.length, hc) });
+        f.key = SRA.keygen();
+        const out = [];
+        for (let i = 0; i < 52; i++) { out.push(SRA.hex(SRA.modPow(SRA.big(m.deck[i]), f.key.e))); if (i % 13 === 12) await SRA.tick(); }
+        return { t: 'sraShufR', no: m.no, deck: Cards.shuffle(out), y: SRA.hex(SRA.modPow(SRA.G, f.key.e)) };
+      }
+      // 2. Remove our shuffle lock (proven) and put a separate lock on each position.
+      case 'sraLock': {
+        const f = this.hands[m.no];
+        if (!f || !f.key || f.locked || f.C) return null;
+        f.locked = true; // once per hand
+        if (!SRA.validDeck(m.items, f.L.K)) return this._bad(f, 'The deck sent for re-locking was malformed or had a repeated card.');
+        f.inp = m.items.slice();
+        const mid = [], out = [], e = [];
+        for (let i = 0; i < f.L.K; i++) {
+          const x = SRA.modPow(SRA.big(m.items[i]), f.key.d);
+          const ck = SRA.keygen();
+          mid.push(SRA.hex(x)); out.push(SRA.hex(SRA.modPow(x, ck.e))); e.push(SRA.hex(ck.e));
+          if (i % 3 === 2) await SRA.tick();
+        }
+        f.mid = mid; f.out = out; f.e = e;
+        const proof = await SRA.proveStrip(`${m.no}|${f.me}`, f.inp, mid, f.key);
+        return { t: 'sraLockR', no: m.no, mid, out, proof };
+      }
+      // The dealer forwards everyone's re-lock steps so each browser can check the whole chain itself.
+      case 'sraStep': {
+        const f = this.hands[m.no];
+        if (!f || !f.L || !Number.isInteger(m.k) || m.k < 0 || m.k >= f.n || f.steps[m.k]) return null;
+        f.steps[m.k] = { y: m.y, inp: m.inp, mid: m.mid, out: m.out, proof: m.proof };
+        return null;
+      }
+      // 3. Everyone has re-locked: verify the chain, then give out our keys to the other players' hole cards.
+      case 'sraDealt': {
+        const f = this.hands[m.no];
+        if (!f || !f.e || f.C) return null;
+        const K = f.L.K;
+        for (let k = 0; k < f.n; k++) {
+          const s = f.steps[k];
+          if (!s) return this._bad(f, 'Part of the encrypted deal is missing.');
+          const inp = k === 0 ? s.inp : f.steps[k - 1].out;
+          if (!SRA.validDeck(inp, K) || !SRA.validDeck(s.mid, K) || !SRA.validDeck(s.out, K)) return this._bad(f, 'Part of the encrypted deal was malformed.');
+          if (k === f.me && (inp.join() !== f.inp.join() || s.mid.join() !== f.mid.join() || s.out.join() !== f.out.join())) return this._bad(f, 'Your own step of the encrypted deal was altered.');
+          if (!(await SRA.verifyStrip(`${m.no}|${k}`, inp, s.mid, s.y, s.proof))) return this._bad(f, `${f.order[k]}'s step of the encrypted deal did not prove correct.`);
+        }
+        f.C = f.steps[f.n - 1].out.slice();
+        // Keep every player's before/after value at each position, to check the keys they give out later.
+        f.ck = Array.from({ length: K }, (_, pos) => f.steps.map((s) => [s.mid[pos], s.out[pos]]));
+        f.steps = []; f.inp = null; f.mid = null; f.out = null; // free memory
+        const keys = [];
+        for (let k = 0; k < f.n; k++) if (k !== f.me) for (const pos of f.L.own(k)) keys.push({ pos, e: f.e[pos] });
+        this._save(f);
+        return { t: 'sraKeys', no: m.no, keys };
+      }
+      // Our hole cards: everyone else's keys for our positions, checked one by one, plus our own.
+      case 'sraHole': {
+        const f = this.hands[m.no];
+        if (!f || !f.C || f.own) return null;
+        const own = [];
+        for (const pos of f.L.own(f.me)) {
+          const ks = m.keys && Array.isArray(m.keys[pos]) ? m.keys[pos] : [];
+          const es = [];
+          for (let k = 0; k < f.n; k++) {
+            if (k === f.me) continue;
+            const it = ks.find((x) => x && x.k === k);
+            if (!it) return this._bad(f, `${f.order[k]}'s key for one of your hole cards is missing.`);
+            if (!this._fits(f, k, pos, it.e)) return this._bad(f, `${f.order[k]} sent a wrong key for one of your hole cards.`);
+            es.push(it.e);
+          }
+          const c = SRA.open(f.C[pos], [...es, f.e[pos]]);
+          if (!c || own.includes(c)) return this._bad(f, 'Your hole cards did not unlock to real cards: the shuffle was tampered with.');
+          own.push(c);
+        }
+        f.own = own;
+        this.ownLog[m.no] = own;
+        if (this.store && this.store.setOwn) this.store.setOwn(this.ownLog);
+        this._save(f);
+        return { t: 'sraOwnOk', no: m.no };
+      }
+      // A board card: release our key once the hand has reached that street.
+      case 'sraBoard': {
+        const f = this.hands[m.no] || this._hand(m.no);
+        if (!f || !f.C || !Array.isArray(m.idx)) return null;
+        const idx = m.idx.filter((i) => Number.isInteger(i) && i >= 0 && i < 5);
+        if (!idx.length || !this.boardAllowed(f, idx, v)) return null;
+        return { t: 'sraKeys', no: m.no, keys: idx.map((i) => ({ pos: f.L.board(i), e: f.e[f.L.board(i)] })) };
+      }
+      // Showdown: show (give out our own keys) or muck.
+      case 'sraSd': {
+        const f = this.hands[m.no] || this._hand(m.no);
+        if (!f || !f.own) return { t: 'sraMuck', no: m.no };
+        if (!this.showdownAllowed(f, v)) return null;
+        if (!m.must && m.autoMuck !== false && this.beaten(f, m)) return { t: 'sraMuck', no: m.no };
+        return this.reveal(m.no);
+      }
+      // The dealer forwards the keys behind every public card so each browser can unlock and check it itself.
+      case 'sraReveal': {
+        const f = this.hands[m.no] || this._hand(m.no);
+        if (!f || !f.C || !Array.isArray(m.items)) return null;
+        f.seen = f.seen || {};
+        for (const it of m.items.slice(0, 60)) {
+          if (!it || !Number.isInteger(it.pos) || it.pos < 0 || it.pos >= f.L.K || f.seen[it.pos] || !Array.isArray(it.keys)) continue;
+          if (it.keys.length !== f.n || new Set(it.keys.map((x) => x && x.k)).size !== f.n) return this._bad(f, 'A card was revealed without every player\'s key.');
+          for (const x of it.keys) if (!this._fits(f, x.k, it.pos, x.e)) return this._bad(f, `${f.order[x.k] || 'Someone'} gave a wrong key for a revealed card.`);
+          const c = SRA.open(f.C[it.pos], it.keys.map((x) => x.e));
+          if (!c) return this._bad(f, 'A revealed card did not unlock to a real card: the shuffle was tampered with.');
+          const mine = f.L.own(f.me).includes(it.pos);
+          if (Object.values(f.seen).includes(c) || (!mine && f.own && f.own.includes(c))) return this._bad(f, `${Cards.pretty(c)} turned up twice: the shuffle was tampered with.`);
+          f.seen[it.pos] = c;
+        }
+        this._save(f);
+        const why = this.check(v);
+        return why ? this._bad(f, why) : null;
+      }
+      // "All cards" tables: every hand goes into the record once it is over.
+      case 'sraRevealAll': {
+        const f = this.hands[m.no] || this._hand(m.no);
+        if (!f || !f.own || !ctx.recordAll || !v || v.handNo < m.no || (v.handNo === m.no && v.phase !== 'done')) return null;
+        return this.reveal(m.no);
+      }
+    }
+    return null;
+  }
+
+  /** A board key goes out only for the live hand, for a street it has reached. */
+  boardAllowed(f, idx, v) {
+    if (!v || v.handNo !== f.no || v.phase !== 'deal') return false;
+    const live = (v.seats || []).filter((s) => s && s.inHand && !s.folded);
+    if (live.filter((s) => !s.allIn).length <= 1) return true; // all-in: the rest of the board comes out now
+    const need = v.board.length === 0 ? 2 : v.board.length; // flop is 0..2, turn 3, river 4
+    return Math.max(...idx) <= need;
+  }
+  /** Our hand is shown only at a real showdown: this hand, five board cards we unlocked ourselves, and we're still in. */
+  showdownAllowed(f, v) {
+    if (!v || v.handNo !== f.no || (v.phase !== 'showdown' && v.phase !== 'done') || v.board.length !== 5) return false;
+    const me = (v.seats || []).find((s) => s && s.isYou);
+    if (!me || me.folded) return false;
+    return [0, 1, 2, 3, 4].every((i) => f.seen && f.seen[f.L.board(i)] === v.board[i]);
+  }
+  /** Compare what the dealer's view shows with the cards we unlocked ourselves. Returns a problem or null. */
+  check(v) {
+    const f = v && this.hands[v.handNo];
+    if (!f || !f.seen || !f.L) return null;
+    for (let i = 0; i < v.board.length; i++) {
+      const c = f.seen[f.L.board(i)];
+      if (c && c !== v.board[i]) return `The board shows ${Cards.pretty(v.board[i])} where the encrypted deck holds ${Cards.pretty(c)}.`;
+    }
+    for (const s of v.seats || []) {
+      if (!s || !s.shown || !Array.isArray(s.cards) || !f.order) continue;
+      const k = f.order.indexOf(s.name);
+      if (k < 0) continue;
+      const pos = f.L.own(k);
+      for (let r = 0; r < pos.length; r++) {
+        const c = f.seen[pos[r]];
+        if (c && s.cards[r] && c !== s.cards[r]) return `${s.name}'s shown cards don't match the encrypted deck.`;
+      }
+    }
+    return null;
+  }
+  /** Muck only when clearly beaten: one pot, and worse than a hand already shown. */
+  beaten(f, m) {
+    const board = Array.isArray(m.board) ? m.board.filter(Cards.isCard) : [];
+    if (board.length !== 5 || m.sidePots || !Array.isArray(m.shown) || !m.shown.length) return false;
+    const mine = Eval.forGame(f.game, f.own, board).score;
+    const shown = m.shown.filter((h) => Array.isArray(h) && h.length === f.hc && h.every(Cards.isCard));
+    return shown.length > 0 && mine < Math.max(...shown.map((h) => Eval.forGame(f.game, h, board).score));
+  }
+  /** Our own keys, so anyone can unlock our hand (showdown or a voluntary show). */
+  reveal(no) {
+    const f = this.hands[no] || this._hand(no);
+    if (!f || !f.own) return null;
+    return { t: 'sraShow', no, keys: f.L.own(f.me).map((pos) => ({ pos, e: f.e[pos] })) };
+  }
+  ownCards(no) {
+    if (Array.isArray(this.ownLog[no])) return this.ownLog[no].slice();
+    const f = this.hands[no] || this._hand(no);
+    return f && f.own ? f.own.slice() : null;
+  }
+
+  /** Put our own cards into a view from the dealer (who never has them). */
+  patchView(v) {
+    if (!v || !v.handNo) return v;
+    const own = this.ownCards(v.handNo);
+    const s = own && (v.seats || []).find((x) => x && x.isYou);
+    if (!s || !s.inHand || !Array.isArray(s.cards) || s.cards.length !== own.length || !s.cards.every((c) => c == null)) return v;
+    s.cards = own;
+    const f = this.hands[v.handNo];
+    if (f && f.game && !(s.folded && v.phase !== 'done')) { try { s.handName = Eval.describe(Eval.forGame(f.game, own, v.board)); } catch { /* ignore */ } }
+    return v;
+  }
+  /** Put our own cards into the dealer's record (it shows them as hidden). */
+  patchRecord(text) {
+    if (!text) return text;
+    try {
+      const g = Notation.parse(text);
+      let changed = false;
+      for (const r of g.hands) {
+        const own = this.ownCards(r.no);
+        if (own && this.name in r.hole && r.hole[this.name] == null && own.length === r.holeCount) { r.hole[this.name] = own; changed = true; }
+      }
+      return changed ? Notation.serialize(g) : text;
+    } catch { return text; }
+  }
+}
+
+/** sessionStorage-backed key store, so a refresh mid-hand doesn't lose your cards (cleared when the tab closes). */
+const SraStore = (tableId, name) => {
+  const key = (x) => `feltroom.sra.${tableId}.${name}.${x}`;
+  return {
+    get(no) { try { return JSON.parse(sessionStorage.getItem(key(no))); } catch { return null; } },
+    set(no, v) {
+      try { sessionStorage.setItem(key(no), JSON.stringify(v)); sessionStorage.removeItem(key(no - 2)); } catch { /* storage full or off: a refresh would lose this hand */ }
+    },
+    getOwn() { try { return JSON.parse(sessionStorage.getItem(key('own'))) || {}; } catch { return {}; } },
+    setOwn(v) { try { sessionStorage.setItem(key('own'), JSON.stringify(v)); } catch { /* ignore */ } },
+  };
+};
+
+/* =====================================================================
    4. RECORD NOTATION  (pure)  -- "PGN for poker", spec in README.md
    GameRecord = { tags:[[key,value]...], hands:[HandRecord] }
    HandRecord = { no, tags:[[k,v]], button, stacks:[[name,stack]], hole:{name:[c,c]|null},
@@ -2600,12 +3077,211 @@ const SEED_WAIT_MS = 2500;     // how long the host waits for each round of shuf
 // Blind levels (multiples of the starting blinds) when "blinds go up every N hands" is on.
 const LEVEL_FACTORS = [1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 80, 100, 150, 200, 300, 500, 800, 1000];
 
+const SRA_REPLY_MS = 30000;    // a connected player's browser has this long to answer an encrypted-deal step
+
+/**
+ * The host's side of the encrypted deal. It only passes locked cards and keys between players: it
+ * never holds anyone's hole cards in readable form. It can read a card only once every player has
+ * given out their key for it (board cards, and hands shown at showdown). Every key is checked
+ * against the giver's published re-lock step as it arrives.
+ */
+class SraDealer {
+  constructor(table, sh) {
+    this.t = table; this.no = sh.no;
+    this.pids = sh.order.slice();
+    this.names = this.pids.map((pid) => sh.names[pid]);
+    this.n = this.pids.length; this.hc = table.holeCount;
+    this.L = SRA.layout(this.n, this.hc);
+    this.keys = Array.from({ length: this.L.K }, () => new Map()); // pos -> Map(player index -> exponent)
+    this.pending = new Map(); // pid -> request awaiting an answer
+    this.cancelled = false;
+    this.failure = null;
+    this.cheat = null;
+  }
+  /** Names of players whose browsers we are waiting on (shown on the table). */
+  waiting() { return [...this.pending.keys()].map((pid) => this.names[this.pids.indexOf(pid)]).filter(Boolean); }
+  /** Send a request and wait for the answer. grace: how long a disconnected player has to come back. */
+  _ask(pid, msg, want, grace = DISCONNECT_GRACE * 1000) {
+    return new Promise((resolve) => {
+      const prev = this.pending.get(pid);
+      if (prev) prev.finish(null);
+      const e = { msg, want, sentAt: Date.now() };
+      e.finish = (r) => { clearInterval(e.timer); if (this.pending.get(pid) === e) this.pending.delete(pid); this.t.changed(); resolve(r); };
+      e.timer = setInterval(() => {
+        const p = this.t.players.get(pid), now = Date.now();
+        if (this.cancelled || !p) return e.finish(null);
+        if (!p.connected) { if (!p.disconnectedAt || now - p.disconnectedAt >= grace) e.finish(null); }
+        else if (now - e.sentAt > SRA_REPLY_MS) e.finish(null);
+      }, 500);
+      this.pending.set(pid, e);
+      this.t.onDirect(pid, msg);
+      this.t.changed();
+    });
+  }
+  /** A player came back: repeat whatever we were waiting on (the first copy may have been lost). */
+  resend(pid) { const e = this.pending.get(pid); if (e) { e.sentAt = Date.now(); this.t.onDirect(pid, e.msg); } }
+  reply(pid, m) {
+    if (m.no !== this.no) return;
+    const k = this.pids.indexOf(pid);
+    if (k < 0) return;
+    if (m.t === 'sraKeys') this._store(k, m.keys);
+    const e = this.pending.get(pid);
+    if (e && e.want.includes(m.t)) e.finish(m);
+  }
+  cancel() { this.cancelled = true; for (const e of [...this.pending.values()]) e.finish(null); }
+  _fail(k, why, sitOut) {
+    const p = this.t.players.get(this.pids[k]);
+    // Someone who simply dropped out is dealt in again when they're back; only a browser that stayed
+    // connected and still failed (or misbehaved) is sat out.
+    if (p && !p.connected) { why = `${this.names[k]} disconnected during the shuffle`; sitOut = false; }
+    this.failure = { pid: this.pids[k], name: this.names[k], why, sitOut: !!sitOut };
+    return false;
+  }
+  _bcast(m) { for (const pid of this.pids) this.t.onDirect(pid, m); }
+  /** Does this player's key really undo their own lock at this position? */
+  _fits(k, pos, e) { return !!this.mids && SRA.keyFits(this.mids[k][pos], this.outs[k][pos], e); }
+  /** Keep the keys a player gave out, but only for other people's positions, and only if they check out. */
+  _store(k, keys) {
+    if (!Array.isArray(keys)) return;
+    const own = this.L.own(k);
+    for (const it of keys.slice(0, this.L.K)) {
+      if (!it || !Number.isInteger(it.pos) || it.pos < 0 || it.pos >= this.L.K || own.includes(it.pos) || this.keys[it.pos].has(k)) continue;
+      if (this._fits(k, it.pos, it.e)) this.keys[it.pos].set(k, it.e);
+      else this.cheat = k;
+    }
+  }
+  _list(pos, extra) { return [...this.keys[pos]].map(([k, e]) => ({ k, e })).concat(extra || []); }
+
+  /** Shuffle, re-lock and hand out hole cards. Resolves true once every player holds their cards. */
+  async setup() {
+    const { no, n, hc, L, pids, names } = this;
+    const game = this.t.gameKind;
+    // Shuffle in dealing order, except that the host's own seat shuffles last.
+    const seq = SRA.shuffleOrder(names, this.t.players.get(this.t.hostPid).name).map((nm) => names.indexOf(nm));
+    let deck = SRA.plainDeck();
+    const ys = [];
+    for (const k of seq) {
+      const r = await this._ask(pids[k], { t: 'sraShuf', no, order: names, hc, game, deck }, ['sraShufR', 'sraBad'], 0);
+      if (this.cancelled) return false;
+      if (!r) return this._fail(k, `${names[k]}'s browser did not shuffle in time`, true);
+      if (r.t === 'sraBad') return this._fail(k, `${names[k]}'s browser rejected the deck (${U.cleanText(r.why, 120)})`);
+      if (!SRA.validDeck(r.deck, 52) || !SRA.el(r.y, true)) return this._fail(k, `${names[k]}'s browser sent back an invalid deck`, true);
+      deck = r.deck; ys[k] = r.y;
+    }
+    let cur = deck.slice(0, L.K);
+    this.mids = []; this.outs = [];
+    for (let k = 0; k < n; k++) {
+      const r = await this._ask(pids[k], { t: 'sraLock', no, items: cur }, ['sraLockR', 'sraBad'], 0);
+      if (this.cancelled) return false;
+      if (!r) return this._fail(k, `${names[k]}'s browser did not answer in time`, true);
+      if (r.t === 'sraBad') return this._fail(k, `${names[k]}'s browser rejected the deck (${U.cleanText(r.why, 120)})`);
+      if (!SRA.validDeck(r.mid, L.K) || !SRA.validDeck(r.out, L.K) || !(await SRA.verifyStrip(`${no}|${k}`, cur, r.mid, ys[k], r.proof))) {
+        return this._fail(k, `${names[k]}'s browser failed the shuffle proof`, true);
+      }
+      this._bcast({ t: 'sraStep', no, k, y: ys[k], inp: k === 0 ? cur : undefined, mid: r.mid, out: r.out, proof: r.proof });
+      this.mids.push(r.mid); this.outs.push(r.out);
+      cur = r.out;
+    }
+    this.C = cur;
+    // Everyone checks the whole chain, then gives out their keys to the other players' hole cards.
+    const rel = await Promise.all(pids.map((pid) => this._ask(pid, { t: 'sraDealt', no }, ['sraKeys', 'sraBad'], 0)));
+    if (this.cancelled) return false;
+    if (this.cheat != null) return this._fail(this.cheat, `${names[this.cheat]}'s browser gave out a wrong key`, true);
+    for (let k = 0; k < n; k++) {
+      if (!rel[k]) return this._fail(k, `${names[k]}'s browser did not answer in time`, true);
+      if (rel[k].t === 'sraBad') return this._fail(k, `${names[k]}'s browser found a problem (${U.cleanText(rel[k].why, 120)})`);
+      if (L.own(k).some((pos) => this.keys[pos].size !== n - 1)) {
+        const g = this.pids.findIndex((pid, j) => j !== k && L.own(k).some((pos) => !this.keys[pos].has(j)));
+        return this._fail(g, `${names[g]}'s browser held back a key`, true);
+      }
+    }
+    const got = await Promise.all(pids.map((pid, k) => this._ask(pid, {
+      t: 'sraHole', no, keys: Object.fromEntries(L.own(k).map((pos) => [pos, this._list(pos)])),
+    }, ['sraOwnOk', 'sraBad'], 0)));
+    if (this.cancelled) return false;
+    for (let k = 0; k < n; k++) {
+      if (got[k] && got[k].t === 'sraOwnOk') continue;
+      if (!got[k]) return this._fail(k, `${names[k]}'s browser did not answer in time`, true);
+      return this._fail(k, `${names[k]}'s browser could not read its cards (${U.cleanText(got[k].why, 120)})`);
+    }
+    return true;
+  }
+
+  /** Board cards at board indexes idx (0..4): collect every player's key, unlock, and show the keys to all. */
+  async boardCards(idx) {
+    const pos = idx.map((i) => this.L.board(i));
+    const missing = this.pids.filter((pid, k) => pos.some((p) => !this.keys[p].has(k)));
+    await Promise.all(missing.map((pid) => this._ask(pid, { t: 'sraBoard', no: this.no, idx }, ['sraKeys'])));
+    if (this.cancelled) return { cards: null };
+    const cards = [];
+    for (const p of pos) {
+      const gone = this.pids.findIndex((pid, k) => !this.keys[p].has(k));
+      if (gone >= 0) return { cards: null, why: `${this.names[gone]} ${this.cheat === gone ? 'gave out a wrong key' : 'left while holding a key needed to deal the board'}` };
+      const c = SRA.open(this.C[p], [...this.keys[p].values()]);
+      if (!c || cards.includes(c)) return { cards: null, why: 'a board card did not unlock to a real card (the shuffle was tampered with)' };
+      cards.push(c);
+    }
+    this._bcast({ t: 'sraReveal', no: this.no, items: pos.map((p) => ({ pos: p, keys: this._list(p) })) });
+    return { cards };
+  }
+
+  /** A player shows their hand: their own keys (checked) plus everyone else's unlock it. Returns the cards or null. */
+  openHand(k, keys) {
+    if (k < 0 || !Array.isArray(keys) || !this.C) return null;
+    const cards = [], items = [];
+    for (const pos of this.L.own(k)) {
+      const it = keys.find((x) => x && x.pos === pos);
+      if (!it || !this._fits(k, pos, it.e) || this.keys[pos].size !== this.n - 1) return null;
+      const c = SRA.open(this.C[pos], [...this.keys[pos].values(), it.e]);
+      if (!c || cards.includes(c)) return null;
+      cards.push(c); items.push({ pos, keys: this._list(pos, [{ k, e: it.e }]) });
+    }
+    this._bcast({ t: 'sraReveal', no: this.no, items });
+    return cards;
+  }
+
+  /** Showdown in the usual order: each player shows (gives their keys) or mucks. Returns a settle plan. */
+  async showdown(h) {
+    const order = Engine.showdownOrder(h);
+    const runout = h.players.filter((p) => !p.folded && !p.allIn).length <= 1;
+    const sidePots = Engine.computePots(h.players.map((p) => p.committed), h.players.map((p) => p.folded)).length > 1;
+    const plan = [], shown = [];
+    for (let j = 0; j < order.length; j++) {
+      const i = order[j], pid = this.t.handPids[i], k = this.pids.indexOf(pid), p = this.t.players.get(pid);
+      const r = await this._ask(pid, {
+        t: 'sraSd', no: this.no, must: j === 0 || runout, autoMuck: !p || p.autoMuck !== false, board: h.board.slice(), shown: shown.slice(), sidePots,
+      }, ['sraShow', 'sraMuck']);
+      if (this.cancelled) return null;
+      const cards = r && r.t === 'sraShow' ? this.openHand(k, r.keys) : null;
+      if (cards) { h.players[i].hole = cards; shown.push(cards); plan.push({ p: i, show: true }); }
+      else plan.push({ p: i, show: false });
+    }
+    return plan;
+  }
+
+  /** "All cards" tables: once the hand is over, everyone's keys go into the record. */
+  revealAll(h, onCards) {
+    this.pids.forEach((pid, k) => {
+      const i = this.t.handPids.indexOf(pid);
+      if (i < 0 || h.players[i].hole) return;
+      this._ask(pid, { t: 'sraRevealAll', no: this.no }, ['sraShow']).then((r) => {
+        const cards = r ? this.openHand(k, r.keys) : null;
+        if (cards && !h.players[i].hole) { h.players[i].hole = cards; onCards(); }
+      });
+    });
+  }
+}
+
 class HostTable {
   constructor(settings, hostName, hostToken) {
     this.s = { game: 'holdem', limit: 'nl', levelHands: 0, maxRebuys: 0, hostPlays: true, ...settings };
     this.gameKind = this.s.game === 'holdem' ? 'holdem' : 'omaha';
     this.holeCount = this.s.game === 'omaha5' ? 5 : this.s.game === 'omaha4' ? 4 : 2;
     this.variant = Notation.variantCode(this.gameKind, this.s.limit, this.holeCount);
+    // Encrypted deal: this device never sees anyone else's cards (see ENCRYPTED DEAL). Not for bot games.
+    this.sra = !!this.s.sra && !this.s.vsBots;
+    if (this.sra) this.s.botTakeover = false;
+    this.sraDealer = null;
     this.level = 0;
     this.blinds = { sb: this.s.sb, bb: this.s.bb, ante: this.s.ante };
     this.shuffling = null;      // commit-reveal shuffle in progress
@@ -2651,7 +3327,7 @@ class HostTable {
     return p;
   }
   /** Is a bot making this seat's decisions right now? (a real bot, or a disconnected player with takeover on) */
-  _botControlled(p) { return !!p && (p.isBot || (!!this.s.botTakeover && !p.connected && !p.leaving)); }
+  _botControlled(p) { return !!p && (p.isBot || (!this.sra && !!this.s.botTakeover && !p.connected && !p.leaving)); }
   _botTurn() {
     if (this.botTimer) return;
     const h = this.hand, i = h.toAct, pid = this.handPids[i];
@@ -2720,6 +3396,7 @@ class HostTable {
     p.connected = on;
     p.disconnectedAt = on ? null : Date.now();
     if (on) p.botAnnounced = false;
+    if (on && this.sraDealer) this.sraDealer.resend(pid);
     if (p.seat != null) this.onEvent(on ? 'success' : 'warn', on ? `${p.name} reconnected` : `${p.name} disconnected`, pid);
     // A disconnected player on the clock with no action timer gets a grace timer.
     if (this.hand && this.hand.phase === 'betting' && this.handPids[this.hand.toAct] === pid) {
@@ -2770,7 +3447,13 @@ class HostTable {
       }
       case 'show': {
         const h = this.hand, idx = this.handPids.indexOf(pid);
-        if (!h || h.phase !== 'done' || idx < 0) return;
+        if (!h || h.phase !== 'done' || idx < 0 || h.voided) return;
+        if (this.sra && !h.players[idx].hole) {
+          // Encrypted deal: showing means handing over your own keys, which unlock your cards for everyone.
+          const D = this.sraDealer, cards = D && D.no === h.no ? D.openHand(D.pids.indexOf(pid), m.keys) : null;
+          if (!cards) return;
+          h.players[idx].hole = cards;
+        }
         if (Engine.showCards(h, idx)) { this._syncLog(); this._sendRecords(); }
         break;
       }
@@ -2794,6 +3477,10 @@ class HostTable {
         if (sh.waiter) sh.waiter();
         return;
       }
+      // Answers from players' browsers during the encrypted deal.
+      case 'sraShufR': case 'sraLockR': case 'sraKeys': case 'sraOwnOk': case 'sraBad': case 'sraShow': case 'sraMuck':
+        if (this.sraDealer) this.sraDealer.reply(pid, m);
+        return;
       case 'chat': {
         const text = U.cleanText(m.text, 280);
         if (!text) return;
@@ -2912,7 +3599,8 @@ class HostTable {
     // (With bot takeover on, a bot keeps their seat going instead.)
     if (!this.s.botTakeover) for (const p of this.players.values()) if (!p.connected && p.disconnectedAt && Date.now() - p.disconnectedAt > 120000 && p.seat != null) p.sittingOut = true;
     this.botModels = Bots.buildModels(this.finished.slice(-80).map((f) => f.hand));
-    const elig = this._eligible();
+    // In an encrypted deal every dealt player's browser must take part, so absent players sit the hand out.
+    const elig = this._eligible().filter((e) => !this.sra || this.players.get(e.pid).connected);
     if (elig.length < 2) { this.waiting = true; return this.changed(); }
     this.waiting = false;
     let bi;
@@ -2938,12 +3626,49 @@ class HostTable {
       stacks: Object.fromEntries(elig.map((e) => [e.pid, this.players.get(e.pid).stack])),
     };
     this.changed();
-    this._fairShuffle(sh).then(() => {
+    const run = this.sra ? this._sraSetup(sh) : this._fairShuffle(sh).then(() => true);
+    run.then((ok) => {
       if (this.shuffling !== sh) return;
       this.shuffling = null;
       if (this.status !== 'playing') return this.changed();
+      if (!ok) { this.nextTimer = setTimeout(() => { this.nextTimer = null; this._startHand(); }, 2000); return this.changed(); }
       this._deal(sh);
     }, (e) => { console.error(e); this.shuffling = null; this.changed(); });
+  }
+
+  /** Encrypted deal: run the shuffle among the players' browsers. If someone fails, nobody has posted chips yet. */
+  async _sraSetup(sh) {
+    if (this.sraDealer) this.sraDealer.cancel();
+    const D = this.sraDealer = new SraDealer(this, sh);
+    const ok = await D.setup();
+    if (!ok && this.sraDealer === D && D.failure) {
+      const f = D.failure, p = this.players.get(f.pid);
+      this._log(`Hand #${sh.no} could not be dealt: ${f.why}`);
+      this.onEvent('warn', `Re-dealing: ${f.why}`, null);
+      if (p && f.sitOut && !p.isHost) { p.sittingOut = true; this._log(`${p.name} is sat out (their browser did not complete the encrypted deal)`); }
+    }
+    return ok;
+  }
+
+  /** Cancel a hand that cannot be finished (a key holder left): everyone gets back what they put in. */
+  _voidHand(why) {
+    const h = this.hand;
+    if (!h || h.phase === 'done') return;
+    this._clearTurn(); clearTimeout(this.dealTimer); this.dealTimer = null;
+    if (this.sraDealer) this.sraDealer.cancel();
+    h.players.forEach((hp, i) => {
+      hp.stack = hp.startStack; hp.bet = 0; hp.committed = 0; hp.allIn = false;
+      const p = this.players.get(this.handPids[i]);
+      if (p) p.stack = hp.stack;
+    });
+    h.phase = 'done'; h.toAct = -1; h.voided = true;
+    h.results = { pots: [], payouts: h.players.map(() => 0), showdown: false, voided: true };
+    this._log(`Hand #${h.no} was cancelled and all chips were returned: ${why}`);
+    this.onEvent('warn', `Hand cancelled: ${why}. Chips returned.`, null);
+    for (const pid of this.handPids) { const p = this.players.get(pid); if (p && p.leaving) this._remove(pid); }
+    clearTimeout(this.nextTimer);
+    this.nextTimer = setTimeout(() => { this.nextTimer = null; this._startHand(); }, 3000);
+    this.changed();
   }
 
   /** Commit to a secret pre-deck, then mix in every player's committed randomness. */
@@ -2988,17 +3713,17 @@ class HostTable {
     const hc = this.holeCount, L = sh.layout;
     const at = (pos) => ({ pos, card: sh.deck[pos], salt: sh.salts[sh.perm[pos]] });
     const holeOf = {};
-    sh.order.forEach((pid, k) => {
+    if (!this.sra) sh.order.forEach((pid, k) => {
       const own = Array.from({ length: hc }, (_, r) => at(L.hole(k, r)));
       holeOf[pid] = own.map((x) => x.card);
       this.onDirect(pid, { t: 'fairown', no: sh.no, cards: own });
     });
-    this.fair = sh;
+    this.fair = this.sra ? null : sh;
     this.handPids = sh.elig.map((e) => e.pid);
     for (const pid of this.handPids) { const nm = sh.names[pid]; if (!this.names.includes(nm)) this.names.push(nm); }
     this.hand = Engine.createHand({
       no: sh.no, players: sh.elig.map((e) => ({ name: sh.names[e.pid], stack: sh.stacks[e.pid] })),
-      button: sh.bi, sb: sh.blinds.sb, bb: sh.blinds.bb, ante: sh.blinds.ante, hole: sh.elig.map((e) => holeOf[e.pid]),
+      button: sh.bi, sb: sh.blinds.sb, bb: sh.blinds.bb, ante: sh.blinds.ante, hole: sh.elig.map((e) => holeOf[e.pid] || null),
       game: this.gameKind, limit: this.s.limit, holeCount: hc,
     });
     this.logCursor = 0;
@@ -3043,6 +3768,25 @@ class HostTable {
         if (!this.turn || this.turn.idx !== h.toAct || this.turn.street !== h.street || this.turn.no !== h.no) this._startTurnTimer();
         break;
       }
+      if (h.phase === 'deal' && this.sra) {
+        if (!this.dealTimer && !this.paused) {
+          // Every player's browser releases its key for the new board cards; the cards are unlocked only then.
+          const runout = h.players.filter((p) => !p.folded && !p.allIn).length <= 1;
+          const idx = h.street === 0 ? [0, 1, 2] : [h.street + 2];
+          const D = this.sraDealer;
+          this.dealTimer = -1;
+          Promise.all([D.boardCards(idx), new Promise((r) => setTimeout(r, runout ? 1300 : 650))]).then(([res]) => {
+            if (this.hand === h) this.dealTimer = null;
+            if (this.hand !== h || h.phase !== 'deal' || this.status !== 'playing') return;
+            if (!res.cards) return res.why ? this._voidHand(res.why) : undefined;
+            if (this.paused) return;
+            Engine.dealBoard(h, res.cards);
+            this._syncLog();
+            this._proceed();
+          });
+        }
+        break;
+      }
       if (h.phase === 'deal') {
         if (!this.dealTimer && !this.paused) {
           const runout = h.players.filter((p) => !p.folded && !p.allIn).length <= 1;
@@ -3057,6 +3801,19 @@ class HostTable {
             this._syncLog();
             this._proceed();
           }, runout ? 1300 : 650);
+        }
+        break;
+      }
+      if (h.phase === 'showdown' && this.sra) {
+        if (!this.dealTimer) {
+          this.dealTimer = -1;
+          this.sraDealer.showdown(h).then((plan) => {
+            if (this.hand === h) this.dealTimer = null;
+            if (!plan || this.hand !== h || h.phase !== 'showdown' || this.status !== 'playing') return;
+            Engine.settle(h, plan);
+            this._finishHand();
+            this.changed();
+          });
         }
         break;
       }
@@ -3091,6 +3848,7 @@ class HostTable {
       }
     }
     this._sendRecords();
+    if (this.sra && this.s.recordHole === 'All' && this.sraDealer) this.sraDealer.revealAll(h, () => this._sendRecords());
     clearTimeout(this.nextTimer);
     if (this._eligible().length < 2) this.waiting = true;
     this.nextTimer = setTimeout(() => { this.nextTimer = null; this._startHand(); }, HAND_PAUSE_MS + (h.results.showdown ? 1200 : 0));
@@ -3130,6 +3888,7 @@ class HostTable {
     this.status = 'ended';
     this._clearTurn(); clearTimeout(this.nextTimer); clearTimeout(this.dealTimer); clearTimeout(this.botTimer);
     this.shuffling = null;
+    if (this.sraDealer) this.sraDealer.cancel();
     this._log('The game has ended');
     this._sendRecords();
     this.onEvent('info', reason, null);
@@ -3180,8 +3939,8 @@ class HostTable {
       const hp = i >= 0 ? h.players[i] : null;
       let cards = null;
       if (hp) {
-        if (qid === pid || hp.shown) cards = hp.hole.slice();
-        else if (!hp.folded && !hp.mucked) cards = new Array(hp.hole.length).fill(null);
+        if (qid === pid || hp.shown) cards = hp.hole ? hp.hole.slice() : new Array(this.holeCount).fill(null);
+        else if (!hp.folded && !hp.mucked) cards = new Array(this.holeCount).fill(null);
       }
       let handName = null;
       if (hp && cards && cards[0] && (qid === pid || hp.shown) && !(qid === pid && hp.folded && !done)) {
@@ -3213,7 +3972,7 @@ class HostTable {
     const results = done ? {
       showdown: h.results.showdown,
       winCards: [...winCards],
-      lines: h.log.filter((e) => e.t === 'win').map((e) => Engine.describeEntry(h, e)),
+      lines: h.voided ? ['Hand cancelled: all chips returned'] : h.log.filter((e) => e.t === 'win').map((e) => Engine.describeEntry(h, e)),
     } : null;
     return {
       t: 'state',
@@ -3222,10 +3981,10 @@ class HostTable {
         maxSeats: this.s.maxSeats, timer: this.s.timer, rebuys: this.s.rebuys, maxRebuys: this.s.maxRebuys || 0, recordHole: this.s.recordHole,
         startingStack: this.s.startingStack, variant: this.variant, variantName: VARIANTS[this.variant].name, holeCount: this.holeCount,
         limit: this.s.limit, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
-        botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots,
+        botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots, sra: this.sra,
         nextLevelIn: this.s.levelHands ? this.s.levelHands - ((Math.max(1, this.handNo) - 1) % this.s.levelHands) : 0,
       },
-      shuffling: !!this.shuffling, fair: this._fairView(),
+      shuffling: !!this.shuffling, fair: this._fairView(), sraWait: this.sraDealer ? this.sraDealer.waiting() : [], voided: !!(h && h.voided),
       status: this.status, paused: this.paused, waiting: !!this.waiting, handNo: h ? h.no : 0,
       phase: h ? h.phase : null, street: h ? (done ? (h.results.showdown ? 'Showdown' : STREETS[h.street]) : STREETS[h.street]) : '',
       board: h ? h.board.slice() : [], pots, potTotal: h && !done ? Engine.potTotal(h) : 0,
@@ -3274,7 +4033,7 @@ const Prefs = {
   wipe(keepDisplay) {
     const display = ['theme', 'muted', 'fourColor', 'panelOpen', 'vSpeed'];
     for (const k of Prefs.keys()) if (!(keepDisplay && display.includes(k))) Prefs.del(k);
-    try { sessionStorage.removeItem('feltroom.active'); } catch { /* ignore */ }
+    try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('feltroom.')) sessionStorage.removeItem(k); } catch { /* ignore */ }
   },
 };
 
@@ -3380,6 +4139,75 @@ const Net = {
   },
 };
 
+
+/**
+ * A player's browser in an encrypted deal (host and guests alike): runs SraPlayer one message at a
+ * time, holds back board-key requests until the table has really reached that street, and fills our
+ * own cards into the views and records the dealer sends (the dealer itself never has them).
+ */
+class SraLink {
+  constructor(name, tableId, send, onProblem) {
+    this.p = new SraPlayer(name, SraStore(tableId, name));
+    this.send = send; this.onProblem = onProblem;
+    this.q = Promise.resolve(); this.deferred = []; this.view = null; this.flagged = new Set();
+  }
+  static is(m) { return typeof m.t === 'string' && /^sra[A-Z]/.test(m.t); }
+  msg(m) { this.q = this.q.then(() => this._run(m)).catch((e) => console.warn(e)); }
+  _problem(no, why) { if (!this.flagged.has(no)) { this.flagged.add(no); this.onProblem(no, why); } }
+  async _run(m) {
+    const v0 = this.view;
+    const r = await this.p.handle(m, { view: v0, recordAll: !!(v0 && v0.table.recordHole === 'All'), onProblem: (no, why) => this._problem(no, why) });
+    if (r) this.send(r);
+    else if (m.t === 'sraBoard' || m.t === 'sraRevealAll' || m.t === 'sraSd') {
+      // Not yet allowed: the view for that street may have arrived while we were working, else wait for it.
+      if (this.view !== v0) return this._run(m);
+      this.deferred = this.deferred.filter((x) => !(x.t === m.t && x.no === m.no)).concat(m).slice(-6);
+    }
+  }
+  onView(v) {
+    this.view = v;
+    const why = this.p.check(v);
+    if (why) this._problem(v.handNo, why);
+    const d = this.deferred; this.deferred = [];
+    for (const m of d) if (m.no >= v.handNo) this.msg(m);
+  }
+  patchView(v) { return this.p.patchView(v); }
+  patchRecord(text) { return this.p.patchRecord(text); }
+  /** Our keys for a voluntary show of the current hand. */
+  showKeys(no) { const r = this.p.reveal(no); return r ? r.keys : null; }
+}
+
+
+/**
+ * PeerJS's JSON channel refuses messages over about 16 KB, so bigger ones (an encrypted deck, a
+ * long chat history) travel as numbered parts and are put back together on arrival.
+ */
+const Wire = {
+  MAX: 15000,
+  pack(m) {
+    const s = JSON.stringify(m);
+    if (s.length <= Wire.MAX) return [m];
+    const id = U.randHex(4), n = Math.ceil(s.length / Wire.MAX);
+    return Array.from({ length: n }, (_, i) => ({ t: 'part', id, i, n, s: s.slice(i * Wire.MAX, (i + 1) * Wire.MAX) }));
+  },
+  /** Returns the whole message once every part is in, else null. At most 4 messages in flight, 12 parts each. */
+  unpack(store, m) {
+    if (typeof m.id !== 'string' || !/^[0-9a-f]{8}$/.test(m.id) || !Number.isInteger(m.n) || m.n < 2 || m.n > 12
+      || !Number.isInteger(m.i) || m.i < 0 || m.i >= m.n || typeof m.s !== 'string' || m.s.length > Wire.MAX) return null;
+    let a = store.get(m.id);
+    if (!a) {
+      if (store.size >= 4) store.delete(store.keys().next().value);
+      a = { n: m.n, got: 0, parts: [] };
+      store.set(m.id, a);
+    }
+    if (a.n !== m.n || a.parts[m.i] != null) return null;
+    a.parts[m.i] = m.s; a.got++;
+    if (a.got < a.n) return null;
+    store.delete(m.id);
+    try { return JSON.parse(a.parts.join('')); } catch { return null; }
+  },
+};
+
 /* ---------- Host side: wires a HostTable to PeerJS connections ---------- */
 class HostSession {
   constructor(settings, name) {
@@ -3404,17 +4232,25 @@ class HostSession {
     const token = Prefs.get('hostToken.' + this.id) || U.randHex(16);
     const t = this.table = new HostTable(this.settings, this.name, token);
     this.pid = t.hostPid;
+    // Encrypted deal: the host's own seat is a player like any other, with its own keys in this tab.
+    if (t.sra) this.sraLink = new SraLink(t.players.get(t.hostPid).name, this.id, (r) => t.handle(this.pid, r), (no, why) => this.handlers.error(`Encrypted deal problem on hand #${no}: ${why}`));
     t.onChange = () => this._scheduleBroadcast();
     t.onEvent = (kind, text, about) => {
       for (const [pid, c] of this.conns) if (pid !== about) this._send(c, { t: 'event', kind, text });
       if (about !== this.pid) this.handlers.event(kind, text);
     };
     t.onRecord = (pid, text, full) => {
-      if (pid === this.pid) { this.record = text; this.recordFull = full; Prefs.set('record.' + this.id, text); Prefs.set('recordFull.' + this.id, full); }
+      if (pid === this.pid) {
+        if (this.sraLink) { text = this.sraLink.patchRecord(text); full = this.sraLink.patchRecord(full); }
+        this.record = text; this.recordFull = full; Prefs.set('record.' + this.id, text); Prefs.set('recordFull.' + this.id, full); }
       else { const c = this.conns.get(pid); if (c) this._send(c, { t: 'record', text, full }); }
     };
     t.onDirect = (pid, m) => {
-      if (pid === this.pid) { if (m.t === 'error') this.handlers.error(m.text); return; }
+      if (pid === this.pid) {
+        if (m.t === 'error') this.handlers.error(m.text);
+        else if (this.sraLink && SraLink.is(m)) this.sraLink.msg(m);
+        return;
+      }
       const c = this.conns.get(pid);
       if (!c) return;
       this._send(c, m);
@@ -3447,6 +4283,12 @@ class HostSession {
     b.n = Math.min(40, b.n + ((now - b.t) / 1000) * 15); b.t = now;
     if (b.n < 1) return;
     b.n -= 1;
+    if (m.t === 'part') {
+      if (!c.pid) return; // only players who have said hello can send large messages
+      const whole = Wire.unpack(c.parts || (c.parts = new Map()), m);
+      if (whole && typeof whole === 'object' && !Array.isArray(whole) && whole.t !== 'part' && whole.t !== 'hello') this._data(c, whole);
+      return;
+    }
     const t = this.table;
     if (m.t === 'hello') {
       if (c.pid) return; // one identity per connection: a second hello can't spawn or swap players
@@ -3483,7 +4325,7 @@ class HostSession {
     if (this.table.turn && this.table.turn.deadline) this._scheduleBroadcast(); // keeps countdowns in sync
   }
 
-  _send(c, m) { try { if (c.open) c.send(m); } catch { /* connection already gone */ } }
+  _send(c, m) { try { if (c.open) for (const x of Wire.pack(m)) c.send(x); } catch { /* connection already gone */ } }
 
   _scheduleBroadcast() {
     if (this.bq) return;
@@ -3492,7 +4334,10 @@ class HostSession {
       this.bq = false;
       const t = this.table;
       for (const [pid, c] of this.conns) this._send(c, t.viewFor(pid));
-      this.handlers.view(t.viewFor(this.pid));
+      const v = t.viewFor(this.pid);
+      if (this.sraLink) { this.sraLink.onView(v); this.sraLink.patchView(v); }
+      this.lastView = v;
+      this.handlers.view(v);
       if (t.status === 'ended' && !this.endedSent) {
         this.endedSent = true;
         for (const c of this.conns.values()) this._send(c, { t: 'ended', reason: 'The host ended the game.' });
@@ -3501,7 +4346,10 @@ class HostSession {
     });
   }
 
-  send(m) { this.table.handle(this.pid, m); }
+  send(m) {
+    if (m.t === 'show' && this.sraLink && this.table.hand) m = { ...m, keys: this.sraLink.showKeys(this.table.hand.no) };
+    this.table.handle(this.pid, m);
+  }
 
   /** Host leaves: tell everyone (so they can still copy their records), then shut down. */
   leave(silent) {
@@ -3543,7 +4391,7 @@ const Safe = (() => {
       recordHole: oneOf(t.recordHole, ['All', 'Showdown'], 'Showdown'), startingStack: num(t.startingStack),
       variant: oneOf(t.variant, Object.keys(VARIANTS), 'NLHE'), holeCount: int(t.holeCount, 2, 5, 2), limit: oneOf(t.limit, ['nl', 'pl'], 'nl'),
       levelHands: int(t.levelHands, 0, 1000, 0), level: int(t.level, 0, 1000, 1), hostPlays: bool(t.hostPlays),
-      nextLevelIn: int(t.nextLevelIn, 0, 1000, 0), botTakeover: bool(t.botTakeover), vsBots: bool(t.vsBots),
+      nextLevelIn: int(t.nextLevelIn, 0, 1000, 0), botTakeover: bool(t.botTakeover), vsBots: bool(t.vsBots), sra: bool(t.sra),
     };
     table.variantName = VARIANTS[table.variant].name;
     const seat = (s, i) => (s && typeof s === 'object' ? {
@@ -3557,6 +4405,7 @@ const Safe = (() => {
     const y = v.you && typeof v.you === 'object' ? v.you : null;
     return {
       t: 'state', table, shuffling: bool(v.shuffling), fair: v.fair, // fair proofs are validated by the Checker itself
+      sraWait: Array.isArray(v.sraWait) ? v.sraWait.slice(0, 9).map((x) => str(x, 24)) : [], voided: bool(v.voided),
       status: oneOf(v.status, ['lobby', 'playing', 'ended'], 'lobby'), paused: bool(v.paused), waiting: bool(v.waiting),
       handNo: int(v.handNo, 0, 1e9, 0), phase: oneOf(v.phase, ['betting', 'deal', 'showdown', 'settle', 'done'], null),
       street: str(v.street, 20), board: (cards(v.board, 5) || []).filter(Boolean),
@@ -3632,16 +4481,17 @@ class ClientSession {
       const to = setTimeout(() => { try { c.close(); } catch { /* ignore */ } fin({ type: 'connect-timeout' }); }, 15000);
       c.on('open', () => {
         this.lastMsg = Date.now();
-        c.send({ t: 'hello', name: this.name, token: this.fresh ? null : Prefs.get('token.' + this.id, null) });
+        c.send({ t: 'hello', name: this.name, token: this.fresh ? null : this._token() });
       });
       c.on('data', (m) => {
         this.lastMsg = Date.now();
         if (!m || typeof m !== 'object') return;
+        if (m.t === 'part') { m = Wire.unpack(this.parts || (this.parts = new Map()), m); if (!m || typeof m !== 'object' || m.t === 'part') return; }
         if (m.t === 'welcome') {
           this.conn = c; this.pid = m.pid; this.name = m.name;
           this.fresh = false;
           Prefs.set('token.' + this.id, m.token); Prefs.set('tokenName.' + this.id, m.name);
-          try { sessionStorage.setItem('feltroom.active', this.id); } catch { /* ignore */ }
+          try { sessionStorage.setItem('feltroom.active', this.id); sessionStorage.setItem('feltroom.token.' + this.id, m.token); } catch { /* ignore */ }
           this.handlers.status('connected');
           fin();
           return;
@@ -3659,6 +4509,8 @@ class ClientSession {
       case 'state':
         m = Safe.view(m);
         if (!m) break;
+        if (m.table.sra && !this.sraLink) this._sra();
+        if (this.sraLink) { this.sraLink.onView(m); this.sraLink.patchView(m); }
         this.lastView = m;
         try { this.fair.view(m, this.name); } catch (e) { console.warn(e); }
         // The record for a hand can arrive just before the view that proves its last board card.
@@ -3668,6 +4520,7 @@ class ClientSession {
       case 'event': this.handlers.event(m.kind, m.text); break;
       case 'record':
         this.record = m.text; this.recordFull = m.full || m.text;
+        if (this.sraLink) { this.record = this.sraLink.patchRecord(this.record); this.recordFull = this.sraLink.patchRecord(this.recordFull); }
         Prefs.set('record.' + this.id, this.record); Prefs.set('recordFull.' + this.id, this.recordFull);
         this.pendingAudit = this.recordFull;
         break;
@@ -3680,7 +4533,21 @@ class ClientSession {
       case 'ping': this.send({ t: 'pong' }); break;
       case 'kicked': this._end('You were removed from the table by the host.'); break;
       case 'ended': this._end(m.reason || 'Host left, game ended.'); break;
+      // Encrypted deal steps go to our own SraPlayer.
+      default: if (SraLink.is(m)) { if (!this.sraLink) this._sra(); this.sraLink.msg(m); } break;
     }
+  }
+
+  /** This tab's own seat first (two tabs of one browser can be two different players), else the browser's. */
+  _token() {
+    try { const t = sessionStorage.getItem('feltroom.token.' + this.id); if (t) return t; } catch { /* ignore */ }
+    return Prefs.get('token.' + this.id, null);
+  }
+  _sra() {
+    this.sraLink = new SraLink(this.name, this.id, (r) => this.send(r), (no, why) => {
+      const f = this.fair._h(no);
+      this.fair._fail(f, why);
+    });
   }
 
   /** Re-simulate the newest hand of the host's record and check it against what we saw ourselves. */
@@ -3722,7 +4589,10 @@ class ClientSession {
     setTimeout(() => { try { this.peer.destroy(); } catch { /* ignore */ } }, 500);
   }
 
-  send(m) { try { if (this.conn && this.conn.open) this.conn.send(m); } catch { /* ignore */ } }
+  send(m) {
+    if (m.t === 'show' && this.sraLink && this.lastView) m = { ...m, keys: this.sraLink.showKeys(this.lastView.handNo) };
+    try { if (this.conn && this.conn.open) for (const x of Wire.pack(m)) this.conn.send(x); } catch { /* ignore */ }
+  }
   leave() {
     try { sessionStorage.removeItem('feltroom.active'); } catch { /* ignore */ }
     this.ended = true; clearInterval(this.dog); try { this.conn && this.conn.close(); this.peer.destroy(); } catch { /* ignore */ } }
@@ -3802,6 +4672,10 @@ const ICONS = {
   flag: '<path d="M4 22V4M4 4h13l-2 4 2 4H4"/>',
   bot: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 13h.01M15 13h.01M9 17h6"/><circle cx="12" cy="3" r="1"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  chevron: '<path d="m9 6 6 6-6 6"/>',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  book: '<path d="M4 19.5V5a2 2 0 0 1 2-2h14v16H6.5a2.5 2.5 0 0 0 0 5H20"/><path d="M8 7h8M8 11h6"/>',
+  calc: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h4"/>',
   shieldOk: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
   shieldBad: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4M12 16h.01"/>',
 };
@@ -4563,6 +5437,83 @@ const SelfTest = (() => {
     eq(Notation.serialize(Notation.parse(t)), t);
   });
 
+  /* ---------- Encrypted deal ---------- */
+  test('Encrypted deal', 'every card maps to a distinct group element and back', () => {
+    const d = SRA.plainDeck();
+    eq(new Set(d).size, 52);
+    d.forEach((h, i) => eq(SRA.decode(SRA.el(h)), Cards.newDeck()[i]));
+  });
+  test('Encrypted deal', 'locks commute and come off in any order', () => {
+    const m = SRA.el(SRA.plainDeck()[7]), a = SRA.keygen(), b = SRA.keygen();
+    const ab = SRA.modPow(SRA.modPow(m, a.e), b.e);
+    eq(SRA.decode(SRA.modPow(SRA.modPow(ab, a.d), b.d)), Cards.newDeck()[7]);
+    eq(SRA.open(SRA.hex(ab), [SRA.hex(a.e), SRA.hex(b.e)]), Cards.newDeck()[7]);
+  });
+  test('Encrypted deal', 'a key is accepted only for the lock it really made', () => {
+    const k = SRA.keygen(), mid = SRA.plainDeck()[3], out = SRA.hex(SRA.modPow(SRA.el(mid), k.e));
+    ok(SRA.keyFits(mid, out, SRA.hex(k.e)), 'right key fits');
+    ok(!SRA.keyFits(mid, out, SRA.hex(k.e + 2n)), 'wrong key rejected');
+  });
+  test('Encrypted deal', 'the shuffle-lock removal proof verifies, and fails on any change', async () => {
+    const k = SRA.keygen(), ins = SRA.plainDeck().slice(0, 9).map((h) => SRA.hex(SRA.modPow(SRA.el(h), k.e)));
+    const mids = ins.map((h) => SRA.hex(SRA.modPow(SRA.el(h), k.d)));
+    const pr = await SRA.proveStrip('t|0', ins, mids, k), y = SRA.hex(SRA.modPow(SRA.G, k.e));
+    ok(await SRA.verifyStrip('t|0', ins, mids, y, pr), 'honest proof');
+    const bad = mids.slice(); [bad[0], bad[1]] = [bad[1], bad[0]];
+    ok(!(await SRA.verifyStrip('t|0', ins, bad, y, pr)), 'swapped cards caught');
+    ok(!(await SRA.verifyStrip('t|1', ins, mids, y, pr)), 'proof bound to its hand and player');
+  });
+  test('Encrypted deal', 'a player never gives out its own hole-card keys while dealing', async () => {
+    const names = ['A', 'B'], P = names.map((n) => new SraPlayer(n));
+    const view = (n) => ({ handNo: 1, phase: 'betting', board: [], hostName: 'A', table: {}, seats: names.map((x) => ({ name: x, isYou: x === n, inHand: true })) });
+    let deck = SRA.plainDeck();
+    for (const k of [1, 0]) deck = (await P[k].handle({ t: 'sraShuf', no: 1, order: names, hc: 2, deck }, { view: view(names[k]) })).deck;
+    let cur = deck.slice(0, 9); const steps = [];
+    for (let k = 0; k < 2; k++) { const r = await P[k].handle({ t: 'sraLock', no: 1, items: cur }, {}); steps.push({ ...r, inp: cur }); cur = r.out; }
+    for (const p of P) for (let k = 0; k < 2; k++) await p.handle({ t: 'sraStep', no: 1, k, y: SRA.hex(SRA.modPow(SRA.G, P[k].hands[1].key.e)), inp: k === 0 ? steps[0].inp : undefined, mid: steps[k].mid, out: steps[k].out, proof: steps[k].proof });
+    const rel = [];
+    for (const p of P) rel.push(await p.handle({ t: 'sraDealt', no: 1 }, {}));
+    const L = SRA.layout(2, 2);
+    rel.forEach((r, k) => { eq(r.t, 'sraKeys'); ok(r.keys.every((x) => !L.own(k).includes(x.pos)), 'no own positions'); });
+    ok(await P[0].handle({ t: 'sraBoard', no: 1, idx: [0, 1, 2] }, { view: view('A') }) === null, 'no board key mid-round');
+    const sd = await P[0].handle({ t: 'sraSd', no: 1, must: true }, { view: view('A') });
+    ok(!sd || sd.t !== 'sraShow', 'no showdown keys mid-hand');
+  });
+
+  test('Security', 'Large messages are split into parts and rebuilt safely', () => {
+    if (typeof Wire === 'undefined') return;
+    const big = { t: 'sraStep', no: 3, mid: Array.from({ length: 60 }, () => 'ab'.repeat(256)) };
+    const parts = Wire.pack(big), store = new Map();
+    ok(parts.length > 1 && parts.every((x) => JSON.stringify(x).length < 16300), 'every part fits the 16 KB channel limit');
+    let out = null;
+    for (const x of parts.slice().reverse()) out = Wire.unpack(store, x) || out;
+    eq(out, big);
+    eq(Wire.unpack(new Map(), { t: 'part', id: 'zz', i: 0, n: 2, s: 'x' }), null);
+    eq(Wire.unpack(new Map(), { t: 'part', id: 'abcdef01', i: 0, n: 500, s: 'x' }), null);
+    const st = new Map();
+    for (let k = 0; k < 10; k++) Wire.unpack(st, { t: 'part', id: (10000000 + k).toString(16).padStart(8, '0'), i: 0, n: 3, s: 'x' });
+    ok(st.size <= 4, 'half-sent messages are capped');
+  });
+
+  /* ---------- Learn ---------- */
+  test('Learn', 'lesson maths matches the standard numbers', () => {
+    eq(Learn.C(52, 5), 2598960);
+    eq(Learn.C(52, 2), 1326);
+    eq(Math.round(Learn.hitTwo(9) * 1000), 350);
+    eq(Math.round(Learn.hitTwo(8) * 1000), 315);
+    eq(Math.round(Learn.hitTwo(4) * 1000), 165);
+    eq(Learn.potOdds(150, 50), 0.25);
+    eq(Learn.ev(0.35, 150, 50), 20);
+    eq(Learn.mdf(100, 100), 0.5);
+  });
+  test('Learn', 'every lesson renders and every quiz has a valid answer', () => {
+    for (const l of Learn.LESSONS) {
+      const h = l.body();
+      ok(typeof h === 'string' && h.length > 100 && !/undefined|NaN|engine disagrees/.test(h), `lesson ${l.id}`);
+      for (const q of l.quiz) ok(q.a >= 0 && q.a < q.opts.length && q.why, `quiz in ${l.id}`);
+    }
+  });
+
   /* ---------- Fair shuffle ---------- */
   test('Fairness', 'SHA-256 matches the standard test vectors', () => {
     eq(Fair.sha256(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
@@ -4762,15 +5713,16 @@ function HomeScreen() {
       <div class="hero-felt" aria-hidden="true"><div class="mini-table"></div>
         ${cardHtml('As', '', 'left:72px;--cw:44px;transform:rotate(-8deg)')}${cardHtml('Kh', '', 'left:106px;--cw:44px;transform:rotate(7deg)')}</div>
       <h1>Hold'em with friends.<br>Just send a link.</h1>
-      <p>Free, peer-to-peer Texas Hold'em and Omaha that runs entirely in your browser, with a provably fair shuffle. No accounts, no downloads, no game servers.</p>
+      <p>Free, peer-to-peer Texas Hold'em and Omaha that runs entirely in your browser, with an encrypted deal that keeps every hand private, even from the host. No accounts, no downloads, no game servers.</p>
       <div class="home-actions">
         <button class="big-choice" data-go="#/host"><span class="bc-ic">${icon('plus')}</span><strong>Host a Game</strong><span>Choose blinds and stacks, share the invite link, and deal.</span></button>
         <button class="big-choice" data-go="#/bots"><span class="bc-ic">${icon('bot')}</span><strong>Play vs Bots</strong><span>Practice offline against computer players, from Beginner to Extreme.</span></button>
         <button class="big-choice" data-go="#/viewer"><span class="bc-ic">${icon('history')}</span><strong>Hand History Viewer</strong><span>Paste a game record to replay every hand, with stats. Works offline.</span></button>
+        <button class="big-choice" data-go="#/learn"><span class="bc-ic">${icon('book')}</span><strong>Learn Poker</strong><span>From the rules to pot odds and expected value, with examples, quizzes and calculators.</span></button>
       </div>
-      <div class="pill-row"><span class="pill">100% free</span><span class="pill">No sign-up</span><span class="pill">Peer-to-peer</span><span class="pill">Provably fair shuffle</span><span class="pill">No ads or tracking</span></div>
+      <div class="pill-row"><span class="pill">100% free</span><span class="pill">No sign-up</span><span class="pill">Peer-to-peer</span><span class="pill">Encrypted, provably fair deal</span><span class="pill">No ads or tracking</span></div>
     </div></section>
-    <footer class="home-foot">The host's browser shuffles and deals. Cards travel directly between players; nothing is stored on a server.
+    <footer class="home-foot">Every player's browser helps shuffle and only you can unlock your cards. Everything travels directly between players; nothing is stored on a server.
       <div style="margin-top:10px"><button class="btn sm ghost" id="h-wipe">${icon('x')}Clear my data on this device</button></div></footer>
   </div></div>`;
   bindThemeToggles(App.root);
@@ -4807,7 +5759,7 @@ function wipeModal() {
 /* ---------- Host setup ---------- */
 function HostSetupScreen() {
   document.title = TitleFlash.base = 'Host a game · Feltroom';
-  const d = Object.assign({ tableName: 'Friday Night Game', name: Prefs.get('name', ''), sb: 1, bb: 2, ante: 0, startingStack: 200, maxSeats: 9, timer: 30, rebuys: true, maxRebuys: 0, recordHole: 'All', game: 'holdem', limit: 'nl', levelHands: 0, hostPlays: true }, Prefs.get('lastSettings', {}));
+  const d = Object.assign({ tableName: 'Friday Night Game', name: Prefs.get('name', ''), sb: 1, bb: 2, ante: 0, startingStack: 200, maxSeats: 9, timer: 30, rebuys: true, maxRebuys: 0, recordHole: 'All', game: 'holdem', limit: 'nl', levelHands: 0, hostPlays: true, sra: true }, Prefs.get('lastSettings', {}));
   d.name = Prefs.get('name', d.name || '');
   const seg = (name, opts, val) => `<div class="seg" role="radiogroup" data-seg="${name}">${opts.map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${String(v) === String(val)}" aria-checked="${String(v) === String(val)}">${l}</button>`).join('')}</div>`;
   App.root.innerHTML = `<div class="page"><div class="page-inner">
@@ -4839,8 +5791,9 @@ function HostSetupScreen() {
         </section>
         <section class="card-ui setup-section"><h3>Fair play</h3>
           <label class="check"><input type="checkbox" name="hostPlays" ${d.hostPlays !== false ? 'checked' : ''}> I'm playing too (take a seat)</label>
+          <label class="check"><input type="checkbox" name="sra" ${d.sra !== false ? 'checked' : ''}> Encrypted deal (recommended)</label>
           <label class="check"><input type="checkbox" name="botTakeover"> Bots replace disconnected players</label>
-          <p class="hint" style="margin:0">Every hand uses a <b>provably fair shuffle</b>: this device commits to the deck before players add their own randomness, and every player's browser checks each card dealt. The dealing device can still see all hole cards, so for a serious game, untick this box and host on a device nobody plays from (a spare laptop or TV).</p>
+          <p class="hint" style="margin:0" id="fair-hint"></p>
         </section>
         <section class="card-ui setup-section"><h3>Game record</h3>
           <div class="field"><span>Record hole cards</span>${seg('recordHole', [['All', 'All cards'], ['Showdown', 'Only cards shown at showdown']], d.recordHole)}</div>
@@ -4856,6 +5809,13 @@ function HostSetupScreen() {
     $$('button', g).forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); });
   }));
   const form = $('#setup');
+  const fairHint = () => {
+    $('#fair-hint').innerHTML = form.sra.checked
+      ? 'Every player\'s browser locks and shuffles the deck with its own secret key, so <b>nobody can see anyone else\'s cards, not even this device</b>. Each deal takes a second or two, and if a player leaves in the middle of a hand, that hand is cancelled and the chips go back.'
+      : 'Standard deal: a <b>provably fair shuffle</b> that every player\'s browser checks. This device sees every hole card while dealing, so if you play too, other players have to trust you.';
+  };
+  form.sra.addEventListener('change', () => { if (form.sra.checked) form.botTakeover.checked = false; fairHint(); });
+  fairHint();
   // Off by default, and turning it on asks for confirmation.
   form.botTakeover.addEventListener('change', (e) => {
     if (!e.target.checked) return;
@@ -4863,8 +5823,9 @@ function HostSetupScreen() {
     const m = openModal(`<h2>${icon('bot')} Let bots replace disconnected players?</h2>
       <p>If a player drops out, a bot makes their decisions using <b>their chips</b> until they reconnect. Wins and losses the bot makes count for that player.</p>
       <p class="muted">Hands in which a bot acts are <b>left out of the player-only game record</b>. They appear only in the full record, marked with a [Bots] tag. Both can be copied from the table menu.</p>
+      ${form.sra.checked ? '<p class="muted"><b>This turns off the encrypted deal.</b> A bot playing for someone needs to see their cards, which only works when this device deals.</p>' : ''}
       <div class="modal-foot"><button class="btn" data-close>Keep it off</button><button class="btn primary" id="bt-on">Turn it on</button></div>`, { label: 'Bot takeover' });
-    $('#bt-on', m.el).addEventListener('click', () => { form.botTakeover.checked = true; m.close(); });
+    $('#bt-on', m.el).addEventListener('click', () => { form.botTakeover.checked = true; form.sra.checked = false; fairHint(); m.close(); });
   });
   const hint = () => {
     const g = $('[data-seg="game"] [aria-pressed="true"]').dataset.v, l = $('[data-seg="limit"] [aria-pressed="true"]').dataset.v;
@@ -4883,7 +5844,7 @@ function HostSetupScreen() {
       sb: Math.floor(Number(form.sb.value)), bb: Math.floor(Number(form.bb.value)), ante: Math.floor(Number(form.ante.value || 0)),
       startingStack: Math.floor(Number(form.startingStack.value)), maxSeats: Number(segv('maxSeats')), timer: Number(segv('timer')),
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : Number(segv('rebuys')), recordHole: segv('recordHole'),
-      game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), hostPlays: form.hostPlays.checked, botTakeover: form.botTakeover.checked,
+      game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), hostPlays: form.hostPlays.checked, botTakeover: form.botTakeover.checked && !form.sra.checked, sra: form.sra.checked,
     };
     const name = U.sanitizeName(form.name.value);
     const errs = [];
@@ -5200,6 +6161,10 @@ function GameScreen(session) {
     $('#m-ok', m.el).addEventListener('click', () => { m.close(); fn(); });
   }
   function leaveTable() {
+    const v = G.view, me = v && v.seats.find((x) => x && x.isYou);
+    if (!isHost && v && v.table.sra && v.status === 'playing' && me && me.inHand && v.phase && v.phase !== 'done') {
+      return confirmModal('Leave in the middle of a hand?', 'With the encrypted deal, your browser holds a key that the rest of this hand needs. If you leave now, the hand is cancelled for everyone and the chips go back. Waiting until the hand ends is kinder.', 'Leave anyway', () => { session.leave(); App.session = null; location.hash = '#/'; });
+    }
     if (isHost && G.view && G.view.status !== 'ended') {
       return confirmModal('Leave and end the game?', 'You are the host: leaving ends the game for everyone. Players keep their game records.', 'End game & leave', () => { session.leave(); App.session = null; location.hash = '#/'; });
     }
@@ -5252,10 +6217,12 @@ function GameScreen(session) {
 
   /* ----- fair play ----- */
   function fairState() {
-    if (isHost) return { cls: 'host', label: 'You deal', icon: 'shieldOk' };
+    const sra = G.view && G.view.table.sra;
     const ck = session.fair, f = ck && ck.latest;
     const failed = ck && Object.values(ck.hands).find((x) => x.status === 'failed');
-    if (failed) return { cls: 'bad', label: 'Check failed', icon: 'shieldBad', f: failed };
+    if (failed && !isHost) return { cls: 'bad', label: 'Check failed', icon: 'shieldBad', f: failed };
+    if (sra) return { cls: 'ok', label: 'Encrypted', icon: 'lock', sra: true };
+    if (isHost) return { cls: 'host', label: 'You deal', icon: 'shieldOk' };
     if (f && f.status === 'verified') return { cls: 'ok', label: 'Verified', icon: 'shieldOk', f };
     return { cls: '', label: 'Fair play', icon: 'shield', f };
   }
@@ -5269,9 +6236,24 @@ function GameScreen(session) {
   function fairModal() {
     const st = fairState(), f = st.f, t = G.view ? G.view.table : {};
     let head;
+    if (st.sra) {
+      openModal(`<h2>${icon('lock')} Encrypted deal</h2>
+        <div class="issue ok">${icon('shieldOk')} <b>Nobody can see your cards but you, and that includes the host.</b></div>
+        <div class="section-title">How it works</div>
+        <ul class="hint" style="padding-left:18px;margin:0;line-height:1.6">
+          <li><b>Everyone shuffles:</b> each player's browser locks all 52 cards with its own secret key and shuffles them, so nobody knows the order.</li>
+          <li><b>Only you hold the last key:</b> every other player gives your browser their key for your cards, but nobody ever gets yours. The host's device only ever relays locked cards.</li>
+          <li><b>Board cards</b> are unlocked street by street. Every key comes with a check, so each browser verifies every card itself.</li>
+          <li><b>At showdown</b> your browser shows your hand by giving out your key, or mucks it, following your auto-muck setting. Folded and mucked hands are never revealed${t.recordHole === 'All' ? ', except that this table records every hand once it is over ("All cards")' : ''}.</li>
+          <li><b>Tampering is caught:</b> a wrong key, a doctored card or an altered shuffle step stops the deal and names the player whose browser did it.</li>
+          <li><b>The limits:</b> nothing can stop two players from sharing their cards in a chat app. If a player leaves in the middle of a hand, the hand is cancelled and the chips go back.</li>
+        </ul>
+        <div class="modal-foot"><button class="btn primary" data-close>Close</button></div>`, { label: 'Encrypted deal' });
+      return;
+    }
     if (isHost) {
       head = `<p>Your device is the dealer. Each hand it commits to a secret deck <b>before</b> the players' browsers add their own randomness, so it can't arrange the cards. Every player's browser checks every card it sees against that commitment and re-checks each hand's result against the rules.</p>
-        <p class="muted">${t.hostPlays ? 'You are also playing. The dealing device can technically see every hole card, so for games where that matters, start a table with "I\'m playing too" turned off and deal from a device nobody plays on.' : 'You are dealing without playing, which is the most trustworthy setup.'}</p>`;
+        <p class="muted">${t.hostPlays ? 'This table uses the standard deal, so your device can technically see every hole card. For games where that matters, start the next table with <b>Encrypted deal</b> turned on: then nobody, including you, can see other players\' cards.' : 'You are dealing without playing. For full privacy, use the <b>Encrypted deal</b> next time.'}</p>`;
     } else if (st.cls === 'bad') {
       head = `<div class="err-box">${icon('alert')}<div><b>Hand #${Number(f.no)} failed verification.</b><ul style="margin:6px 0 0;padding-left:18px">${f.problems.map((p) => `<li>${U.esc(p)}</li>`).join('')}</ul></div></div>
         <p>The host's device didn't deal or score this hand the way it promised. That points to a modified game page or a tampered connection. Consider stopping play with this host.</p>`;
@@ -5286,7 +6268,7 @@ function GameScreen(session) {
         <li><b>No stacked decks:</b> the host commits to the deck before your random seed is added, so it can't choose who gets which card.</li>
         <li><b>No swapped cards:</b> your cards, the board and every shown hand are checked against the committed deck. Leftover cards are checked when the hand ends.</li>
         <li><b>No fiddled pots:</b> every hand is replayed through the rules engine on your device.</li>
-        <li><b>The limits:</b> the dealing device can see hole cards, and nothing can stop two players from sharing their cards in a chat app.</li>
+        <li><b>The limits:</b> with the standard deal the dealing device can see hole cards (the <b>Encrypted deal</b> setting removes that), and nothing can stop two players from sharing their cards in a chat app.</li>
       </ul>
       <div class="modal-foot"><button class="btn primary" data-close>Close</button></div>`, { label: 'Fair play' });
   }
@@ -5337,7 +6319,7 @@ function GameScreen(session) {
         <div class="sum-tile"><b>${t.timer ? t.timer + 's' : 'Off'}</b><span>Action timer</span></div>
         <div class="sum-tile"><b>${!t.rebuys ? 'No' : t.maxRebuys ? `${t.maxRebuys} each` : 'Unlimited'}</b><span>Rebuys</span></div>
         <div class="sum-tile"><b>${t.recordHole === 'All' ? 'All cards' : 'Showdown only'}</b><span>Hole cards in record</span></div>
-        <div class="sum-tile" style="grid-column:span 2"><b>${icon('shieldOk')} Provably fair shuffle</b><span>${t.hostPlays ? 'Host is also playing' : 'Host deals only (does not play)'}${t.botTakeover ? ' · bots replace dropouts' : ''}</span></div>
+        <div class="sum-tile" style="grid-column:span 2">${t.sra ? `<b>${icon('lock')} Encrypted deal</b><span>Nobody can see other players' cards, not even the host</span>` : `<b>${icon('shieldOk')} Provably fair shuffle</b><span>${t.hostPlays ? 'Host is also playing' : 'Host deals only (does not play)'}${t.botTakeover ? ' · bots replace dropouts' : ''}</span>`}</div>
       </div>
       ${v.you && v.you.isHost
         ? `<button class="btn primary lg" id="l-start" ${seated.length < 2 ? 'disabled' : ''}>${icon('play')}Start Game</button><p class="hint" style="margin:0;text-align:center">${seated.length < 2 ? 'Waiting for at least one more player to sit down.' : `${seated.length} players seated. Ready when you are.`}</p>`
@@ -5547,7 +6529,8 @@ function GameScreen(session) {
       pb.setAttribute('aria-label', v.paused ? 'Resume game' : 'Pause game');
     }
     const ban = $('#g-banner');
-    const banText = G.ended ? '' : G.status === 'reconnecting' ? 'Connection lost. Reconnecting to the host…' : v.paused ? 'Game paused by the host' : v.status === 'playing' && v.waiting && (!v.phase || v.phase === 'done') ? 'Waiting for at least two players with chips…' : '';
+    const banText = G.ended ? '' : G.status === 'reconnecting' ? 'Connection lost. Reconnecting to the host…' : v.paused ? 'Game paused by the host' : v.status === 'playing' && v.waiting && (!v.phase || v.phase === 'done') ? 'Waiting for at least two players with chips…'
+      : v.sraWait.length && v.phase && v.phase !== 'betting' && v.phase !== 'done' ? `Waiting for ${v.sraWait.join(', ')} to unlock the next cards…` : '';
     ban.textContent = banText; ban.classList.toggle('hidden', !banText); ban.classList.toggle('warn', G.status === 'reconnecting');
     renderLobby(v);
     if (prev && prev.status === 'lobby' && v.status !== 'lobby') setTimeout(() => table.layout(), 30);
@@ -5556,7 +6539,7 @@ function GameScreen(session) {
     if (G.pre === 'check' && v.you && v.you.toCallPreview > 0 && !v.legal) G.pre = null;
     table.render({
       maxSeats: v.table.maxSeats, mySeat: v.you && v.you.seat != null ? v.you.seat : 0, handKey: v.handNo ? 'h' + v.handNo : '',
-      seats: v.seats, board: v.board, pots: v.pots, street: v.shuffling ? 'Shuffling…' : v.handNo ? v.street : v.status === 'lobby' ? 'Waiting for players' : '',
+      seats: v.seats, board: v.board, pots: v.pots, street: v.shuffling ? (v.table.sra ? 'Encrypting deck…' : 'Shuffling…') : v.handNo ? v.street : v.status === 'lobby' ? 'Waiting for players' : '',
       results: v.results, timer: v.timer, readOnly: false, feltText: v.table.name,
       canSit: !!v.you && v.you.seat == null && v.status !== 'ended' && !(v.you.isHost && !v.table.hostPlays),
     });
@@ -5625,6 +6608,647 @@ function GameScreen(session) {
   return {
     destroy() { removeEventListener('keydown', onKey); removeEventListener('resize', onResize); table.destroy(); closeMenu(); TitleFlash.stop(); },
   };
+}
+
+/* =====================================================================
+   9. LEARN POKER  (#/learn): lessons from the rules to the maths, each
+   with worked examples and a short quiz, plus calculators. Hand names,
+   pots, raise limits and probabilities in the examples are computed by
+   the same engine the game uses, so they can't disagree with the table.
+   ===================================================================== */
+const Learn = (() => {
+  // ---------- small maths helpers (also used by the calculators) ----------
+  const C = (n, k) => { if (k < 0 || k > n) return 0; let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return Math.round(r); };
+  const pct = (x, d = 1) => `${(x * 100).toFixed(d)}%`;
+  const hitTwo = (outs) => 1 - C(47 - outs, 2) / C(47, 2); // flop to river, two cards to come
+  const hitOne = (outs, unseen = 46) => outs / unseen;       // one card to come
+  const potOdds = (pot, call) => call / (pot + call);         // pot already includes the bet you face
+  const ev = (eq, pot, call) => eq * pot - (1 - eq) * call;   // EV of calling: win the pot, or lose the call
+  const alpha = (pot, bet) => bet / (pot + bet);              // how often a bluff must work
+  const mdf = (pot, bet) => pot / (pot + bet);                // how often you must continue vs a bet
+  const fmt = (x) => U.fmt(Math.round(x * 100) / 100);
+
+  /** Monte Carlo equity of two or more Hold'em/Omaha hands, optionally with some board cards. */
+  function equity(hands, board = [], game = 'holdem', iters = 20000) {
+    const dead = new Set([...hands.flat(), ...board]);
+    const deck = Cards.newDeck().filter((c) => !dead.has(c));
+    const wins = hands.map(() => 0); let ties = 0;
+    const need = 5 - board.length;
+    for (let it = 0; it < iters; it++) {
+      // partial Fisher–Yates for the cards we need (simulation only: Math.random is fine here)
+      for (let i = 0; i < need; i++) { const j = i + Math.floor(Math.random() * (deck.length - i)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+      const b = board.concat(deck.slice(0, need));
+      const sc = hands.map((h) => Eval.forGame(game, h, b).score);
+      const best = Math.max(...sc), w = sc.filter((s) => s === best).length;
+      if (w > 1) ties++;
+      sc.forEach((s, i) => { if (s === best) wins[i] += 1 / w; });
+    }
+    return { eq: wins.map((x) => x / iters), tie: ties / iters, iters };
+  }
+
+  // ---------- content helpers ----------
+  const cards = (s, size = 34) => `<span class="crow">${s.split(/\s+/).filter(Boolean).map((c) => (c === '?' ? cardHtml(null, '', `--cw:${size}px`) : cardHtml(c, '', `--cw:${size}px`))).join('')}</span>`;
+  const hand = (hole, board, game = 'holdem', label = '') => {
+    const e = Eval.forGame(game, hole.split(' '), board.split(' '));
+    return `<div class="lhand">${label ? `<b>${label}</b>` : ''}${cards(hole)}<span class="muted">+</span>${cards(board, 30)}<span class="lres">= ${U.esc(Eval.describe(e))}</span><span class="lbest">best five: ${cards(e.best.join(' '), 26)}</span></div>`;
+  };
+  const rule = (h) => `<div class="lrule"><b>Rule</b><div>${h}</div></div>`;
+  const formula = (h, note = '') => `<div class="lform"><code>${h}</code>${note ? `<span>${note}</span>` : ''}</div>`;
+  const ex = (title, h) => `<div class="lex"><div class="lex-t">${icon('play')} Example: ${title}</div>${h}</div>`;
+  const tip = (h) => `<div class="ltip"><b>Tip</b> ${h}</div>`;
+  const table = (head, rows) => `<div class="ltable-wrap"><table class="ltable"><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+
+  // ---------- the course ----------
+  const CHAPTERS = [
+    { id: 'basics', title: 'The basics', blurb: 'Cards, hands and how a hand of poker is played.' },
+    { id: 'rules', title: 'Rules in depth', blurb: 'Raises, all-ins, side pots, showdowns, pot limit and Omaha.' },
+    { id: 'math', title: 'Poker maths', blurb: 'Outs, odds, expected value, bet sizes and combinations.' },
+    { id: 'strategy', title: 'Putting it together', blurb: 'Position, starting hands and stack sizes.' },
+  ];
+
+  const L = [];
+  const lesson = (o) => L.push(o);
+
+  /* ===== 1. Basics ===== */
+  lesson({
+    id: 'deck', ch: 'basics', title: 'The deck and the goal',
+    body: () => `
+      <p>Poker uses a standard <b>52-card deck</b>: 13 ranks in each of 4 suits. From lowest to highest the ranks are
+      2, 3, 4, 5, 6, 7, 8, 9, 10 (written <b>T</b>), Jack, Queen, King, Ace. Suits (♠ spades, ♥ hearts, ♦ diamonds, ♣ clubs) are all equal: no suit beats another.</p>
+      ${cards('2c 5d 9h Ts Jc Qd Kh As')}
+      ${rule('You win a hand in one of two ways: <b>everyone else folds</b>, or you have the <b>best five-card hand at the showdown</b>.')}
+      <p>Card names in this app use a rank and a suit letter: <code>As</code> is the ace of spades, <code>Td</code> the ten of diamonds, <code>7c</code> the seven of clubs.</p>
+      ${ex('reading cards', `<p>${cards('Ah Kh')} is "ace-king of hearts", written <code>AhKh</code>, or <b>AKs</b> for short (s = suited). ${cards('Qs Qd')} is a pair of queens, <b>QQ</b>. ${cards('Jc 9d')} is <b>J9o</b> (o = offsuit).</p>`)}
+      ${tip('An ace can also play low, but only in the straight A-2-3-4-5 (the "wheel").')}`,
+    quiz: [
+      { q: 'How many cards are in a poker deck?', opts: ['48', '52', '54'], a: 1, why: '13 ranks × 4 suits = 52. No jokers.' },
+      { q: 'Which suit is highest?', opts: ['Spades', 'Hearts', 'None: suits are equal'], a: 2, why: 'In Hold\'em and Omaha suits never break ties. Equal hands split the pot.' },
+    ],
+  });
+
+  lesson({
+    id: 'rankings', ch: 'basics', title: 'Hand rankings',
+    body: () => {
+      const rows = [
+        ['Royal flush', 'As Ks Qs Js Ts', 'A-K-Q-J-T all one suit', 4],
+        ['Straight flush', '9h 8h 7h 6h 5h', 'Five in a row, one suit', 36],
+        ['Four of a kind', 'Qc Qd Qh Qs 7d', 'Four cards of one rank', 624],
+        ['Full house', 'Kc Kd Kh 4s 4d', 'Three of a kind plus a pair', 3744],
+        ['Flush', 'Ad Jd 8d 6d 2d', 'Five of one suit', 5108],
+        ['Straight', 'Tc 9d 8s 7h 6c', 'Five in a row, mixed suits', 10200],
+        ['Three of a kind', '7c 7d 7s Kh 2c', 'Three cards of one rank', 54912],
+        ['Two pair', 'Jh Jc 4d 4s As', 'Two different pairs', 123552],
+        ['One pair', 'Th Tc Ks 8d 3h', 'Two cards of one rank', 1098240],
+        ['High card', 'Ah Qc 9d 6s 3c', 'None of the above', 1302540],
+      ];
+      const total = C(52, 5);
+      return `<p>Every poker hand is exactly <b>five cards</b>. From best to worst:</p>
+      ${table(['Hand', 'Example', 'What it is', 'Ways to make it', 'Chance in 5 cards'], rows.map(([n, c, d, k]) => [`<b>${n}</b>`, cards(c, 26), d, U.fmt(k), pct(k / total, 4)]))}
+      ${formula(`C(52, 5) = 52! ÷ (5! × 47!) = ${U.fmt(total)}`, 'different five-card hands; each row counts how many of them make that hand')}
+      ${ex('why a flush beats a straight', `<p>There are ${U.fmt(10200)} straights but only ${U.fmt(5108)} flushes. Rarer hands rank higher. Counting flushes: ${formula('4 suits × C(13, 5) − 40 straight flushes = 4 × 1,287 − 40 = 5,108')}</p>`)}
+      ${ex('the wheel', `<p>${cards('5s 4d 3h 2c Ac')} is a straight, <b>${U.esc(Eval.describe(Eval.evaluate(['5s', '4d', '3h', '2c', 'Ac'])))}</b>: the ace plays low. It is the lowest straight; ${cards('6s 5s 4d 3h 2c', 26)} beats it.</p>`)}
+      ${tip('Straights do not "wrap around": Q-K-A-2-3 is not a straight.')}`;
+    },
+    quiz: [
+      { q: 'Which hand is better?', opts: ['Full house', 'Flush'], a: 0, why: 'Full house ranks above a flush (3,744 ways versus 5,108).' },
+      { q: 'Is K-A-2-3-4 a straight?', opts: ['Yes', 'No'], a: 1, why: 'Straights don\'t wrap. The ace is high (10-J-Q-K-A) or low (A-2-3-4-5), never in the middle.' },
+      { q: 'Which is more common in five cards?', opts: ['Two pair', 'Three of a kind'], a: 0, why: 'Two pair: 123,552 ways. Three of a kind: 54,912. Rarer = stronger, so trips beat two pair.' },
+    ],
+  });
+
+  lesson({
+    id: 'flow', ch: 'basics', title: 'How a hand of Hold\'em is played',
+    body: () => `
+      <p>Each hand has up to <b>four betting rounds</b>. The <b>button</b> (dealer marker) moves one seat to the left every hand.</p>
+      <ol class="lsteps">
+        <li><b>Blinds.</b> The two players left of the button post forced bets: the <b>small blind</b> and the <b>big blind</b>. They make sure there's something to win.</li>
+        <li><b>Preflop.</b> Everyone gets two face-down <b>hole cards</b>. Betting starts with the player left of the big blind.</li>
+        <li><b>Flop.</b> Three shared <b>community cards</b> are dealt face up. Betting starts with the first active player left of the button.</li>
+        <li><b>Turn.</b> A fourth community card, then another betting round.</li>
+        <li><b>River.</b> The fifth and last community card, then the final betting round.</li>
+        <li><b>Showdown.</b> If two or more players are left, hands are shown and the best five-card hand wins the pot.</li>
+      </ol>
+      ${rule('A betting round ends when every player still in has either put in the same amount or is all-in, and everyone has had a chance to act.')}
+      ${ex('a full hand, blinds 1/2', `
+        <p>Alice is on the button, Bob is the small blind (posts 1), Cat the big blind (posts 2).</p>
+        <p><b>Preflop:</b> Alice ${cards('Ah Qh', 28)} raises to 6. Bob folds. Cat ${cards('9c 9d', 28)} calls 4 more. Pot: 6 + 6 + 1 = <b>13</b>.</p>
+        <p><b>Flop</b> ${cards('Qs 7d 2c', 28)}: Cat checks, Alice bets 8, Cat calls. Pot <b>29</b>.</p>
+        <p><b>Turn</b> ${cards('4h', 28)}: both check. <b>River</b> ${cards('Kc', 28)}: both check.</p>
+        <p><b>Showdown:</b> ${hand('Ah Qh', 'Qs 7d 2c 4h Kc', 'holdem', 'Alice')} ${hand('9c 9d', 'Qs 7d 2c 4h Kc', 'holdem', 'Cat')} Alice wins the 29 chip pot.</p>`)}
+      ${tip('Heads-up (two players) is special: the button posts the small blind and acts <b>first</b> before the flop, then <b>last</b> on every later street.')}`,
+    quiz: [
+      { q: 'How many community cards are dealt on the flop?', opts: ['1', '3', '5'], a: 1, why: 'Flop = 3 cards, turn = 1, river = 1: five in total.' },
+      { q: 'Who acts first after the flop (3+ players)?', opts: ['The player left of the big blind', 'The first active player left of the button', 'The button'], a: 1, why: 'Preflop starts left of the big blind; on every later street the first active player left of the button starts.' },
+    ],
+  });
+
+  lesson({
+    id: 'actions', ch: 'basics', title: 'Your options: fold, check, call, bet, raise',
+    body: () => `
+      ${table(['Action', 'When you can', 'What it means'], [
+        ['<b>Fold</b>', 'Any time it\'s your turn', 'Give up the hand and anything you put in the pot.'],
+        ['<b>Check</b>', 'Nobody has bet this round (or you already matched)', 'Pass without putting in chips.'],
+        ['<b>Bet</b>', 'Nobody has bet this round', 'Put chips in that others must match to stay in.'],
+        ['<b>Call</b>', 'Someone has bet', 'Match the current bet.'],
+        ['<b>Raise</b>', 'Someone has bet', 'Increase the bet. Others must match the new amount.'],
+        ['<b>All-in</b>', 'Any time', 'Put in all your chips. You can only win what you matched from each player (see side pots).'],
+      ])}
+      ${rule('<b>Table stakes:</b> you can only bet the chips in front of you when the hand starts. You can never be forced out of a hand for lack of chips; you go all-in instead.')}
+      ${ex('one betting round', `<p>Blinds 1/2. The player under the gun <b>calls</b> 2. The next player <b>raises to 8</b>. Everyone else must now put in 8 in total (fold, call 8, or raise again). The first player has 2 in, so a call costs them 6 more.</p>`)}
+      ${tip('Keyboard shortcuts at the table: <b>F</b> fold, <b>C</b> check or call, <b>R</b> raise.')}`,
+    quiz: [
+      { q: 'Someone bet 10 before you. Can you check?', opts: ['Yes', 'No'], a: 1, why: 'Checking is only allowed when there is nothing to call. Facing a bet you fold, call or raise.' },
+      { q: 'You have 30 chips and face a bet of 50. What can you do?', opts: ['Only fold', 'Call all-in for 30, or fold', 'Borrow 20 more'], a: 1, why: 'Table stakes: you can call for everything you have. You can then only win 30 from each opponent.' },
+    ],
+  });
+
+  lesson({
+    id: 'best5', ch: 'basics', title: 'Making the best five-card hand',
+    body: () => `
+      <p>In Hold'em you make the best five-card hand from <b>any combination</b> of your two hole cards and the five community cards: both, one, or none of yours.</p>
+      ${rule('Only five cards count. A sixth or seventh card never matters, even if it\'s an ace.')}
+      ${ex('using both hole cards', hand('9h 8h', 'Th Jh 2c 7d Qs'))}
+      ${ex('using one hole card', hand('Ad 3c', 'Kd 9d 4d 2d Js'))}
+      ${ex('playing the board (using none)', `${hand('2c 3d', 'Ts Js Qs Kd Ah')}<p>The board itself is a straight. Anyone still in the hand ties unless they can beat it.</p>`)}
+      ${ex('a hidden full house', hand('7s 7c', '7d Kh Kc 2s 9h'))}`,
+    quiz: [
+      { q: 'Board: Ts Js Qs Kd Ah. You hold 2c 3d, your opponent holds 4h 5h. Who wins?', opts: ['You', 'Your opponent', 'Split pot'], a: 2, why: 'Both play the board straight (A-K-Q-J-T). Neither hand improves it, so the pot is split.' },
+      { q: 'Can you use just one of your hole cards?', opts: ['Yes, in Hold\'em', 'No, you must use both'], a: 0, why: 'In Hold\'em any five of the seven cards play. (Omaha is different: there you must use exactly two.)' },
+    ],
+  });
+
+  lesson({
+    id: 'kickers', ch: 'basics', title: 'Kickers, ties and split pots',
+    body: () => {
+      const b = 'As 9c 7d 4h 2s';
+      const a = Eval.forGame('holdem', ['Ah', 'Kd'], b.split(' ')), q = Eval.forGame('holdem', ['Ad', 'Qc'], b.split(' '));
+      return `
+      <p>When two players have the same kind of hand, compare the cards that make it, highest first. Unused cards in the five are called <b>kickers</b>, and they break ties.</p>
+      ${rule('Compare rank by rank down the five cards. If all five match, the hands tie and the pot is <b>split</b> equally. Odd chips go to the first winner left of the button.')}
+      ${ex('a kicker decides it', `${hand('Ah Kd', b, 'holdem', 'Alice')}${hand('Ad Qc', b, 'holdem', 'Bob')}
+        <p>Both have a pair of aces. Next card: Alice's king beats Bob's queen, so Alice wins (${a.score > q.score ? 'confirmed by the engine' : 'engine disagrees!'}).</p>`)}
+      ${ex('kickers that don\'t play', `${hand('Ah 3d', 'Ks Kd Qc Qh Jc', 'holdem', 'Alice')}${hand('Ac 2s', 'Ks Kd Qc Qh Jc', 'holdem', 'Bob')}
+        <p>Both make kings and queens with an ace kicker. The 3 and the 2 are the sixth and seventh cards and don't count: <b>split pot</b>.</p>`)}
+      ${ex('the board\'s kicker counts too', `${hand('Kh 2c', 'Ks 9d 8c 6h 4s', 'holdem', 'Alice')}${hand('Kd 3c', 'Ks 9d 8c 6h 4s', 'holdem', 'Bob')}<p>Pair of kings with 9-8-6 kickers for both: split. Neither small card makes the best five.</p>`)}
+      ${tip('Two pair compares the higher pair first, then the lower pair, then the kicker. A full house compares the three-of-a-kind first.')}`;
+    },
+    quiz: [
+      { q: 'Board A♠ 9♣ 7♦ 4♥ 2♠. A K vs A J. Who wins?', opts: ['A K', 'A J', 'Split'], a: 0, why: 'Both have a pair of aces; the king kicker beats the jack.' },
+      { q: 'Board K K Q Q J. Ace-three vs ace-two. Result?', opts: ['Ace-three wins', 'Split pot'], a: 1, why: 'Best five for both: K K Q Q A. The 3 and 2 don\'t play.' },
+    ],
+  });
+
+  /* ===== 2. Rules in depth ===== */
+  lesson({
+    id: 'positions', ch: 'rules', title: 'Blinds, button and positions',
+    body: () => `
+      <p>Seats are named by where they sit relative to the button. Acting <b>later</b> is an advantage: you see what others did first.</p>
+      ${table(['Position', 'Where', 'Acts preflop', 'Acts after the flop'], [
+        ['SB, small blind', '1 left of button', 'second to last', 'first'],
+        ['BB, big blind', '2 left of button', 'last', 'second'],
+        ['UTG, "under the gun"', '3 left of button', 'first', 'early'],
+        ['MP / HJ, middle / hijack', 'middle seats', 'middle', 'middle'],
+        ['CO, cutoff', '1 right of button', 'late', 'second to last'],
+        ['BTN, button', 'dealer seat', 'late', '<b>last</b>'],
+      ])}
+      ${rule('<b>Heads-up</b> (two players): the button posts the <b>small</b> blind and acts first preflop; the other player posts the big blind. After the flop the button acts last.')}
+      ${rule('<b>Antes</b> are small forced bets from every player, posted before the blinds. They make the pot bigger before anyone acts.')}
+      ${ex('who posts what', '<p>Six players, blinds 2/4, ante 1. Before any cards are dealt the pot already holds 6 × 1 + 2 + 4 = <b>12</b> chips.</p>')}
+      ${tip('With "blinds go up" turned on, the blinds and ante multiply by 2×, 3×, 5×, 8×… every few hands. Each hand in the record states its own level.')}`,
+    quiz: [
+      { q: 'Heads-up, who posts the small blind?', opts: ['The button', 'The other player'], a: 0, why: 'Heads-up the button is the small blind and acts first preflop, last after the flop.' },
+      { q: 'Which seat acts last after the flop?', opts: ['Big blind', 'Button', 'Under the gun'], a: 1, why: 'The button acts last on the flop, turn and river: the best seat at the table.' },
+    ],
+  });
+
+  lesson({
+    id: 'minraise', ch: 'rules', title: 'Minimum raises (no limit)',
+    body: () => {
+      const h = Engine.createHand({ no: 1, players: ['A', 'B', 'C', 'D'].map((name) => ({ name, stack: 500 })), button: 0, sb: 1, bb: 2 });
+      const l0 = Engine.legal(h); Engine.applyAction(h, { type: 'raise', to: 6 }); const l1 = Engine.legal(h); Engine.applyAction(h, { type: 'raise', to: 20 }); const l2 = Engine.legal(h);
+      return `
+      ${rule('A raise must be at least as big as the <b>last bet or raise</b> in the same round. The first bet must be at least one big blind.')}
+      ${formula('minimum raise to = current bet + size of the last raise')}
+      ${ex('raises getting bigger', `<p>Blinds 1/2 (the big blind counts as the first "bet" of 2).</p>
+        <ul class="lsteps"><li>First raiser: min raise to = 2 + 2 = <b>${l0.minTo}</b>. They raise to 6 (a raise of 4).</li>
+        <li>Next player: min re-raise to = 6 + 4 = <b>${l1.minTo}</b>. They raise to 20 (a raise of 14).</li>
+        <li>Next player: min re-raise to = 20 + 14 = <b>${l2.minTo}</b>.</li></ul>
+        <p class="hint">These limits come straight from the game engine.</p>`)}
+      ${rule('In no limit the maximum is always your whole stack: all-in.')}`;
+    },
+    quiz: [
+      { q: 'Blinds 5/10. Someone raises to 35. What is the minimum re-raise to?', opts: ['45', '60', '70'], a: 1, why: 'The raise was 25 (from 10 to 35). Minimum re-raise to = 35 + 25 = 60.' },
+      { q: 'On the flop nobody has bet. Blinds 1/2. Smallest legal bet?', opts: ['1', '2', 'Anything'], a: 1, why: 'The first bet in a round must be at least one big blind (or all-in for less).' },
+    ],
+  });
+
+  lesson({
+    id: 'sidepots', ch: 'rules', title: 'All-ins and side pots',
+    body: () => {
+      const pots = Engine.computePots([50, 150, 300], [false, false, false]);
+      return `
+      <p>An all-in player can only win from each opponent as much as they put in themselves. Anything extra goes into a <b>side pot</b> they can't win.</p>
+      ${rule('Build pots from the smallest all-in up: the <b>main pot</b> takes the smallest stack from everyone; each <b>side pot</b> takes the next layer from those who have more. Any bet nobody could call is simply returned.')}
+      ${formula('main pot = smallest all-in × number of players in it', 'then repeat with what is left')}
+      ${ex('three players all-in for 50, 150 and 300', `
+        ${table(['Pot', 'Amount', 'Who can win it'], pots.map((p, k) => [k === 0 ? 'Main pot' : p.eligible.length === 1 ? 'Returned (uncalled)' : `Side pot ${k}`, U.fmt(p.amount), p.eligible.map((i) => ['Ann (50)', 'Ben (150)', 'Cy (300)'][i]).join(', ')]))}
+        <p>Main: 50 × 3 = 150. Side: (150 − 50) × 2 = 200. Cy's last 150 can't be called, so it goes back to Cy. If Ann has the best hand she wins 150; the best of Ben and Cy wins the side pot of 200.</p>`)}
+      ${tip('Each pot is decided on its own, so one player can win the main pot while another wins the side pot.')}`;
+    },
+    quiz: [
+      { q: 'Ann is all-in for 40; Ben and Cy each put in 100. How big is the main pot?', opts: ['120', '200', '240'], a: 0, why: 'Main pot = 40 × 3 = 120. The side pot is (100 − 40) × 2 = 120, which only Ben and Cy can win.' },
+      { q: 'Ann (all-in, smallest) has the best hand. Does she win everything?', opts: ['Yes', 'Only the main pot'], a: 1, why: 'She can only win what she could match. The side pot goes to the better of the others.' },
+    ],
+  });
+
+  lesson({
+    id: 'shortallin', ch: 'rules', title: 'Short all-ins and reopening the betting',
+    body: () => `
+      ${rule('An all-in that is <b>less than a full raise</b> does not reopen the betting for players who have already acted. They may call or fold, but not raise again.')}
+      ${ex('the betting stays closed', `<p>Blinds 5/10. Ann bets 100 on the flop. Ben calls 100. Cy goes all-in for 130, a raise of only 30, less than the 100 needed for a full raise.</p>
+        <p>Back to Ann: she can call 30 more or fold, but <b>cannot re-raise</b>, because Cy's all-in wasn't a full raise. If Cy had gone all-in for 200 or more, Ann could raise again.</p>`)}
+      ${tip('The table shows this as "raising is closed" when it applies.')}`,
+    quiz: [
+      { q: 'You bet 50, someone goes all-in for 70 (a raise of 20). Can you re-raise?', opts: ['Yes', 'No, only call or fold'], a: 1, why: 'A 20 raise is less than a full raise of 50, so the betting isn\'t reopened for you.' },
+    ],
+  });
+
+  lesson({
+    id: 'showdown', ch: 'rules', title: 'Showdown: who shows first, mucking',
+    body: () => `
+      ${rule('At the showdown, the <b>last player to bet or raise on the river shows first</b>. If everyone checked, the first player left of the button shows first. The others then show in turn, clockwise.')}
+      ${rule('Once a better hand is shown, you may <b>muck</b> (throw away without showing). A mucked hand cannot win. When players are all-in with no more betting possible, every hand is turned face up.')}
+      ${ex('who shows', `<p>On the river Ben bets and Cy calls. Ben must show first. If Ben shows ${cards('Ks Kd', 26)} and Cy's hand is worse, Cy can muck without revealing it.</p>`)}
+      ${tip('Your "auto-muck" setting mucks clearly beaten hands for you. Turn it off if you like to show every hand. You can also show your cards voluntarily after any hand.')}`,
+    quiz: [
+      { q: 'River: everyone checked. Who shows first?', opts: ['The big blind', 'The first player left of the button', 'The last caller'], a: 1, why: 'With no river bet, showing starts left of the button and goes clockwise.' },
+    ],
+  });
+
+  lesson({
+    id: 'potlimit', ch: 'rules', title: 'Pot limit',
+    body: () => {
+      const h = Engine.createHand({ no: 1, players: ['A', 'B', 'C'].map((name) => ({ name, stack: 1000 })), button: 0, sb: 1, bb: 2, limit: 'pl' });
+      const l0 = Engine.legal(h); Engine.applyAction(h, { type: 'raise', to: l0.maxTo }); const l1 = Engine.legal(h);
+      return `
+      <p>In pot limit the most you can bet or raise is the size of the pot, counted <b>as if you had called first</b>.</p>
+      ${formula('maximum raise to = current bet + pot + amount to call', 'pot = everything in the middle, including bets this round')}
+      ${ex('raising the pot preflop, blinds 1/2', `<p>First to act: current bet 2, pot 1 + 2 = 3, amount to call 2.</p>
+        ${formula(`max raise to = 2 + 3 + 2 = ${l0.maxTo}`)}
+        <p>They raise to ${l0.maxTo}. The small blind (1 already in) now faces: current bet ${l1.currentBet}, pot ${l1.pot}, call ${l1.toCall}.</p>
+        ${formula(`max raise to = ${l1.currentBet} + ${l1.pot} + ${l1.toCall} = ${l1.maxTo}`)}
+        <p class="hint">Both numbers are what the game engine allows.</p>`)}
+      ${ex('a pot-size bet after the flop', '<p>Pot is 60 and nobody has bet: the maximum bet is 60. If someone bets 60, the next player can raise to at most 60 + (60 + 60 + 60) = 240: their call of 60 makes the pot 180, and they may raise by that much.</p>')}
+      ${tip('Minimum raises work exactly as in no limit.')}`;
+    },
+    quiz: [
+      { q: 'Pot limit. Pot is 100 (no bets yet this round). Largest bet?', opts: ['50', '100', '200'], a: 1, why: 'With nothing to call, the maximum bet is simply the pot: 100.' },
+      { q: 'Pot is 100 and someone bets 50 (pot now 150). Largest raise to?', opts: ['150', '250', '300'], a: 1, why: 'Max raise to = current bet 50 + pot 150 + call 50 = 250.' },
+    ],
+  });
+
+  lesson({
+    id: 'omaha', ch: 'rules', title: 'Omaha: exactly two plus three',
+    body: () => `
+      <p>Omaha deals each player <b>four</b> hole cards (five in 5-Card Omaha). Everything else plays like Hold'em except one big rule:</p>
+      ${rule('Your hand must use <b>exactly two</b> of your hole cards and <b>exactly three</b> board cards. Not one, not three: two.')}
+      ${ex('four hearts on the board, one in your hand', `${hand('Ah Kc 2c 3d', 'Qh Jh 9h 5h 4c', 'omaha')}<p>In Hold'em the A♥ would make a flush. In Omaha you need <b>two</b> hearts in your hand, so this is not a flush.</p>`)}
+      ${ex('two hearts in hand', hand('Ah Kh 2c 3d', 'Qh Jh 9h 5s 4c', 'omaha'))}
+      ${ex('four of a kind on the board', `${hand('As Kd 7c 2h', 'Qs Qd Qh Qc 3d', 'omaha')}<p>In Hold'em everyone would have four queens. In Omaha you may use only three board cards, so the best you can do is three queens with your two best cards.</p>`)}
+      ${tip('With four hole cards you have C(4,2) = 6 two-card combinations to combine with C(5,3) = 10 three-card boards: 60 possible hands. Five hole cards give 10 × 10 = 100.')}`,
+    quiz: [
+      { q: 'Omaha. Board has four spades. You hold one spade. Do you have a flush?', opts: ['Yes', 'No'], a: 1, why: 'You must use exactly two hole cards, so you need two spades in your hand.' },
+      { q: 'How many two-card combinations from four hole cards?', opts: ['4', '6', '12'], a: 1, why: 'C(4, 2) = 4 × 3 ÷ 2 = 6.' },
+    ],
+  });
+
+  /* ===== 3. Maths ===== */
+  lesson({
+    id: 'outs', ch: 'math', title: 'Counting outs',
+    body: () => `
+      <p>An <b>out</b> is an unseen card that would make your hand (probably) the best. Count them, then turn them into a probability.</p>
+      ${table(['Draw', 'Example (hand + flop)', 'Outs'], [
+        ['Flush draw', `${cards('Ah 7h', 24)} ${cards('Kh 9h 2c', 24)}`, '9 (13 hearts − 4 seen)'],
+        ['Open-ended straight draw', `${cards('9c 8d', 24)} ${cards('7s 6h 2c', 24)}`, '8 (four 5s + four 10s)'],
+        ['Gutshot (inside) straight draw', `${cards('9c 8d', 24)} ${cards('6s 5h Kc', 24)}`, '4 (four 7s)'],
+        ['Two overcards', `${cards('Ac Kd', 24)} ${cards('9s 6h 2c', 24)}`, '6 (three aces + three kings)'],
+        ['Pocket pair to a set', `${cards('7c 7d', 24)} ${cards('Ks 9h 2c', 24)}`, '2'],
+        ['Flush draw + open-ended', `${cards('9h 8h', 24)} ${cards('7h 6c 2h', 24)}`, '15 (9 hearts + 6 more straight cards)'],
+      ])}
+      ${rule('Never count a card twice: in the combo draw, the 5♥ and 10♥ already count as hearts, so the straight adds 8 − 2 = 6.')}
+      ${tip('Discount "dirty" outs: a card that completes your straight but also puts a flush on the board may not be good.')}`,
+    quiz: [
+      { q: 'You hold two hearts and the flop has two hearts. How many outs to a flush?', opts: ['8', '9', '13'], a: 1, why: '13 hearts − 4 you can see = 9.' },
+      { q: 'You hold 9-8 on a 7-6-2 flop. Straight outs?', opts: ['4', '8', '12'], a: 1, why: 'Any 5 or any 10 makes a straight: 4 + 4 = 8 (open-ended).' },
+    ],
+  });
+
+  lesson({
+    id: 'rule24', ch: 'math', title: 'From outs to odds: the rule of 2 and 4',
+    body: () => {
+      const rows = [2, 4, 6, 8, 9, 12, 15].map((o) => [o, pct(hitOne(o, 47)), `${o * 2}%`, pct(hitTwo(o)), `${o * 4}%`]);
+      return `
+      <p>After the flop, 47 cards are unseen (52 − your 2 − 3 on the board). After the turn, 46.</p>
+      ${formula('one card to come:   P(hit) = outs ÷ unseen cards')}
+      ${formula('two cards (flop to river):   P(hit) = 1 − C(47 − outs, 2) ÷ C(47, 2)', 'one minus the chance of missing twice')}
+      ${rule('<b>Quick estimate:</b> multiply your outs by <b>2</b> for one card to come, by <b>4</b> for two cards (flop, with all-in so you see both). Above about 8 outs the ×4 rule overestimates a little.')}
+      ${table(['Outs', 'Exact, next card', 'Rule of 2', 'Exact, by the river', 'Rule of 4'], rows)}
+      ${ex('a flush draw', `<p>9 outs on the flop. Exact chance to hit by the river:</p>${formula(`1 − C(38, 2) ÷ C(47, 2) = 1 − ${C(38, 2)} ÷ ${C(47, 2)} = ${pct(hitTwo(9))}`)}<p>The rule of 4 says 36%: close enough at the table.</p>`)}
+      ${tip('If someone can still bet on the turn, use the one-card number: you only know you\'ll see one more card.')}`;
+    },
+    quiz: [
+      { q: 'You have 8 outs on the turn. Roughly what are your odds on the river?', opts: ['8%', '16% (about 17% exactly)', '32%'], a: 1, why: 'One card to come: 8 × 2 ≈ 16%. Exactly 8 ÷ 46 = 17.4%.' },
+      { q: 'Using the rule of 4, a gutshot (4 outs) on the flop, all-in?', opts: ['8%', '16%', '24%'], a: 1, why: '4 × 4 = 16%. Exactly: 1 − C(43,2)/C(47,2) = 16.5%.' },
+    ],
+  });
+
+  lesson({
+    id: 'potodds', ch: 'math', title: 'Pot odds: is the call worth it?',
+    body: () => `
+      ${formula('required equity = amount to call ÷ (pot after the bet + amount to call)', 'call if your chance of winning is higher')}
+      ${ex('the classic', `<p>The pot is 100. Your opponent bets 50, so the pot is now 150 and you must call 50.</p>
+        ${formula(`50 ÷ (150 + 50) = ${pct(potOdds(150, 50))}`)}
+        <p>You're risking 50 to win 150: odds of <b>3 to 1</b>. You need to win at least 25% of the time.</p>`)}
+      ${ex('a flush draw on the turn', `<p>You have 9 outs with one card to come: ${pct(hitOne(9))}. The pot is 80 and your opponent bets 40.</p>
+        ${formula(`required = 40 ÷ (120 + 40) = ${pct(potOdds(120, 40))}`)}
+        <p>${pct(hitOne(9))} &lt; ${pct(potOdds(120, 40))}, so calling loses money in the long run, unless you'll win more later (next lesson).</p>`)}
+      ${table(['Bet size', 'Your odds', 'Equity needed to call'], [[0.25, '1/4 pot'], [0.33, '1/3 pot'], [0.5, '1/2 pot'], [0.75, '3/4 pot'], [1, 'pot'], [2, '2× pot']].map(([b, l]) => [l, `${fmt((1 + b) / b)} : 1`, pct(potOdds(1 + b, b))]))}
+      ${tip('Converting: odds of X : 1 mean you need 1 ÷ (X + 1). 3 : 1 → 25%; 2 : 1 → 33%.')}`,
+    quiz: [
+      { q: 'Pot 60, opponent bets 60 (pot now 120). Equity needed to call?', opts: ['25%', '33%', '50%'], a: 1, why: '60 ÷ (120 + 60) = 33.3%: a pot-size bet always needs one third.' },
+      { q: 'You have 20% equity and face a half-pot bet (needs 25%). Call?', opts: ['Yes', 'Not on pot odds alone'], a: 1, why: '20% is less than the 25% required. Only implied odds (future winnings) could justify it.' },
+    ],
+  });
+
+  lesson({
+    id: 'ev', ch: 'math', title: 'Expected value (EV)',
+    body: () => `
+      <p><b>Expected value</b> is what a decision wins or loses on average if you could repeat it many times.</p>
+      ${formula('EV(call) = equity × pot − (1 − equity) × call', 'pot = what you win: everything already in the middle, including the bet you face')}
+      ${ex('a profitable call', `<p>Pot 150 (after a 50 bet), call 50, equity 35%.</p>${formula(`EV = 0.35 × 150 − 0.65 × 50 = ${fmt(ev(0.35, 150, 50))} chips`)}<p>Positive: calling wins about ${fmt(ev(0.35, 150, 50))} chips on average.</p>`)}
+      ${ex('a losing call', `<p>Same pot, equity 19.6% (flush draw, one card to come).</p>${formula(`EV = 0.196 × 150 − 0.804 × 50 = ${fmt(ev(0.196, 150, 50))} chips`)}`)}
+      ${ex('EV of a bluff', `<p>Pot 100. You bet 75 as a bluff that never wins if called. Your opponent folds 50% of the time.</p>${formula('EV = P(fold) × pot − P(call) × bet = 0.5 × 100 − 0.5 × 75 = 12.5')}<p>A bluff with no showdown value is profitable if they fold more than 75 ÷ (100 + 75) = ${pct(alpha(100, 75))} of the time.</p>`)}
+      ${rule('EV = 0 exactly at the pot-odds break-even point: solve EV(call) = 0 and you get equity = call ÷ (pot + call).')}`,
+    quiz: [
+      { q: 'Pot 200, call 100, equity 30%. EV of calling?', opts: ['−10', '+10', '+60'], a: 0, why: '0.30 × 200 − 0.70 × 100 = 60 − 70 = −10.' },
+    ],
+  });
+
+  lesson({
+    id: 'implied', ch: 'math', title: 'Implied odds and reverse implied odds',
+    body: () => {
+      const eq = hitOne(4), P = 30, c = 10, X = c / eq - P - c;
+      return `
+      <p><b>Implied odds</b> count chips you expect to win <b>later</b> when you hit. They can make a call right that pot odds alone say is wrong.</p>
+      ${formula('extra you must win later (X) ≥ call ÷ equity − pot − call')}
+      ${ex('a gutshot', `<p>Turn. Pot 30 after a 10 bet; you need 10 to call; 4 outs → ${pct(eq)}.</p>
+        ${formula(`X ≥ 10 ÷ ${eq.toFixed(3)} − 30 − 10 = ${fmt(X)}`)}
+        <p>You need to win about <b>${Math.ceil(X)}</b> more chips on the river, on average, when you hit. Against a deep opponent who will pay you off, that's realistic; against a short stack it isn't.</p>`)}
+      ${rule('<b>Reverse implied odds:</b> when you make a weak version of a hand (a small flush, a straight that a bigger straight beats), you can lose extra chips later. Discount those draws.')}`;
+    },
+    quiz: [
+      { q: 'Implied odds matter most when stacks are…', opts: ['Short', 'Deep'], a: 1, why: 'Deep stacks mean there is plenty left to win after you hit.' },
+    ],
+  });
+
+  lesson({
+    id: 'sizing', ch: 'math', title: 'Bet sizing: how often a bluff must work, how often to defend',
+    body: () => `
+      <p>The same numbers seen from the bettor's side.</p>
+      ${formula('bluff break-even (α) = bet ÷ (pot + bet)', 'how often opponents must fold for a pure bluff to profit')}
+      ${formula('minimum defence frequency (MDF) = pot ÷ (pot + bet)', 'how often you must continue so an any-two-cards bluff doesn\'t profit')}
+      ${formula('balanced river bluffs = bet ÷ (pot + 2 × bet)', 'the share of bluffs in a betting range that makes the caller indifferent')}
+      ${table(['Bet', 'α (bluff needs folds)', 'MDF (defend at least)', 'Bluffs in a balanced range'], [[0.33, '1/3 pot'], [0.5, '1/2 pot'], [0.75, '3/4 pot'], [1, 'pot'], [2, '2× pot']].map(([b, l]) => [l, pct(alpha(1, b)), pct(mdf(1, b)), pct(b / (1 + 2 * b))]))}
+      ${ex('half-pot bet', `<p>Pot 100, bet 50. α = 50 ÷ 150 = ${pct(alpha(100, 50))}: the bluff profits if they fold more than a third of the time. MDF = 100 ÷ 150 = ${pct(mdf(100, 50))}: the defender should continue with about two thirds of their range.</p>`)}
+      ${tip('A bigger bet needs <b>more</b> folds to break even as a bluff, but a balanced betting range can then contain <b>more</b> bluffs.')}`,
+    quiz: [
+      { q: 'Pot-size bluff. How often must it work to break even?', opts: ['33%', '50%', '67%'], a: 1, why: 'α = 100 ÷ (100 + 100) = 50%.' },
+      { q: 'Facing a pot-size bet, minimum defence frequency?', opts: ['33%', '50%', '67%'], a: 1, why: 'MDF = pot ÷ (pot + bet) = 100 ÷ 200 = 50%.' },
+    ],
+  });
+
+  lesson({
+    id: 'combos', ch: 'math', title: 'Combinations and blockers',
+    body: () => `
+      <p>Counting the ways a hand can be dealt (its <b>combinations</b>) tells you what your opponent is likely to have.</p>
+      ${formula('pocket pair: C(4, 2) = 6 combos', 'e.g. 6 ways to be dealt AA')}
+      ${formula('unpaired hand: 4 × 4 = 16 combos', '4 suited + 12 offsuit')}
+      ${formula('all starting hands: C(52, 2) = 1,326', '169 different "types": 13 pairs, 78 suited, 78 offsuit')}
+      ${ex('card removal on the board', `<p>Board ${cards('Ah 8c 3d', 26)}. How many ways can someone hold AA? One ace is on the board, so only 3 are left: C(3, 2) = <b>3</b> combos (not 6). AK: 3 aces × 4 kings = <b>12</b> combos (not 16).</p>`)}
+      ${ex('blockers', `<p>You hold ${cards('As Qc', 26)} on ${cards('Kd Jd 4c', 26)}. Your opponent's possible AK: 3 aces left × 4 kings = 12 combos instead of 16. Holding the ace <b>blocks</b> a quarter of their AK combos, and holding the ace of spades blocks the nut flush on a spade board.</p>`)}
+      ${ex('value versus bluffs', '<p>Your opponent bets the river and you think they have either a set of eights (pairs: 3 combos left if one 8 is on the board) or a missed flush draw like suited J-T (4 combos). That\'s 3 value combos against 4 bluffs: they are bluffing 4 ÷ 7 = 57% of the time.</p>')}`,
+    quiz: [
+      { q: 'How many combinations of AK are there before the flop?', opts: ['4', '12', '16'], a: 2, why: '4 aces × 4 kings = 16 (4 suited, 12 offsuit).' },
+      { q: 'A king is on the board. How many combos of KK remain?', opts: ['3', '4', '6'], a: 0, why: 'Only 3 kings are unseen: C(3, 2) = 3.' },
+    ],
+  });
+
+  lesson({
+    id: 'probs', ch: 'math', title: 'Useful probabilities',
+    body: () => {
+      const T = C(52, 2);
+      const set = 1 - C(48, 3) / C(50, 3), fl = C(11, 3) / C(50, 3), fd = (C(11, 2) * 39) / C(50, 3);
+      return `
+      ${table(['Event', 'Formula', 'Chance'], [
+        ['Dealt any pocket pair', '13 × 6 ÷ 1,326', `${pct(78 / T)} (1 in 17)`],
+        ['Dealt AA (or any one pair)', '6 ÷ 1,326', `${pct(6 / T, 2)} (1 in 221)`],
+        ['Dealt suited cards', '4 × 78 ÷ 1,326', pct(312 / T)],
+        ['Dealt AK (any suits)', '16 ÷ 1,326', pct(16 / T, 2)],
+        ['Pocket pair flops a set or better', '1 − C(48, 3) ÷ C(50, 3)', pct(set)],
+        ['Suited cards flop a flush', 'C(11, 3) ÷ C(50, 3)', pct(fl, 2)],
+        ['Suited cards flop a flush draw', 'C(11, 2) × 39 ÷ C(50, 3)', pct(fd)],
+        ['Flush draw completes by the river', '1 − C(38, 2) ÷ C(47, 2)', pct(hitTwo(9))],
+        ['Open-ended draw completes by the river', '1 − C(39, 2) ÷ C(47, 2)', pct(hitTwo(8))],
+      ])}
+      ${ex('why sets are worth chasing cheaply', `<p>A small pair flops a set ${pct(set)} of the time, about 1 in 8.5. Calling a raise just to "set mine" pays when you can win roughly 15 times the call or more when you hit (the implied odds rule of thumb).</p>`)}`;
+    },
+    quiz: [
+      { q: 'How often are you dealt a pocket pair?', opts: ['About 1 in 17', 'About 1 in 50', 'About 1 in 221'], a: 0, why: '78 of the 1,326 starting hands are pairs: 5.9%, 1 in 17. Any specific pair is 1 in 221.' },
+    ],
+  });
+
+  lesson({
+    id: 'equity', ch: 'math', title: 'Equity: classic matchups',
+    body: () => `
+      <p><b>Equity</b> is your share of the pot if all the cards were dealt out with no more betting. These numbers are worked out on your device right now by dealing thousands of random boards with the game's own hand evaluator.</p>
+      <div id="eq-table">${table(['Matchup', 'Hand 1', 'Hand 2'], [
+        ['AA vs KK', 'As Ad', 'Kc Kh', 'Overpair vs underpair'],
+        ['QQ vs AK', 'Qs Qd', 'Ac Kh', 'The "coin flip"'],
+        ['AK vs AQ', 'Ad Kc', 'As Qh', 'Domination (shared ace)'],
+        ['22 vs AK', '2c 2d', 'Ah Ks', 'Small pair vs two overcards'],
+        ['JTs vs AK', 'Jh Th', 'Ac Kd', 'Connected suited vs big cards'],
+        ['AA vs 87s', 'Ac Ad', '8s 7s', 'Strongest vs a suited connector'],
+      ].map(([n, a, b, d]) => [`<b>${n}</b><div class="hint">${d}</div>`, `${cards(a, 24)} <span class="eqv" data-h1="${a}" data-h2="${b}" data-i="0">…</span>`, `${cards(b, 24)} <span class="eqv" data-h1="${a}" data-h2="${b}" data-i="1">…</span>`, '']).map((r) => r.slice(0, 3)))}</div>
+      ${rule('A pair against two higher cards is roughly a coin flip (about 55/45). A hand that shares a card with a better hand ("dominated") wins only about a quarter of the time.')}
+      ${tip('Try your own matchups with the equity calculator in the Tools lesson.')}`,
+    after(root) {
+      const cells = $$('.eqv', root);
+      const done = new Set();
+      cells.forEach((el) => {
+        const key = el.dataset.h1 + '|' + el.dataset.h2;
+        if (done.has(key)) return;
+        done.add(key);
+        setTimeout(() => {
+          const r = equity([el.dataset.h1.split(' '), el.dataset.h2.split(' ')], [], 'holdem', 12000);
+          $$(`.eqv[data-h1="${el.dataset.h1}"][data-h2="${el.dataset.h2}"]`, root).forEach((x) => { x.textContent = pct(r.eq[+x.dataset.i]); });
+        }, 30);
+      });
+    },
+    quiz: [
+      { q: 'QQ against AK (all-in preflop) is roughly…', opts: ['80/20', '55/45', '30/70'], a: 1, why: 'A pair against two overcards is close to a coin flip, slightly in favour of the pair.' },
+    ],
+  });
+
+  /* ===== 4. Strategy ===== */
+  lesson({
+    id: 'position', ch: 'strategy', title: 'Position and starting hands',
+    body: () => `
+      <p>Acting last is worth a lot: you see what everyone else does before you decide. Play <b>fewer hands early</b> and <b>more hands late</b>.</p>
+      ${table(['Position', 'A sensible opening range (full table)', 'Roughly'], [
+        ['Early (UTG)', 'Pairs 77+, AJs+, KQs, AQo+', '10%'],
+        ['Middle', 'Pairs 55+, ATs+, KJs+, QJs, JTs, AJo+, KQo', '15%'],
+        ['Cutoff', 'Pairs 22+, A2s+, K9s+, Q9s+, J9s+, T9s, 98s, ATo+, KJo+', '25%'],
+        ['Button', 'Pairs 22+, most suited aces, kings and connectors, A8o+, KTo+, QTo+, JTo', '40%'],
+        ['Small blind', 'Similar to the cutoff when it\'s folded to you', '25–35%'],
+      ])}
+      ${rule('Raise rather than limp (just call the big blind) when you enter a pot first. It gives you two ways to win: everyone folds now, or you win at showdown.')}
+      ${ex('the same hand, two seats', `<p>${cards('Kh Jc', 26)} is a fold under the gun at a full table (it's often dominated by AK, AJ, KQ) but a standard raise on the button.</p>`)}
+      ${tip('These are starting points, not laws. Tighten up against aggressive tables and loosen up when others fold too much.')}`,
+    quiz: [
+      { q: 'Where should you play the most hands?', opts: ['Under the gun', 'On the button'], a: 1, why: 'The button acts last after the flop: the best seat at the table.' },
+    ],
+  });
+
+  lesson({
+    id: 'spr', ch: 'strategy', title: 'Stack-to-pot ratio and effective stacks',
+    body: () => `
+      ${formula('effective stack = the smaller of your stack and your opponent\'s', 'you can never win or lose more than that from them')}
+      ${formula('SPR = effective stack ÷ pot on the flop')}
+      ${table(['SPR', 'What it means'], [
+        ['Under 3', 'Top pair or better is usually happy to get all-in.'],
+        ['3 to 10', 'Top pair is a good hand but often not worth stacking off. Think before going all-in.'],
+        ['Over 10', 'Deep: big hands (sets, straights, flushes) and good draws gain value; one pair is often just a bluff-catcher.'],
+      ])}
+      ${ex('working it out', '<p>You have 400, your opponent 250. Effective stack: 250. The pot on the flop is 60, so SPR = 250 ÷ 60 ≈ 4.2. With top pair, you should be willing to play a big pot but not automatically all of it.</p>')}`,
+    quiz: [
+      { q: 'You have 1,000, they have 300, pot 100. SPR?', opts: ['3', '10', '13'], a: 0, why: 'Effective stack is 300 (the smaller). 300 ÷ 100 = 3.' },
+    ],
+  });
+
+  lesson({
+    id: 'tools', ch: 'strategy', title: 'Tools: calculators',
+    body: () => `
+      <p>Plug in your own numbers. Everything runs on this device.</p>
+      <div class="ltools">
+        <section class="card-ui ltool"><h4>${icon('calc')} Pot odds and EV</h4>
+          <div class="two"><label class="field"><span>Pot (including the bet you face)</span><input class="input num" id="t-pot" type="number" min="0" value="150"></label>
+          <label class="field"><span>Amount to call</span><input class="input num" id="t-call" type="number" min="0" value="50"></label></div>
+          <label class="field"><span>Your equity (%)</span><input class="input num" id="t-eq" type="number" min="0" max="100" value="35"></label>
+          <div class="lout" id="t-po"></div></section>
+        <section class="card-ui ltool"><h4>${icon('calc')} Outs to odds</h4>
+          <label class="field"><span>Outs</span><input class="input num" id="t-outs" type="number" min="0" max="30" value="9"></label>
+          <div class="lout" id="t-oo"></div></section>
+        <section class="card-ui ltool"><h4>${icon('calc')} Bet size</h4>
+          <div class="two"><label class="field"><span>Pot</span><input class="input num" id="t-bp" type="number" min="1" value="100"></label>
+          <label class="field"><span>Bet</span><input class="input num" id="t-bb" type="number" min="1" value="75"></label></div>
+          <div class="lout" id="t-bs"></div></section>
+        <section class="card-ui ltool"><h4>${icon('calc')} Equity calculator</h4>
+          <div class="two"><label class="field"><span>Hand 1</span><input class="input" id="t-h1" value="Ah Kh" autocomplete="off"></label>
+          <label class="field"><span>Hand 2</span><input class="input" id="t-h2" value="Qs Qd" autocomplete="off"></label></div>
+          <div class="two"><label class="field"><span>Board (0, 3, 4 or 5 cards)</span><input class="input" id="t-bd" value="" placeholder="e.g. Kd 7h 2c" autocomplete="off"></label>
+          <div class="field"><span>Game</span><select class="input" id="t-g"><option value="holdem">Hold'em</option><option value="omaha">Omaha (4 or 5 cards)</option></select></div></div>
+          <button class="btn primary" id="t-run" type="button">${icon('play')}Run 20,000 deals</button>
+          <div class="lout" id="t-eqo"></div></section>
+      </div>`,
+    after(root) {
+      const n = (id) => Math.max(0, Number($(id, root).value) || 0);
+      const upd = () => {
+        const pot = n('#t-pot'), call = n('#t-call'), eq = Math.min(100, n('#t-eq')) / 100;
+        $('#t-po', root).innerHTML = call > 0 ? `You need <b>${pct(potOdds(pot, call))}</b> equity (odds ${fmt(pot / call)} : 1).<br>EV of calling at ${pct(eq, 0)}: <b>${ev(eq, pot, call) >= 0 ? '+' : ''}${fmt(ev(eq, pot, call))}</b> chips → ${ev(eq, pot, call) >= 0 ? 'call' : 'fold (unless implied odds make up the difference)'}.` : 'Nothing to call: checking is free.';
+        const o = Math.min(30, Math.floor(n('#t-outs')));
+        $('#t-oo', root).innerHTML = `Next card (flop→turn): <b>${pct(hitOne(o, 47))}</b> · (turn→river): <b>${pct(hitOne(o, 46))}</b><br>By the river from the flop: <b>${pct(hitTwo(o))}</b> (rule of 4 says ${Math.min(100, o * 4)}%)`;
+        const bp = n('#t-bp') || 1, bb = n('#t-bb') || 1;
+        $('#t-bs', root).innerHTML = `That's ${pct(bb / bp, 0)} of the pot.<br>A pure bluff needs folds <b>${pct(alpha(bp, bb))}</b> of the time.<br>The caller needs <b>${pct(potOdds(bp + bb, bb))}</b> equity and should defend at least <b>${pct(mdf(bp, bb))}</b> of their range.`;
+      };
+      $$('input', root).forEach((i) => i.addEventListener('input', upd));
+      upd();
+      const parse = (s) => (String(s).match(/(10|[2-9TJQKA])[shdc♠♥♦♣]/gi) || []).map((x) => Cards.parse(x)).filter(Boolean);
+      $('#t-run', root).addEventListener('click', () => {
+        const game = $('#t-g', root).value, h1 = parse($('#t-h1', root).value), h2 = parse($('#t-h2', root).value), bd = parse($('#t-bd', root).value);
+        const all = [...h1, ...h2, ...bd], out = $('#t-eqo', root);
+        const hc = game === 'omaha' ? [4, 5] : [2];
+        if (!hc.includes(h1.length) || h1.length !== h2.length) return void (out.innerHTML = `<span class="err-text">Enter ${game === 'omaha' ? '4 or 5' : '2'} cards for each hand, like <code>Ah Kh</code>.</span>`);
+        if (![0, 3, 4, 5].includes(bd.length)) return void (out.innerHTML = '<span class="err-text">The board needs 0, 3, 4 or 5 cards.</span>');
+        if (new Set(all).size !== all.length) return void (out.innerHTML = '<span class="err-text">The same card appears twice.</span>');
+        out.textContent = 'Dealing…';
+        setTimeout(() => {
+          const r = equity([h1, h2], bd, game, bd.length === 5 ? 1 : 20000);
+          out.innerHTML = `${cards(h1.join(' '), 24)} <b>${pct(r.eq[0])}</b> &nbsp; ${cards(h2.join(' '), 24)} <b>${pct(r.eq[1])}</b><br><span class="hint">Ties ${pct(r.tie)} (counted as half a win each) · ${U.fmt(r.iters)} deal${r.iters === 1 ? '' : 's'}</span>`;
+        }, 20);
+      });
+    },
+    quiz: [],
+  });
+
+  return { CHAPTERS, LESSONS: L, equity, C, hitTwo, hitOne, potOdds, ev, alpha, mdf };
+})();
+
+function LearnScreen(id) {
+  document.title = TitleFlash.base = 'Learn Poker · Feltroom';
+  document.body.classList.add('scroll');
+  const prog = () => Prefs.get('learn', { done: [] });
+  const isDone = (lid) => prog().done.includes(lid);
+  const markDone = (lid) => { const p = prog(); if (!p.done.includes(lid)) { p.done.push(lid); Prefs.set('learn', p); } };
+  const L = Learn.LESSONS;
+  const idx = L.findIndex((x) => x.id === id);
+  const head = (title) => `<div class="page-head"><a class="btn ghost icon-btn" href="${idx >= 0 ? '#/learn' : '#/'}" aria-label="Back">${icon('back')}</a><h2>${title}</h2><span class="grow"></span>${topIconButtons()}</div>`;
+
+  if (idx < 0) {
+    const done = prog().done.filter((x) => L.some((l) => l.id === x)).length;
+    App.root.innerHTML = `<div class="page"><div class="page-inner">${head(`${icon('book')} Learn Poker`)}
+      <p class="muted" style="margin-top:0">From the rules of the game to the maths behind every decision. Each lesson has worked examples and a short quiz. Your progress stays on this device.</p>
+      <div class="lprog"><div class="lprog-bar"><span style="width:${(done / L.length) * 100}%"></span></div><span>${done} of ${L.length} lessons done</span></div>
+      ${Learn.CHAPTERS.map((ch, ci) => `<section class="lchap"><h3><span class="lnum">${ci + 1}</span>${ch.title}</h3><p class="hint">${ch.blurb}</p>
+        <div class="llist">${L.filter((l) => l.ch === ch.id).map((l) => `<a class="litem ${isDone(l.id) ? 'done' : ''}" href="#/learn/${l.id}"><span class="lcheck">${isDone(l.id) ? icon('check') : ''}</span><span>${U.esc(l.title)}</span>${icon('chevron')}</a>`).join('')}</div></section>`).join('')}
+    </div></div>`;
+    bindThemeToggles(App.root);
+    return { destroy() { document.body.classList.remove('scroll'); } };
+  }
+
+  const l = L[idx], ch = Learn.CHAPTERS.find((c) => c.id === l.ch);
+  const prev = L[idx - 1], next = L[idx + 1];
+  App.root.innerHTML = `<div class="page"><div class="page-inner learn">${head(U.esc(l.title))}
+    <div class="hint" style="margin:-14px 0 14px">${U.esc(ch.title)} · Lesson ${idx + 1} of ${L.length}</div>
+    <article class="lbody">${l.body()}</article>
+    ${l.quiz.length ? `<section class="lquiz card-ui"><h3>${icon('check')} Check yourself</h3>${l.quiz.map((q, qi) => `<div class="lq" data-q="${qi}"><p><b>${qi + 1}.</b> ${U.esc(q.q)}</p><div class="lopts">${q.opts.map((o, oi) => `<button class="btn sm" data-o="${oi}">${U.esc(o)}</button>`).join('')}</div><div class="lwhy hidden"></div></div>`).join('')}</section>` : ''}
+    <nav class="lnav">${prev ? `<a class="btn" href="#/learn/${prev.id}">${icon('back')}${U.esc(prev.title)}</a>` : '<span></span>'}
+      ${next ? `<a class="btn primary" href="#/learn/${next.id}">${U.esc(next.title)} ${icon('chevron')}</a>` : '<a class="btn primary" href="#/learn">All lessons</a>'}</nav>
+  </div></div>`;
+  bindThemeToggles(App.root);
+  if (l.after) l.after(App.root);
+  if (!l.quiz.length) markDone(l.id);
+  let right = 0;
+  $$('.lq', App.root).forEach((el) => {
+    const q = l.quiz[+el.dataset.q];
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-o]');
+      if (!b || el.dataset.answered) return;
+      el.dataset.answered = '1';
+      const ok = +b.dataset.o === q.a;
+      if (ok) right++;
+      $$('[data-o]', el).forEach((x) => { x.disabled = true; if (+x.dataset.o === q.a) x.classList.add('primary'); });
+      if (!ok) b.classList.add('danger');
+      const w = $('.lwhy', el);
+      w.innerHTML = `${ok ? '<b class="ok-text">Correct.</b>' : '<b class="err-text">Not quite.</b>'} ${U.esc(q.why)}`;
+      w.classList.remove('hidden');
+      if ($$('.lq[data-answered]', App.root).length === l.quiz.length) {
+        markDone(l.id);
+        toast(right === l.quiz.length ? 'Lesson complete: all correct!' : `Lesson complete: ${right} of ${l.quiz.length} correct.`, right === l.quiz.length ? 'success' : 'info');
+      }
+    });
+  });
+  window.scrollTo(0, 0);
+  return { destroy() { document.body.classList.remove('scroll'); } };
 }
 
 /* =====================================================================
@@ -6070,6 +7694,7 @@ function route(force) {
   else if (h.startsWith('#/bots')) App.screen = s && s.offline && !s.closed ? GameScreen(s) : BotSetupScreen();
   else if (h.startsWith('#/viewer')) App.screen = ViewerScreen();
   else if (h.startsWith('#/selftest')) App.screen = SelfTestScreen();
+  else if (h.startsWith('#/learn')) App.screen = LearnScreen(decodeURIComponent(h.slice(8).replace(/^\//, '')));
   else App.screen = HomeScreen();
 }
 addEventListener('hashchange', () => route());

@@ -2,10 +2,14 @@
 
 Feltroom is a free poker game that runs in the browser. It plays No-Limit or Pot-Limit Texas
 Hold'em, Omaha and 5-Card Omaha. One player hosts, and their
-browser shuffles, deals and enforces the rules. Friends join from a link, and the cards travel
+browser runs the table and enforces the rules. Friends join from a link, and everything travels
 directly between browsers over WebRTC. There is no game server, no account and no build step.
 
-The site has three parts:
+With the **encrypted deal** (on by default) every player's browser helps shuffle and only you can
+unlock your own cards. The host's device never sees anyone else's hand, not even with developer
+tools open. See [Fair play and anti-cheat](#fair-play-and-anti-cheat).
+
+The site has four parts:
 
 - **The live game** (`#/host` and `#join=<id>`): a lobby with an invite link and QR code, the table,
   host controls, chat, a game log and a game record you can copy at any time.
@@ -19,6 +23,13 @@ The site has three parts:
   - **Table overview:** average pot, showdown rate, split pots, and which hands won.
   - **Stat key:** a key at the bottom of the panel explains exactly how each stat is counted.
     Hovering over any stat shows its definition too.
+- **Learn Poker** (`#/learn`): 25 lessons in four chapters, from the deck and hand rankings to side
+  pots, pot limit, Omaha, outs, pot odds, expected value, implied odds, bet sizing, combinations and
+  stack-to-pot ratio. Every rule has a worked example, every formula is written out, and each lesson
+  ends with a short quiz. Hand names, raise limits, side pots and equities in the examples are
+  computed by the game's own engine, so they always agree with the table. A Tools lesson has a pot
+  odds and EV calculator, an outs calculator, a bet-size calculator and an equity calculator.
+  Progress is saved in your browser.
 
 Everything is in one file, `index.html` (HTML, CSS and JavaScript inline). The only external
 resource is the PeerJS library, loaded from a free CDN.
@@ -115,6 +126,10 @@ test suite and lists pass/fail results. The suite covers:
 - the advanced stats (3-bet, c-bet, check-raise and others), checked against a hand worked out by hand
 - SHA-256 against the standard test vectors, the shuffle permutation, and fair-deal checks that
   catch swapped cards, wrong board positions and excluded seeds
+- the encrypted deal: card encoding, commuting locks, key checks, the zero-knowledge proof (and
+  that it fails on any change), and that a player never gives out its own hole-card keys
+- the Learn lessons: the maths matches the standard numbers, every lesson renders and every quiz
+  answer is valid
 - the QR encoder, checked against a reference encoder
 
 ---
@@ -130,7 +145,9 @@ test suite and lists pass/fail results. The suite covers:
   - 2–9 seats
   - action timer (off, 15s, 30s or 60s)
   - rebuys: none, 1, 2 or 3 per player, or unlimited
-  - **I'm playing too:** turn this off to use the host's device only as the dealer (see Fair play)
+  - **Encrypted deal** (on by default): nobody can see anyone else's cards, the host included
+    (see Fair play)
+  - **I'm playing too:** turn this off to use the host's device only as the dealer
   - **Record hole cards:**
     - *All cards*: everyone's record shows every player's cards once each hand is over.
     - *Only cards shown at showdown*: each record shows your own cards plus any cards that were shown.
@@ -228,24 +245,119 @@ In a test of 1,500 hands, Advanced bots beat Beginner bots by about 28 big blind
 
 ## Fair play and anti-cheat
 
-In a peer-to-peer game, somebody's device has to shuffle and deal. Feltroom makes that device
-prove its work to everyone else.
+In a peer-to-peer game someone's device runs the table. Feltroom is built so that device can't see
+your cards or cheat, and so other players can't either.
 
-**What players can't do, even with the browser's developer tools open:**
+### Encrypted deal: nobody sees your cards, not even the host
+
+This is on by default (**Host a game → Fair play → Encrypted deal**). It uses "mental poker":
+commutative encryption over the 2048-bit group of RFC 3526 (group 14).
+
+1. **Everyone shuffles.** Each card is a number. In turn, every dealt player's browser locks all 52
+   cards with its own secret key and shuffles them. Locks commute (x^(a·b) = x^(b·a)), so they can be
+   removed in any order, and a card is readable only when every lock is off. Nobody knows the
+   final order. The host's own seat shuffles last.
+2. **Re-lock.** In turn, each browser removes its shuffle lock and puts a separate lock on every
+   card position. It publishes the before and after values together with a zero-knowledge
+   (Chaum–Pedersen) proof that it removed exactly its own lock and changed nothing else. Every
+   browser checks every proof.
+3. **Deal.** Every player hands out their keys for the *other* players' hole-card positions, never
+   their own. Your browser collects everyone else's keys for your cards and adds its own, so **only
+   your browser can read your cards.** The host's device only relays locked cards and keys that
+   can't open anything by themselves.
+4. **Board cards** are unlocked street by street. A browser gives out its key for a board card only
+   once its own view of the hand has reached that street. Every key is checked against its owner's
+   published before/after values, and each browser unlocks the board itself and compares it with
+   what the host shows.
+5. **Showdown.** Your browser shows your hand by giving out your own keys, or mucks it if your
+   auto-muck setting says so. It only does this at a real showdown: this hand, five board cards it
+   unlocked itself, and you're still in. Folded and mucked hands are never revealed, except on
+   "All cards" tables, where every hand goes into the record once the hand is over.
+
+What this rules out, even for a host who rewrites their copy of the program:
+
+- **Reading anyone's cards.** The host never holds your last key. No message can make your browser
+  decrypt something on its behalf: browsers only hand out keys, and never the keys to their own
+  cards.
+- **Swapping, copying or inventing cards.** A wrong key, a doctored card, a duplicate or an
+  altered shuffle step fails a check. The deal stops, and the player whose browser did it is named
+  and sat out.
+- **Peeking at the next street early.** Nobody can unlock a board card until every player has
+  released their key for it.
+
+Costs of the encrypted deal:
+
+- Each deal takes a second or two (more at a full Omaha table) while the browsers do the maths.
+- Every dealt player must stay connected. If someone leaves mid-hand and doesn't come back within
+  30 seconds, that hand is cancelled and everyone gets their chips back. Players who are
+  disconnected when a hand starts sit it out. Refreshing the page is fine: keys are kept in the
+  tab's session storage.
+- "Bots replace disconnected players" isn't available, because a bot can't play cards nobody can
+  see.
+
+The one thing it can't fully stop: a player who modifies their own copy and is first to shuffle
+could secretly plant a marked card. Each attempt leaves a card that can't be unlocked somewhere in
+the deck. If that card gets dealt, the hand stops with a tampering warning, and it only rarely
+lands where it would help. Proving every shuffle in zero knowledge would close this gap, but it
+would take many seconds per hand in a browser. The host can't do this, because the host's seat
+always shuffles last.
+
+### Standard deal: a provably fair shuffle
+
+With the encrypted deal turned off, the host's browser deals, and every player checks it:
+
+1. Before every hand, the host shuffles a secret deck and publishes a SHA-256 commitment for each
+   card (the card plus a random salt).
+2. Every connected browser then commits to its own random seed, and afterwards reveals it. This
+   includes seated players, players sitting out, spectators and the dealer. The deck is
+   unpredictable as long as any one of them is honest.
+3. The final order is computed from all the seeds together, so the host can't choose who gets
+   which card: the deck was locked in before it knew the players' randomness.
+4. Each card a player sees arrives with its salt, and the player's browser checks it against the
+   commitment for that card's position. This covers their own cards, the board and shown hands.
+5. Each player's browser also replays the hand through the rules engine and checks the result.
+
+In this mode the dealing device can see every card. If that matters, untick **I'm playing too**
+and host from a device nobody plays on. The standard deal is faster and works with bot takeover.
+
+If any check fails, in either mode, the player sees a red **Check failed** badge and an alert
+explaining what didn't match. The shield button in the top bar shows the status.
+
+### What other players can't do, even with developer tools open
 
 - **See other players' cards.** Each player's browser only ever receives that player's own hole
-  cards, plus cards that are shown at showdown. The deck and other hands never leave the host, so
-  reading the page's code or network traffic reveals nothing.
+  cards, or the keys to them, plus cards that are shown. Reading the page's code or network
+  traffic reveals nothing.
 - **Act for someone else, or act illegally.** Players send only requests ("raise to 40"). The host
   checks every request against the rules. Each seat is tied to a random 128-bit token, and host
   commands (start, pause, remove, stacks, end) are never accepted from the network.
 - **Flood the host.** Each connection is rate-limited.
 
-**How this was tested.** Automated attacks are run against the real code:
+No software can stop two players from telling each other their cards through another app.
 
-- **A "spy" player** records everything their browser receives during dozens of hands, in every
-  game type and record mode. The test checks that no unshown hole card ever appears in that data
-  and that none can be worked out by elimination.
+### How this was tested
+
+Automated attacks are run against the real code:
+
+- **The host's view of an encrypted game** (`sratest`) covers dozens of simulated hands with 2 to 6
+  players, in Hold'em, Omaha and 5-Card Omaha and both record modes. It gathers every message the
+  host relayed, plus the host's own keys, and tries to unlock every other player's hole cards.
+  It succeeds only for hands that were shown, as it should.
+- **A hostile dealer** (`sraattack`) tries to make a browser give up its cards:
+  - asking for board keys before the street
+  - asking for showdown keys mid-hand, or on a board the browser didn't unlock itself
+  - asking for an "All cards" reveal on a showdown-only table
+  - forcing a second shuffle or re-lock of the same hand
+  - feeding it a non-standard starting deck, a duplicated card, a forged proof or an altered chain
+  - sending a wrong key, or a key copied from another position
+
+  Every attempt is refused or caught, and the culprit is named.
+- **A three-browser game in headless Chromium** with the encrypted deal: hands play to
+  showdown, the host's table holds no hole cards at any point, a player refreshes mid-hand and
+  keeps their cards, and records contain each player's own cards.
+- **A "spy" player** records everything their browser receives in standard-deal games. The test
+  checks that no unshown hole card ever appears in that data and that none can be worked out by
+  elimination.
 - **A hostile player** sends crafted messages that try to:
   - claim the host's or another player's seat
   - re-send "hello" to spawn extra identities or swap identity
@@ -256,16 +368,6 @@ prove its work to everyone else.
   - pollute JavaScript objects with names such as `__proto__`
 - **A hostile host** sends script-injection payloads in every field: names, cards, seats, chat,
   records and fairness messages.
-
-Issues found and fixed:
-
-- **Folded hands could be deduced.** In "showdown only" mode, the end-of-hand fairness check revealed
-  the burn and undealt cards, which let a player work out folded hands by elimination. It now
-  reveals only public cards.
-- **Seats could be claimed or invented.** The host's seat could in principle be claimed with its
-  token, one connection could create many players, and fractional seat numbers were accepted.
-- **Fake joins could fill the table.**
-- **Several host-supplied values reached the page unescaped.**
 
 **Page hardening:**
 
@@ -278,32 +380,8 @@ Issues found and fixed:
 - The offline `?local` test transport only works on localhost.
 - Frame and opener isolation headers.
 
-**What the host can't do without being caught (provably fair shuffle):**
-
-1. Before every hand, the host shuffles a secret deck and publishes a SHA-256 commitment for each
-   card (the card plus a random salt).
-2. Every connected browser then commits to its own random seed, and afterwards reveals it. This
-   includes seated players, players sitting out, spectators and the dealer. The deck is
-   unpredictable as long as any one of them is honest.
-3. The final order is computed from all the seeds together, so the host can't choose who gets
-   which card: the deck was locked in before it knew the players' randomness.
-4. Each card a player sees arrives with its salt, and the player's browser checks it against the
-   commitment for that card's position. This covers their own cards, the board and shown hands.
-   When the hand ends, the burns and undealt cards are revealed and checked as well.
-5. Each player's browser also replays the hand through the rules engine and checks the result.
-
-If anything fails, the player sees a red **Check failed** badge and an alert explaining what didn't
-match. The shield button in the top bar shows the status for the latest hand.
-
-**The honest limits:**
-
-- The dealing device can still look at every card. For games where that matters, untick **I'm
-  playing too** and host from a device nobody plays on, such as a spare laptop or a TV.
-- Fully hiding the cards from the dealer as well would need "mental poker" cryptography. That would
-  require every player to stay online for every card and would be much slower.
-- No software can stop two players from telling each other their cards through another app.
-
-The SHA-256 used for these proofs is built into the page, so it works over plain HTTP too.
+All the cryptography (SHA-256 and the big-number maths) is built into the page, so it works over
+plain HTTP too and nothing is downloaded.
 
 **Where the randomness comes from.**
 
@@ -445,16 +523,19 @@ include the line number, and a **Show line** button selects the line in the text
    as "Full House, Kings over Sevens"
 3. **Rules engine:** pure, with no DOM, network or randomness; the caller deals the cards, which is
    what makes exact replays possible
-4. **Record notation:** serialize, parse and replay, plus stats
-5. **Host table:** the authoritative game controller that runs in the host's tab; it handles seats,
+4. **Fair shuffle and encrypted deal:** SHA-256 commitments, and the mental-poker protocol (each
+   player's side, and the host's relay, which only ever handles locked cards)
+5. **Record notation:** serialize, parse and replay, plus stats
+6. **Host table:** the authoritative game controller that runs in the host's tab; it handles seats,
    timers and personalised views
-6. **Networking:** the PeerJS host and client sessions, reconnects, heartbeats, friendly error
+7. **Networking:** the PeerJS host and client sessions, reconnects, heartbeats, friendly error
    messages, and the `?local` transport
-7. **UI:** theme, Web Audio sounds, toasts, the table renderer shared by the game and the viewer,
+8. **UI:** theme, Web Audio sounds, toasts, the table renderer shared by the game and the viewer,
    and the screens
-8. **QR code generator:** a tiny inline encoder (byte mode, error correction level M)
-9. **Self-tests**
-10. **Router**
+9. **QR code generator:** a tiny inline encoder (byte mode, error correction level M)
+10. **Self-tests**
+11. **Learn Poker:** lessons, quizzes and calculators
+12. **Router**
 
 ---
 
@@ -473,7 +554,8 @@ free plan, which needs an email sign-up but no card.
 | Cards, chips, table, icons | Drawn with CSS and inline SVG | Free; written for this project |
 | Sounds | Generated live with the Web Audio API | Free; no audio files |
 | QR code | Generated in the page by an inline encoder | Free; no remote QR service |
-| Fair-shuffle proofs | SHA-256, written into the page | Free; no service involved |
+| Fair-shuffle proofs and the encrypted deal | SHA-256 and big-number maths, written into the page | Free; no service involved |
+| Learn Poker lessons and calculators | Written into the page | Free; works offline |
 | Charts | Hand-written SVG | Free; no chart library |
 | Ads, analytics, tracking, telemetry | None | n/a |
 
