@@ -9,6 +9,23 @@ With the **encrypted deal** (on by default) every player's browser helps shuffle
 unlock your own cards. The host's device never sees anyone else's hand, not even with developer
 tools open. See [Fair play and anti-cheat](#fair-play-and-anti-cheat).
 
+**Viewers (off by default).** Tick **Allow viewers with a watch-only link** when you set up a table,
+in either **Host a game** or **Play vs Bots**. You then get a separate **viewer link** (the eye button
+in the top bar, or the ⋯ menu) that you can send at any point in the game.
+
+- **What viewers see:** the table, bets, board, log and chat, but never anyone's hole cards. They
+  only see hands turned face up at showdown, which every player sees too.
+- **What viewers can't do:** sit down, act, or get game records or the deal's proofs.
+- **A separate address:** the viewer link connects to its own broker ID, not the players' invite
+  link, so it can't be edited into a seat at the table.
+- **Viewer chat:** a second option, **Viewers can post in the chat**, lets them talk. Their messages
+  are marked "(viewer)".
+- **Not remembered:** both options start switched off for every new table.
+
+**Bots cheer you on (off by default).** In Play vs Bots, this setting makes the bots post corny,
+encouraging messages in the chat, for example "Believe in the river! 🌊" or "WOW, that pot was HUGE! 🏆".
+They speak at the start, after your wins and big pots, after a bust, and now and then in between.
+
 **Mobile or computer?** The first time you open the site it asks which you're on (it suggests one
 for your device). Your choice is remembered, and the home screen has a button to switch.
 

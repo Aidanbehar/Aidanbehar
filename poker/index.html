@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-5qFj0u5UD8bj+ElMsyXnC2/EQCbVX01JLN0tDBk5p7k=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-TDafqR0FzK1tu+Vj5ulfV4hhZ0bSPWzqnbPqaufR1qA=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -553,6 +553,12 @@ pre.hand-text { white-space: pre-wrap; word-break: break-word; font: 12.5px/1.6 
   #toasts { left: 14px; right: 14px; align-items: center; }
 }
 
+
+label.check.sub { padding-left: 26px; }
+label.check:has(input:disabled) { opacity: .5; }
+.chat-msg.viewer b::after { content: " 👁"; font-size: 11px; }
+.watching-pill { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); }
+.watching-pill svg { width: 16px; height: 16px; }
 
 /* =====================================================================
    MOBILE LAYOUT (chosen on the first screen; body.mobile)
@@ -3394,9 +3400,21 @@ class SraDealer {
   }
 }
 
+/** Corny, kind table talk for bots ("Bots cheer you on" setting). {you} is the player, {who} whoever it's about. */
+const BOT_CHEER = {
+  start: ['Shuffle up and smile, everybody! 😄', 'Good luck, {you}! May the flop be with you! 🍀', 'Let\'s have a fun game, friends! 🃏', 'Cards in the air, joy in the heart! ✨'],
+  win: ['Nice pot, {you}! Your chips are proud of you! 🎉', 'Well played, {you}! Keep that sparkle! ✨', 'Look at you go, {you}! 👏', 'That\'s how it\'s done, {you}! 🌟'],
+  bigWin: ['WOW, {you}! That pot was HUGE! 🏆', 'Somebody call the chip police, {you} is on fire! 🔥', 'Legendary hand, {you}! Frame it! 🖼️', 'I\'m not even mad, {you}. That was beautiful! 😭👏'],
+  bust: ['Chin up, {you}! Every champion has a rebuy story! 💪', 'The cards owe you one, {you}! 🃏', 'Bad beats build character, {you}! Go get \'em! 🌈', 'Shake it off, {you}! The deck still loves you! ❤️'],
+  any: ['Believe in the river! 🌊', 'Every fold is a step toward greatness! 🚶', 'You\'ve got this, {you}! 💪', 'Remember: it\'s not about the chips, it\'s about the friends we beat along the way! 😄',
+    'Keep calm and shuffle on! ☕', 'Smile! The flop can sense fear! 😁', 'Positive vibes only at this table! ✌️', 'You miss 100% of the pots you don\'t play! (Please play responsibly.) 😅',
+    'Hydrate, {you}! Champions drink water! 💧', 'Today\'s forecast: 100% chance of good cards! ☀️'],
+};
+
 class HostTable {
   constructor(settings, hostName, hostToken) {
-    this.s = { game: 'holdem', limit: 'nl', levelHands: 0, maxRebuys: 0, hostPlays: true, ...settings };
+    this.s = { game: 'holdem', limit: 'nl', levelHands: 0, maxRebuys: 0, hostPlays: true, spectators: false, viewerChat: false, botChat: false, ...settings };
+    this.s.viewerChat = !!(this.s.spectators && this.s.viewerChat);
     this.gameKind = this.s.game === 'holdem' ? 'holdem' : 'omaha';
     this.holeCount = this.s.game === 'omaha5' ? 5 : this.s.game === 'omaha4' ? 4 : 2;
     this.variant = Notation.variantCode(this.gameKind, this.s.limit, this.holeCount);
@@ -3604,10 +3622,7 @@ class HostTable {
         if (this.sraDealer) this.sraDealer.reply(pid, m);
         return;
       case 'chat': {
-        const text = U.cleanText(m.text, 280);
-        if (!text) return;
-        this.chat.push({ id: ++this.chatId, from: p.name, text, ts: Date.now() });
-        if (this.chat.length > 80) this.chat.shift();
+        if (!this.addChat(p.name, m.text, {})) return;
         break;
       }
       // ---- host-only controls ----
@@ -3617,6 +3632,7 @@ class HostTable {
         if (this._eligible().length < 2) return err('At least two seated players with chips are needed.');
         this.status = 'playing';
         this.onEvent('success', 'The game has started', null);
+        this._botSay('start');
         this._startHand();
         return;
       case 'pause':
@@ -3658,6 +3674,34 @@ class HostTable {
       default: return;
     }
     this.changed();
+  }
+
+  /** Add a chat line. kind: { viewer } for someone watching through the viewer link, { bot } for a computer player. */
+  addChat(from, text, kind = {}) {
+    text = U.cleanText(text, 280);
+    if (!text) return false;
+    this.chat.push({ id: ++this.chatId, from, text, ts: Date.now(), viewer: !!kind.viewer, bot: !!kind.bot });
+    if (this.chat.length > 80) this.chat.shift();
+    return true;
+  }
+  /** A message from a viewer (watch link), if this table lets viewers chat. */
+  viewerChat(name, text) {
+    if (!this.s.spectators || !this.s.viewerChat || this.status === 'ended') return;
+    if (this.addChat(name, text, { viewer: true })) this.changed();
+  }
+
+  /* ---------------- bot table talk (cheerful, optional) ---------------- */
+  _botSay(kind, about) {
+    if (!this.s.botChat || this.status === 'ended') return;
+    const bots = [...this.players.values()].filter((p) => p.isBot && p.seat != null);
+    if (!bots.length) return;
+    const human = this.players.get(this.hostPid);
+    const you = (human && human.name) || 'friend';
+    const L = BOT_CHEER[kind] || BOT_CHEER.any;
+    const line = L[Math.floor(Math.random() * L.length)].replace(/\{you\}/g, you).replace(/\{who\}/g, about || you);
+    const bot = bots[Math.floor(Math.random() * bots.length)]; // cosmetic choice, not security-relevant
+    clearTimeout(this.botChatTimer);
+    this.botChatTimer = setTimeout(() => { if (this.status !== 'ended' && this.addChat(bot.name, line, { bot: true })) this.changed(); }, 700 + Math.random() * 1500);
   }
 
   _sit(pid, seat) {
@@ -3971,6 +4015,14 @@ class HostTable {
     }
     this._sendRecords();
     if (this.sra && this.s.recordHole === 'All' && this.sraDealer) this.sraDealer.revealAll(h, () => this._sendRecords());
+    if (this.s.botChat) {
+      const hi = this.handPids.indexOf(this.hostPid), won = hi >= 0 ? h.results.payouts[hi] : 0;
+      const host = this.players.get(this.hostPid);
+      if (hi >= 0 && won > 0 && won >= 10 * h.bb) this._botSay('bigWin');
+      else if (hi >= 0 && host && host.stack === 0) this._botSay('bust');
+      else if (hi >= 0 && won > 0) this._botSay('win');
+      else if (Math.random() < 0.3) this._botSay('any');
+    }
     clearTimeout(this.nextTimer);
     if (this._eligible().length < 2) this.waiting = true;
     this.nextTimer = setTimeout(() => { this.nextTimer = null; this._startHand(); }, HAND_PAUSE_MS + (h.results.showdown ? 1200 : 0));
@@ -4104,9 +4156,10 @@ class HostTable {
         startingStack: this.s.startingStack, variant: this.variant, variantName: VARIANTS[this.variant].name, holeCount: this.holeCount,
         limit: this.s.limit, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
         botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots, sra: this.sra,
+        spectators: !!this.s.spectators, viewerChat: !!this.s.viewerChat, botChat: !!this.s.botChat,
         nextLevelIn: this.s.levelHands ? this.s.levelHands - ((Math.max(1, this.handNo) - 1) % this.s.levelHands) : 0,
       },
-      shuffling: !!this.shuffling, fair: this._fairView(), sraWait: this.sraDealer ? this.sraDealer.waiting() : [], voided: !!(h && h.voided),
+      watchId: this.s.spectators ? this.watchId || null : null, shuffling: !!this.shuffling, fair: this._fairView(), sraWait: this.sraDealer ? this.sraDealer.waiting() : [], voided: !!(h && h.voided),
       status: this.status, paused: this.paused, waiting: !!this.waiting, handNo: h ? h.no : 0,
       phase: h ? h.phase : null, street: h ? (done ? (h.results.showdown ? 'Showdown' : STREETS[h.street]) : STREETS[h.street]) : '',
       board: h ? h.board.slice() : [], pots, potTotal: h && !done ? Engine.potTotal(h) : 0,
@@ -4124,6 +4177,16 @@ class HostTable {
       })),
       log: this.log.slice(-120), chat: this.chat.slice(-60),
     };
+  }
+  /**
+   * What someone watching through the viewer link sees: the table as an onlooker, never a hole card
+   * (only hands turned face up at showdown, which every player sees too), and none of the deal proofs.
+   */
+  viewForWatcher() {
+    const v = this.viewFor('\u0000watcher');
+    v.seats = v.seats.map((st) => st && { ...st, cards: st.cards && st.shown ? st.cards : st.cards && st.cards.map(() => null), handName: st.shown ? st.handName : null });
+    v.fair = null; v.you = null; v.legal = null; v.watching = true; v.players = v.players.map((p) => ({ ...p, pid: '' }));
+    return v;
   }
   _liveStack(pid) {
     const h = this.hand, i = this.handPids.indexOf(pid);
@@ -4230,6 +4293,8 @@ const Net = {
     });
   },
 
+  watchUrl(id) { return id ? `${location.origin}${location.pathname.replace(/index\.html$/, '')}${Net.local ? '?local' : ''}#watch=${id}` : ''; },
+
   newHostId() {
     const a = 'abcdefghjkmnpqrstuvwxyz23456789';
     const part = () => Array.from({ length: 4 }, () => a[U.randInt(a.length)]).join('');
@@ -4330,6 +4395,82 @@ const Wire = {
   },
 };
 
+
+/**
+ * Viewers who open the watch link (#watch=ID). They are not players: they can't sit, act or see a
+ * single hole card, they get no records or deal proofs, and they can chat only if the table allows
+ * it. Used by both hosted games and Play vs Bots.
+ */
+const MAX_WATCHERS = 40;
+class WatchHub {
+  constructor(session) { this.s = session; this.conns = new Set(); this.peer = null; }
+  get table() { return this.s.table; }
+  /** The viewer link uses its own broker ID, separate from the players' invite link, so it can only ever watch. */
+  get url() { return this.peer ? Net.watchUrl(this.peer.id) : ''; }
+  async open() {
+    try {
+      this.peer = await Net.createPeer(Net.newHostId());
+      this.peer.on('connection', (c) => {
+        c.lastSeen = Date.now();
+        c.on('data', (m) => {
+          c.lastSeen = Date.now();
+          if (!m || typeof m !== 'object' || Array.isArray(m)) return;
+          const now = Date.now(), b = c.bucket || (c.bucket = { n: 20, t: now });
+          b.n = Math.min(20, b.n + ((now - b.t) / 1000) * 8); b.t = now;
+          if (b.n < 1) return;
+          b.n -= 1;
+          if (c.watch) this.data(c, m);
+          else if (m.t === 'hello' && m.watch === true) this.hello(c, m);
+          else { this.s._send(c, { t: 'reject', text: 'This is a viewer link: it can only be used to watch.' }); setTimeout(() => { try { c.close(); } catch { /* ignore */ } }, 500); }
+        });
+        c.on('close', () => this.closed(c));
+        c.on('error', () => this.closed(c));
+      });
+      this.peer.on('disconnected', () => { setTimeout(() => { try { if (!this.peer.destroyed) this.peer.reconnect(); } catch { /* ignore */ } }, 1500); });
+      this.beat = setInterval(() => this.heartbeat(), 4000);
+      if (this.table) { this.table.watchId = this.peer.id; this.table.changed(); }
+    } catch (e) {
+      this.s.handlers.error(`The viewer link isn't available: ${Net.friendly(e).title}.`);
+    }
+  }
+  close(reason) {
+    this.end(reason);
+    clearInterval(this.beat);
+    if (this.peer) setTimeout(() => { try { this.peer.destroy(); } catch { /* ignore */ } }, 300);
+  }
+  hello(c, m) {
+    const t = this.table;
+    const no = (text) => { this.s._send(c, { t: 'reject', text }); setTimeout(() => { try { c.close(); } catch { /* ignore */ } }, 500); };
+    if (!t || !t.s.spectators) return no('This table does not allow viewers.');
+    if (t.status === 'ended') return no('This game has ended.');
+    if (this.conns.size >= MAX_WATCHERS) return no('Too many people are watching this table right now.');
+    c.watch = true;
+    c.name = (U.sanitizeName(String(m.name || '').slice(0, 64)) || 'Viewer').slice(0, 18);
+    this.conns.add(c);
+    this.s._send(c, { t: 'welcome', watch: true, name: c.name, hostId: this.peer.id });
+    this.s._send(c, t.viewForWatcher());
+  }
+  data(c, m) {
+    if (m.t === 'ping') return this.s._send(c, { t: 'pong' });
+    if (m.t === 'chat') this.table.viewerChat(c.name + ' (viewer)', m.text);
+  }
+  closed(c) { this.conns.delete(c); }
+  broadcast() {
+    if (!this.conns.size) return;
+    const v = this.table.viewForWatcher();
+    for (const c of this.conns) this.s._send(c, v);
+  }
+  event(kind, text) { for (const c of this.conns) this.s._send(c, { t: 'event', kind, text }); }
+  end(reason) { for (const c of this.conns) this.s._send(c, { t: 'ended', reason }); }
+  heartbeat() {
+    const now = Date.now();
+    for (const c of [...this.conns]) {
+      this.s._send(c, { t: 'ping' });
+      if (now - c.lastSeen > 16000) { this.conns.delete(c); try { c.close(); } catch { /* ignore */ } }
+    }
+  }
+}
+
 /* ---------- Host side: wires a HostTable to PeerJS connections ---------- */
 class HostSession {
   constructor(settings, name) {
@@ -4353,12 +4494,15 @@ class HostSession {
     this.id = this.peer.id;
     const token = Prefs.get('hostToken.' + this.id) || U.randHex(16);
     const t = this.table = new HostTable(this.settings, this.name, token);
+    this.watchers = new WatchHub(this);
+    if (t.s.spectators) this.watchers.open();
     this.pid = t.hostPid;
     // Encrypted deal: the host's own seat is a player like any other, with its own keys in this tab.
     if (t.sra) this.sraLink = new SraLink(t.players.get(t.hostPid).name, this.id, (r) => t.handle(this.pid, r), (no, why) => this.handlers.error(`Encrypted deal problem on hand #${no}: ${why}`));
     t.onChange = () => this._scheduleBroadcast();
     t.onEvent = (kind, text, about) => {
       for (const [pid, c] of this.conns) if (pid !== about) this._send(c, { t: 'event', kind, text });
+      this.watchers.event(kind, text);
       if (about !== this.pid) this.handlers.event(kind, text);
     };
     t.onRecord = (pid, text, full) => {
@@ -4390,6 +4534,7 @@ class HostSession {
   }
 
   get inviteUrl() { return `${location.origin}${location.pathname.replace(/index\.html$/, '')}${Net.local ? '?local' : ''}#join=${this.id}`; }
+  get watchUrl() { return this.watchers ? this.watchers.url : ''; }
 
   _attach(c) {
     c.lastSeen = Date.now();
@@ -4405,6 +4550,7 @@ class HostSession {
     b.n = Math.min(40, b.n + ((now - b.t) / 1000) * 15); b.t = now;
     if (b.n < 1) return;
     b.n -= 1;
+    if (m.t === 'hello' && m.watch === true) { this._send(c, { t: 'reject', text: 'Use the viewer link to watch this table.' }); return; }
     if (m.t === 'part') {
       if (!c.pid) return; // only players who have said hello can send large messages
       const whole = Wire.unpack(c.parts || (c.parts = new Map()), m);
@@ -4456,6 +4602,7 @@ class HostSession {
       this.bq = false;
       const t = this.table;
       for (const [pid, c] of this.conns) this._send(c, t.viewFor(pid));
+      this.watchers.broadcast();
       const v = t.viewFor(this.pid);
       if (this.sraLink) { this.sraLink.onView(v); this.sraLink.patchView(v); }
       this.lastView = v;
@@ -4463,6 +4610,7 @@ class HostSession {
       if (t.status === 'ended' && !this.endedSent) {
         this.endedSent = true;
         for (const c of this.conns.values()) this._send(c, { t: 'ended', reason: 'The host ended the game.' });
+        this.watchers.end('The host ended the game.');
         this.handlers.ended('You ended the game.');
       }
     });
@@ -4484,6 +4632,7 @@ class HostSession {
       this.table._clearTurn(); clearTimeout(this.table.nextTimer); clearTimeout(this.table.dealTimer);
     }
     for (const c of this.conns.values()) this._send(c, { t: 'ended', reason: 'Host left, game ended.' });
+    if (this.watchers) this.watchers.close('Host left, game ended.');
     setTimeout(() => { try { this.peer.destroy(); } catch { /* ignore */ } }, silent ? 0 : 300);
   }
 }
@@ -4514,6 +4663,7 @@ const Safe = (() => {
       variant: oneOf(t.variant, Object.keys(VARIANTS), 'NLHE'), holeCount: int(t.holeCount, 2, 5, 2), limit: oneOf(t.limit, ['nl', 'pl'], 'nl'),
       levelHands: int(t.levelHands, 0, 1000, 0), level: int(t.level, 0, 1000, 1), hostPlays: bool(t.hostPlays),
       nextLevelIn: int(t.nextLevelIn, 0, 1000, 0), botTakeover: bool(t.botTakeover), vsBots: bool(t.vsBots), sra: bool(t.sra),
+      spectators: bool(t.spectators), viewerChat: bool(t.viewerChat), botChat: bool(t.botChat),
     };
     table.variantName = VARIANTS[table.variant].name;
     const seat = (s, i) => (s && typeof s === 'object' ? {
@@ -4556,7 +4706,8 @@ const Safe = (() => {
         isBot: bool(p && p.isBot), rebuys: int(p && p.rebuys, 0, 1e6, 0), net: num(p && p.net),
       })) : [],
       log: Array.isArray(v.log) ? v.log.slice(-150).map((l) => ({ id: num(l && l.id), text: str(l && l.text, 300), kind: oneOf(l && l.kind, ['hand', 'win', ''], '') })) : [],
-      chat: Array.isArray(v.chat) ? v.chat.slice(-80).map((c) => ({ id: num(c && c.id), from: str(c && c.from, 24), text: str(c && c.text, 300), ts: num(c && c.ts) })) : [],
+      chat: Array.isArray(v.chat) ? v.chat.slice(-80).map((c) => ({ id: num(c && c.id), from: str(c && c.from, 30), text: str(c && c.text, 300), ts: num(c && c.ts), viewer: bool(c && c.viewer), bot: bool(c && c.bot) })) : [],
+      watching: bool(v.watching), watchId: typeof v.watchId === 'string' && /^[a-z0-9-]{4,40}$/.test(v.watchId) ? v.watchId : null,
     };
   }
   return { view };
@@ -4565,7 +4716,8 @@ const Safe = (() => {
 
 class ClientSession {
   constructor(hostId, name, opts = {}) {
-    this.role = 'client';
+    this.role = opts.watch ? 'watcher' : 'client';
+    this.watch = !!opts.watch;
     this.fresh = !!opts.fresh;
     this.id = hostId;
     this.name = name;
@@ -4577,6 +4729,8 @@ class ClientSession {
   }
   on(ev, fn) { this.handlers[ev] = fn; return this; }
   get inviteUrl() { return `${location.origin}${location.pathname.replace(/index\.html$/, '')}${Net.local ? '?local' : ''}#join=${this.id}`; }
+  /** Players get the viewer link's ID in their view; a viewer re-shares the link they came in on. */
+  get watchUrl() { return this.watch ? Net.watchUrl(this.id) : (this.lastView && this.lastView.watchId ? Net.watchUrl(this.lastView.watchId) : ''); }
 
   async connect() {
     if (!this.peer || this.peer.destroyed) this.peer = await Net.createPeer();
@@ -4603,12 +4757,19 @@ class ClientSession {
       const to = setTimeout(() => { try { c.close(); } catch { /* ignore */ } fin({ type: 'connect-timeout' }); }, 15000);
       c.on('open', () => {
         this.lastMsg = Date.now();
-        c.send({ t: 'hello', name: this.name, token: this.fresh ? null : this._token() });
+        c.send(this.watch ? { t: 'hello', watch: true, name: this.name } : { t: 'hello', name: this.name, token: this.fresh ? null : this._token() });
       });
       c.on('data', (m) => {
         this.lastMsg = Date.now();
         if (!m || typeof m !== 'object') return;
         if (m.t === 'part') { m = Wire.unpack(this.parts || (this.parts = new Map()), m); if (!m || typeof m !== 'object' || m.t === 'part') return; }
+        if (m.t === 'welcome' && this.watch) {
+          if (m.watch !== true) { fin({ type: 'rejected', message: 'That link is not a viewer link.' }); return; }
+          this.conn = c; this.name = String(m.name || 'Viewer').slice(0, 18);
+          this.handlers.status('connected');
+          fin();
+          return;
+        }
         if (m.t === 'welcome') {
           this.conn = c; this.pid = m.pid; this.name = m.name;
           this.fresh = false;
@@ -4631,7 +4792,7 @@ class ClientSession {
       case 'state':
         m = Safe.view(m);
         if (!m) break;
-        if (m.table.sra && !this.sraLink) this._sra();
+        if (m.table.sra && !this.sraLink && !this.watch) this._sra();
         if (this.sraLink) { this.sraLink.onView(m); this.sraLink.patchView(m); }
         this.lastView = m;
         try { this.fair.view(m, this.name); } catch (e) { console.warn(e); }
@@ -4641,6 +4802,7 @@ class ClientSession {
         break;
       case 'event': this.handlers.event(m.kind, m.text); break;
       case 'record':
+        if (this.watch) break;
         this.record = m.text; this.recordFull = m.full || m.text;
         if (this.sraLink) { this.record = this.sraLink.patchRecord(this.record); this.recordFull = this.sraLink.patchRecord(this.recordFull); }
         Prefs.set('record.' + this.id, this.record); Prefs.set('recordFull.' + this.id, this.recordFull);
@@ -4656,7 +4818,7 @@ class ClientSession {
       case 'kicked': this._end('You were removed from the table by the host.'); break;
       case 'ended': this._end(m.reason || 'Host left, game ended.'); break;
       // Encrypted deal steps go to our own SraPlayer.
-      default: if (SraLink.is(m)) { if (!this.sraLink) this._sra(); this.sraLink.msg(m); } break;
+      default: if (SraLink.is(m) && !this.watch) { if (!this.sraLink) this._sra(); this.sraLink.msg(m); } break;
     }
   }
 
@@ -4732,8 +4894,12 @@ class BotSession {
   }
   on(ev, fn) { this.handlers[ev] = fn; return this; }
   get inviteUrl() { return ''; }
+  /** Viewer link for a bot game: only once the table has opened its connection to the broker. */
+  get watchUrl() { return this.watchers ? this.watchers.url : ''; }
   start() {
     const t = this.table = new HostTable({ ...this.settings, vsBots: true, hostPlays: true }, this.name, U.randHex(16));
+    this.watchers = new WatchHub(this);
+    if (t.s.spectators) this.watchers.open(); // the game stays on this device; the broker is only for viewers
     this.pid = t.hostPid;
     for (const b of this.bots) t.addBot(b);
     t.onChange = () => {
@@ -4742,19 +4908,22 @@ class BotSession {
       queueMicrotask(() => {
         this.bq = false;
         this.handlers.view(t.viewFor(this.pid));
-        if (t.status === 'ended' && !this.endedSent) { this.endedSent = true; this.handlers.ended('Game over.'); }
+        this.watchers.broadcast();
+        if (t.status === 'ended' && !this.endedSent) { this.endedSent = true; this.watchers.end('The game is over.'); this.handlers.ended('Game over.'); }
       });
     };
-    t.onEvent = (kind, text) => this.handlers.event(kind, text);
+    t.onEvent = (kind, text) => { this.handlers.event(kind, text); this.watchers.event(kind, text); };
     t.onRecord = (pid, text, full) => { if (pid === this.pid) { this.record = full; this.recordFull = full; Prefs.set('record.offline', full); } };
     t.onDirect = (pid, m) => { if (pid === this.pid && m.t === 'error') this.handlers.error(m.text); };
     t.handle(this.pid, { t: 'start' });
     return this;
   }
   send(m) { this.table.handle(this.pid, m); }
+  _send(c, m) { try { if (c.open) for (const x of Wire.pack(m)) c.send(x); } catch { /* connection already gone */ } }
   leave() {
     if (this.closed) return;
     this.closed = true;
+    if (this.watchers) this.watchers.close('The game is over.');
     const t = this.table;
     if (t && t.status !== 'ended') { t.status = 'ended'; t._clearTurn(); clearTimeout(t.nextTimer); clearTimeout(t.dealTimer); clearTimeout(t.botTimer); }
   }
@@ -4795,6 +4964,7 @@ const ICONS = {
   bot: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 13h.01M15 13h.01M9 17h6"/><circle cx="12" cy="3" r="1"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
+  eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
   phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
   monitor: '<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
@@ -5201,11 +5371,7 @@ class TableView {
           view.seats.forEach((st, seat) => {
             if (!st || !st.won) return;
             if (st.isYou) mine = true;
-            this.fly([50, 41], this.pos(seat, 0.85), st.won);
-            const [x, y] = this.pos(seat);
-            const f = document.createElement('div');
-            f.className = 'win-amt'; f.style.left = x + '%'; f.style.top = y + '%'; f.textContent = '+' + U.fmt(st.won);
-            this.fx.appendChild(f); setTimeout(() => f.remove(), 1700);
+            this.fly([50, 41], this.pos(seat, 0.85), st.won); // the amount itself shows on the seat's "+won" badge
           });
           if (snd) Sound.play(mine ? 'win' : 'chip');
         }, 420);
@@ -6117,6 +6283,11 @@ function HostSetupScreen() {
           <label class="check"><input type="checkbox" name="botTakeover"> Bots replace disconnected players</label>
           <p class="hint" style="margin:0" id="fair-hint"></p>
         </section>
+<section class="card-ui setup-section"><h3>Viewers</h3>
+          <label class="check"><input type="checkbox" name="spectators"> Allow viewers with a watch-only link</label>
+          <label class="check sub"><input type="checkbox" name="viewerChat" disabled> Viewers can post in the chat</label>
+          <p class="hint" style="margin:0">Off by default. When on, you get a separate <b>viewer link</b> (in the ⋯ menu) that you can send at any time. Viewers see the table, bets and chat, but <b>never anyone's hole cards</b> (only hands turned face up at showdown), and they can't sit down or play.</p>
+        </section>
         <section class="card-ui setup-section"><h3>Game record</h3>
           <div class="field"><span>Record hole cards</span>${seg('recordHole', [['All', 'All cards'], ['Showdown', 'Only cards shown at showdown']], d.recordHole)}</div>
           <p class="hint" style="margin:0">"All cards" reveals every player's hole cards in everyone's record once each hand is over. Hole cards are never sent to other players during a hand.</p>
@@ -6137,6 +6308,7 @@ function HostSetupScreen() {
       : 'Standard deal: a <b>provably fair shuffle</b> that every player\'s browser checks. This device sees every hole card while dealing, so if you play too, other players have to trust you.';
   };
   form.sra.addEventListener('change', () => { if (form.sra.checked) form.botTakeover.checked = false; fairHint(); });
+  bindViewerOptions(form);
   fairHint();
   // Off by default, and turning it on asks for confirmation.
   form.botTakeover.addEventListener('change', (e) => {
@@ -6167,6 +6339,7 @@ function HostSetupScreen() {
       startingStack: Math.floor(Number(form.startingStack.value)), maxSeats: Number(segv('maxSeats')), timer: Number(segv('timer')),
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : Number(segv('rebuys')), recordHole: segv('recordHole'),
       game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), hostPlays: form.hostPlays.checked, botTakeover: form.botTakeover.checked && !form.sra.checked, sra: form.sra.checked,
+      spectators: form.spectators.checked, viewerChat: form.spectators.checked && form.viewerChat.checked,
     };
     const name = U.sanitizeName(form.name.value);
     const errs = [];
@@ -6180,10 +6353,19 @@ function HostSetupScreen() {
     const box = $('#setup-err');
     if (errs.length) { box.innerHTML = `${icon('alert')}<div>${errs.map(U.esc).join('<br>')}</div>`; box.classList.remove('hidden'); return; }
     box.classList.add('hidden');
-    Prefs.set('lastSettings', s); Prefs.set('name', name);
+    // The viewer options are deliberately not remembered: they start switched off for every new table.
+    const { spectators, viewerChat, ...remember } = s; void spectators; void viewerChat;
+    Prefs.set('lastSettings', remember); Prefs.set('name', name);
     await startHosting(s, name);
   });
   return {};
+}
+
+/** "Viewers can chat" only makes sense when viewers are allowed. */
+function bindViewerOptions(form) {
+  const sync = () => { form.viewerChat.disabled = !form.spectators.checked; if (!form.spectators.checked) form.viewerChat.checked = false; };
+  form.spectators.addEventListener('change', sync);
+  sync();
 }
 
 /* ---------- Play vs Bots setup ---------- */
@@ -6214,6 +6396,19 @@ function BotSetupScreen() {
         <div class="field"><span>Blinds go up</span>${seg('levelHands', [[0, 'Never'], [10, 'Every 10 hands'], [20, '20'], [30, '30']], d.levelHands)}</div>
         <div class="field"><span>Rebuys (bots rebuy automatically)</span>${seg('rebuys', [['no', 'None'], [1, '1 each'], [3, '3 each'], ['any', 'Unlimited']], d.rebuys)}</div>
       </section>
+      <section class="card-ui setup-section" style="grid-column:1/-1"><h3>Extras</h3>
+        <div class="two">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <label class="check"><input type="checkbox" name="botChat"> Bots cheer you on in the chat</label>
+            <p class="hint" style="margin:0">Corny, encouraging table talk from the bots ("Believe in the river! 🌊"). Off by default.</p>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <label class="check"><input type="checkbox" name="spectators"> Allow viewers with a watch-only link</label>
+            <label class="check sub"><input type="checkbox" name="viewerChat" disabled> Viewers can post in the chat</label>
+            <p class="hint" style="margin:0">Off by default. Friends can watch your practice game from their own device but never see your hole cards. Needs an internet connection for the link.</p>
+          </div>
+        </div>
+      </section>
     </div>
     <div id="bsetup-err" class="err-box hidden" role="alert" style="margin-top:16px"></div>
     <div class="setup-foot"><span class="hint">Runs entirely on this device · no internet needed once loaded</span><button class="btn primary lg">${icon('play')}Deal me in</button></div>
@@ -6236,6 +6431,7 @@ function BotSetupScreen() {
   };
   const hint = () => { $('#diff-hint').textContent = HINTS[segv('difficulty')] || ''; };
   hint();
+  bindViewerOptions($('#bsetup'));
   $('#bsetup').addEventListener('submit', (e) => {
     e.preventDefault();
     const f = e.target;
@@ -6245,6 +6441,7 @@ function BotSetupScreen() {
       startingStack: Math.floor(+f.startingStack.value), game: segv('game'), limit: segv('limit'), levelHands: +segv('levelHands'),
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : +segv('rebuys'),
       timer: 0, recordHole: 'All', botSpeed: segv('botSpeed'),
+      botChat: f.botChat.checked, spectators: f.spectators.checked, viewerChat: f.spectators.checked && f.viewerChat.checked,
     };
     const nBots = +segv('bots'), errs = [];
     if (!(s.sb >= 1 && s.bb >= s.sb)) errs.push('Big blind must be at least the small blind (and both at least 1).');
@@ -6350,17 +6547,58 @@ function JoinScreen(hostId) {
   return {};
 }
 
+/* ---------- Viewer link: watch a table without playing ---------- */
+function WatchScreen(watchId) {
+  document.title = TitleFlash.base = 'Watch a game · Feltroom';
+  const s = App.session;
+  if (s && s.role === 'watcher' && s.id === watchId && !s.ended) { App.screen = GameScreen(s); return App.screen; }
+  const saved = Prefs.get('name', '');
+  App.root.innerHTML = `<div class="page"><div class="page-inner">
+    <header class="row"><a class="brand" href="#/" style="text-decoration:none;color:inherit"><div class="logo" aria-hidden="true">♠</div><strong>Feltroom</strong></a><span class="grow"></span>${topIconButtons()}</header>
+    <form class="center-card card-ui" id="watch" style="margin:auto">
+      <div class="state-ic">${icon('eye')}</div>
+      <h2>Watch a poker game</h2>
+      <p class="muted" style="margin:0">You'll see the table, the board, the bets and the chat, but never anyone's hole cards (only hands turned face up at showdown).</p>
+      <label class="field" style="text-align:left"><span>Your name (shown if the table lets viewers chat)</span><input class="input" name="name" maxlength="18" value="${U.esc(saved)}" placeholder="e.g. Sam" autocomplete="off"></label>
+      <button class="btn primary lg">${icon('eye')}Start watching</button>
+    </form></div></div>`;
+  bindThemeToggles(App.root);
+  const f = $('#watch');
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = U.sanitizeName(f.name.value) || 'Viewer';
+    App.root.innerHTML = `<div class="page"><div class="center-card card-ui" style="margin:auto"><div class="spinner" aria-hidden="true"></div><h2>Connecting to the table…</h2><p class="muted">Finding the game through the free PeerJS broker.</p></div></div>`;
+    const sess = new ClientSession(watchId, name, { watch: true });
+    try { await sess.connect(); App.session = sess; App.screen = GameScreen(sess); }
+    catch (err) { try { sess.leave(); } catch { /* ignore */ } showError(Net.friendly(err), () => route(true), '#/'); }
+  });
+  return {};
+}
+
+/** The viewer link with a QR code (anyone can open it at any point in the game). */
+function viewerLinkModal(url) {
+  if (!url) return toast('The viewer link is still connecting. Try again in a moment.', 'info');
+  const m = openModal(`<h2>${icon('eye')} Viewer link</h2><p class="muted" style="margin-top:0">Send this to anyone who wants to watch. Viewers see the table and the chat but never anyone's hole cards, and they can't sit down or play. You can share it at any time during the game.</p>
+    <div class="invite-link" style="margin-bottom:14px">${U.esc(url)}</div>
+    <div class="qr">${qrSvg(url)}</div>
+    <div class="modal-foot"><button class="btn" data-close>Close</button><button class="btn primary" id="m-copywatch">${icon('copy')}Copy viewer link</button></div>`, { label: 'Viewer link' });
+  $('#m-copywatch', m.el).addEventListener('click', () => copyText(url, 'Viewer link copied'));
+}
+
 /* ---------- Live table ---------- */
 function GameScreen(session) {
   const isHost = session.role === 'host';
+  const isWatcher = session.role === 'watcher';
   const mobile = () => Device.mobile || matchMedia('(max-width: 900px)').matches;
   App.root.innerHTML = `<div class="game">
     <header class="topbar">
       <div class="brand"><div class="logo" aria-hidden="true">♠</div><div style="min-width:0"><div class="t-name" id="g-name">Table</div><div class="t-sub" id="g-sub"></div></div></div>
       <div class="top-actions">
-        ${session.offline ? '' : `<button class="btn sm ghost" id="g-fair" aria-label="Fair play status">${icon('shield')}<span class="hide-sm">Fair play</span></button>
+        ${session.offline || isWatcher ? '' : `<button class="btn sm ghost" id="g-fair" aria-label="Fair play status">${icon('shield')}<span class="hide-sm">Fair play</span></button>
         <button class="btn sm hide-sm" id="g-invite">${icon('link')}<span>Invite</span></button>`}
-        <button class="btn sm ghost hide-sm" id="g-copy">${icon('copy')}<span>Copy Game Record</span></button>
+        ${isWatcher ? `<span class="pill watching-pill">${icon('eye')}<span class="hide-sm">Watching</span></span>` : ''}
+        <button class="btn sm ghost hidden" id="g-watchlink" aria-label="Viewer link">${icon('eye')}<span class="hide-sm">Viewer link</span></button>
+        ${isWatcher ? '<span id="g-copy" hidden></span>' : `<button class="btn sm ghost hide-sm" id="g-copy">${icon('copy')}<span>Copy Game Record</span></button>`}
         ${isHost ? `<button class="btn sm ghost hidden" id="g-pause"></button>` : ''}
         <button class="btn ghost icon-btn" id="g-sound"></button>
         <button class="btn ghost icon-btn hide-sm" data-theme-toggle aria-label="Toggle light or dark theme">${Theme.icon()}</button>
@@ -6413,10 +6651,11 @@ function GameScreen(session) {
   soundBtn();
   $('#g-sound').addEventListener('click', () => { Sound.toggle(); soundBtn(); });
   $('#g-help').addEventListener('click', () => helpOverlay('game'));
-  if (!session.offline) {
+  if (!session.offline && !isWatcher) {
     $('#g-invite').addEventListener('click', () => inviteModal());
     $('#g-fair').addEventListener('click', () => fairModal());
   }
+  $('#g-watchlink').addEventListener('click', () => viewerLinkModal(session.watchUrl));
   $('#g-copy').addEventListener('click', () => copyRecord(false));
   if (isHost) $('#g-pause').addEventListener('click', () => session.send({ t: 'pause', on: !G.view.paused }));
   $('#g-menu').addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
@@ -6467,8 +6706,10 @@ function GameScreen(session) {
     const m = openModal(`<h2>Invite players</h2><p class="muted" style="margin-top:0">Anyone with this link can join the table, with no account needed.</p>
       <div class="invite-link" style="margin-bottom:14px">${U.esc(url)}</div>
       <div class="qr">${qrSvg(url)}</div>
+      ${G.view && G.view.table.spectators ? `<p class="hint">Someone who only wants to watch? Send them the <button class="btn sm" id="m-towatch">${icon('eye')}viewer link</button> instead.</p>` : ''}
       <div class="modal-foot"><button class="btn" data-close>Close</button><button class="btn primary" id="m-copylink">${icon('copy')}Copy link</button></div>`, { label: 'Invite players' });
     $('#m-copylink', m.el).addEventListener('click', () => copyText(url, 'Invite link copied'));
+    const tw = $('#m-towatch', m.el); if (tw) tw.addEventListener('click', () => { m.close(); viewerLinkModal(session.watchUrl); });
   }
   function adjustModal() {
     const v = G.view;
@@ -6513,11 +6754,12 @@ function GameScreen(session) {
       ${seated ? `<label><input type="checkbox" id="m-sitout" ${y.sittingOut ? 'checked' : ''}> Sit out next hands</label>` : ''}
       ${seated && !y.inHand ? `<button id="m-stand" role="menuitem">${icon('users')}Leave my seat</button>` : ''}
       <hr>
-      ${session.offline ? '' : `<button id="m-invite" role="menuitem">${icon('link')}Invite players</button>`}
-      <button id="m-copy" role="menuitem">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy game record'}</button>
+      ${session.offline || isWatcher ? '' : `<button id="m-invite" role="menuitem">${icon('link')}Invite players</button>`}
+      ${v && v.table.spectators ? `<button id="m-watch" role="menuitem">${icon('eye')}Viewer link (watch only)</button>` : ''}
+      ${isWatcher ? '' : `<button id="m-copy" role="menuitem">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy game record'}</button>
       ${twoRecords() ? `<button id="m-copyfull" role="menuitem">${icon('bot')}Copy full record (with bot hands)</button><button id="m-viewfull" role="menuitem">${icon('history')}Open full record in viewer</button>` : ''}
       <button id="m-view" role="menuitem">${icon('history')}${twoRecords() ? 'Open player-only record in viewer' : 'Open record in viewer'}</button>
-      <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>
+      <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>`}
       <button id="m-theme" role="menuitem">${Theme.icon()}Light / dark theme</button>
       ${isHost && v && v.status !== 'ended' ? `<hr>
         ${v.status === 'lobby' ? `<button id="m-start" role="menuitem">${icon('play')}Start game</button>` : `<button id="m-pause" role="menuitem">${icon(v.paused ? 'play' : 'pause')}${v.paused ? 'Resume game' : 'Pause game'}</button>`}
@@ -6531,6 +6773,7 @@ function GameScreen(session) {
     on('m-muck', (e) => session.send({ t: 'automuck', on: e.target.checked }));
     on('m-sitout', (e) => session.send({ t: 'sitout', on: e.target.checked }));
     on('m-stand', () => session.send({ t: 'stand' }));
+    on('m-watch', () => viewerLinkModal(session.watchUrl));
     on('m-invite', inviteModal); on('m-copy', () => copyRecord(false)); on('m-view', () => openInViewer(false)); on('m-dl', () => downloadRecord(false));
     on('m-copyfull', () => copyRecord(true)); on('m-viewfull', () => openInViewer(true));
     on('m-theme', () => { Theme.toggle(); $$('[data-theme-toggle]').forEach((x) => { x.innerHTML = Theme.icon(); }); });
@@ -6607,6 +6850,11 @@ function GameScreen(session) {
     G.barKey = null;
     if (G.view) renderBar();
     $('#g-banner').classList.add('hidden');
+    if (isWatcher) {
+      openModal(`<div class="state-ic err" style="margin-bottom:12px">${icon('flag')}</div><h2 style="text-align:center">${U.esc(reason)}</h2>
+        <p class="muted" style="text-align:center">Thanks for watching!</p><div class="modal-foot" style="justify-content:center"><a class="btn primary" href="#/" data-close>${icon('home')}Home</a></div>`, { label: 'Game ended' });
+      return;
+    }
     const m = openModal(`<div class="state-ic err" style="margin-bottom:12px">${icon('flag')}</div><h2 style="text-align:center">${U.esc(reason)}</h2>
       <p class="muted" style="text-align:center">Your game record up to this point is saved in this browser. Copy it, download it, or replay it in the viewer.</p>
       <div class="modal-foot" style="justify-content:center"><a class="btn" href="#/" data-close>${icon('home')}Home</a><button class="btn" id="e-dl">${icon('download')}Download</button><button class="btn" id="e-view">${icon('history')}Open in viewer</button><button class="btn primary" id="e-copy">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy Game Record'}</button>${twoRecords() ? `<button class="btn" id="e-full">${icon('bot')}Copy full record</button>` : ''}</div>`, { label: 'Game ended' });
@@ -6619,7 +6867,7 @@ function GameScreen(session) {
   /* ----- lobby dock ----- */
   function renderLobby(v) {
     const el = $('#g-lobby');
-    const show = v.status === 'lobby';
+    const show = v.status === 'lobby' && !isWatcher;
     el.classList.toggle('hidden', !show);
     if (!show) return;
     const url = session.inviteUrl;
@@ -6686,7 +6934,9 @@ function GameScreen(session) {
     G.sending = false;
     let html = '';
     const hn = myHandName(v);
-    if (G.ended || v.status === 'ended') {
+    if (isWatcher && !(G.ended || v.status === 'ended')) {
+      html = `<div class="ab-msg">${icon('eye')}You're watching${v.status === 'lobby' ? ': the game hasn\'t started yet' : ''}. Hole cards stay hidden; you'll see hands only when they're shown.</div>`;
+    } else if (G.ended || v.status === 'ended') {
       html = `<div class="ab-msg">Game over.<button class="btn primary" data-do="copy">${icon('copy')}Copy Game Record</button><button class="btn" data-do="viewer">${icon('history')}Open in viewer</button></div>`;
     } else if (!y || y.seat == null) {
       const free = v.seats.some((s) => !s);
@@ -6775,7 +7025,7 @@ function GameScreen(session) {
     const el = document.createElement('div');
     el.className = 'cf';
     el.title = 'Open chat';
-    el.innerHTML = `<b style="color:hsl(${hueOf(c.from)} 60% 55%)">${U.esc(c.from)}</b>${U.esc(c.text)}`;
+    el.innerHTML = `<b style="color:hsl(${hueOf(c.from)} 60% 55%)">${c.bot ? '🤖 ' : ''}${U.esc(c.from)}</b>${U.esc(c.text)}`;
     el.addEventListener('click', () => { setPanel(true); selectTab('chat'); $('#g-chatin').focus(); feed.innerHTML = ''; });
     feed.appendChild(el);
     while (feed.children.length > 4) feed.firstChild.remove();
@@ -6798,7 +7048,7 @@ function GameScreen(session) {
       const fresh = v.chat.filter((c) => c.id > G.chatId);
       G.chatId = lastChat;
       const list = $('#g-chat');
-      list.innerHTML = v.chat.map((c) => `<div class="chat-msg"><b style="color:hsl(${hueOf(c.from)} 60% 60%)">${U.esc(c.from)}</b>${U.esc(c.text)}</div>`).join('');
+      list.innerHTML = v.chat.map((c) => `<div class="chat-msg${c.viewer ? ' viewer' : ''}"><b style="color:hsl(${hueOf(c.from)} 60% 60%)">${c.bot ? '🤖 ' : ''}${U.esc(c.from)}</b>${U.esc(c.text)}</div>`).join('');
       list.scrollTop = list.scrollHeight;
       const others = fresh.filter((c) => !v.you || c.from !== v.you.name);
       if (G.chatSeen) {
@@ -6850,6 +7100,15 @@ function GameScreen(session) {
     const seated = v.seats.filter(Boolean).length;
     $('#g-sub').textContent = `${v.table.variant} · Blinds ${U.fmt(v.table.sb)}/${U.fmt(v.table.bb)}${v.table.ante ? ` · Ante ${U.fmt(v.table.ante)}` : ''}${v.table.levelHands && v.status === 'playing' ? ` · Level ${v.table.level} (up in ${v.table.nextLevelIn})` : ''} · ${v.status === 'lobby' ? 'Lobby' : v.handNo ? 'Hand #' + v.handNo : 'Starting'} · ${seated}/${v.table.maxSeats} seated`;
     renderFairBadge();
+    $('#g-watchlink').classList.toggle('hidden', !(v.table.spectators && session.watchUrl));
+    if (isWatcher) {
+      // Viewers chat only if the table allows it.
+      const canChat = v.table.viewerChat;
+      $('#g-chatform').classList.toggle('hidden', !canChat);
+      let note = $('#g-chatnote');
+      if (!canChat && !note) { note = document.createElement('p'); note.id = 'g-chatnote'; note.className = 'hint'; note.style.margin = '8px 0 0'; note.textContent = 'Viewers can read the chat but not post at this table.'; $('#g-chatform').after(note); }
+      if (note) note.classList.toggle('hidden', !!canChat);
+    }
     if (isHost) {
       const pb = $('#g-pause');
       pb.classList.toggle('hidden', v.status !== 'playing');
@@ -8011,6 +8270,7 @@ function route(force) {
     s.leave(); App.session = null;
   }
   if (!force && s && s.role === 'client' && !s.ended && lastHash.startsWith('#join=') && !h.startsWith('#join=')) { s.leave(); App.session = null; }
+  if (!force && s && s.role === 'watcher' && !s.ended && lastHash.startsWith('#watch=') && !h.startsWith('#watch=')) { s.leave(); App.session = null; }
   lastHash = h;
   if (App.screen && App.screen.destroy) App.screen.destroy();
   App.screen = null;
@@ -8019,7 +8279,9 @@ function route(force) {
   // First visit: ask whether this is a phone or a computer, then carry on to where the link pointed.
   if (!Device.get() && !h.startsWith('#/selftest')) { App.screen = DeviceScreen(h || '#/'); return; }
   const j = h.match(/^#join=([A-Za-z0-9_-]+)/);
+  const w = h.match(/^#watch=([A-Za-z0-9_-]+)/);
   if (j) App.screen = JoinScreen(j[1]);
+  else if (w) App.screen = WatchScreen(w[1]);
   else if (h.startsWith('#/host')) App.screen = s && s.role === 'host' && !s.offline && !s.closed ? GameScreen(s) : HostSetupScreen();
   else if (h.startsWith('#/bots')) App.screen = s && s.offline && !s.closed ? GameScreen(s) : BotSetupScreen();
   else if (h.startsWith('#/viewer')) App.screen = ViewerScreen();
