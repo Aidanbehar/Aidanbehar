@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-F5Ygg7/H1eUDqEYu1ZVcn9UQdsKQJbiWeow2Ahspock=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-TGVKhWzgpWRAbGXb8BZRDorfbDKFnkGqANGbGvsY8+o=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -2426,6 +2426,8 @@ const Notation = {
       ['Event', o.event], ['Date', o.date], ['Variant', o.variant || 'NLHE'], ['Blinds', `${o.sb}/${o.bb}`],
       ['Ante', String(o.ante || 0)], ['StartingStack', String(o.startingStack)],
       ['Players', o.players.join(',')], ['HoleCards', o.holeCards === 'All' ? 'All' : 'Showdown'],
+      // Every other table setting, so the record says exactly how the game was set up.
+      ...(o.settings || []).filter(([k, v]) => /^[A-Za-z][A-Za-z0-9_]*$/.test(k) && v != null).map(([k, v]) => [k, String(v).replace(/["\[\]\\]/g, '')]),
     ];
   },
 
@@ -4092,10 +4094,29 @@ class HostTable {
     const tags = Notation.gameTags({
       event: this.s.tableName, date: this.date, sb: this.s.sb, bb: this.s.bb, ante: this.s.ante,
       startingStack: this.s.startingStack, players: this.names, holeCards: this.s.recordHole, variant: this.variant,
+      settings: this.settingTags(),
     });
     const hands = this.finished.filter(({ hand }) => full || !(hand.botNames && hand.botNames.length))
       .map(({ hand, pids }) => Notation.fromHand(hand, pids.indexOf(pid), this.s.recordHole, { levels: !!this.s.levelHands }));
     return Notation.serialize({ tags, hands });
+  }
+  /** All of this table's settings as record header tags. */
+  settingTags() {
+    const s = this.s, yn = (x) => (x ? 'On' : 'Off');
+    const t = [
+      ['Mode', s.vsBots ? 'Play vs Bots' : 'Hosted'], ['Game', VARIANTS[this.variant].name], ['MaxSeats', s.maxSeats],
+      ['ActionTimer', s.timer ? `${s.timer}s` : 'Off'], ['BlindsUp', s.levelHands ? `Every ${s.levelHands} hands` : 'Never'],
+      ['Rebuys', !s.rebuys ? 'None' : s.maxRebuys ? `${s.maxRebuys} each` : 'Unlimited'],
+    ];
+    if (s.vsBots) {
+      const bots = [...this.players.values()].filter((p) => p.isBot);
+      t.push(['BotPlayers', bots.map((p) => `${p.name} (${Bots.LABELS[p.botDifficulty] || p.botDifficulty}, ${(Bots.PERSONALITIES[p.botPersonality] || {}).name || p.botPersonality})`).join('; ')],
+        ['BotSpeed', s.botSpeed || 'normal'], ['BotsCheer', yn(s.botChat)]);
+    } else {
+      t.push(['Deal', this.sra ? 'Encrypted' : 'Standard'], ['HostPlays', yn(s.hostPlays !== false)], ['BotTakeover', yn(s.botTakeover)], ['WaitingRoom', yn(s.listed)]);
+    }
+    t.push(['Viewers', yn(s.spectators)], ['ViewerChat', yn(s.viewerChat)]);
+    return t;
   }
   _sendRecords() { for (const [pid, p] of this.players) if (!p.isBot) this.onRecord(pid, this.recordFor(pid, false), this.recordFor(pid, true)); }
 
@@ -5171,16 +5192,27 @@ const TitleFlash = {
 };
 document.addEventListener('visibilitychange', () => { if (!document.hidden) TitleFlash.stop(); });
 
+/**
+ * Copy text. Uses the clipboard API, and falls back to a hidden text box placed inside any open dialog
+ * (dialogs keep keyboard focus to themselves, which made the old fallback silently fail). Only says
+ * "copied" when it really was; otherwise shows the text selected so it can be copied by hand.
+ */
 async function copyText(text, label = 'Copied to clipboard') {
-  try { await navigator.clipboard.writeText(text); }
-  catch {
+  let ok = false;
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; } } catch { /* try the fallback */ }
+  if (!ok) {
+    const host = document.querySelector('.modal') || document.body;
     const ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); } catch { /* ignore */ }
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    host.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
     ta.remove();
   }
-  toast(label, 'success', 2200);
+  if (ok) { toast(label, 'success', 2200); return true; }
+  const m = openModal(`<h2>Copy this</h2><p class="muted" style="margin-top:0">Your browser blocked automatic copying. The text is selected below: press Ctrl+C (or ⌘C, or long-press and Copy).</p>
+    <textarea class="input" rows="3" readonly style="width:100%">${U.esc(text)}</textarea><div class="modal-foot"><button class="btn primary" data-close>Done</button></div>`, { label: 'Copy' });
+  const t = m.el.querySelector('textarea'); t.focus(); t.select();
+  return false;
 }
 function downloadText(name, text) {
   const a = document.createElement('a');
@@ -5269,8 +5301,8 @@ class TableView {
   }
   destroy() { this.ro.disconnect(); cancelAnimationFrame(this.raf); }
 
-  /** Stacked rows instead of the oval: always on mobile, and on a computer when the oval can't fit without overlaps. */
-  get stacked() { return Device.mobile || !!this.compact; }
+  /** Stacked rows instead of the oval: only when the Mobile layout was chosen. A computer always keeps the oval. */
+  get stacked() { return Device.mobile; }
 
   layout() {
     if (this.stacked) return this._layoutMobile();
@@ -5303,7 +5335,6 @@ class TableView {
   /** Mobile: no oval. Rows that flow (opponents, board, you), so nothing can ever sit on top of anything else. */
   _layoutMobile() {
     const key = 'm' + this.stage.clientWidth + 'x' + this.stage.clientHeight;
-    if (this.compact && key !== this.lkey && this.lkey) { this.compact = false; this.lkey = null; return this.layout(); } // window changed: try the oval again
     this.el.classList.add('mtable');
     this.el.style.width = ''; this.el.style.height = '';
     this.el.style.setProperty('--s', '1');
@@ -5335,8 +5366,7 @@ class TableView {
 
   /**
    * After drawing the oval, measure it: no seat may touch another seat, the board or the edge of the
-   * screen. If anything does, shrink everything a little and redraw; if even the smallest size
-   * overlaps, use the stacked layout for this window size instead.
+   * screen. If anything does, shrink everything a little and redraw. The layout itself never changes.
    */
   _fit(view) {
     const overlaps = () => {
@@ -5354,8 +5384,7 @@ class TableView {
       return false;
     };
     if (!this.w || !this.stage.clientWidth) return;
-    for (let guard = 0; guard < 8 && overlaps(); guard++) {
-      if (this.fitK <= 0.62) { this.compact = true; this.lkey = null; this.layout(); return; }
+    for (let guard = 0; guard < 10 && this.fitK > 0.4 && overlaps(); guard++) {
       this.fitK *= 0.9;
       this.el.style.setProperty('--s', (this.baseS * this.fitK).toFixed(3));
       this._renderOval(view, { animate: false });
@@ -6066,6 +6095,15 @@ const SelfTest = (() => {
     ok(st.size <= 4, 'half-sent messages are capped');
   });
 
+  test('Notation', 'Every table setting is written into the record and survives a round trip', () => {
+    const tags = Notation.gameTags({ event: 'Settings', date: '2026.10.16', sb: 1, bb: 2, ante: 0, startingStack: 200, players: ['A', 'B'], holeCards: 'All',
+      settings: [['ActionTimer', '30s'], ['Deal', 'Encrypted'], ['BotPlayers', 'Rook (Expert, Shark); Ada "x" [y]'], ['Bad Key', 'no'], ['Viewers', 'On']] });
+    const g = Notation.parse(Notation.serialize({ tags, hands: [] }) + '\n#1 [Button "A"] [Stacks "A:200, B:200"]\nA sb 1; B bb 2\nA f\n=> B wins 3');
+    const get = (k) => (g.tags.find((t) => t[0] === k) || [])[1];
+    eq([get('ActionTimer'), get('Deal'), get('Viewers'), get('BotPlayers')], ['30s', 'Encrypted', 'On', 'Rook (Expert, Shark); Ada x y']);
+    ok(!g.tags.some((t) => t[0] === 'Bad Key'), 'invalid tag names are dropped');
+  });
+
   /* ---------- Learn ---------- */
   test('Learn', 'lesson maths matches the standard numbers', () => {
     eq(Learn.C(52, 5), 2598960);
@@ -6741,11 +6779,12 @@ function WatchScreen(watchId) {
 }
 
 /** The viewer link with a QR code (anyone can open it at any point in the game). */
-function viewerLinkModal(url) {
+async function viewerLinkModal(url) {
   if (!url) return toast('The viewer link is still connecting. Try again in a moment.', 'info');
+  if (!(await copyText(url, 'Viewer link copied to your clipboard'))) return;
   const m = openModal(`<h2>${icon('eye')} Viewer link</h2><p class="muted" style="margin-top:0">Send this to anyone who wants to watch. Viewers see the table and the chat but never anyone's hole cards, and they can't sit down or play. You can share it at any time during the game.</p>
     <div class="invite-link" style="margin-bottom:14px">${U.esc(url)}</div>
-    <div class="qr">${qrSvg(url)}</div>
+    <div class="qr">${QR.svg(url)}</div>
     <div class="modal-foot"><button class="btn" data-close>Close</button><button class="btn primary" id="m-copywatch">${icon('copy')}Copy viewer link</button></div>`, { label: 'Viewer link' });
   $('#m-copywatch', m.el).addEventListener('click', () => copyText(url, 'Viewer link copied'));
 }

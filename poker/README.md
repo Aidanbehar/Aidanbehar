@@ -53,10 +53,9 @@ for your device). Your choice is remembered, and the home screen has a button to
   button with an unread count, recent messages appear in a strip under the table, and the log,
   chat and player list open as a sheet from the bottom. On small screens the table scrolls to your
   seat when it's your turn.
-- **Computer** keeps the oval table. Each player's bet and dealer/blind badges sit inside their
-  seat, and after every update the table measures itself: if anything would touch the board,
-  another seat or the edge of the window, it shrinks slightly, and if it still can't fit, it
-  switches to the stacked layout.
+- **Computer** always keeps the oval table, in the game and in the viewer. Each player's bet and
+  dealer/blind badges sit inside their seat, and after every update the table measures itself: if
+  anything would touch the board, another seat or the edge of the window, it shrinks slightly.
 
 The site has four parts:
 
@@ -472,6 +471,13 @@ R: 5h; Bob x; Carol b 20; Bob c 20
 SD: Carol shows [ThJd]; Bob shows [5d3h]
 => Bob wins 186 (Pair of Fives)
 ```
+
+Records also carry every table setting as extra header tags, for example `[Mode "Hosted"]`,
+`[Game "No-Limit Hold'em"]`, `[MaxSeats "9"]`, `[ActionTimer "15s"]`, `[BlindsUp "Never"]`,
+`[Rebuys "Unlimited"]`, `[Deal "Encrypted"]`, `[HostPlays "On"]`, `[BotTakeover "Off"]`,
+`[WaitingRoom "Off"]`, `[Viewers "On"]` and `[ViewerChat "Off"]`. Play vs Bots records list
+`[BotPlayers "..."]` with each bot's level and style, `[BotSpeed "..."]` and `[BotsCheer "..."]`.
+Readers ignore tags they don't know.
 
 ### Specification
 
