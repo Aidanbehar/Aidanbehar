@@ -193,7 +193,8 @@ test suite and lists pass/fail results. The suite covers:
 
 - **Host settings:**
   - game: **Texas Hold'em**, **Omaha** (4 hole cards) or **5-Card Omaha** (up to 8 seats)
-  - betting: **No limit** or **Pot limit**
+  - betting: **No limit**, **Pot limit** or **Limit** (fixed limit), in hosted and bot games. Limit is
+    used only when the host picks it.
   - table name and your display name
   - small blind, big blind and an optional ante
   - starting stack, and optionally **blinds that go up** every 10, 20 or 30 hands
@@ -250,6 +251,12 @@ test suite and lists pass/fail results. The suite covers:
   cards on the board with one in your hand is not a flush.
 - **Pot limit.** The largest bet is the pot. The largest raise is to the current bet plus the pot
   after calling. For example, with blinds of 1/2 the first raise is at most to 7.
+- **Limit (fixed limit).** Every bet and raise is exactly one fixed size: the big blind before the
+  flop and on the flop, twice the big blind on the turn and river. With blinds of 1/2 that is 2, 2,
+  4, 4. Each betting round allows at most 4 bets (a bet and 3 raises; before the flop the big blind
+  counts as the first bet). There is no bet slider: the raise button shows the one legal amount. A
+  short all-in does not count toward the cap and does not reopen the betting. Records use the
+  variants `FLHE`, `FLO` and `FLO5`.
 - **Rising blinds.** Blinds and antes are multiplied by 1, 2, 3, 5, 8, 10, 15, 20, … at each level.
 - **Raises.** A raise must add at least as much as the previous full raise. An all-in that is
   less than a full raise does not reopen the betting for players who have already acted. Several
@@ -456,6 +463,30 @@ plain HTTP too and nothing is downloaded.
 
 ## Game record format
 
+### Compact records (what Copy Game Record gives you)
+
+**Copy Game Record** copies a **compact record**: one short line that starts with `♣`, for
+example `♣b煴瓶赉东俼寻…`. It holds exactly the same data as the full text record: every tag,
+setting, card, action, showdown and result. The viewer turns it back into the identical text
+record, character for character. A typical game is about 7 to 13 times shorter. A 4,302-character
+sample becomes 489 characters.
+
+How it is made, all in the browser at no cost:
+
+1. The record is packed into bytes. Player names are stored once and then referred to by number.
+   Common tags and values come from a built-in dictionary. Starting stacks are stored as the change
+   from the previous hand.
+2. The bytes are compressed with the browser's built-in `deflate-raw` compression.
+3. Each 14 bits becomes one CJK character (U+4E00 onwards). `a`/`b` after the `♣` marks whether
+   the last character holds 7 or 14 bits.
+
+Anything changed or cut off is rejected with a clear error instead of loading wrong data. The
+viewer accepts compact records and text records, whether pasted or loaded from a file. To get
+the human-readable text instead, use **Copy readable record (text)** in the table menu. Downloaded
+files are always readable text.
+
+### Text format
+
 The record is plain text, similar to chess PGN. It contains everything needed to replay each hand
 exactly. Here is the first hand of the built-in sample game:
 
@@ -495,7 +526,7 @@ Readers ignore tags they don't know.
 |---|---|
 | `Event` | Table name |
 | `Date` | `YYYY.MM.DD` |
-| `Variant` | `NLHE`, `PLHE`, `NLO`, `PLO`, `NLO5` or `PLO5` (No-/Pot-Limit; Hold'em, Omaha, 5-Card Omaha) |
+| `Variant` | `NLHE`, `PLHE`, `FLHE`, `NLO`, `PLO`, `FLO`, `NLO5`, `PLO5` or `FLO5` (No-limit / Pot-limit / Fixed-limit; Hold'em, Omaha, 5-Card Omaha) |
 | `Blinds` | `SB/BB` (**required**) |
 | `Ante` | Ante per player, `0` if none |
 | `StartingStack` | Buy-in amount |

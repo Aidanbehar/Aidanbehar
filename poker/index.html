@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-I+JzbOf7nJfNRnAeNOQ/30MvwfEldcWsl1HxwUrU/F8=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-6RJ8yLXkyUnfAFE7GoUwbwp3Yk0WgUezlVTB4KpzYI0=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -968,6 +968,7 @@ const Eval = {
                'done'    -> chips distributed
    ===================================================================== */
 const STREETS = ['Preflop', 'Flop', 'Turn', 'River'];
+const LIMIT_CAP = 4; // fixed limit: a bet and three raises per betting round
 
 const Engine = {
   /**
@@ -981,14 +982,14 @@ const Engine = {
     if (!(o.button >= 0 && o.button < n)) throw new Error('Invalid button position');
     const h = {
       no: o.no || 1, sb: o.sb, bb: o.bb, ante: o.ante || 0, button: o.button,
-      game: o.game === 'omaha' ? 'omaha' : 'holdem', limit: o.limit === 'pl' ? 'pl' : 'nl',
+      game: o.game === 'omaha' ? 'omaha' : 'holdem', limit: ['pl', 'fl'].includes(o.limit) ? o.limit : 'nl',
       holeCount: o.holeCount || (o.game === 'omaha' ? 4 : 2),
       players: o.players.map((p, i) => ({
         name: p.name, startStack: p.stack, stack: p.stack, bet: 0, committed: 0,
         folded: false, allIn: false, acted: false, actedBet: 0,
         hole: (o.hole && o.hole[i]) || null, shown: false, mucked: false,
       })),
-      board: [], street: 0, currentBet: 0, minRaise: o.bb, toAct: -1,
+      board: [], street: 0, currentBet: 0, minRaise: o.bb, toAct: -1, betCount: 1, // the big blind is the first bet
       phase: 'betting', pendingDeal: 0, log: [], lastAggressor: -1, results: null,
     };
     for (const p of h.players) if (!(p.stack > 0)) throw new Error(`${p.name} has no chips to play`);
@@ -1052,21 +1053,28 @@ const Engine = {
     const othersAble = h.players.some((q, j) => j !== i && !q.folded && !q.allIn);
     const allInTo = p.bet + p.stack;
     // Pot limit: the largest raise is to (current bet + the pot after calling).
-    const potCap = h.limit === 'pl' ? h.currentBet + Engine.potTotal(h) + toCall : Infinity;
+    // Fixed limit: every bet and raise is exactly one bet (the big blind preflop and on the flop, two big
+    // blinds on the turn and river), with at most four bets in a betting round.
+    const fixed = h.limit === 'fl', size = Engine.betSize(h);
+    const potCap = h.limit === 'pl' ? h.currentBet + Engine.potTotal(h) + toCall : fixed ? h.currentBet + size : Infinity;
     const maxTo = Math.min(allInTo, potCap);
+    const capReached = fixed && h.betCount >= LIMIT_CAP;
     // An all-in that is less than a full raise does not reopen betting for
     // players who already acted (cumulative short raises can, TDA style).
     const reopened = !p.acted || h.currentBet - p.actedBet >= h.minRaise;
-    const canRaise = othersAble && reopened && maxTo > h.currentBet;
-    const minFull = h.currentBet === 0 ? h.bb : h.currentBet + h.minRaise;
+    const canRaise = othersAble && reopened && !capReached && maxTo > h.currentBet;
+    const minFull = fixed ? h.currentBet + size : h.currentBet === 0 ? h.bb : h.currentBet + h.minRaise;
     return {
       player: i, canCheck: toCall === 0, toCall, callTo: p.bet + toCall, canRaise,
       minTo: Math.min(minFull, maxTo), maxTo, isBet: h.currentBet === 0,
       currentBet: h.currentBet, myBet: p.bet, stack: p.stack, pot: Engine.potTotal(h),
       reopenBlocked: othersAble && !reopened && maxTo > h.currentBet,
-      capped: maxTo < allInTo, limit: h.limit,
+      capped: maxTo < allInTo, limit: h.limit, betSize: fixed ? size : null, capReached,
     };
   },
+
+  /** Fixed limit: the small bet (big blind) on the first two rounds, the big bet (two big blinds) after. */
+  betSize(h) { return h.street < 2 ? h.bb : 2 * h.bb; },
 
   potTotal(h) { return U.sum(h.players.map((p) => p.committed)); },
 
@@ -1094,10 +1102,11 @@ const Engine = {
       }
       to = Number(to);
       if (!Number.isInteger(to)) throw new Error('Amount must be a whole number of chips');
-      if (to > L.maxTo) throw new Error(L.capped ? `Pot limit: the most you can make it is ${U.fmt(L.maxTo)}` : `You only have ${U.fmt(L.maxTo)} in total`);
+      if (to > L.maxTo) throw new Error(h.limit === 'fl' && L.capped ? `Limit: ${L.isBet ? 'bets' : 'raises'} are exactly ${U.fmt(L.betSize)}, so it's to ${U.fmt(L.maxTo)}` : L.capped ? `Pot limit: the most you can make it is ${U.fmt(L.maxTo)}` : `You only have ${U.fmt(L.maxTo)} in total`);
       if (to < L.minTo) throw new Error(`Minimum ${L.isBet ? 'bet' : 'raise'} is to ${U.fmt(L.minTo)}`);
       const inc = to - h.currentBet;
       if (inc >= h.minRaise) h.minRaise = inc;
+      if (h.limit === 'fl' && inc >= Engine.betSize(h)) h.betCount++; // a short all-in doesn't count toward the cap
       amt = to - p.bet; Engine._put(p, amt);
       h.currentBet = to; h.lastAggressor = i;
       rec = L.isBet ? 'b' : 'r';
@@ -1116,7 +1125,7 @@ const Engine = {
     h.board.push(...cards); h.street++;
     h.log.push({ t: 'deal', street: h.street, cards: cards.slice() });
     for (const p of h.players) { p.bet = 0; p.acted = false; p.actedBet = 0; }
-    h.currentBet = 0; h.minRaise = h.bb; h.lastAggressor = -1; h.pendingDeal = 0;
+    h.currentBet = 0; h.minRaise = h.limit === 'fl' ? Engine.betSize(h) : h.bb; h.betCount = 0; h.lastAggressor = -1; h.pendingDeal = 0;
     h.phase = 'betting';
     h.toAct = Engine._nextToAct(h, h.button);
     if (h.toAct < 0) Engine._endRound(h);
@@ -2380,12 +2389,15 @@ const VARIANTS = {
   PLO: { game: 'omaha', limit: 'pl', holeCount: 4, name: 'Pot-Limit Omaha' },
   NLO5: { game: 'omaha', limit: 'nl', holeCount: 5, name: 'No-Limit 5-Card Omaha' },
   PLO5: { game: 'omaha', limit: 'pl', holeCount: 5, name: 'Pot-Limit 5-Card Omaha' },
+  FLHE: { game: 'holdem', limit: 'fl', holeCount: 2, name: "Limit Hold'em" },
+  FLO: { game: 'omaha', limit: 'fl', holeCount: 4, name: 'Limit Omaha' },
+  FLO5: { game: 'omaha', limit: 'fl', holeCount: 5, name: 'Limit 5-Card Omaha' },
 };
 
 const Notation = {
   /** Variant code for the [Variant] tag, e.g. NLHE, PLO, PLO5. */
   variantCode(game, limit, holeCount) {
-    return `${limit === 'pl' ? 'PL' : 'NL'}${game === 'omaha' ? 'O' : 'HE'}${game === 'omaha' && holeCount === 5 ? '5' : ''}`;
+    return `${limit === 'pl' ? 'PL' : limit === 'fl' ? 'FL' : 'NL'}${game === 'omaha' ? 'O' : 'HE'}${game === 'omaha' && holeCount === 5 ? '5' : ''}`;
   },
 
   potLabel(k) { return k === 0 ? 'main pot' : `side pot ${k}`; },
@@ -2896,6 +2908,219 @@ const STAT_KEY = [
   ['Winning hands', 'Which hand categories won pots at showdown (table overview).'],
 ];
 
+/* ---------- Compact records ----------
+   The same record in as few characters as possible. The parsed record is written as tight binary
+   (player names become numbers, each card one byte, amounts variable-length), squeezed with the
+   browser's built-in DEFLATE, then spelled with 16,384 different Chinese characters, so each character
+   carries 14 bits. It starts with ♣. Loading it rebuilds the exact same record: decode(encode(x))
+   serializes to the identical text, which the self-tests check. */
+const Compact = (() => {
+  const PREFIX = '♣', BASE = 0x4E00, BITS = 14;
+  // Common tag names and values become one-byte codes.
+  const KEYS = ['Event', 'Date', 'Variant', 'Blinds', 'Ante', 'StartingStack', 'Players', 'HoleCards', 'Mode', 'Game', 'MaxSeats', 'ActionTimer',
+    'BlindsUp', 'Rebuys', 'Deal', 'HostPlays', 'BotTakeover', 'WaitingRoom', 'Viewers', 'ViewerChat', 'HostCanChangeStacks', 'HostCanRemovePlayers',
+    'BotPlayers', 'BotSpeed', 'BotsCheer', 'Button', 'Stacks', 'Bots'];
+  const VALS = ['On', 'Off', 'All', 'Showdown', 'Hosted', 'Play vs Bots', 'Never', 'Unlimited', 'None', 'Encrypted', 'Standard', 'main pot',
+    'normal', 'fast', 'slow', ...Object.keys(VARIANTS), ...Object.values(VARIANTS).map((v) => v.name)];
+  const DECK = Cards.newDeck();
+  const POSTS = ['sb', 'bb', 'a'], ACTS = ['f', 'x', 'c', 'b', 'r'];
+  const enc = new TextEncoder(), dec = new TextDecoder('utf-8', { fatal: true });
+
+  function writer() {
+    const b = [];
+    const w = {
+      bytes: b,
+      u(n) { if (!(Number.isInteger(n) && n >= 0)) throw new Error('bad number'); while (n >= 128) { b.push((n % 128) | 128); n = Math.floor(n / 128); } b.push(n); },
+      z(n) { w.u(n >= 0 ? n * 2 : -n * 2 - 1); },
+      raw(s) { const x = enc.encode(s); w.u(x.length); for (const y of x) b.push(y); },
+      str(s) { const k = VALS.indexOf(s); if (k >= 0) w.u(k + 1); else { w.u(0); w.raw(s); } },
+      card(c) { const k = DECK.indexOf(c); if (k < 0) throw new Error('bad card'); b.push(k); },
+    };
+    return w;
+  }
+  function reader(bytes) {
+    let i = 0;
+    const need = () => { if (i >= bytes.length) throw new Error('The compact record is cut off.'); return bytes[i++]; };
+    const r = {
+      u() { let n = 0, m = 1, x; do { x = need(); n += (x & 127) * m; m *= 128; if (m > 2 ** 56) throw new Error('bad number'); } while (x & 128); return n; },
+      z() { const n = r.u(); return n % 2 ? -(n + 1) / 2 : n / 2; },
+      raw() { const n = r.u(); if (i + n > bytes.length) throw new Error('The compact record is cut off.'); const s = dec.decode(bytes.subarray(i, i + n)); i += n; return s; },
+      str() { const k = r.u(); if (k === 0) return r.raw(); if (k > VALS.length) throw new Error('bad value'); return VALS[k - 1]; },
+      card() { const k = need(); if (k >= 52) throw new Error('bad card'); return DECK[k]; },
+      done: () => i === bytes.length,
+    };
+    return r;
+  }
+
+  const stackStr = (list) => list.map(([n, s]) => `${n}:${s}`).join(', ');
+
+  /** Parsed record -> bytes. */
+  function pack(g) {
+    const w = writer();
+    // every name, numbered in order of first appearance
+    const names = [];
+    const nm = (n) => { let k = names.indexOf(n); if (k < 0) { k = names.length; names.push(n); } return k; };
+    for (const r of g.hands) for (const [n] of r.stacks) nm(n);
+    w.u(names.length); names.forEach((n) => w.raw(n));
+    const key = (k) => { const x = KEYS.indexOf(k); if (x >= 0) w.u(x + 1); else { w.u(0); w.raw(k); } };
+    w.u(g.tags.length);
+    for (const [k, v] of g.tags) { key(k); w.str(v); }
+    w.u(g.hands.length);
+    let prevNo = 0;
+    const last = new Map(); // name -> previous starting stack (stacks are written as changes)
+    for (const r of g.hands) {
+      w.z(r.no - prevNo - 1); prevNo = r.no;
+      w.u(r.tags.length);
+      for (const [k, v] of r.tags) {
+        key(k);
+        // Button and Stacks become name numbers when that rebuilds the exact same text
+        if (k === 'Button' && names.includes(v)) { w.u(1); w.u(names.indexOf(v)); }
+        else if (k === 'Stacks' && stackStr(r.stacks) === v && r.stacks.every(([n]) => names.includes(n))) {
+          w.u(2); w.u(r.stacks.length);
+          for (const [n, s] of r.stacks) { w.u(names.indexOf(n)); w.z(s - (last.get(n) || 0)); last.set(n, s); }
+        }
+        else { w.u(0); w.str(v); }
+      }
+      // players dealt in, for hole cards (the order of [Stacks])
+      w.u(r.stacks.length); for (const [n] of r.stacks) w.u(nm(n));
+      w.u(r.holeCount);
+      for (const [n] of r.stacks) { const h = r.hole[n]; if (h) { w.u(1); h.forEach(w.card); } else w.u(0); }
+      w.u(r.posts.length);
+      for (const p of r.posts) { w.u(nm(p.name)); w.u(POSTS.indexOf(p.kind)); w.u(p.amt); }
+      w.u(r.streets.length);
+      r.streets.forEach((st, s) => {
+        if (s > 0) { w.u(st.board.length); st.board.forEach(w.card); }
+        w.u(st.actions.length);
+        for (const a of st.actions) { w.u(nm(a.name)); const t = ACTS.indexOf(a.type); w.u(t * 2 + (a.to != null ? 1 : 0)); if (a.to != null) w.u(a.to); }
+      });
+      w.u(r.shows.length);
+      for (const s of r.shows) {
+        const same = s.cards && r.hole[s.name] && s.cards.join() === r.hole[s.name].join();
+        w.u(nm(s.name)); w.u(!s.show ? 0 : same ? 1 : 2);
+        if (s.show && !same) { w.u(s.cards.length); s.cards.forEach(w.card); }
+      }
+      w.u(r.results.length);
+      for (const x of r.results) {
+        w.u(nm(x.name)); w.u(x.amt);
+        const side = x.pot && /^side pot (\d+)$/.exec(x.pot);
+        if (x.pot == null) w.u(0); else if (x.pot === 'main pot') w.u(1); else if (side && String(+side[1]) === side[1]) w.u(2 + Number(side[1])); else { w.u(1e9); w.str(x.pot); }
+        if (x.desc == null) w.u(0); else { w.u(1); w.str(x.desc); }
+      }
+    }
+    return { bytes: Uint8Array.from(w.bytes), names };
+  }
+
+  /** bytes -> a record shaped like Notation.parse's, enough for Notation.serialize. */
+  function unpack(bytes) {
+    const rd = reader(bytes);
+    const names = Array.from({ length: rd.u() }, () => rd.raw());
+    const name = () => { const k = rd.u(); if (k >= names.length) throw new Error('bad name'); return names[k]; };
+    const key = () => { const x = rd.u(); if (x === 0) return rd.raw(); if (x > KEYS.length) throw new Error('bad tag'); return KEYS[x - 1]; };
+    const g = { tags: [], hands: [] };
+    const nt = rd.u(); for (let i = 0; i < nt; i++) g.tags.push([key(), rd.str()]);
+    const nh = rd.u();
+    let prevNo = 0;
+    const last = new Map();
+    for (let h = 0; h < nh; h++) {
+      const r = { no: prevNo + 1 + rd.z(), tags: [], hole: Object.create(null), posts: [], streets: [], shows: [], results: [] };
+      prevNo = r.no;
+      const ntg = rd.u();
+      for (let i = 0; i < ntg; i++) {
+        const k = key(), mode = rd.u();
+        if (mode === 1) r.tags.push([k, name()]);
+        else if (mode === 2) {
+          const n = rd.u();
+          const list = Array.from({ length: n }, () => { const nm2 = name(), s = (last.get(nm2) || 0) + rd.z(); if (s < 0) throw new Error('bad stack'); last.set(nm2, s); return [nm2, s]; });
+          r.tags.push([k, stackStr(list)]);
+        }
+        else r.tags.push([k, rd.str()]);
+      }
+      const np = rd.u(); r.stacks = Array.from({ length: np }, () => [name(), 0]);
+      r.holeCount = rd.u();
+      for (const [n] of r.stacks) r.hole[n] = rd.u() ? Array.from({ length: r.holeCount }, () => rd.card()) : null;
+      const npo = rd.u(); for (let i = 0; i < npo; i++) r.posts.push({ name: name(), kind: POSTS[rd.u()], amt: rd.u() });
+      const ns = rd.u();
+      for (let s = 0; s < ns; s++) {
+        const st = { board: [], actions: [] };
+        if (s > 0) { const nb = rd.u(); for (let i = 0; i < nb; i++) st.board.push(rd.card()); }
+        const na = rd.u();
+        for (let i = 0; i < na; i++) { const nmx = name(), t = rd.u(); st.actions.push({ name: nmx, type: ACTS[t >> 1], to: t & 1 ? rd.u() : null }); }
+        r.streets.push(st);
+      }
+      const nsh = rd.u();
+      for (let i = 0; i < nsh; i++) {
+        const n = name(), m = rd.u();
+        r.shows.push({ name: n, show: m > 0, cards: m === 0 ? null : m === 1 ? r.hole[n] : Array.from({ length: rd.u() }, () => rd.card()) });
+      }
+      const nr = rd.u();
+      for (let i = 0; i < nr; i++) {
+        const n = name(), amt = rd.u(), p = rd.u();
+        const pot = p === 0 ? null : p === 1 ? 'main pot' : p === 1e9 ? rd.str() : `side pot ${p - 2}`;
+        r.results.push({ name: n, amt, pot, desc: rd.u() ? rd.str() : null });
+      }
+      g.hands.push(r);
+    }
+    if (!rd.done()) throw new Error('The compact record has extra data at the end.');
+    return g;
+  }
+
+  async function pipe(bytes, stream) {
+    const out = await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer();
+    return new Uint8Array(out);
+  }
+  /** 14 bits per character; a leading a/b says whether the byte count is even or odd. */
+  function toChars(bytes) {
+    let s = PREFIX + (bytes.length % 2 ? 'b' : 'a'), acc = 0, n = 0;
+    for (const x of bytes) {
+      acc = (acc << 8) | x; n += 8;
+      while (n >= BITS) { n -= BITS; s += String.fromCharCode(BASE + ((acc >> n) & 16383)); }
+      acc &= (1 << n) - 1;
+    }
+    if (n > 0) s += String.fromCharCode(BASE + ((acc << (BITS - n)) & 16383));
+    return s;
+  }
+  function fromChars(s) {
+    s = s.replace(/\s+/g, '');
+    if (s[0] !== PREFIX || !'ab'.includes(s[1])) throw new Error('This is not a compact record.');
+    const body = s.slice(2), odd = s[1] === 'b';
+    let len = Math.floor((body.length * BITS) / 8);
+    if (len % 2 !== (odd ? 1 : 0)) len--;
+    const out = new Uint8Array(len);
+    let acc = 0, n = 0, k = 0;
+    for (const ch of body) {
+      const v = ch.charCodeAt(0) - BASE;
+      if (!(v >= 0 && v < 16384)) throw new Error('The compact record contains a character that does not belong in it.');
+      acc = (acc << BITS) | v; n += BITS;
+      while (n >= 8 && k < len) { n -= 8; out[k++] = (acc >> n) & 255; }
+      acc &= (1 << n) - 1;
+    }
+    if (k !== len) throw new Error('The compact record is cut off.');
+    return out;
+  }
+
+  const available = () => typeof CompressionStream === 'function' && typeof DecompressionStream === 'function';
+  return {
+    isCompact: (text) => typeof text === 'string' && text.trimStart().startsWith(PREFIX),
+    available,
+    /** Record text -> compact string. */
+    async encode(text) {
+      const g = Notation.parse(text);
+      let { bytes } = pack(g);
+      bytes = await pipe(bytes, new CompressionStream('deflate-raw'));
+      return toChars(bytes);
+    },
+    /** Compact string -> the record's text. Throws RecordError-style messages. */
+    async decode(s) {
+      try {
+        const bytes = await pipe(fromChars(s), new DecompressionStream('deflate-raw'));
+        return Notation.serialize(unpack(bytes));
+      } catch (e) {
+        throw new RecordError(1, /compact record/.test(e.message) ? e.message : 'This compact record is damaged or incomplete. Copy it again in full.');
+      }
+    },
+    _pack: pack, _unpack: unpack,
+  };
+})();
 
 /* Built-in sample game for the viewer ("Load sample game") and the self-tests. */
 const SAMPLE_RECORD = `[Event "Friday Night Game"]
@@ -4790,7 +5015,7 @@ const Safe = (() => {
       name: str(t.name, 40), sb: num(t.sb), bb: num(t.bb, 1), ante: num(t.ante), baseSb: num(t.baseSb), baseBb: num(t.baseBb),
       maxSeats: int(t.maxSeats, 2, 9, 9), timer: int(t.timer, 0, 600, 0), rebuys: bool(t.rebuys), maxRebuys: int(t.maxRebuys, 0, 99, 0),
       recordHole: oneOf(t.recordHole, ['All', 'Showdown'], 'Showdown'), startingStack: num(t.startingStack),
-      variant: oneOf(t.variant, Object.keys(VARIANTS), 'NLHE'), holeCount: int(t.holeCount, 2, 5, 2), limit: oneOf(t.limit, ['nl', 'pl'], 'nl'),
+      variant: oneOf(t.variant, Object.keys(VARIANTS), 'NLHE'), holeCount: int(t.holeCount, 2, 5, 2), limit: oneOf(t.limit, ['nl', 'pl', 'fl'], 'nl'),
       levelHands: int(t.levelHands, 0, 1000, 0), level: int(t.level, 0, 1000, 1), hostPlays: bool(t.hostPlays),
       nextLevelIn: int(t.nextLevelIn, 0, 1000, 0), botTakeover: bool(t.botTakeover), vsBots: bool(t.vsBots), sra: bool(t.sra),
       spectators: bool(t.spectators), viewerChat: bool(t.viewerChat), botChat: bool(t.botChat), listed: bool(t.listed),
@@ -4818,7 +5043,7 @@ const Safe = (() => {
       legal: L && {
         player: int(L.player, 0, 9, 0), canCheck: bool(L.canCheck), toCall: num(L.toCall), callTo: num(L.callTo), canRaise: bool(L.canRaise),
         minTo: num(L.minTo), maxTo: num(L.maxTo), isBet: bool(L.isBet), currentBet: num(L.currentBet), myBet: num(L.myBet), stack: num(L.stack),
-        pot: num(L.pot), reopenBlocked: bool(L.reopenBlocked), capped: bool(L.capped), limit: oneOf(L.limit, ['nl', 'pl'], 'nl'),
+        pot: num(L.pot), reopenBlocked: bool(L.reopenBlocked), capped: bool(L.capped), limit: oneOf(L.limit, ['nl', 'pl', 'fl'], 'nl'), betSize: num(L.betSize), capReached: bool(L.capReached),
       },
       timer: v.timer && typeof v.timer === 'object' ? { remaining: num(v.timer.remaining), total: num(v.timer.total), paused: bool(v.timer.paused) } : null,
       results: v.results && typeof v.results === 'object' ? {
@@ -5217,6 +5442,36 @@ async function copyText(text, label = 'Copied to clipboard') {
     <textarea class="input" rows="3" readonly style="width:100%">${U.esc(text)}</textarea><div class="modal-foot"><button class="btn primary" data-close>Done</button></div>`, { label: 'Copy' });
   const t = m.el.querySelector('textarea'); t.focus(); t.select();
   return false;
+}
+/**
+ * Compact copies of records, made in the background as the record grows, so the Copy button can put
+ * the compact text on the clipboard instantly (some browsers only allow copying during the click).
+ */
+const CompactCache = {
+  map: new Map(),
+  peek(text) { return this.map.get(text) || null; },
+  make(text) {
+    if (!text || !Compact.available()) return Promise.resolve(text);
+    const hit = this.map.get(text);
+    if (hit) return Promise.resolve(hit);
+    return Compact.encode(text).then((c) => { this.map.set(text, c); while (this.map.size > 6) this.map.delete(this.map.keys().next().value); return c; }, () => text);
+  },
+  prime(text) { if (text && /#\d+/.test(text) && !this.map.has(text)) this.make(text); },
+};
+/** Copy a record in its compact form (falls back to the readable text if this browser can't compress). */
+async function copyRecordText(text, label) {
+  const ready = CompactCache.peek(text);
+  if (ready) return copyText(ready, `${label} (compact: ${U.fmt(ready.length)} characters)`);
+  try {
+    // Safari: hand the clipboard a promise while still inside the click.
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      const p = CompactCache.make(text);
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': p.then((c) => new Blob([c], { type: 'text/plain' })) })]);
+      const c = await p;
+      return toast(`${label} (compact: ${U.fmt(c.length)} characters)`, 'success', 2600);
+    }
+  } catch { /* fall through */ }
+  return copyText(await CompactCache.make(text), label);
 }
 function downloadText(name, text) {
   const a = document.createElement('a');
@@ -6121,6 +6376,57 @@ const SelfTest = (() => {
     }
   });
 
+  /* ---------- Compact records ---------- */
+  test('Notation', 'A compact record rebuilds exactly the same record, in far fewer characters', async () => {
+    if (!Compact.available() || typeof SAMPLE_RECORD === 'undefined') return;
+    const canon = Notation.serialize(Notation.parse(SAMPLE_RECORD));
+    const c = await Compact.encode(SAMPLE_RECORD);
+    ok(Compact.isCompact(c) && c.length * 5 < canon.length, `compact is ${c.length} characters vs ${canon.length}`);
+    eq(await Compact.decode(c), canon);
+    eq(await Compact.decode(c.replace(/(.{30})/g, '$1\n')), canon, 'line breaks added by a chat app are ignored');
+    let rejected = false;
+    try { await Compact.decode(c.slice(0, -4)); } catch (e) { rejected = e instanceof RecordError; }
+    ok(rejected, 'a cut-off compact record is rejected with a clear error');
+  });
+
+  /* ---------- Fixed limit ---------- */
+  test('Limit', 'Bets and raises are one fixed size, capped at four bets a round', () => {
+    const h = Engine.createHand({ no: 1, players: ['A', 'B', 'C'].map((name) => ({ name, stack: 500 })), button: 0, sb: 1, bb: 2, limit: 'fl' });
+    let L = Engine.legal(h);
+    eq([L.minTo, L.maxTo, L.betSize], [4, 4, 2], 'preflop raise is one small bet');
+    throws(() => Engine.applyAction(h, { type: 'raise', to: 6 }), /exactly/);
+    Engine.applyAction(h, { type: 'raise', to: 4 });      // 2nd bet (the big blind is the 1st)
+    Engine.applyAction(h, { type: 'raise', to: 6 });      // 3rd
+    Engine.applyAction(h, { type: 'raise', to: 8 });      // 4th: capped
+    L = Engine.legal(h);
+    ok(!L.canRaise && L.capReached, 'no fifth bet');
+    Engine.applyAction(h, { type: 'call' }); Engine.applyAction(h, { type: 'call' });
+    Engine.dealBoard(h, ['2c', '7d', '9h']);
+    L = Engine.legal(h); eq([L.isBet, L.minTo, L.maxTo], [true, 2, 2], 'flop bet is the small bet');
+    Engine.applyAction(h, { type: 'check' }); Engine.applyAction(h, { type: 'check' }); Engine.applyAction(h, { type: 'check' });
+    Engine.dealBoard(h, ['Kc']);
+    L = Engine.legal(h); eq([L.minTo, L.maxTo], [4, 4], 'turn bet is the big bet');
+    Engine.applyAction(h, { type: 'bet', to: 4 });
+    L = Engine.legal(h); eq([L.minTo, L.maxTo], [8, 8], 'turn raise is to 8');
+  });
+  test('Limit', 'A short all-in neither counts toward the cap nor reopens the betting', () => {
+    const h = Engine.createHand({ no: 1, players: [{ name: 'A', stack: 100 }, { name: 'B', stack: 5 }, { name: 'C', stack: 100 }], button: 0, sb: 1, bb: 2, limit: 'fl' });
+    Engine.applyAction(h, { type: 'raise', to: 4 }); // A (button, first to act three-handed)
+    Engine.applyAction(h, { type: 'raise', to: 5 }); // B: all-in for one more chip (a short raise)
+    eq(h.betCount, 2, 'short all-in not counted');
+    Engine.applyAction(h, { type: 'raise', to: 7 }); // C: a full raise over the all-in
+    const L = Engine.legal(h); eq([L.player, L.minTo], [0, 9], 'A may raise again');
+  });
+  test('Limit', 'Limit games record and replay with their own variant codes', () => {
+    eq(Notation.variantCode('holdem', 'fl', 2), 'FLHE'); eq(Notation.variantCode('omaha', 'fl', 5), 'FLO5');
+    const h = play({ stacks: [100, 100], limit: 'fl', actions: (hh, L) => (L.canRaise && hh.betCount < 3 ? { type: L.isBet ? 'bet' : 'raise', to: L.minTo } : L.canCheck ? { type: 'check' } : { type: 'call' }) });
+    ok(h.phase === 'done' && h.limit === 'fl', 'hand finished');
+    const tags = Notation.gameTags({ event: 'Limit', date: '2026.10.16', sb: 1, bb: 2, ante: 0, startingStack: 100, players: ['A', 'B'], holeCards: 'All', variant: 'FLHE' });
+    const text = Notation.serialize({ tags, hands: [Notation.fromHand(h, 0, 'All')] });
+    const rp = Replay.game(Notation.parse(text));
+    eq(rp.issues, [], 'replays under limit rules');
+  });
+
   /* ---------- Learn ---------- */
   test('Learn', 'lesson maths matches the standard numbers', () => {
     eq(Learn.C(52, 5), 2598960);
@@ -6419,7 +6725,7 @@ function HostSetupScreen() {
         <section class="card-ui setup-section" style="grid-column:1/-1"><h3>Game</h3>
           <div class="two">
             <div class="field"><span>Game</span>${seg('game', [['holdem', "Texas Hold'em"], ['omaha4', 'Omaha'], ['omaha5', '5-Card Omaha']], d.game)}</div>
-            <div class="field"><span>Betting</span>${seg('limit', [['nl', 'No limit'], ['pl', 'Pot limit']], d.limit)}</div>
+            <div class="field"><span>Betting</span>${seg('limit', [['nl', 'No limit'], ['pl', 'Pot limit'], ['fl', 'Limit']], d.limit)}</div>
           </div>
           <p class="hint" style="margin:0" id="game-hint"></p>
         </section>
@@ -6496,7 +6802,7 @@ function HostSetupScreen() {
     const g = $('[data-seg="game"] [aria-pressed="true"]').dataset.v, l = $('[data-seg="limit"] [aria-pressed="true"]').dataset.v;
     $('#game-hint').textContent = (g === 'holdem' ? 'Two hole cards; make the best five-card hand from any of your cards and the board.'
       : `${g === 'omaha5' ? 'Five' : 'Four'} hole cards; your hand must use exactly two of them plus exactly three from the board.`)
-      + (l === 'pl' ? ' Pot limit: the biggest bet or raise is the size of the pot.' : ' No limit: bet any amount up to your whole stack.');
+      + (l === 'pl' ? ' Pot limit: the biggest bet or raise is the size of the pot.' : l === 'fl' ? ' Limit: every bet and raise is a fixed size (one big blind preflop and on the flop, two on the turn and river), with at most four bets per round.' : ' No limit: bet any amount up to your whole stack.');
   };
   $$('[data-seg="game"], [data-seg="limit"]').forEach((g) => g.addEventListener('click', () => setTimeout(hint)));
   hint();
@@ -6560,7 +6866,7 @@ function BotSetupScreen() {
       <section class="card-ui setup-section"><h3>You</h3>
         <label class="field"><span>Your name</span><input class="input" name="name" maxlength="18" value="${U.esc(d.name)}" placeholder="e.g. Alice" autocomplete="off"></label>
         <div class="field"><span>Game</span>${seg('game', [['holdem', "Hold'em"], ['omaha4', 'Omaha'], ['omaha5', '5-Card Omaha']], d.game)}</div>
-        <div class="field"><span>Betting</span>${seg('limit', [['nl', 'No limit'], ['pl', 'Pot limit']], d.limit)}</div>
+        <div class="field"><span>Betting</span>${seg('limit', [['nl', 'No limit'], ['pl', 'Pot limit'], ['fl', 'Limit']], d.limit)}</div>
       </section>
       <section class="card-ui setup-section"><h3>Stakes</h3>
         <div class="two"><label class="field"><span>Small blind</span><input class="input num" name="sb" type="number" min="1" value="${d.sb}"></label><label class="field"><span>Big blind</span><input class="input num" name="bb" type="number" min="1" value="${d.bb}"></label></div>
@@ -6916,7 +7222,12 @@ function GameScreen(session) {
   function copyRecord(full) {
     const r = record(full === true);
     if (!r || !/#\d+/.test(r)) { toast(twoRecords() && !full ? 'No player-only hands yet (hands a bot played are only in the full record).' : 'No hands have finished yet. The record fills in after each hand.', 'info'); if (r) copyText(r, 'Record header copied'); return; }
-    copyText(r, full === true ? 'Full game record copied (includes bot hands)' : twoRecords() ? 'Player-only game record copied' : 'Game record copied');
+    copyRecordText(r, full === true ? 'Full game record copied (includes bot hands)' : twoRecords() ? 'Player-only game record copied' : 'Game record copied');
+  }
+  function copyReadable() {
+    const r = record(twoRecords() ? false : true);
+    if (!r || !/#\d+/.test(r)) return toast('No hands have finished yet.', 'info');
+    copyText(r, 'Readable game record copied');
   }
   function openInViewer(full) {
     const r = record(full === true);
@@ -6990,6 +7301,7 @@ function GameScreen(session) {
       ${isWatcher ? '' : `<button id="m-copy" role="menuitem">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy game record'}</button>
       ${twoRecords() ? `<button id="m-copyfull" role="menuitem">${icon('bot')}Copy full record (with bot hands)</button><button id="m-viewfull" role="menuitem">${icon('history')}Open full record in viewer</button>` : ''}
       <button id="m-view" role="menuitem">${icon('history')}${twoRecords() ? 'Open player-only record in viewer' : 'Open record in viewer'}</button>
+      <button id="m-copytext" role="menuitem">${icon('copy')}Copy readable record (text)</button>
       <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>`}
       <button id="m-theme" role="menuitem">${Theme.icon()}Light / dark theme</button>
       ${isHost && v && v.status !== 'ended' ? `<hr>
@@ -7005,6 +7317,7 @@ function GameScreen(session) {
     on('m-sitout', (e) => session.send({ t: 'sitout', on: e.target.checked }));
     on('m-stand', () => session.send({ t: 'stand' }));
     on('m-watch', () => viewerLinkModal(session.watchUrl));
+    on('m-copytext', copyReadable);
     on('m-invite', inviteModal); on('m-copy', () => copyRecord(false)); on('m-view', () => openInViewer(false)); on('m-dl', () => downloadRecord(false));
     on('m-copyfull', () => copyRecord(true)); on('m-viewfull', () => openInViewer(true));
     on('m-theme', () => { Theme.toggle(); $$('[data-theme-toggle]').forEach((x) => { x.innerHTML = Theme.icon(); }); });
@@ -7153,7 +7466,7 @@ function GameScreen(session) {
     const r = $('#ab-range'), i = $('#ab-amt'), b = $('#ab-raise');
     if (r && from !== 'range') r.value = x;
     if (i && from !== 'input') i.value = x;
-    if (b) b.innerHTML = `${x === L.maxTo ? 'All-in' : L.isBet ? 'Bet' : 'Raise to'} ${U.fmt(x)}<small>R · Enter</small>`;
+    if (b) b.innerHTML = `${x === L.maxTo && !L.capped ? 'All-in' : L.isBet ? 'Bet' : 'Raise to'} ${U.fmt(x)}<small>R · Enter</small>`;
   }
   function myHandName(v) { const s = v.you && v.you.seat != null ? v.seats[v.you.seat] : null; return s && s.handName; }
   function renderBar() {
@@ -7184,7 +7497,7 @@ function GameScreen(session) {
       if (G.legalKey !== JSON.stringify(L)) { G.legalKey = JSON.stringify(L); G.raiseAmt = L.minTo; }
       const callLabel = L.canCheck ? 'Check' : `${L.toCall >= L.stack ? 'All-in' : 'Call'} ${U.fmt(L.toCall)}`;
       html = `<div class="ab-wrap">
-        ${L.canRaise ? `<div class="ab-raise">
+        ${L.canRaise && L.maxTo > L.minTo ? `<div class="ab-raise">
           <div class="quick">${qs.map(([k, label, val]) => `<button class="btn sm" data-q="${val}" title="${U.fmt(val)}">${label}</button>`).join('')}</div>
           <div class="slider-row"><button class="btn sm icon-btn" data-step="-1" aria-label="Decrease bet">−</button>
             <input type="range" id="ab-range" min="${L.minTo}" max="${L.maxTo}" step="1" value="${G.raiseAmt}" aria-label="Bet amount">
@@ -7331,6 +7644,7 @@ function GameScreen(session) {
     const seated = v.seats.filter(Boolean).length;
     $('#g-sub').textContent = `${v.table.variant} · Blinds ${U.fmt(v.table.sb)}/${U.fmt(v.table.bb)}${v.table.ante ? ` · Ante ${U.fmt(v.table.ante)}` : ''}${v.table.levelHands && v.status === 'playing' ? ` · Level ${v.table.level} (up in ${v.table.nextLevelIn})` : ''} · ${v.status === 'lobby' ? 'Lobby' : v.handNo ? 'Hand #' + v.handNo : 'Starting'} · ${seated}/${v.table.maxSeats} seated`;
     renderFairBadge();
+    if (!isWatcher) { CompactCache.prime(record(false)); CompactCache.prime(record(true)); }
     $('#g-watchlink').classList.toggle('hidden', !(v.table.spectators && session.watchUrl));
     if (isWatcher) {
       // Viewers chat only if the table allows it.
@@ -8122,7 +8436,12 @@ function ViewerScreen() {
     });
   }
 
-  function tryLoad(text) {
+  async function tryLoad(text) {
+    // A compact record (starting with ♣) is unpacked to the full text first.
+    if (Compact.isCompact(text)) {
+      try { text = await Compact.decode(text); }
+      catch (e) { if ($('#v-text')) showErr(e); else loadPage(text, e); return; }
+    }
     let game;
     try { game = Notation.parse(text); }
     catch (e) { if ($('#v-text')) showErr(e); else loadPage(text, e); return; }
@@ -8185,7 +8504,8 @@ function ViewerScreen() {
     bindThemeToggles(App.root);
     $('#v-help').addEventListener('click', () => helpOverlay('viewer'));
     $('#v-new').addEventListener('click', () => loadPage(V.text));
-    $('#v-copy').addEventListener('click', () => copyText(Notation.serialize(V.game), 'Record copied'));
+    CompactCache.prime(Notation.serialize(V.game));
+    $('#v-copy').addEventListener('click', () => copyRecordText(Notation.serialize(V.game), 'Record copied'));
     $('#v-persp').addEventListener('change', (e) => { V.persp = e.target.value; show(false); });
     $('#v-speed').addEventListener('change', (e) => { V.speed = Number(e.target.value); Prefs.set('vSpeed', V.speed); if (V.playing) { stop(); play(); } });
     $$('[data-nav]').forEach((b) => b.addEventListener('click', () => nav(b.dataset.nav)));
