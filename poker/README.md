@@ -9,6 +9,24 @@ With the **encrypted deal** (on by default) every player's browser helps shuffle
 unlock your own cards. The host's device never sees anyone else's hand, not even with developer
 tools open. See [Fair play and anti-cheat](#fair-play-and-anti-cheat).
 
+**Waiting Room (off by default).** The home screen has a **Waiting Room** that lists public
+tables. A table shows up only if its host ticked **List this table in the public Waiting Room** when
+setting it up.
+
+- **Listing:** each listed table shows its name, the host's name, the game, blinds, starting stack,
+  how many seats are taken and whether it's still waiting to start.
+- **Join and Watch:** **Join** takes you to the normal join screen. **Watch** appears when the host
+  also allows viewers.
+- **Invite links still work:** the host can still send invite links (and viewer links) as usual;
+  listing only adds the table to the Waiting Room.
+- **Ending:** the listing disappears when the game ends or the host leaves. The option is not
+  remembered between tables.
+- **No server:** the Waiting Room uses 24 well-known "room slot" IDs on the free PeerJS broker. A
+  listed table claims a free slot with an extra broker connection, and the Waiting Room asks every
+  slot which table is there. A full scan takes a second or two.
+- **Untrusted listings:** every answer is cleaned and escaped before it is shown, because anyone
+  could answer on a slot. Joining a table from the list is exactly like opening an invite link.
+
 **Viewers (off by default).** Tick **Allow viewers with a watch-only link** when you set up a table,
 in either **Host a game** or **Play vs Bots**. You then get a separate **viewer link** (the eye button
 in the top bar, or the ⋯ menu) that you can send at any point in the game.

@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-TDafqR0FzK1tu+Vj5ulfV4hhZ0bSPWzqnbPqaufR1qA=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-F5Ygg7/H1eUDqEYu1ZVcn9UQdsKQJbiWeow2Ahspock=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -555,6 +555,18 @@ pre.hand-text { white-space: pre-wrap; word-break: break-word; font: 12.5px/1.6 
 
 
 label.check.sub { padding-left: 26px; }
+.r-status { display: flex; align-items: center; gap: 10px; color: var(--text-2); font-size: 14px; min-height: 24px; margin-bottom: 12px; }
+.r-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 14px; }
+.r-card { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.r-top { display: flex; align-items: center; gap: 12px; }
+.r-id { flex: 1; min-width: 0; }
+.r-id h3 { margin: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r-id .muted { font-size: 13px; }
+.pill.r-open { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.r-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--text-2); }
+.r-facts span { display: inline-flex; align-items: center; gap: 4px; } .r-facts svg { width: 14px; height: 14px; }
+.r-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.btn.disabled { opacity: .45; pointer-events: none; }
 label.check:has(input:disabled) { opacity: .5; }
 .chat-msg.viewer b::after { content: " 👁"; font-size: 11px; }
 .watching-pill { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); }
@@ -4156,7 +4168,7 @@ class HostTable {
         startingStack: this.s.startingStack, variant: this.variant, variantName: VARIANTS[this.variant].name, holeCount: this.holeCount,
         limit: this.s.limit, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
         botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots, sra: this.sra,
-        spectators: !!this.s.spectators, viewerChat: !!this.s.viewerChat, botChat: !!this.s.botChat,
+        spectators: !!this.s.spectators, viewerChat: !!this.s.viewerChat, botChat: !!this.s.botChat, listed: !!this.s.listed,
         nextLevelIn: this.s.levelHands ? this.s.levelHands - ((Math.max(1, this.handNo) - 1) % this.s.levelHands) : 0,
       },
       watchId: this.s.spectators ? this.watchId || null : null, shuffling: !!this.shuffling, fair: this._fairView(), sraWait: this.sraDealer ? this.sraDealer.waiting() : [], voided: !!(h && h.voided),
@@ -4229,7 +4241,9 @@ class LocalPeer {
     this.h = {}; this.conns = {}; this.disconnected = false; this.destroyed = false;
     this.bc = new BroadcastChannel('feltroom-local');
     this.bc.onmessage = (e) => this._msg(e.data);
-    setTimeout(() => this._emit('open', this.id), 40);
+    // Like the real broker, an ID can only be held by one peer at a time.
+    if (typeof id === 'string') this.bc.postMessage({ k: 'who', id });
+    setTimeout(() => { if (this.taken) { this.destroyed = true; this._emit('error', { type: 'unavailable-id', message: 'ID is taken' }); } else this._emit('open', this.id); }, 150);
     addEventListener('beforeunload', () => this.destroy());
   }
   on(ev, fn) { (this.h[ev] = this.h[ev] || []).push(fn); return this; }
@@ -4243,7 +4257,10 @@ class LocalPeer {
     return c;
   }
   _msg(m) {
-    if (this.destroyed || m.to !== this.id) return;
+    if (this.destroyed) return;
+    if (m.k === 'who') { if (m.id === this.id) this.bc.postMessage({ k: 'taken', id: m.id }); return; }
+    if (m.k === 'taken') { if (m.id === this.id) this.taken = true; return; }
+    if (m.to !== this.id) return;
     const c = this.conns[m.cid];
     if (m.k === 'connect') {
       const nc = new LocalConn(this, m.cid, m.from);
@@ -4471,6 +4488,92 @@ class WatchHub {
   }
 }
 
+
+/**
+ * The Waiting Room: public tables, found without any server of our own. There are a fixed number of
+ * well-known room slots on the free PeerJS broker. A host who opts in claims a free slot with a second
+ * connection; the Waiting Room screen asks every slot "which table is here?" and lists the answers.
+ * Only the table name, host name, stakes and seat count are shared, plus the links to join or watch.
+ */
+const Rooms = {
+  SLOTS: 24,
+  slotId: (i) => `feltroom-room-v1-${i}`,
+  isTableId: (x) => typeof x === 'string' && /^nlhe-[a-z0-9]{4}-[a-z0-9]{4}$/.test(x),
+  /** Clean one answer from a slot into a known-safe shape (anyone could be squatting a slot). */
+  clean(m) {
+    if (!m || typeof m !== 'object' || m.t !== 'room' || !Rooms.isTableId(m.joinId)) return null;
+    const str = (x, n) => (typeof x === 'string' ? x.slice(0, n) : '');
+    const num = (x, lo, hi) => (typeof x === 'number' && Number.isFinite(x) && x >= lo && x <= hi ? Math.floor(x) : null);
+    return {
+      name: U.cleanText(str(m.name, 40), 40) || 'Poker table', host: U.cleanText(str(m.host, 24), 24) || '?', variant: U.cleanText(str(m.variant, 40), 40),
+      sb: num(m.sb, 0, 1e12), bb: num(m.bb, 0, 1e12), ante: num(m.ante, 0, 1e12) || 0, stack: num(m.stack, 0, 1e13),
+      seated: num(m.seated, 0, 9) || 0, max: num(m.max, 2, 9) || 9, status: ['lobby', 'playing'].includes(m.status) ? m.status : 'playing',
+      hand: num(m.hand, 0, 1e9) || 0, joinId: m.joinId, watchId: Rooms.isTableId(m.watchId) ? m.watchId : null, sra: m.sra === true,
+    };
+  },
+  /** Ask every slot what's there. onTable is called as answers arrive; resolves when all have answered or timed out. */
+  async scan(onTable, onProgress) {
+    const peer = await Net.createPeer();
+    const seen = new Set();
+    let done = 0;
+    const empty = new Map(); // slot ID -> finish, so the broker's "nobody there" ends that wait at once
+    peer.on('error', (e) => {
+      const m = /peer (\S+)$/.exec((e && e.message) || '');
+      if (m && empty.has(m[1])) empty.get(m[1])();
+    });
+    await Promise.all(Array.from({ length: Rooms.SLOTS }, (_, i) => new Promise((resolve) => {
+      let finished = false, to = null, c = null;
+      const fin = () => { if (finished) return; finished = true; clearTimeout(to); try { c.close(); } catch { /* ignore */ } onProgress(++done, Rooms.SLOTS); resolve(); };
+      empty.set(Rooms.slotId(i), fin);
+      c = peer.connect(Rooms.slotId(i), { reliable: true, serialization: 'json' });
+      to = setTimeout(fin, 7000);
+      c.on('open', () => c.send({ t: 'roomq' }));
+      c.on('data', (m) => { const r = Rooms.clean(m); if (r && !seen.has(r.joinId)) { seen.add(r.joinId); onTable(r); } fin(); });
+      c.on('error', fin); c.on('close', fin);
+    })));
+    setTimeout(() => { try { peer.destroy(); } catch { /* ignore */ } }, 300);
+  },
+};
+
+/** A hosted table's listing in the Waiting Room (only when the host chose to list it). */
+class RoomAd {
+  constructor(session) { this.s = session; this.peer = null; this.stopped = false; }
+  async start() {
+    const order = Array.from({ length: Rooms.SLOTS }, (_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) { const j = U.randInt(i + 1); [order[i], order[j]] = [order[j], order[i]]; }
+    for (const i of order) {
+      if (this.stopped) return;
+      try { this.peer = await Net.createPeer(Rooms.slotId(i)); break; }
+      catch (e) { if (e && e.type !== 'unavailable-id') { this.s.handlers.error(`Couldn't list this table in the Waiting Room: ${Net.friendly(e).title}.`); return; } }
+    }
+    if (this.stopped) { this.stop(); return; }
+    if (!this.peer) { this.s.handlers.error('The Waiting Room is full right now, so this table isn\'t listed. Invite links still work.'); return; }
+    this.peer.on('connection', (c) => {
+      let answered = false;
+      c.on('data', (m) => {
+        if (answered || !m || m.t !== 'roomq') return;
+        answered = true;
+        try { c.send(this.info()); } catch { /* ignore */ }
+        setTimeout(() => { try { c.close(); } catch { /* ignore */ } }, 1500);
+      });
+      setTimeout(() => { try { c.close(); } catch { /* ignore */ } }, 10000);
+    });
+    this.peer.on('disconnected', () => { setTimeout(() => { try { if (!this.peer.destroyed && !this.stopped) this.peer.reconnect(); } catch { /* ignore */ } }, 1500); });
+    this.listed = true;
+    this.s.handlers.event('success', 'Your table is listed in the Waiting Room');
+  }
+  info() {
+    const t = this.s.table;
+    return {
+      t: 'room', name: t.s.tableName, host: t.players.get(t.hostPid).name, variant: VARIANTS[t.variant].name,
+      sb: t.blinds.sb, bb: t.blinds.bb, ante: t.blinds.ante, stack: t.s.startingStack,
+      seated: t.seats.filter(Boolean).length, max: t.s.maxSeats, status: t.status, hand: t.handNo,
+      joinId: this.s.id, watchId: t.s.spectators && this.s.watchers && this.s.watchers.peer ? this.s.watchers.peer.id : null, sra: t.sra,
+    };
+  }
+  stop() { this.stopped = true; if (this.peer) { try { this.peer.destroy(); } catch { /* ignore */ } } }
+}
+
 /* ---------- Host side: wires a HostTable to PeerJS connections ---------- */
 class HostSession {
   constructor(settings, name) {
@@ -4496,6 +4599,7 @@ class HostSession {
     const t = this.table = new HostTable(this.settings, this.name, token);
     this.watchers = new WatchHub(this);
     if (t.s.spectators) this.watchers.open();
+    if (this.settings.listed) { this.ad = new RoomAd(this); this.ad.start(); }
     this.pid = t.hostPid;
     // Encrypted deal: the host's own seat is a player like any other, with its own keys in this tab.
     if (t.sra) this.sraLink = new SraLink(t.players.get(t.hostPid).name, this.id, (r) => t.handle(this.pid, r), (no, why) => this.handlers.error(`Encrypted deal problem on hand #${no}: ${why}`));
@@ -4611,6 +4715,7 @@ class HostSession {
         this.endedSent = true;
         for (const c of this.conns.values()) this._send(c, { t: 'ended', reason: 'The host ended the game.' });
         this.watchers.end('The host ended the game.');
+        if (this.ad) this.ad.stop();
         this.handlers.ended('You ended the game.');
       }
     });
@@ -4633,6 +4738,7 @@ class HostSession {
     }
     for (const c of this.conns.values()) this._send(c, { t: 'ended', reason: 'Host left, game ended.' });
     if (this.watchers) this.watchers.close('Host left, game ended.');
+    if (this.ad) this.ad.stop();
     setTimeout(() => { try { this.peer.destroy(); } catch { /* ignore */ } }, silent ? 0 : 300);
   }
 }
@@ -4663,7 +4769,7 @@ const Safe = (() => {
       variant: oneOf(t.variant, Object.keys(VARIANTS), 'NLHE'), holeCount: int(t.holeCount, 2, 5, 2), limit: oneOf(t.limit, ['nl', 'pl'], 'nl'),
       levelHands: int(t.levelHands, 0, 1000, 0), level: int(t.level, 0, 1000, 1), hostPlays: bool(t.hostPlays),
       nextLevelIn: int(t.nextLevelIn, 0, 1000, 0), botTakeover: bool(t.botTakeover), vsBots: bool(t.vsBots), sra: bool(t.sra),
-      spectators: bool(t.spectators), viewerChat: bool(t.viewerChat), botChat: bool(t.botChat),
+      spectators: bool(t.spectators), viewerChat: bool(t.viewerChat), botChat: bool(t.botChat), listed: bool(t.listed),
     };
     table.variantName = VARIANTS[table.variant].name;
     const seat = (s, i) => (s && typeof s === 'object' ? {
@@ -6181,6 +6287,7 @@ function HomeScreen() {
       <p>Free, peer-to-peer Texas Hold'em and Omaha that runs entirely in your browser, with an encrypted deal that keeps every hand private, even from the host. No accounts, no downloads, no game servers.</p>
       <div class="home-actions">
         <button class="big-choice" data-go="#/host"><span class="bc-ic">${icon('plus')}</span><strong>Host a Game</strong><span>Choose blinds and stacks, share the invite link, and deal.</span></button>
+        <button class="big-choice" data-go="#/rooms"><span class="bc-ic">${icon('users')}</span><strong>Waiting Room</strong><span>Browse public tables other people are hosting right now, then join or watch with one click.</span></button>
         <button class="big-choice" data-go="#/bots"><span class="bc-ic">${icon('bot')}</span><strong>Play vs Bots</strong><span>Practice offline against computer players, from Beginner to Extreme.</span></button>
         <button class="big-choice" data-go="#/viewer"><span class="bc-ic">${icon('history')}</span><strong>Hand History Viewer</strong><span>Paste a game record to replay every hand, with stats. Works offline.</span></button>
         <button class="big-choice" data-go="#/learn"><span class="bc-ic">${icon('book')}</span><strong>Learn Poker</strong><span>From the rules to pot odds and expected value, with examples, quizzes and calculators.</span></button>
@@ -6283,7 +6390,11 @@ function HostSetupScreen() {
           <label class="check"><input type="checkbox" name="botTakeover"> Bots replace disconnected players</label>
           <p class="hint" style="margin:0" id="fair-hint"></p>
         </section>
-<section class="card-ui setup-section"><h3>Viewers</h3>
+<section class="card-ui setup-section"><h3>Waiting Room</h3>
+          <label class="check"><input type="checkbox" name="listed"> List this table in the public Waiting Room</label>
+          <p class="hint" style="margin:0">Off by default. When on, anyone browsing the <b>Waiting Room</b> can see this table's name, your name, the game and stakes and how many seats are free, and can join it${''} (or watch, if viewers are allowed). Your invite links keep working as usual. The listing disappears when the game ends.</p>
+        </section>
+        <section class="card-ui setup-section"><h3>Viewers</h3>
           <label class="check"><input type="checkbox" name="spectators"> Allow viewers with a watch-only link</label>
           <label class="check sub"><input type="checkbox" name="viewerChat" disabled> Viewers can post in the chat</label>
           <p class="hint" style="margin:0">Off by default. When on, you get a separate <b>viewer link</b> (in the ⋯ menu) that you can send at any time. Viewers see the table, bets and chat, but <b>never anyone's hole cards</b> (only hands turned face up at showdown), and they can't sit down or play.</p>
@@ -6339,7 +6450,7 @@ function HostSetupScreen() {
       startingStack: Math.floor(Number(form.startingStack.value)), maxSeats: Number(segv('maxSeats')), timer: Number(segv('timer')),
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : Number(segv('rebuys')), recordHole: segv('recordHole'),
       game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), hostPlays: form.hostPlays.checked, botTakeover: form.botTakeover.checked && !form.sra.checked, sra: form.sra.checked,
-      spectators: form.spectators.checked, viewerChat: form.spectators.checked && form.viewerChat.checked,
+      spectators: form.spectators.checked, viewerChat: form.spectators.checked && form.viewerChat.checked, listed: form.listed.checked,
     };
     const name = U.sanitizeName(form.name.value);
     const errs = [];
@@ -6354,7 +6465,7 @@ function HostSetupScreen() {
     if (errs.length) { box.innerHTML = `${icon('alert')}<div>${errs.map(U.esc).join('<br>')}</div>`; box.classList.remove('hidden'); return; }
     box.classList.add('hidden');
     // The viewer options are deliberately not remembered: they start switched off for every new table.
-    const { spectators, viewerChat, ...remember } = s; void spectators; void viewerChat;
+    const { spectators, viewerChat, listed, ...remember } = s; void spectators; void viewerChat; void listed;
     Prefs.set('lastSettings', remember); Prefs.set('name', name);
     await startHosting(s, name);
   });
@@ -6545,6 +6656,60 @@ function JoinScreen(hostId) {
   };
   if (token && sameTab) connect(rejoinName || saved, false); else form();
   return {};
+}
+
+/* ---------- Waiting Room: public tables ---------- */
+function RoomsScreen() {
+  document.title = TitleFlash.base = 'Waiting Room · Feltroom';
+  document.body.classList.add('scroll');
+  let alive = true, timer = null, scanning = false;
+  App.root.innerHTML = `<div class="page"><div class="page-inner">
+    <div class="page-head"><a class="btn ghost icon-btn" href="#/" aria-label="Back to home">${icon('back')}</a><h2>Waiting Room</h2><span class="grow"></span><button class="btn sm" id="r-refresh">${icon('history')}Refresh</button>${topIconButtons()}</div>
+    <p class="muted" style="margin-top:0">Public tables that their hosts chose to list. Click <b>Join</b> to take a seat, or <b>Watch</b> where the host allows viewers. Want your own table here? Host a game and tick <b>List this table in the public Waiting Room</b>.</p>
+    <div class="r-status" id="r-status"></div>
+    <div class="r-list" id="r-list"></div>
+  </div></div>`;
+  bindThemeToggles(App.root);
+  const list = $('#r-list'), status = $('#r-status');
+  const card = (r) => {
+    const free = r.max - r.seated, full = free <= 0;
+    return `<article class="card-ui r-card">
+      <div class="r-top">${avatarHtml(r.host)}<div class="r-id"><h3>${U.esc(r.name)}</h3><span class="muted">Hosted by ${U.esc(r.host)}</span></div>
+        <span class="pill ${r.status === 'lobby' ? 'r-open' : ''}">${r.status === 'lobby' ? 'Waiting to start' : `Playing · hand ${r.hand}`}</span></div>
+      <div class="r-facts"><span><b>${U.esc(r.variant || 'Poker')}</b></span><span>Blinds <b>${r.sb != null ? U.fmt(r.sb) : '?'}/${r.bb != null ? U.fmt(r.bb) : '?'}</b>${r.ante ? ` · ante ${U.fmt(r.ante)}` : ''}</span>
+        ${r.stack != null ? `<span>Stack <b>${U.fmt(r.stack)}</b></span>` : ''}<span><b>${r.seated}/${r.max}</b> seated</span>${r.sra ? `<span>${icon('lock')}Encrypted deal</span>` : ''}</div>
+      <div class="r-actions">${r.watchId ? `<a class="btn" href="#watch=${r.watchId}">${icon('eye')}Watch</a>` : ''}
+        <a class="btn primary ${full ? 'disabled' : ''}" ${full ? 'aria-disabled="true"' : `href="#join=${r.joinId}"`}>${icon('play')}${full ? 'Table full' : 'Join'}</a></div>
+    </article>`;
+  };
+  async function scan() {
+    if (scanning || !alive) return;
+    scanning = true;
+    const found = [];
+    status.innerHTML = `<div class="spinner" style="width:18px;height:18px;border-width:2px"></div><span>Looking for tables…</span>`;
+    const draw = () => {
+      found.sort((a, b) => (a.status === 'lobby' ? 0 : 1) - (b.status === 'lobby' ? 0 : 1) || (b.max - b.seated) - (a.max - a.seated));
+      list.innerHTML = found.map(card).join('');
+    };
+    try {
+      await Rooms.scan((r) => { if (!alive) return; found.push(r); draw(); }, (n, total) => { if (alive) status.querySelector('span').textContent = `Looking for tables… (${n} of ${total} room slots checked)`; });
+      if (!alive) return;
+      draw();
+      status.innerHTML = found.length
+        ? `<span>${found.length} table${found.length === 1 ? '' : 's'} found · refreshes every 30 seconds</span>`
+        : '';
+      if (!found.length) list.innerHTML = `<div class="empty card-ui" style="padding:30px"><span class="e-ic">🪑</span><b>No public tables right now.</b><br>Be the first: <a href="#/host">host a game</a> and tick <i>List this table in the public Waiting Room</i>.</div>`;
+    } catch (e) {
+      if (!alive) return;
+      const f = Net.friendly(e);
+      status.innerHTML = '';
+      list.innerHTML = `<div class="err-box">${icon('alert')}<div><b>${U.esc(f.title)}</b><br>${U.esc(f.message)}</div></div>`;
+    } finally { scanning = false; }
+    if (alive) { clearTimeout(timer); timer = setTimeout(scan, 30000); }
+  }
+  $('#r-refresh').addEventListener('click', () => { clearTimeout(timer); scan(); });
+  scan();
+  return { destroy() { alive = false; clearTimeout(timer); document.body.classList.remove('scroll'); } };
 }
 
 /* ---------- Viewer link: watch a table without playing ---------- */
@@ -8286,6 +8451,7 @@ function route(force) {
   else if (h.startsWith('#/bots')) App.screen = s && s.offline && !s.closed ? GameScreen(s) : BotSetupScreen();
   else if (h.startsWith('#/viewer')) App.screen = ViewerScreen();
   else if (h.startsWith('#/selftest')) App.screen = SelfTestScreen();
+  else if (h.startsWith('#/rooms')) App.screen = RoomsScreen();
   else if (h.startsWith('#/learn')) App.screen = LearnScreen(decodeURIComponent(h.slice(8).replace(/^\//, '')));
   else App.screen = HomeScreen();
 }
