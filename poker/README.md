@@ -9,6 +9,20 @@ With the **encrypted deal** (on by default) every player's browser helps shuffle
 unlock your own cards. The host's device never sees anyone else's hand, not even with developer
 tools open. See [Fair play and anti-cheat](#fair-play-and-anti-cheat).
 
+**Mobile or computer?** The first time you open the site it asks which you're on (it suggests one
+for your device). Your choice is remembered, and the home screen has a button to switch.
+
+- **Mobile** stacks the table in rows: the other players as compact tiles, then the board, then
+  your own seat with big cards, then the action buttons. Nothing is ever drawn on top of anything
+  else, so the board and every player's cards and name are always fully visible. Chat has its own
+  button with an unread count, recent messages appear in a strip under the table, and the log,
+  chat and player list open as a sheet from the bottom. On small screens the table scrolls to your
+  seat when it's your turn.
+- **Computer** keeps the oval table. Each player's bet and dealer/blind badges sit inside their
+  seat, and after every update the table measures itself: if anything would touch the board,
+  another seat or the edge of the window, it shrinks slightly, and if it still can't fit, it
+  switches to the stacked layout.
+
 The site has four parts:
 
 - **The live game** (`#/host` and `#join=<id>`): a lobby with an invite link and QR code, the table,
