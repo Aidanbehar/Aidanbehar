@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-TGVKhWzgpWRAbGXb8BZRDorfbDKFnkGqANGbGvsY8+o=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-I+JzbOf7nJfNRnAeNOQ/30MvwfEldcWsl1HxwUrU/F8=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -3427,7 +3427,7 @@ const BOT_CHEER = {
 
 class HostTable {
   constructor(settings, hostName, hostToken) {
-    this.s = { game: 'holdem', limit: 'nl', levelHands: 0, maxRebuys: 0, hostPlays: true, spectators: false, viewerChat: false, botChat: false, ...settings };
+    this.s = { game: 'holdem', limit: 'nl', levelHands: 0, maxRebuys: 0, hostPlays: true, spectators: false, viewerChat: false, botChat: false, hostAdjust: false, hostKick: false, ...settings };
     this.s.viewerChat = !!(this.s.spectators && this.s.viewerChat);
     this.gameKind = this.s.game === 'holdem' ? 'holdem' : 'omaha';
     this.holeCount = this.s.game === 'omaha5' ? 5 : this.s.game === 'omaha4' ? 4 : 2;
@@ -3655,6 +3655,7 @@ class HostTable {
         break;
       case 'kick': {
         if (!isHost) return;
+        if (!this.s.hostKick) return err('Removing players is turned off at this table.');
         const q = this.players.get(m.pid);
         if (!q || q.pid === this.hostPid) return;
         this.banned.add(q.token);
@@ -3669,6 +3670,7 @@ class HostTable {
       }
       case 'adjust': {
         if (!isHost) return;
+        if (!this.s.hostAdjust) return err('Changing stacks is turned off at this table.');
         if (this.shuffling || (this.hand && this.hand.phase !== 'done')) return err('Stacks can only be changed between hands.');
         for (const [qid, val] of Object.entries(m.stacks || {})) {
           const q = this.players.get(qid), v = Math.max(0, Math.floor(Number(val)));
@@ -4115,7 +4117,7 @@ class HostTable {
     } else {
       t.push(['Deal', this.sra ? 'Encrypted' : 'Standard'], ['HostPlays', yn(s.hostPlays !== false)], ['BotTakeover', yn(s.botTakeover)], ['WaitingRoom', yn(s.listed)]);
     }
-    t.push(['Viewers', yn(s.spectators)], ['ViewerChat', yn(s.viewerChat)]);
+    t.push(['Viewers', yn(s.spectators)], ['ViewerChat', yn(s.viewerChat)], ['HostCanChangeStacks', yn(s.hostAdjust)], ['HostCanRemovePlayers', yn(s.hostKick)]);
     return t;
   }
   _sendRecords() { for (const [pid, p] of this.players) if (!p.isBot) this.onRecord(pid, this.recordFor(pid, false), this.recordFor(pid, true)); }
@@ -4190,6 +4192,7 @@ class HostTable {
         limit: this.s.limit, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
         botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots, sra: this.sra,
         spectators: !!this.s.spectators, viewerChat: !!this.s.viewerChat, botChat: !!this.s.botChat, listed: !!this.s.listed,
+        hostAdjust: !!this.s.hostAdjust, hostKick: !!this.s.hostKick,
         nextLevelIn: this.s.levelHands ? this.s.levelHands - ((Math.max(1, this.handNo) - 1) % this.s.levelHands) : 0,
       },
       watchId: this.s.spectators ? this.watchId || null : null, shuffling: !!this.shuffling, fair: this._fairView(), sraWait: this.sraDealer ? this.sraDealer.waiting() : [], voided: !!(h && h.voided),
@@ -4627,7 +4630,7 @@ class HostSession {
     t.onChange = () => this._scheduleBroadcast();
     t.onEvent = (kind, text, about) => {
       for (const [pid, c] of this.conns) if (pid !== about) this._send(c, { t: 'event', kind, text });
-      this.watchers.event(kind, text);
+      if (this.watchers) this.watchers.event(kind, text);
       if (about !== this.pid) this.handlers.event(kind, text);
     };
     t.onRecord = (pid, text, full) => {
@@ -4727,7 +4730,7 @@ class HostSession {
       this.bq = false;
       const t = this.table;
       for (const [pid, c] of this.conns) this._send(c, t.viewFor(pid));
-      this.watchers.broadcast();
+      if (this.watchers) this.watchers.broadcast();
       const v = t.viewFor(this.pid);
       if (this.sraLink) { this.sraLink.onView(v); this.sraLink.patchView(v); }
       this.lastView = v;
@@ -4735,7 +4738,7 @@ class HostSession {
       if (t.status === 'ended' && !this.endedSent) {
         this.endedSent = true;
         for (const c of this.conns.values()) this._send(c, { t: 'ended', reason: 'The host ended the game.' });
-        this.watchers.end('The host ended the game.');
+        if (this.watchers) this.watchers.end('The host ended the game.');
         if (this.ad) this.ad.stop();
         this.handlers.ended('You ended the game.');
       }
@@ -4791,6 +4794,7 @@ const Safe = (() => {
       levelHands: int(t.levelHands, 0, 1000, 0), level: int(t.level, 0, 1000, 1), hostPlays: bool(t.hostPlays),
       nextLevelIn: int(t.nextLevelIn, 0, 1000, 0), botTakeover: bool(t.botTakeover), vsBots: bool(t.vsBots), sra: bool(t.sra),
       spectators: bool(t.spectators), viewerChat: bool(t.viewerChat), botChat: bool(t.botChat), listed: bool(t.listed),
+      hostAdjust: bool(t.hostAdjust), hostKick: bool(t.hostKick),
     };
     table.variantName = VARIANTS[table.variant].name;
     const seat = (s, i) => (s && typeof s === 'object' ? {
@@ -6104,6 +6108,19 @@ const SelfTest = (() => {
     ok(!g.tags.some((t) => t[0] === 'Bad Key'), 'invalid tag names are dropped');
   });
 
+  test('Security', 'The host can change stacks or remove players only when the table allows it', () => {
+    if (typeof HostTable === 'undefined') return;
+    for (const allow of [false, true]) {
+      const t = new HostTable({ tableName: 'T', sb: 1, bb: 2, ante: 0, startingStack: 100, maxSeats: 4, timer: 0, rebuys: false, recordHole: 'All', hostAdjust: allow, hostKick: allow }, 'Host', 'aaaaaaaaaaaaaaaa');
+      const errs = []; t.onDirect = (pid, m) => { if (m.t === 'error') errs.push(m.text); };
+      const b = t.addPlayer('Bob', 'bbbbbbbbbbbbbbbb');
+      t.handle(t.hostPid, { t: 'adjust', stacks: { [b.pid]: 5000 } });
+      t.handle(t.hostPid, { t: 'kick', pid: b.pid });
+      eq([b.player.stack === 5000, !t.players.has(b.pid)], [allow, allow], allow ? 'allowed' : 'blocked by default');
+      if (!allow) eq(errs.length, 2);
+    }
+  });
+
   /* ---------- Learn ---------- */
   test('Learn', 'lesson maths matches the standard numbers', () => {
     eq(Learn.C(52, 5), 2598960);
@@ -6428,7 +6445,12 @@ function HostSetupScreen() {
           <label class="check"><input type="checkbox" name="botTakeover"> Bots replace disconnected players</label>
           <p class="hint" style="margin:0" id="fair-hint"></p>
         </section>
-<section class="card-ui setup-section"><h3>Waiting Room</h3>
+<section class="card-ui setup-section"><h3>Host controls</h3>
+          <label class="check"><input type="checkbox" name="hostAdjust"> Host can change players' chip stacks</label>
+          <label class="check"><input type="checkbox" name="hostKick"> Host can remove players from the table</label>
+          <p class="hint" style="margin:0">Both off by default, so nobody's chips can be edited and nobody can be thrown out mid-game. Turn them on only if your group wants the host to have these powers. Either way, the table's log notes every change.</p>
+        </section>
+        <section class="card-ui setup-section"><h3>Waiting Room</h3>
           <label class="check"><input type="checkbox" name="listed"> List this table in the public Waiting Room</label>
           <p class="hint" style="margin:0">Off by default. When on, anyone browsing the <b>Waiting Room</b> can see this table's name, your name, the game and stakes and how many seats are free, and can join it${''} (or watch, if viewers are allowed). Your invite links keep working as usual. The listing disappears when the game ends.</p>
         </section>
@@ -6489,6 +6511,7 @@ function HostSetupScreen() {
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : Number(segv('rebuys')), recordHole: segv('recordHole'),
       game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), hostPlays: form.hostPlays.checked, botTakeover: form.botTakeover.checked && !form.sra.checked, sra: form.sra.checked,
       spectators: form.spectators.checked, viewerChat: form.spectators.checked && form.viewerChat.checked, listed: form.listed.checked,
+      hostAdjust: form.hostAdjust.checked, hostKick: form.hostKick.checked,
     };
     const name = U.sanitizeName(form.name.value);
     const errs = [];
@@ -6503,7 +6526,7 @@ function HostSetupScreen() {
     if (errs.length) { box.innerHTML = `${icon('alert')}<div>${errs.map(U.esc).join('<br>')}</div>`; box.classList.remove('hidden'); return; }
     box.classList.add('hidden');
     // The viewer options are deliberately not remembered: they start switched off for every new table.
-    const { spectators, viewerChat, listed, ...remember } = s; void spectators; void viewerChat; void listed;
+    const { spectators, viewerChat, listed, hostAdjust, hostKick, ...remember } = s; void spectators; void viewerChat; void listed; void hostAdjust; void hostKick;
     Prefs.set('lastSettings', remember); Prefs.set('name', name);
     await startHosting(s, name);
   });
@@ -6550,6 +6573,9 @@ function BotSetupScreen() {
           <div style="display:flex;flex-direction:column;gap:8px">
             <label class="check"><input type="checkbox" name="botChat"> Bots cheer you on in the chat</label>
             <p class="hint" style="margin:0">Corny, encouraging table talk from the bots ("Believe in the river! 🌊"). Off by default.</p>
+            <label class="check"><input type="checkbox" name="hostAdjust"> I can change chip stacks (mine and the bots')</label>
+            <label class="check"><input type="checkbox" name="hostKick"> I can remove bots from the table</label>
+            <p class="hint" style="margin:0">Both off by default: the game plays out with the chips and bots it started with.</p>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px">
             <label class="check"><input type="checkbox" name="spectators"> Allow viewers with a watch-only link</label>
@@ -6591,6 +6617,7 @@ function BotSetupScreen() {
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : +segv('rebuys'),
       timer: 0, recordHole: 'All', botSpeed: segv('botSpeed'),
       botChat: f.botChat.checked, spectators: f.spectators.checked, viewerChat: f.spectators.checked && f.viewerChat.checked,
+      hostAdjust: f.hostAdjust.checked, hostKick: f.hostKick.checked,
     };
     const nBots = +segv('bots'), errs = [];
     if (!(s.sb >= 1 && s.bb >= s.sb)) errs.push('Big blind must be at least the small blind (and both at least 1).');
@@ -6967,7 +6994,7 @@ function GameScreen(session) {
       <button id="m-theme" role="menuitem">${Theme.icon()}Light / dark theme</button>
       ${isHost && v && v.status !== 'ended' ? `<hr>
         ${v.status === 'lobby' ? `<button id="m-start" role="menuitem">${icon('play')}Start game</button>` : `<button id="m-pause" role="menuitem">${icon(v.paused ? 'play' : 'pause')}${v.paused ? 'Resume game' : 'Pause game'}</button>`}
-        <button id="m-adjust" role="menuitem">${icon('users')}Adjust stacks…</button>
+        ${v.table.hostAdjust ? `<button id="m-adjust" role="menuitem">${icon('users')}Adjust stacks…</button>` : ''}
         <button id="m-end" class="danger" role="menuitem">${icon('flag')}End game</button>` : ''}
       <hr><button id="m-leave" class="danger" role="menuitem">${icon('x')}Leave table</button>`;
     $('.game').appendChild(menuEl);
@@ -7277,16 +7304,16 @@ function GameScreen(session) {
       }
     }
     G.chatSeen = true; // history present on the first view is not "new"
-    const pkey = JSON.stringify([v.players, v.phase, v.you && v.you.pid]);
+    const pkey = JSON.stringify([v.players, v.phase, v.you && v.you.pid, v.table.hostAdjust, v.table.hostKick]);
     if (pkey !== G.pkey) {
       G.pkey = pkey;
       const host = v.you && v.you.isHost;
-      $('#tp-players').innerHTML = `${host && v.status !== 'ended' ? `<button class="btn sm" id="p-adjust" style="width:100%;margin-bottom:10px" ${v.phase && v.phase !== 'done' ? 'disabled title="Available between hands"' : ''}>${icon('users')}Adjust stacks</button>` : ''}
+      $('#tp-players').innerHTML = `${host && v.table.hostAdjust && v.status !== 'ended' ? `<button class="btn sm" id="p-adjust" style="width:100%;margin-bottom:10px" ${v.phase && v.phase !== 'done' ? 'disabled title="Available between hands"' : ''}>${icon('users')}Adjust stacks</button>` : ''}
         <div class="plist">${v.players.map((p) => `<div class="prow">${avatarHtml(p.name)}<div class="p-main">
           <div class="p-name">${p.isBot ? '🤖 ' : ''}${U.esc(p.name)}${p.isHost ? ' ★' : ''}${v.you && v.you.pid === p.pid ? ' <span class="muted">(you)</span>' : ''}</div>
           <div class="p-sub"><span class="status-dot ${p.connected ? '' : 'off'}"></span>${p.connected ? '' : 'Disconnected · '}${p.seat != null ? 'Seat ' + (p.seat + 1) : 'Watching'} · <span class="num">${U.fmt(p.stack)}</span>
             · <span class="num ${p.net > 0 ? 'net-pos' : p.net < 0 ? 'net-neg' : ''}">${p.net > 0 ? '+' : ''}${U.fmt(p.net)}</span>${p.sittingOut ? ' · sitting out' : ''}${p.rebuys ? ` · ${p.rebuys} rebuy${p.rebuys > 1 ? 's' : ''}` : ''}</div></div>
-          ${host && !p.isHost && v.status !== 'ended' ? `<button class="btn sm danger" data-kick="${U.esc(p.pid)}" aria-label="Remove ${U.esc(p.name)}">Remove</button>` : ''}</div>`).join('')}</div>`;
+          ${host && v.table.hostKick && !p.isHost && v.status !== 'ended' ? `<button class="btn sm danger" data-kick="${U.esc(p.pid)}" aria-label="Remove ${U.esc(p.name)}">Remove</button>` : ''}</div>`).join('')}</div>`;
       const adj = $('#p-adjust'); if (adj) adj.addEventListener('click', adjustModal);
       $$('[data-kick]').forEach((b) => b.addEventListener('click', () => {
         const p = v.players.find((x) => x.pid === b.dataset.kick);

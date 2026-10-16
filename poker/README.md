@@ -9,6 +9,13 @@ With the **encrypted deal** (on by default) every player's browser helps shuffle
 unlock your own cards. The host's device never sees anyone else's hand, not even with developer
 tools open. See [Fair play and anti-cheat](#fair-play-and-anti-cheat).
 
+**Host controls (off by default).** By default the host can't change anyone's chip stack or remove
+anyone from the table, in hosted games and in Play vs Bots. To allow it, tick **Host can change
+players' chip stacks** and/or **Host can remove players from the table** (in Play vs Bots: **I can
+change chip stacks** / **I can remove bots**). Only then do the Adjust stacks and Remove buttons appear.
+The table itself refuses those commands otherwise, even from a modified page. Every change is
+written to the log, and the record notes both settings.
+
 **Waiting Room (off by default).** The home screen has a **Waiting Room** that lists public
 tables. A table shows up only if its host ticked **List this table in the public Waiting Room** when
 setting it up.
@@ -475,7 +482,8 @@ SD: Carol shows [ThJd]; Bob shows [5d3h]
 Records also carry every table setting as extra header tags, for example `[Mode "Hosted"]`,
 `[Game "No-Limit Hold'em"]`, `[MaxSeats "9"]`, `[ActionTimer "15s"]`, `[BlindsUp "Never"]`,
 `[Rebuys "Unlimited"]`, `[Deal "Encrypted"]`, `[HostPlays "On"]`, `[BotTakeover "Off"]`,
-`[WaitingRoom "Off"]`, `[Viewers "On"]` and `[ViewerChat "Off"]`. Play vs Bots records list
+`[WaitingRoom "Off"]`, `[Viewers "On"]`, `[ViewerChat "Off"]`, `[HostCanChangeStacks "Off"]` and
+`[HostCanRemovePlayers "Off"]`. Play vs Bots records list
 `[BotPlayers "..."]` with each bot's level and style, `[BotSpeed "..."]` and `[BotsCheer "..."]`.
 Readers ignore tags they don't know.
 
