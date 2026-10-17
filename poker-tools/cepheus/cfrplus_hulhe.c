@@ -579,18 +579,20 @@ static double evWalk(const Board *B, int id, double *const S[2], const double *r
 static void evalCmd(const char *a, const char *b, int boards) {
   double *SA = loadStrategy(a), *SB = loadStrategy(b);
   static Board B; static double buf[MAXDEPTH][3][MAXN], ones[MAXN];
-  uint64_t s = 777; double sum = 0, sum2 = 0;
+  uint64_t s = 777; double sum = 0, sum2 = 0, bbSeat = 0, btnSeat = 0;
   for (int k = 0; k < boards; k++) {
     int b5[5]; randBoard(&s, b5, 5); setupBoard(&B, b5);
     for (int i = 0; i < B.n; i++) ones[i] = 1;
     double *p1[2] = { SA, SB }, *p2[2] = { SB, SA };
     double pairs = (double)B.n * 990;
-    double ev = (evWalk(&B, 0, p1, ones, ones, buf, 0) - evWalk(&B, 0, p2, ones, ones, buf, 0)) / 2 / pairs;
-    sum += ev; sum2 += ev * ev;
+    double asBB = evWalk(&B, 0, p1, ones, ones, buf, 0) / pairs, asBtn = -evWalk(&B, 0, p2, ones, ones, buf, 0) / pairs;
+    double ev = (asBB + asBtn) / 2;
+    sum += ev; sum2 += ev * ev; bbSeat += asBB; btnSeat += asBtn;
   }
   double m = sum / boards, var = sum2 / boards - m * m, sd = sqrt(var > 0 ? var : 0) / sqrt(boards);
   double bb = g_blind[0] > g_blind[1] ? g_blind[0] : g_blind[1];
   printf("%s vs %s: %+.1f +/- %.1f mbb/hand (%d boards, both seats, all hands)\n", a, b, m / bb * 1000, 1.96 * sd / bb * 1000, boards);
+  printf("JSON {\"a\":\"%s\",\"b\":\"%s\",\"mbb\":%.2f,\"ci\":%.2f,\"asBB\":%.2f,\"asButton\":%.2f,\"boards\":%d}\n", a, b, m / bb * 1000, 1.96 * sd / bb * 1000, bbSeat / boards / bb * 1000, btnSeat / boards / bb * 1000, boards);
 }
 
 /* ---------------------------------------------------------------- export for the browser */
