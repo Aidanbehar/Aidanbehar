@@ -399,24 +399,26 @@ Players:
   calculations, how it learned during training, its playing style (VPIP, PFR, 3-bet, aggression,
   c-bet, fold rates, WTSD, W$SD), how much a single hand swings, and a sample long run.
 
-The test results (`cepheus/cepheus-stats.json`, 23 KB) load only when the tab is opened. They
-come from 174,000 hands through Feltroom's own engine, every deal played twice with the seats
-swapped, with zero strategy fallbacks. Cepheus beat every opponent by more than luck explains:
+The test results (`cepheus/cepheus-stats.json`, 33 KB) load only when the tab is opened. They
+come from 480,000 hands through Feltroom's own engine: 30,000 per matchup, every deal played
+twice with the seats swapped, with zero strategy fallbacks. Cepheus beat every opponent by more
+than luck explains:
 
 | Opponent | bb/100 |
 |---|---|
-| Beginner bot | +71 ± 5 |
-| Casual bot | +29 ± 6 |
-| Intermediate bot | +25 ± 5 |
-| Advanced bot | +22 ± 5 |
-| Professional bot | +24 ± 5 |
-| Elite bot | +20 ± 5 |
-| Extreme bot | +25 ± 5 |
-| Extreme GTO-inspired | +19 ± 5 |
+| Beginner bot | +69.4 ± 3.0 |
+| Casual bot | +28.0 ± 3.5 |
+| Intermediate bot | +21.6 ± 3.1 |
+| Advanced bot | +23.6 ± 2.9 |
+| Professional bot | +19.6 ± 3.0 |
+| Elite bot | +25.4 ± 2.9 |
+| Extreme bot | +22.1 ± 2.9 |
+| Extreme GTO-inspired | +23.6 ± 2.9 |
 
-Against itself it scores +2 ± 5, which is zero within the error, as it should be. The
-game-engine results agree with the solver's exact calculations: against always-call, +52.9 ± 4.6
-through the engine and +50.9 exact.
+Against itself the true result is exactly zero. The solver confirms it, and the engine measured
+−2.5 ± 2.0, which is ordinary variation across 16 matchups. The game-engine results agree with
+the solver's exact calculations over 6,000 boards: against always-call, +50.3 ± 2.4 through the
+engine and +51.0 exact. The tab also shows a 10,000-hand sample run against Extreme.
 
 **Loading.** The engine (`cepheus/cepheus.js`, 12 KB) and the strategy
 (`cepheus/cepheus-strategy.bin`, 579 KB) are separate static files. They are downloaded only when

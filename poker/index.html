@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-iIpJL1Kj3+m4A5HVEeoZ8oRdQjjBrXvJ/o6xkERORhA=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-tSnRY7+LsRMW04EpwhMWepNvtfYaXzPontoRSVdmK5o=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -7195,7 +7195,7 @@ const CepheusBot = {
 
 /* ----- The "Stats" tab of a Play Against Cepheus game: how good the bot is, and how you are doing. ----- */
 const CepheusStats = (() => {
-  const URL = 'cepheus/cepheus-stats.json', SHA = '57ebe99c20668f7a2b8b6ce1d681e50bfe25e607795eeab1cf351b6734681fac';
+  const URL = 'cepheus/cepheus-stats.json', SHA = 'c5421069deeded426b6da9b2e236f4ddcab4fddf06dbc277fe2fbecbbcc4b21b';
   let data = null, loading = null, failed = false;
   const load = () => {
     if (data) return Promise.resolve(data);
@@ -7365,8 +7365,8 @@ const CepheusStats = (() => {
     const conv = d.convergence;
     return `<section class="cs-sec"><h4>The numbers</h4>
       <details open><summary>Every matchup</summary><div class="cs-scroll"><table class="cs-table cs-wide"><thead><tr><th>Opponent</th><th>Hands</th><th title="Big blinds per 100 hands, ± 95% range">bb/100</th><th title="Share of hands Cepheus won">Won</th><th title="Hands that reached a showdown">SD</th><th title="On the button (small blind)">Btn</th><th title="In the big blind">BB</th></tr></thead><tbody>
-        ${ms.map((m) => `<tr><td>${esc(nameOf(m.opponent))}</td><td class="num">${m.hands.toLocaleString()}</td><td class="num ${m.bb100 - m.ci95bb100 > 0 ? 'net-pos' : m.bb100 + m.ci95bb100 < 0 ? 'net-neg' : ''}">${sgn(m.bb100)} ±${m.ci95bb100.toFixed(1)}</td><td class="num">${pct(m.wonPct)}</td><td class="num">${pct(m.showdownPct)}</td><td class="num">${sgn(m.byPosition.button.bb100, 0)}</td><td class="num">${sgn(m.byPosition.bb.bb100, 0)}</td></tr>`).join('')}
-      </tbody></table></div><p class="cs-note">Each deal was played twice with the seats swapped (duplicate poker), which cancels much of the luck. bb/100 is big blinds won per 100 hands; ± is the 95% range. Green means the win is bigger than luck explains.</p></details>
+        ${ms.map((m) => `<tr><td>${esc(nameOf(m.opponent))}${m.opponent === 'self' ? '*' : ''}</td><td class="num">${m.hands.toLocaleString()}</td><td class="num ${m.opponent === 'self' ? '' : m.bb100 - m.ci95bb100 > 0 ? 'net-pos' : m.bb100 + m.ci95bb100 < 0 ? 'net-neg' : ''}">${sgn(m.bb100)} ±${m.ci95bb100.toFixed(1)}</td><td class="num">${pct(m.wonPct)}</td><td class="num">${pct(m.showdownPct)}</td><td class="num">${sgn(m.byPosition.button.bb100, 0)}</td><td class="num">${sgn(m.byPosition.bb.bb100, 0)}</td></tr>`).join('')}
+      </tbody></table></div><p class="cs-note">Each deal was played twice with the seats swapped (duplicate poker), which cancels much of the luck. bb/100 is big blinds won per 100 hands; ± is the 95% range. Green means the win is bigger than luck explains. *Against itself the true result is exactly zero (the exact calculation below confirms it); the small number here is ordinary random variation. With ${ms.length} matchups, one landing just outside its 95% range is expected now and then.</p></details>
       <details><summary>Exact calculations (no luck at all)</summary><table class="cs-table"><thead><tr><th>Against</th><th>bb/100</th><th>On the button</th><th>In the big blind</th></tr></thead><tbody>
         ${d.exact.map((x) => `<tr><td>${esc(nameOf(x.b))}</td><td class="num">${sgn(x.mbb / 10)}</td><td class="num">${sgn(x.asButton / 10)}</td><td class="num">${sgn(x.asBB / 10)}</td></tr>`).join('')}
       </tbody></table><p class="cs-note">Computed by the offline solver over ${d.exact[0].boards.toLocaleString()} random boards, adding up every possible pair of hands on each board exactly. Against a copy of itself the result is exactly zero, as it should be.</p></details>
