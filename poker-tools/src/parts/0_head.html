@@ -697,7 +697,8 @@ button.mt-seat.empty svg { width: 16px; height: 16px; }
 .mt-mycards { display: flex; gap: 6px; --cw: min(16vw, 60px); justify-content: center; }
 .mt-mycards.many { --cw: min(13vw, 50px); gap: 4px; }
 /* Mobile oval: players around a tall phone table */
-.table.moval { order: 1; flex: none; border-radius: 0; background: none; box-shadow: none; --mk: 1; }
+.table.moval { order: 1; flex: 1 1 0; min-height: 0; width: 100%; border-radius: 0; background: none; box-shadow: none; --mk: 1; }
+.table.moval.fixed-h { flex: none; }
 .table.moval::before, .table.moval::after { display: none; }
 .moval .layer { position: absolute; inset: 0; }
 .moval .fx { display: none; }

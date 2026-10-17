@@ -332,19 +332,27 @@ class TableView {
   }
 
   /** Mobile oval: the table takes whatever height the stage has left after the banner and chat strip. */
-  _layoutMobileOval() {
-    this.el.classList.remove('mtable');
-    this.el.classList.add('moval');
-    for (const c of this.stage.children) if (!this.watched.has(c)) { this.watched.add(c); this.ro.observe(c); }
+  /** The space the phone table may use: the stage minus its padding, the banner and the chat strip. */
+  _mobileAvail() {
+    // In the game the browser sizes the table itself (it fills what the stage has left), so it follows
+    // the action bar in the same frame; the viewer's stage grows with its content, so it gets a height.
+    if (!this.opts.mobileHeight && this.el.classList.contains('moval')) return { W: this.el.clientWidth, H: this.el.clientHeight };
     const cs = getComputedStyle(this.stage), gap = parseFloat(cs.rowGap) || 0;
     let H = this.stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
     for (const c of this.stage.children) if (c !== this.el && c.offsetParent !== null && getComputedStyle(c).position !== 'absolute') H -= c.offsetHeight + gap;
     const W = this.stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     if (this.opts.mobileHeight) H = this.opts.mobileHeight(W); // a stage that grows with its content (the viewer)
-    H = Math.floor(H);
+    return { W, H: Math.floor(H) };
+  }
+  _layoutMobileOval() {
+    this.el.classList.remove('mtable');
+    this.el.classList.add('moval');
+    for (const c of [...this.stage.children, this.el]) if (!this.watched.has(c)) { this.watched.add(c); this.ro.observe(c); }
+    if (this.opts.mobileHeight) this.el.classList.add('fixed-h'); else { this.el.style.width = ''; this.el.style.height = ''; }
+    const { W, H } = this._mobileAvail();
     if (H < 240 || W < 250) { this.rowsFor.add(this._mkey()); this.lkey = null; return this._layoutMobile(); }
     const key = `o${W}x${H}`;
-    this.el.style.width = W + 'px'; this.el.style.height = H + 'px';
+    if (this.opts.mobileHeight) { this.el.style.width = W + 'px'; this.el.style.height = H + 'px'; }
     this.el.style.setProperty('--s', '1');
     this.w = W; this.h = H;
     if (key === this.lkey) return;
@@ -656,6 +664,14 @@ class TableView {
     while (!ok && k > 0.62) { k *= 0.92; draw(k); ok = fits(); }
     this.mk = k;
     if (!ok) return false;
+    // The action bar can change height in the same moment the table was measured, without the browser
+    // reporting a resize. Check once more after this frame and fit to the space that is really there.
+    cancelAnimationFrame(this.sizeRaf);
+    this.sizeRaf = requestAnimationFrame(() => {
+      if (!this.el.classList.contains('moval')) return;
+      const a = this._mobileAvail();
+      if (a.W !== this.w || a.H !== this.h) { this.lkey = null; this._layoutMobileOval(); }
+    });
 
     if (view.timer && view.timer.total) {
       const end = performance.now() + (view.timer.remaining || 0);
