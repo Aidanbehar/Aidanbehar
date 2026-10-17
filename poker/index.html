@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-+NePmb1fyo3L7VRO3jDfz94aFPtyrdTzuPb2vdurKJU=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-xPVck6UTkjJ7n2S6tH6L/iCm+5L8WfvDSQ4JLA5V3gs=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -6689,7 +6689,7 @@ const SelfTest = (() => {
    ===================================================================== */
 const CepheusBot = {
   JS: 'cepheus/cepheus.js', DATA: 'cepheus/cepheus-strategy.bin',
-  JS_SRI: 'sha384-DQKJJRXaM74wMLEgdZBPm4B/FV50/mKzH9tHWYvBvDB9V8MTAHhTZ/qMaeNWj03d', DATA_SHA256: '2c825ca8d66f6c2efe53154b93cf277ab12b1b25589e577c77ec4bc80f053542', DATA_BYTES: '578608',
+  JS_SRI: 'sha384-DQKJJRXaM74wMLEgdZBPm4B/FV50/mKzH9tHWYvBvDB9V8MTAHhTZ/qMaeNWj03d', DATA_SHA256: 'ef6d5b3138e7318a6ca47bb72c002fd6cfc7bc91feb91ac27333197684a3adea', DATA_BYTES: '578683',
   // The table Cepheus was computed for (holdem.limit.2p.reverse_blinds.game): blinds 5/10, bets 10/10/20/20.
   SB: 5, BB: 10, STACK: 1000,
   model: null, loading: null, rng: null,

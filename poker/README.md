@@ -70,6 +70,9 @@ The site has four parts:
   host controls, chat, a game log and a game record you can copy at any time.
 - **Play vs Bots** (`#/bots`): practise offline against 1–8 computer players. There are seven
   difficulty levels and eight play styles, and it works in any of the game variants.
+- **Play Against Cepheus** (`#/cepheus`): heads-up limit Hold'em against a CFR+ strategy computed
+  on Cepheus's exact game. It is an approximation, not Cepheus itself; see
+  [Play Against Cepheus](#play-against-cepheus).
 - **The Hand History Viewer** (`#/viewer`): paste a game record and replay every hand on the same
   table UI, with stats and a chart of chip stacks over time. The viewer works offline.
   - **Per player:** hands, wins, net chips, bb/100, VPIP, PFR, 3-bet, fold to 3-bet, limp,
@@ -302,6 +305,64 @@ Maniac, Trapper and GTO-inspired.
 
 Bots never see hidden cards. They get the same information a real player at that seat would have.
 In a test of 1,500 hands, Advanced bots beat Beginner bots by about 28 big blinds per 100 hands.
+
+---
+
+## Play Against Cepheus
+
+**Play Against Cepheus** (`#/cepheus`) is heads-up fixed-limit Texas Hold'em against one strong
+computer opponent. It is **an approximation of Cepheus, not Cepheus itself**.
+
+**Background.** In 2015 the University of Alberta's Cepheus essentially solved this game with an
+algorithm called CFR+. Its strategy is more than 10 TB and was never published. The `CFR_plus`
+archive its authors released contains the solver code, the game definition and a hand evaluator,
+but no strategy.
+
+**What we built from it** (details in `poker-tools/cepheus/README.md`):
+
+- The same CFR+ algorithm, run on Cepheus's exact game. The betting tree is read from the
+  archive's `holdem.limit.2p.reverse_blinds.game` and has 6,378 decision points.
+- Similar hands are grouped together: the 169 starting hands, then 50 hand-strength groups on the
+  flop, turn and river. This keeps the strategy to a 579 KB file.
+- Hands are ranked with the archive's own evaluator, in the solver and in the browser.
+- The strategy was computed in 100 minutes on 4 CPU cores (14,273 iterations).
+
+How strong it is, in exact expected value over 1,000 sampled boards, playing both seats with
+every hand:
+
+| Opponent | Big blinds per 100 hands |
+|---|---|
+| Always call | +50.6 |
+| Always raise | +34.0 |
+| Random play | +78.6 |
+
+It also beats its own earlier training snapshots by a little, and that margin shrinks as training
+goes on, which shows it is converging.
+
+**The game:**
+
+- Blinds are 5/10. Bets are 10 before the flop and on the flop, 20 on the turn and river.
+- There are at most 4 bets per round.
+- Both stacks reset to 1,000 every hand, as in Cepheus's game, where stacks are unlimited.
+- Your running result appears in the table header and the player list.
+
+**How it plays:**
+
+- It decides using only its own cards, the board and the betting. It never sees your cards or
+  future cards.
+- Its decisions are randomised with the strategy's own probabilities, so it is hard to read.
+- If it ever met a situation its strategy does not cover, it would check or call and say so in
+  the log. This has not happened in testing.
+
+**Loading.** The engine (`cepheus/cepheus.js`, 12 KB) and the strategy
+(`cepheus/cepheus-strategy.bin`, 579 KB) are separate static files. They are downloaded only when
+you press **Play Cepheus**. The page pins both files: the engine with Subresource Integrity, the
+strategy with SHA-256. A missing, damaged or mismatched file shows a clear error and leaves the
+other modes untouched.
+
+The CFR+ code and hand-ranking tables are used under the archive's licence
+(`cepheus/LICENCE-CFR_plus.txt`). Feltroom is not affiliated with or endorsed by the University
+of Alberta.
 
 ---
 

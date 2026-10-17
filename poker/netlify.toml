@@ -1,5 +1,6 @@
 # Feltroom: static site, no build step, no Functions, no Forms.
-# Works on Netlify's free plan. Everything lives in index.html.
+# Works on Netlify's free plan. Everything lives in index.html, except the optional
+# Play Against Cepheus files in cepheus/, which load only when that mode is opened.
 
 [build]
   publish = "."
