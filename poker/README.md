@@ -279,32 +279,63 @@ test suite and lists pass/fail results. The suite covers:
 
 ## Bots
 
-The bot engine is adapted from the "Royal Flush Engine" AI. Each decision runs a pipeline:
+Each decision runs a pipeline:
 
-1. Equity: a Monte-Carlo simulation against the opponents' likely ranges, or a heuristic at
-   low levels.
-2. Board texture, outs and blockers.
-3. Pot odds, implied odds, stack-to-pot ratio and minimum defence frequency.
-4. A read on each opponent, built from their public play earlier in the game.
-5. The expected value of folding, checking or calling, and betting or raising at several sizes.
-6. Strategy frequencies, with deliberate mixing so the bot doesn't always play the same spot the
-   same way.
+1. **Read the hand from public information.** The bot looks at every player's position, every
+   bet and its size compared with the pot, and lines such as check-raises, donk bets (leading into
+   the previous street's aggressor), barrels on every street and overbets.
+2. **Equity.** A Monte-Carlo simulation is run against each opponent's likely hands, using a fast
+   built-in hand evaluator (about 6.7 million hands per second).
+   - **Preflop ranges** come from the opponent's actions, position and history.
+   - **After the flop**, every bet narrows their range toward its strongest part, and bigger bets
+     narrow it more. Calls drop the weakest part.
+   - **Each range keeps a share of bluffs** that matches how often that player has been seen
+     bluffing at showdown.
+3. **The numbers:** pot odds, implied odds, stack-to-pot ratio, outs and blockers. Outs only count
+   cards that improve the bot's own hand, not cards that pair the board for everyone. Fold equity
+   is estimated by bet size, from how often each opponent folds to small and big bets.
+4. **Candidate actions,** each scored in chips, then shaped by the bot's style:
+   - Preflop uses position-aware ranges with soft edges, so borderline hands are mixed. Re-raises
+     can be for value or a bluff (with a blocker), and short-stacked play is all-in or fold.
+   - After the flop, strong hands raise for value.
+5. **Balanced sizing and safe mixing.**
+   - From Advanced up, bluffs and strong hands share the same big "polar" sizes and medium hands
+     use smaller ones, with overlap and a little jitter. A bet's size says little about the hand.
+   - Bots vary between actions that are close in value, but never pick one that is clearly bad.
+   - No level ever folds a full house or better, and strong bots never fold the nuts.
+   - Strong hands are slow-played now and then, so a raise is not a guaranteed tell.
 
 | Level | What it adds |
 |---|---|
-| Beginner | Raw hand strength only; calls too much, rarely bluffs |
-| Casual | Pot odds and simple position awareness |
-| Intermediate | Equity against a modelled range, continuation bets, semi-bluffs |
-| Advanced | Fold equity, multiple bet sizes, starts reading opponents |
-| Professional | Exploitative adjustments, implied odds, stack-to-pot commitment |
-| Elite | Blockers, minimum-defence-frequency defending, strategy mixing |
-| Extreme | GTO-inspired: deep simulations, balanced value/bluff ratios, bounded exploits |
+| Beginner | Raw hand strength only; ignores position, calls too much, has size tells |
+| Casual | Pot odds, some position, starts to notice that bets mean strength |
+| Intermediate | Equity against real ranges, reads bet sizes, push/fold when short |
+| Advanced | Reads lines (check-raise, donk bet, three barrels); balanced bet sizes |
+| Professional | Opponent model: fold rates by bet size, showdown bluff evidence |
+| Elite | Deeper simulations, blockers, sharper exploits |
+| Extreme | Deepest simulations, most careful reads, balanced bluffs and sizes |
 
 The play styles are Balanced, Tight-aggressive, Loose-aggressive, Tight-passive, Loose-passive,
-Maniac, Trapper and GTO-inspired.
+Maniac, Trapper and GTO-inspired. GTO-inspired adds minimum-defence-frequency defending to the
+balanced settings.
+
+**A style is a tendency, not a script:**
+- Every bot gets its own randomised version of its style. Each trait varies, and there is a
+  hidden pinch of a second style.
+- Its mood drifts from hand to hand, with the occasional change of gear.
+- So two "Maniacs" don't play identically, and a table of identical labels doesn't move in
+  lockstep.
 
 Bots never see hidden cards. They get the same information a real player at that seat would have.
-In a test of 1,500 hands, Advanced bots beat Beginner bots by about 28 big blinds per 100 hands.
+Simulations run in small chunks, so the page stays responsive even with eight bots.
+
+**How the current engine was tested** (bb/100 = big blinds won per 100 hands, ± is the 95% range):
+
+- Six-bot tables of every style: preflop participation, fold-to-continuation-bet rates, walks,
+  showdowns and bluff shares fall in realistic ranges.
+- Simple scripted strategies lose to Intermediate and above: always call, always min-raise,
+  always all-in, random betting, and value-only overbetting. The value-only overbetter beat the
+  old Elite (+233 bb/100) but loses to the new one (−225 ± 96).
 
 ---
 
