@@ -387,6 +387,37 @@ goes on, which shows it is converging.
 - If it ever met a situation its strategy does not cover, it would check or call and say so in
   the log. This has not happened in testing.
 
+**The Stats tab.** During a game against Cepheus, a **Stats** tab sits next to Log, Chat and
+Players:
+
+- **Your session:** your result, an honest "too early to tell" verdict based on how much luck
+  could explain, a chart of your running total, and your play-style numbers next to Cepheus's.
+- **How good is Cepheus?** In plain language: how often it wins a hand, and the chance you would
+  be ahead after 10, 100, 1,000 or 10,000 hands. Then a win-rate chart against every opponent,
+  with 95% ranges.
+- **The numbers:** every matchup with error bars and results by position, the exact
+  calculations, how it learned during training, its playing style (VPIP, PFR, 3-bet, aggression,
+  c-bet, fold rates, WTSD, W$SD), how much a single hand swings, and a sample long run.
+
+The test results (`cepheus/cepheus-stats.json`, 23 KB) load only when the tab is opened. They
+come from 174,000 hands through Feltroom's own engine, every deal played twice with the seats
+swapped, with zero strategy fallbacks. Cepheus beat every opponent by more than luck explains:
+
+| Opponent | bb/100 |
+|---|---|
+| Beginner bot | +71 ± 5 |
+| Casual bot | +29 ± 6 |
+| Intermediate bot | +25 ± 5 |
+| Advanced bot | +22 ± 5 |
+| Professional bot | +24 ± 5 |
+| Elite bot | +20 ± 5 |
+| Extreme bot | +25 ± 5 |
+| Extreme GTO-inspired | +19 ± 5 |
+
+Against itself it scores +2 ± 5, which is zero within the error, as it should be. The
+game-engine results agree with the solver's exact calculations: against always-call, +52.9 ± 4.6
+through the engine and +50.9 exact.
+
 **Loading.** The engine (`cepheus/cepheus.js`, 12 KB) and the strategy
 (`cepheus/cepheus-strategy.bin`, 579 KB) are separate static files. They are downloaded only when
 you press **Play Cepheus**. The page pins both files: the engine with Subresource Integrity, the
