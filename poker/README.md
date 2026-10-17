@@ -336,6 +336,8 @@ Simulations run in small chunks, so the page stays responsive even with eight bo
 - Simple scripted strategies lose to Intermediate and above: always call, always min-raise,
   always all-in, random betting, and value-only overbetting. The value-only overbetter beat the
   old Elite (+233 bb/100) but loses to the new one (−225 ± 96).
+- Head-to-head against the previous engine (same level on both sides, 1,400 hands with the same
+  cards dealt to each side): Intermediate +127 ± 74, Elite +148 ± 86, Extreme +164 ± 83 bb/100.
 
 ---
 
