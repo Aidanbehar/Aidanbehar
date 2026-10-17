@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-l/1B0iEWLUcKe2cxerqHiw++35J1dDRXquN8y5JpfTs=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-iIpJL1Kj3+m4A5HVEeoZ8oRdQjjBrXvJ/o6xkERORhA=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -7211,6 +7211,8 @@ const CepheusStats = (() => {
   const esc = (s) => U.esc(String(s));
   const NAMES = { call: 'Always calls', raise: 'Always raises', random: 'Random clicks', uniform: 'Random clicks', self: 'Itself (mirror match)', beginner: 'Beginner bot', casual: 'Casual bot', intermediate: 'Intermediate bot', advanced: 'Advanced bot', professional: 'Professional bot', elite: 'Elite bot', extreme: 'Extreme bot', 'elite:maniac': 'Elite Maniac', 'elite:loosepassive': 'Elite Loose-passive', 'elite:tightpassive': 'Elite Tight-passive', 'elite:trapper': 'Elite Trapper', 'extreme:gto': 'Extreme GTO-inspired' };
   const nameOf = (k) => NAMES[k] || k;
+  // the sample run: newer results files store { curve, curveStep }, older ones curveEvery30
+  const runOf = (m) => (m.curve ? { pts: m.curve, step: m.curveStep || 50 } : { pts: m.curveEvery30 || [], step: 30 });
 
   /** Public play-style numbers for one seat over finished hands (same definitions as the offline tests). */
   function profile(hands, nameIs) {
@@ -7383,7 +7385,7 @@ const CepheusStats = (() => {
       </tbody></table><p class="cs-note">Averaged over its games against the Advanced, Professional, Elite and Extreme bots. Heads-up limit rewards aggression: it plays most hands and rarely just calls.</p></details>
       <details><summary>How much a single hand swings</summary>${histChart(ext.histogramBB, 'How often each result happened in one hand against the Extreme bot, in big blinds')}
         <p class="cs-note">One hand against Extreme, in big blinds (a typical swing is ±${ext.sdPerHand.toFixed(1)} bb per hand). Most hands are small; the big pots decide sessions.</p></details>
-      <details><summary>A sample run of ${(ext.curveEvery30.length * 30).toLocaleString()} hands</summary>${lineChart('run', [0, ...ext.curveEvery30], { xLabel: 'hands', xStep: 30, aria: "Cepheus's running result over a sample of hands against the Extreme bot" })}
+      <details><summary>A sample run of ${(runOf(ext).pts.length * runOf(ext).step).toLocaleString()} hands</summary>${lineChart('run', [0, ...runOf(ext).pts], { xLabel: 'hands', xStep: runOf(ext).step, aria: "Cepheus's running result over a sample of hands against the Extreme bot" })}
         <p class="cs-note">Cepheus's running total against Extreme. Even a winning player has long losing stretches.</p></details>
       <details><summary>How this was tested</summary><ul class="cs-note">
         <li>${d.totalHands.toLocaleString()} hands through Feltroom's own game engine, with every bet checked for the right size and the 4-bet cap. Fallbacks (spots the strategy did not cover): ${d.totalFallbacks}.</li>
@@ -7410,7 +7412,7 @@ const CepheusStats = (() => {
       const conv = data.convergence;
       bindLine(el, 'conv', conv.map((x) => x.vsCall / 10), conv.length > 1 ? conv[1].minutes - conv[0].minutes : 1, (m, v) => `<b>After ${m} minutes of training</b><div>${sgn(v)} bb/100 vs always-call</div>`);
       const ext = data.matchups.find((m) => m.opponent === 'extreme');
-      bindLine(el, 'run', [0, ...ext.curveEvery30], 30, (i, v) => `<b>After ${i.toLocaleString()} hands</b><div>Cepheus: <b class="num">${sgn(v)} bb</b></div>`);
+      bindLine(el, 'run', [0, ...runOf(ext).pts], runOf(ext).step, (i, v) => `<b>After ${i.toLocaleString()} hands</b><div>Cepheus: <b class="num">${sgn(v)} bb</b></div>`);
       bindBars(el);
     } else if (!failed) {
       load().then(() => render(el, session), () => { const l = el.querySelector('#cs-loading'); if (l) l.textContent = 'The test results could not be loaded. Your session numbers above still work.'; });
