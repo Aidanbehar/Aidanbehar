@@ -51,7 +51,7 @@ function DeviceScreen(next) {
       <h2>Welcome to Feltroom</h2>
       <p class="muted" style="margin:0">How are you playing? You can switch any time from the home screen.</p>
       <div class="device-opts">
-        <button class="big-choice ${g === 'mobile' ? 'suggest' : ''}" data-dev="mobile"><span class="bc-ic">${icon('phone')}</span><strong>Mobile</strong><span>Phone or tablet. A stacked table made for touch screens: cards never overlap, and chat is one tap away.</span>${g === 'mobile' ? '<em>Suggested for this device</em>' : ''}</button>
+        <button class="big-choice ${g === 'mobile' ? 'suggest' : ''}" data-dev="mobile"><span class="bc-ic">${icon('phone')}</span><strong>Mobile</strong><span>Phone or tablet. Players sit around a table sized for your screen, cards and names never overlap, and chat is one tap away.</span>${g === 'mobile' ? '<em>Suggested for this device</em>' : ''}</button>
         <button class="big-choice ${g === 'computer' ? 'suggest' : ''}" data-dev="computer"><span class="bc-ic">${icon('monitor')}</span><strong>Computer</strong><span>Laptop or desktop. The classic oval table with the log, chat and players beside it.</span>${g === 'computer' ? '<em>Suggested for this device</em>' : ''}</button>
       </div>
     </div></div></div>`;

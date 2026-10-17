@@ -54,12 +54,18 @@ They speak at the start, after your wins and big pots, after a bust, and now and
 **Mobile or computer?** The first time you open the site it asks which you're on (it suggests one
 for your device). Your choice is remembered, and the home screen has a button to switch.
 
-- **Mobile** stacks the table in rows: the other players as compact tiles, then the board, then
-  your own seat with big cards, then the action buttons. Nothing is ever drawn on top of anything
-  else, so the board and every player's cards and name are always fully visible. Chat has its own
-  button with an unread count, recent messages appear in a strip under the table, and the log,
-  chat and player list open as a sheet from the bottom. On small screens the table scrolls to your
-  seat when it's your turn.
+- **Mobile** seats everyone around a tall, phone-shaped oval table, as at a real table:
+  - The other players sit around the rail as compact tiles (name, chips and small cards). Their
+    dealer, blind and bet chips sit with them, and the board and pot sit in the middle.
+  - You sit at the bottom with big cards.
+  - After every redraw the table measures every tile, card, tag and the board. If any two would
+    touch or spill off the screen, everything shrinks a little and is drawn again. If even the
+    smallest size can't fit (for example a phone held sideways), that screen size uses stacked rows
+    instead, which can never overlap.
+  - Chat has its own button with an unread count, recent messages appear in a strip under the
+    table, and the log, chat and player list open as a sheet from the bottom.
+  - It was tested on 360×640, iPhone SE, iPhone 13, Pixel 7, iPad and a sideways phone, with 2, 4
+    and 9 players and 8-player 5-card Omaha, including showdowns. Nothing overlapped.
 - **Computer** always keeps the oval table, in the game and in the viewer. Each player's bet and
   dealer/blind badges sit inside their seat, and after every update the table measures itself: if
   anything would touch the board, another seat or the edge of the window, it shrinks slightly.

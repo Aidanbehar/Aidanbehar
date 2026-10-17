@@ -49,7 +49,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** "Mobile or computer?" — chosen on the first visit and remembered. Mobile gets the stacked, no-overlap table. */
+/** "Mobile or computer?" — chosen on the first visit and remembered. Mobile gets the phone oval (rows as a fallback). */
 const Device = {
   get() { try { const v = localStorage.getItem('feltroom.device'); return v ? JSON.parse(v) : null; } catch { return null; } },
   set(kind) { try { localStorage.setItem('feltroom.device', JSON.stringify(kind)); } catch { /* private mode */ } Device.apply(); },
@@ -266,6 +266,8 @@ class TableView {
     this.view = null;
     this.ro = new ResizeObserver(() => this.layout());
     this.ro.observe(stage);
+    this.watched = new Set(); this.rowsFor = new Set(); this.mk = 1;
+    stage.tableView = this; // lets the layout tests inspect the table
     this.el.addEventListener('click', (e) => {
       const b = e.target.closest('button[data-seat]');
       if (b && opts.onSit) opts.onSit(Number(b.dataset.seat));
@@ -274,12 +276,23 @@ class TableView {
   }
   destroy() { this.ro.disconnect(); cancelAnimationFrame(this.raf); }
 
-  /** Stacked rows instead of the oval: only when the Mobile layout was chosen. A computer always keeps the oval. */
-  get stacked() { return Device.mobile; }
+  /**
+   * Mobile: players sit around a phone-shaped oval table. After every redraw the table measures
+   * itself; if any two pieces would touch (or spill off the screen) everything shrinks a little, and
+   * if even the smallest size cannot fit (say nine players at showdown on a tiny screen), this screen
+   * size switches to the stacked rows, which can never overlap. A computer always keeps the big oval.
+   */
+  get stacked() { return Device.mobile && this.rowsFor.has(this._mkey()); }
+  get mobileOval() { return Device.mobile && !this.stacked; }
+  _mkey(v = this.view) {
+    const cards = v ? Math.max(2, ...v.seats.map((st) => (st && st.cards ? st.cards.length : 2))) : 2;
+    // per screen, not per momentary stage height (the action bar changes height between turns)
+    return `${innerWidth}x${innerHeight}:${v ? v.maxSeats : 0}:${cards}`;
+  }
 
   layout() {
-    if (this.stacked) return this._layoutMobile();
-    this.el.classList.remove('mtable');
+    if (Device.mobile) return this.stacked ? this._layoutMobile() : this._layoutMobileOval();
+    this.el.classList.remove('mtable', 'moval');
     const W = this.stage.clientWidth - 12, H = this.stage.clientHeight - 12;
     if (W < 50 || H < 50) return;
     const portrait = W / H < 0.95;
@@ -308,12 +321,34 @@ class TableView {
   /** Mobile: no oval. Rows that flow (opponents, board, you), so nothing can ever sit on top of anything else. */
   _layoutMobile() {
     const key = 'm' + this.stage.clientWidth + 'x' + this.stage.clientHeight;
+    this.el.classList.remove('moval');
     this.el.classList.add('mtable');
     this.el.style.width = ''; this.el.style.height = '';
     this.el.style.setProperty('--s', '1');
     this.w = this.stage.clientWidth; this.h = this.stage.clientHeight;
     if (key === this.lkey) return;
     this.lkey = key;
+    if (this.view) this.render(this.view, { animate: false });
+  }
+
+  /** Mobile oval: the table takes whatever height the stage has left after the banner and chat strip. */
+  _layoutMobileOval() {
+    this.el.classList.remove('mtable');
+    this.el.classList.add('moval');
+    for (const c of this.stage.children) if (!this.watched.has(c)) { this.watched.add(c); this.ro.observe(c); }
+    const cs = getComputedStyle(this.stage), gap = parseFloat(cs.rowGap) || 0;
+    let H = this.stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    for (const c of this.stage.children) if (c !== this.el && c.offsetParent !== null && getComputedStyle(c).position !== 'absolute') H -= c.offsetHeight + gap;
+    const W = this.stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (this.opts.mobileHeight) H = this.opts.mobileHeight(W); // a stage that grows with its content (the viewer)
+    H = Math.floor(H);
+    if (H < 240 || W < 250) { this.rowsFor.add(this._mkey()); this.lkey = null; return this._layoutMobile(); }
+    const key = `o${W}x${H}`;
+    this.el.style.width = W + 'px'; this.el.style.height = H + 'px';
+    this.el.style.setProperty('--s', '1');
+    this.w = W; this.h = H;
+    if (key === this.lkey) return;
+    this.lkey = key; this.mk = 1;
     if (this.view) this.render(this.view, { animate: false });
   }
 
@@ -331,8 +366,17 @@ class TableView {
   }
 
   render(view, o = {}) {
-    if (this.stacked !== this.el.classList.contains('mtable')) { this.lkey = null; this.view = view; this.layout(); }
-    if (this.stacked) return this.renderMobile(view, o);
+    if (Device.mobile) {
+      const key = this._mkey(view);
+      if (!this.rowsFor.has(key)) {
+        if (!this.el.classList.contains('moval')) { this.lkey = null; this.view = view; this.layout(); }
+        if (this._renderMobileOval(view, o)) return;
+        this.rowsFor.add(key); // this screen size cannot fit an oval without overlaps: rows from now on
+        this.lkey = null; this.layout();
+      } else if (!this.el.classList.contains('mtable')) { this.lkey = null; this.view = view; this.layout(); }
+      return this.renderMobile(view, o);
+    }
+    if (this.el.classList.contains('mtable') || this.el.classList.contains('moval')) { this.lkey = null; this.view = view; this.layout(); }
     this._renderOval(view, o);
     this._fit(view);
   }
@@ -485,6 +529,151 @@ class TableView {
         }, 420);
       }
     }
+  }
+
+  /**
+   * Phone oval: opponents sit around the rail of a tall oval, you sit at the bottom with big cards,
+   * the board and pot sit in the middle. Returns false if nothing fits even at the smallest size.
+   */
+  _renderMobileOval(view, o = {}) {
+    if (!this.w) this._layoutMobileOval();
+    const prev = this.view;
+    this.view = view;
+    const same = prev && prev.handKey === view.handKey;
+    const animate = o.animate !== false && !document.hidden;
+    const newHand = animate && view.handKey && (!prev || prev.handKey !== view.handKey);
+    const winSet = new Set(view.results ? view.results.winCards : []);
+    const hl = (c) => (winSet.size && c ? (winSet.has(c) ? 'win' : 'dim') : '');
+    const n = view.maxSeats, me = view.mySeat || 0, meSt = view.seats[me], meIsMe = !!meSt && (meSt.isYou || view.readOnly);
+    const cardsOf = (st, seat) => (st.cards || []).map((c, j) => {
+      const ps = same && prev.seats[seat];
+      const dealt = newHand && !(ps && ps.cards);
+      const flipNow = animate && same && ps && ps.cards && !ps.cards[j] && c;
+      const c2 = (st.folded && c) ? 'ghost' : hl(st.shown || st.isYou || view.readOnly ? c : null);
+      return cardHtml(c, `${dealt ? 'deal' : ''} ${flipNow ? 'flip' : ''} ${c2}`, dealt ? `animation-delay:${j * 70}ms` : '');
+    }).join('');
+    const status = (st) => {
+      if (st.folded) return `<span class="tag">${st.mucked ? 'Mucked' : 'Folded'}</span>`;
+      if (st.allIn) return '<span class="tag allin">All-in</span>';
+      if (st.busted) return '<span class="tag off">Busted</span>';
+      if (st.sittingOut) return '<span class="tag off">Out</span>';
+      if (st.botPlaying) return '<span class="tag off">Bot playing</span>';
+      if (st.disconnected) return '<span class="tag off">Offline</span>';
+      if (!view.results && !st.won && st.lastAction && ACTION_WORD[st.lastAction]) return `<span class="tag last">${ACTION_WORD[st.lastAction]}</span>`;
+      return '';
+    };
+    const marks = (st) => `${st.button ? '<span class="tag mk dealer" title="Dealer button">D</span>' : ''}${st.sb ? '<span class="tag mk sb" title="Small blind">SB</span>' : ''}${st.bb ? '<span class="tag mk bb" title="Big blind">BB</span>' : ''}`;
+    const ring = (st) => (st.toAct && view.timer && view.timer.total ? '<svg class="ring" viewBox="0 0 50 50"><circle cx="25" cy="25" r="23" pathLength="100" stroke-dasharray="100" stroke-dashoffset="0" data-ring></circle></svg>' : '');
+    const bet = (st, seat) => {
+      if (!(st.bet > 0)) return '';
+      const ps = same && prev.seats[seat];
+      return `<span class="mt-bet ${animate && same && (!ps || ps.bet < st.bet) ? 'pop' : ''}">${chipsHtml(st.bet, 3)}<b>${U.fmt(st.bet)}</b></span>`;
+    };
+    // Short hand names on the small seats ("Two Pair" rather than "Two Pair, Aces and Eights").
+    const won = (st, short) => `${st.won ? `<span class="tag win">+${U.fmt(st.won)}</span>` : ''}${st.handName ? `<span class="tag hn" title="${U.esc(st.handName)}">${U.esc(short ? st.handName.split(',')[0] : st.handName)}</span>` : ''}`;
+    const label = (st) => `${st.name}${st.isYou ? ' (you)' : ''}, ${st.allIn ? 'all-in' : U.fmt(st.stack) + ' chips'}${st.folded ? ', folded' : ''}${st.toAct ? ', to act' : ''}`;
+    const cls = (st, extra) => [extra, st.toAct ? 'active' : '', st.folded ? 'folded' : '', (st.sittingOut || st.busted) ? 'out' : '', st.won ? 'winner' : ''].join(' ');
+
+    const W = this.w, H = this.h;
+    const draw = (k) => {
+      this.el.style.setProperty('--mk', k.toFixed(3));
+      const myCw = Math.min(W * 0.15, 56) * k;
+      const meH = meIsMe ? myCw * 1.4 + 18 : 0;
+      // the felt: a tall oval above your seat
+      const fx = 10, fy = 8, fw = W - 2 * fx, fh = Math.max(120, H - fy - (meIsMe ? meH * 0.62 : 8));
+      const cx = W / 2, cy = fy + fh / 2;
+      const podW = Math.min(104, W * 0.29) * k, podH = 74 * k;
+      // seats straddle the rail; spread evenly along it, leaving the bottom for you
+      const rx = fw / 2 - podW * 0.36, ry = fh / 2 - podH * 0.3;
+      const N = 360, pts = [], len = [0];
+      for (let i = 0; i <= N; i++) { const a = Math.PI / 2 + (i / N) * 2 * Math.PI; pts.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]); if (i) len.push(len[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])); }
+      const at = (t) => { const L = t * len[N]; let i = 1; while (i < N && len[i] < L) i++; return pts[i]; };
+      const gapT = meIsMe ? Math.min(0.34, (Math.min(W * 0.8, 330) * k) / len[N] * 1.1) : 0;
+      const parts = [`<div class="mfelt" style="left:${fx}px;top:${fy}px;width:${fw}px;height:${fh}px"></div>`];
+      if (view.feltText) parts.push(`<div class="felt-mark" style="top:${cy + fh * 0.22}px;font-size:${10 * k}px">${U.esc(view.feltText)}</div>`);
+      const opp = meIsMe ? n - 1 : n;
+      for (let j = 0; j < opp; j++) {
+        const seat = meIsMe ? (me + 1 + j) % n : (me + j) % n, st = view.seats[seat];
+        const t = meIsMe ? gapT / 2 + (1 - gapT) * (j + 0.5) / opp : j / opp;
+        const [x, y] = at(t);
+        if (!st) {
+          if (view.canSit && !view.readOnly) parts.push(`<button class="mseat-empty" data-seat="${seat}" style="left:${x}px;top:${y}px" aria-label="Sit in seat ${seat + 1}">Sit</button>`);
+          continue;
+        }
+        const many = st.cards && st.cards.length > 2;
+        const line = `${marks(st)}${status(st)}${bet(st, seat)}`;
+        parts.push(`<div class="mseat ${cls(st, '')}" data-seat="${seat}" style="left:${x}px;top:${y}px" role="group" aria-label="${U.esc(label(st))}">
+          ${st.cards && (!st.folded || st.shown) ? `<div class="ms-cards${many ? ' many' : ''}">${cardsOf(st, seat)}</div>` : ''}
+          <div class="ms-plate">${avatarHtml(st.name, ring(st))}<div class="ms-id"><div class="nm">${U.esc(st.name)}${st.isBot ? ' 🤖' : ''}${st.isHost ? ' ★' : ''}</div><div class="stack">${st.allIn && !st.stack ? 'All-in' : U.fmt(st.stack)}</div></div></div>
+          ${line ? `<div class="ms-line">${line}</div>` : ''}${st.won || st.handName ? `<div class="ms-tags">${won(st, true)}</div>` : ''}</div>`);
+      }
+      // the middle: street, pot (or the result), board
+      const prevBoard = same && prev ? prev.board.length : 0;
+      let board = '';
+      for (let i = 0; i < 5; i++) {
+        const c = view.board[i];
+        if (c) { const fresh = animate && i >= prevBoard; board += cardHtml(c, `${fresh ? 'flip' : ''} ${hl(c)}`, fresh ? `animation-delay:${(i - prevBoard) * 110}ms` : ''); }
+        else board += '<div class="slot"></div>';
+      }
+      const pots = (view.pots || []).filter((p) => p.amount > 0).map((p) => `<div class="pot">${chipsHtml(p.amount, 3)}<span class="pot-label">${U.esc(p.label)}</span><span class="pot-amt">${U.fmt(p.amount)}</span></div>`).join('');
+      const res = view.results && view.results.lines.length ? `<div class="mt-result" style="max-width:${Math.round(fw * 0.62)}px">${U.esc(view.results.lines.join(' · '))}</div>` : '';
+      const bcw = Math.max(22, Math.min(50, (fw - 2 * podW * 0.95) / 5.5)) * k;
+      parts.push(`<div class="mcenter" style="left:${cx}px;top:${cy}px;--bcw:${bcw}px"><div class="street-label">${U.esc(view.street || '')}</div><div class="pots">${res || pots}</div><div class="board" aria-label="Board">${board}</div></div>`);
+      if (meIsMe) {
+        const st = meSt, many = st.cards && st.cards.length > 2;
+        const line = `${marks(st)}${status(st)}${bet(st, me)}`;
+        parts.push(`<div class="mme ${cls(st, '')}" data-seat="${me}" style="--mcw:${(many ? myCw * 0.78 : myCw).toFixed(1)}px" role="group" aria-label="${U.esc(label(st))}">
+          <div class="mt-mycards${many ? ' many' : ''}">${cardsOf(st, me)}</div>
+          <div class="mme-info"><div class="ms-plate">${avatarHtml(st.name, ring(st))}<div class="ms-id"><div class="nm">${U.esc(st.name)}${view.readOnly ? '' : ' (you)'}</div><div class="stack">${st.allIn && !st.stack ? 'All-in' : U.fmt(st.stack)}</div></div></div>
+          ${line ? `<div class="ms-line">${line}</div>` : ''}${st.won || st.handName ? `<div class="ms-tags">${won(st, false)}</div>` : ''}</div></div>`);
+      }
+      this.layer.innerHTML = parts.join('');
+      // Seats near the edge are nudged inward so they always sit fully on screen.
+      for (const e of this.layer.querySelectorAll('.mseat, .mseat-empty')) {
+        const w = e.offsetWidth, h = e.offsetHeight, x = parseFloat(e.style.left), y = parseFloat(e.style.top);
+        e.style.left = Math.min(W - w / 2 - 2, Math.max(w / 2 + 2, x)) + 'px';
+        e.style.top = Math.min(H - h / 2 - 2, Math.max(h / 2 + 2, y)) + 'px';
+      }
+    };
+    // Measure: no two pieces may touch, and nothing may leave the table area.
+    const fits = () => {
+      const box = (e) => e.getBoundingClientRect(), T = box(this.el);
+      const els = [...this.layer.querySelectorAll('.mseat, .mseat-empty, .mme, .mcenter .board, .mcenter .pots, .mcenter .street-label')].filter((e) => { const r = box(e); return r.width && r.height; });
+      const items = els.map(box), nm = (e) => e.className.split(' ')[0] + (e.dataset.seat ? '@' + e.dataset.seat : '');
+      for (let i = 0; i < items.length; i++) {
+        const a = items[i];
+        if (a.left < T.left - 1 || a.right > T.right + 1 || a.top < T.top - 1 || a.bottom > T.bottom + 1) { this.fitWhy = `${nm(els[i])} leaves the table`; return false; }
+        for (let j = i + 1; j < items.length; j++) { const b = items[j]; if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > -2 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > -2) { this.fitWhy = `${nm(els[i])} touches ${nm(els[j])}`; return false; } }
+      }
+      return true;
+    };
+    let k = Math.min(1, this.mk || 1);
+    draw(k);
+    // Grow back toward full size when there is room again (a new hand, fewer players)...
+    while (k < 1 && fits()) { const k2 = Math.min(1, k / 0.92); draw(k2); if (fits()) k = k2; else { draw(k); break; } }
+    // ...and shrink while anything touches.
+    let ok = fits();
+    while (!ok && k > 0.62) { k *= 0.92; draw(k); ok = fits(); }
+    this.mk = k;
+    if (!ok) return false;
+
+    if (view.timer && view.timer.total) {
+      const end = performance.now() + (view.timer.remaining || 0);
+      if (!this.timer || Math.abs(this.timer.end - end) > 400 || this.timer.paused !== view.timer.paused) this.timer = { end, total: view.timer.total, paused: view.timer.paused, rem: view.timer.remaining };
+      cancelAnimationFrame(this.raf); this.tick();
+    } else { this.timer = null; cancelAnimationFrame(this.raf); }
+    if (!animate || !prev || this.opts.sound === false) return true;
+    if (newHand) { Sound.play('deal'); Sound.play('deal', 0.12); }
+    if (same && view.board.length > prev.board.length) Sound.play('deal');
+    if (same) view.seats.forEach((st, seat) => {
+      const ps = prev.seats[seat];
+      if (!st || !ps) return;
+      if (st.bet > ps.bet) Sound.play('chip');
+      if (st.lastAction === 'x' && ps.lastAction !== 'x') Sound.play('knock');
+      if (st.folded && !ps.folded) Sound.play('fold');
+    });
+    if (same && view.results && !prev.results) setTimeout(() => Sound.play(view.seats.some((st) => st && st.won && st.isYou) ? 'win' : 'chip'), 420);
+    return true;
   }
 
   renderMobile(view, o = {}) {

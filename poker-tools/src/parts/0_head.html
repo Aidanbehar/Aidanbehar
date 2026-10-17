@@ -640,6 +640,7 @@ body.mobile .table-stage { display: flex; flex-direction: column; align-items: c
 body.mobile .banner { position: static; transform: none; order: 0; white-space: normal; text-align: center; max-width: 100%; flex: none; border-radius: 14px; }
 body.mobile .chat-feed { position: static; order: 2; width: min(100%, 720px); max-width: none; flex: none; pointer-events: auto; }
 body.mobile .chat-feed:empty { display: none; }
+body.mobile .table-stage:has(> .table.moval) { overflow: hidden; }
 .table.mtable { order: 1; width: min(100%, 720px); height: auto; flex: none; border-radius: 18px; padding: 8px;
   box-shadow: inset 0 0 40px rgba(0,0,0,.45), 0 0 0 3px var(--rail-1); }
 .table.mtable::before { border-radius: 18px; }
@@ -695,6 +696,48 @@ button.mt-seat.empty svg { width: 16px; height: 16px; }
 .mt-me .mt-mid { justify-content: flex-start; }
 .mt-mycards { display: flex; gap: 6px; --cw: min(16vw, 60px); justify-content: center; }
 .mt-mycards.many { --cw: min(13vw, 50px); gap: 4px; }
+/* Mobile oval: players around a tall phone table */
+.table.moval { order: 1; flex: none; border-radius: 0; background: none; box-shadow: none; --mk: 1; }
+.table.moval::before, .table.moval::after { display: none; }
+.moval .layer { position: absolute; inset: 0; }
+.moval .fx { display: none; }
+.mfelt { position: absolute; border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 42%, rgba(255,255,255,.10), transparent 58%), repeating-radial-gradient(circle at 30% 30%, var(--felt-line) 0 1px, transparent 1px 3px), radial-gradient(ellipse at 50% 50%, var(--felt-1) 0%, var(--felt-2) 62%, var(--felt-3) 100%);
+  box-shadow: inset 0 0 40px rgba(0,0,0,.55), 0 0 0 6px var(--rail-1), 0 0 0 7px var(--rail-hi), 0 0 0 9px var(--rail-2), 0 10px 24px rgba(0,0,0,.45); }
+.moval .felt-mark { position: absolute; left: 50%; transform: translate(-50%, -50%); }
+.mseat { position: absolute; transform: translate(-50%, -50%); width: max-content; max-width: calc(min(104px, 29vw) * var(--mk)); display: flex; flex-direction: column; align-items: center; gap: calc(2px * var(--mk)); z-index: 5; }
+.ms-plate { display: flex; align-items: center; gap: calc(4px * var(--mk)); max-width: 100%; min-width: 0; background: var(--seat-bg); border: 1px solid var(--seat-border); border-radius: 999px; padding: calc(2px * var(--mk)) calc(8px * var(--mk)) calc(2px * var(--mk)) calc(2px * var(--mk)); box-shadow: 0 2px 8px rgba(0,0,0,.3); color: var(--text); }
+.mseat.active .ms-plate, .mme.active .ms-plate { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.mseat.winner .ms-plate, .mme.winner .ms-plate { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
+.mseat.folded, .mseat.out { opacity: .6; }
+.ms-plate .avatar { width: calc(24px * var(--mk)); height: calc(24px * var(--mk)); font-size: calc(10px * var(--mk)); }
+.ms-plate .avatar .ring { inset: -4px; width: calc(100% + 8px); height: calc(100% + 8px); }
+.ms-id { min-width: 0; line-height: 1.12; overflow: hidden; }
+.ms-id .nm { font-weight: 700; font-size: calc(10.5px * var(--mk)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-id .stack { font-size: calc(10.5px * var(--mk)); font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-cards { display: flex; gap: calc(2px * var(--mk)); --cw: calc(19px * var(--mk)); }
+.ms-cards.many { --cw: calc(14px * var(--mk)); gap: 1px; }
+.ms-cards .card.win, .mme .card.win { transform: none; }
+.ms-line, .ms-tags { display: flex; gap: 3px; align-items: center; justify-content: center; flex-wrap: wrap; max-width: 100%; }
+.ms-line .tag, .ms-tags .tag { font-size: calc(9px * var(--mk)); padding: 1px 5px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.ms-line .mt-bet { font-size: calc(10px * var(--mk)); }
+button.mseat-empty { position: absolute; transform: translate(-50%, -50%); width: calc(48px * var(--mk)); height: calc(48px * var(--mk)); border-radius: 50%; border: 2px dashed rgba(255,255,255,.4); background: rgba(0,0,0,.25); color: #fff; font-weight: 700; font-size: calc(11px * var(--mk)); z-index: 5; }
+button.mseat-empty:active { background: var(--accent-soft); border-color: var(--accent); }
+.mcenter { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: calc(4px * var(--mk)); z-index: 2; pointer-events: none; }
+.mcenter .board { --cw: var(--bcw); gap: calc(4px * var(--mk)); }
+.mcenter .card.win { transform: none; }
+.moval .card.deal { animation-name: dealDown; } /* grow in place: never starts off the edge */
+.mcenter .street-label { font-size: calc(10px * var(--mk)); }
+.mcenter .pots { min-height: calc(20px * var(--mk)); }
+.mcenter .pot { font-size: calc(12px * var(--mk)); padding: 2px 9px 2px 3px; }
+.mcenter .pot .chips { --s: .7; }
+.mcenter .mt-result { font-size: calc(11.5px * var(--mk)); padding: 3px 10px; }
+.mme { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; align-items: center; gap: calc(8px * var(--mk)); z-index: 6; max-width: 100%; }
+.mme .mt-mycards { --cw: var(--mcw); gap: calc(5px * var(--mk)); }
+.mme-info { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; max-width: calc(150px * var(--mk)); }
+.mme .ms-line, .mme .ms-tags { justify-content: flex-start; }
+.mme .ms-tags .tag { white-space: normal; overflow-wrap: anywhere; }
+.mme.folded .mt-mycards { opacity: .6; }
 .mt-me .mt-top { justify-content: flex-start; }
 .mt-me .mt-id { flex: 0 1 auto; }
 .mt-me .avatar { width: 34px; height: 34px; font-size: 13px; }

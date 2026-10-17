@@ -18,7 +18,7 @@ function ViewerScreen() {
       <div class="v-load">
         <div class="page-head" style="margin:0"><h2>Replay a game</h2></div>
         <p class="muted" style="margin:0">Paste a game record (from <b>Copy Game Record</b> at the table). Nothing is uploaded: every hand is re-simulated locally with the same rules engine the live game uses.</p>
-        <textarea class="input" id="v-text" rows="16" spellcheck="false" aria-label="Game record" placeholder='[Event "Friday Night Game"]&#10;[Blinds "1/2"]&#10;...&#10;&#10;#1 [Button "Alice"] [Stacks "Alice:200, Bob:200"]&#10;...'></textarea>
+        <textarea class="input" id="v-text" rows="16" spellcheck="false" aria-label="Game record"></textarea>
         <div id="v-err"></div>
         <div class="row" style="flex-wrap:wrap">
           <button class="btn primary lg" id="v-load">Load</button>
@@ -126,7 +126,7 @@ function ViewerScreen() {
     $('#v-speed').addEventListener('change', (e) => { V.speed = Number(e.target.value); Prefs.set('vSpeed', V.speed); if (V.playing) { stop(); play(); } });
     $$('[data-nav]').forEach((b) => b.addEventListener('click', () => nav(b.dataset.nav)));
     $$('[data-vtab]').forEach((b) => b.addEventListener('click', () => { V.tab = b.dataset.vtab; renderSide(); }));
-    V.table = new TableView($('#v-stage'), { readOnly: true });
+    V.table = new TableView($('#v-stage'), { readOnly: true, mobileHeight: (w) => Math.round(Math.max(380, Math.min(innerHeight * 0.66, w * 1.5))) });
     const list = $('#v-hands');
     list.innerHTML = V.replay.hands.map((rh, k) => `<button class="v-hand" data-hk="${k}">${rh.issues.length ? '<span class="warn-ic" title="Inconsistency found">⚠ </span>' : ''}${(rh.rec.tags || []).some((t) => t[0] === 'Bots') ? '<span title="A bot made decisions in this hand">🤖 </span>' : ''}${U.esc(Replay.summary(rh))}</button>`).join('');
     list.addEventListener('click', (e) => { const b = e.target.closest('[data-hk]'); if (b) { stop(); V.hk = Number(b.dataset.hk); V.si = 0; show(true); } });
