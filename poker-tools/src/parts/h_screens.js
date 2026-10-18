@@ -5,9 +5,10 @@
 const App = { root: document.getElementById('app'), session: null, screen: null };
 
 function topIconButtons() {
-  return `<button class="btn ghost icon-btn" data-theme-toggle aria-label="Toggle light or dark theme">${Theme.icon()}</button>`;
+  return `<button class="btn sm ghost" data-appearance aria-label="Appearance: felt, cards and theme">${icon('palette')}<span class="hide-sm">Appearance</span></button><button class="btn ghost icon-btn" data-theme-toggle aria-label="Toggle light or dark theme">${Theme.icon()}</button>`;
 }
 function bindThemeToggles(root) {
+  $$('[data-appearance]', root).forEach((b) => b.addEventListener('click', appearanceModal));
   $$('[data-theme-toggle]', root).forEach((b) => b.addEventListener('click', () => { Theme.toggle(); $$('[data-theme-toggle]').forEach((x) => { x.innerHTML = Theme.icon(); }); }));
 }
 
@@ -32,12 +33,11 @@ function HomeScreen() {
       <div class="pill-row"><span class="pill">100% free</span><span class="pill">No sign-up</span><span class="pill">Peer-to-peer</span><span class="pill">Encrypted, provably fair deal</span><span class="pill">No ads or tracking</span></div>
     </div></section>
     <footer class="home-foot">Every player's browser helps shuffle and only you can unlock your cards. Everything travels directly between players; nothing is stored on a server.
-      <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn sm ghost" id="h-device">${icon(Device.mobile ? 'monitor' : 'phone')}Switch to ${Device.mobile ? 'computer' : 'mobile'} layout</button><button class="btn sm ghost" id="h-look">${icon('palette')}Appearance</button><button class="btn sm ghost" id="h-wipe">${icon('x')}Clear my data on this device</button></div></footer>
+      <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn sm ghost" id="h-device">${icon(Device.mobile ? 'monitor' : 'phone')}Switch to ${Device.mobile ? 'computer' : 'mobile'} layout</button><button class="btn sm ghost" id="h-wipe">${icon('x')}Clear my data on this device</button></div></footer>
   </div></div>`;
   bindThemeToggles(App.root);
   $$('[data-go]', App.root).forEach((b) => b.addEventListener('click', () => { location.hash = b.dataset.go; }));
   $('#h-wipe').addEventListener('click', wipeModal);
-  $('#h-look').addEventListener('click', appearanceModal);
   $('#h-device').addEventListener('click', () => { Device.set(Device.mobile ? 'computer' : 'mobile'); route(true); });
   return {};
 }
@@ -623,6 +623,7 @@ function GameScreen(session) {
         <button class="btn sm ghost hidden" id="g-watchlink" aria-label="Viewer link">${icon('eye')}<span class="hide-sm">Viewer link</span></button>
         ${isWatcher ? '<span id="g-copy" hidden></span>' : `<button class="btn sm ghost hide-sm" id="g-copy">${icon('copy')}<span>Copy Game Record</span></button>`}
         ${isHost ? `<button class="btn sm ghost hidden" id="g-pause"></button>` : ''}
+        <button class="btn ghost icon-btn" data-appearance aria-label="Appearance: felt, cards and theme" title="Appearance">${icon('palette')}</button>
         <button class="btn ghost icon-btn" id="g-sound"></button>
         <button class="btn ghost icon-btn hide-sm" data-theme-toggle aria-label="Toggle light or dark theme">${Theme.icon()}</button>
         <button class="btn ghost icon-btn hide-sm" id="g-help" aria-label="Keyboard shortcuts">${icon('help')}</button>

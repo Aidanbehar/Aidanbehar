@@ -265,7 +265,7 @@ test suite and lists pass/fail results. The suite covers:
     plays, and every decision.
   - The bot mixes its play, so it decides each spot 48 times and the review compares your choice with
     that mix. These are estimates from a strong player, not a perfect solver.
-- **Appearance:** the ⋯ menu and the home screen have **Appearance**, with a live preview:
+- **Appearance:** the **Appearance** button (palette icon) is at the top of every screen, including the game table, and in the ⋯ menu. It has a live preview:
   - dark or light theme
   - table felt: green, blue, red, purple, charcoal or brown
   - card backs: blue, red, green, purple, black or gold
