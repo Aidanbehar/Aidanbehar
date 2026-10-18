@@ -20,7 +20,7 @@ const Prefs = {
   },
   /** Wipe saved names, settings, rejoin links and records; optionally keep display preferences. */
   wipe(keepDisplay) {
-    const display = ['theme', 'muted', 'fourColor', 'panelOpen', 'vSpeed', 'device', 'felt', 'cardBack', 'rail', 'bigPrint'];
+    const display = ['theme', 'muted', 'fourColor', 'panelOpen', 'vSpeed', 'device', 'felt', 'cardBack', 'rail', 'bigPrint', 'cardFace', 'backPattern'];
     for (const k of Prefs.keys()) if (!(keepDisplay && display.includes(k))) Prefs.del(k);
     try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('feltroom.')) sessionStorage.removeItem(k); } catch { /* ignore */ }
   },

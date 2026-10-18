@@ -472,9 +472,43 @@ button.seat-empty:hover { background: var(--accent-soft); border-color: var(--ac
 :root[data-back="gold"] { --back-1: #b58a1e; --back-2: #8c6a12; }
 :root[data-rail="light"] { --rail-1: #8a6a48; --rail-2: #5e4630; }
 :root[data-rail="black"] { --rail-1: #24272c; --rail-2: #141619; }
-.big-print .card .cr { font-size: calc(var(--cw, 40px) * .56); left: 8%; top: 4%; }
-.big-print .card .cs { display: none; }
-.big-print .card .cb { font-size: calc(var(--cw, 40px) * .66); right: 6%; bottom: 3%; }
+/* Card styles (Appearance). Every style keeps the card's size, so nothing on the table moves. */
+[data-face="large"] .card .cr { font-size: calc(var(--cw, 40px) * .56); left: 8%; top: 4%; }
+[data-face="large"] .card .cs { display: none; }
+[data-face="large"] .card .cb { font-size: calc(var(--cw, 40px) * .66); right: 6%; bottom: 3%; }
+[data-face="center"] .card .cs { display: none; }
+[data-face="center"] .card .cb { right: auto; bottom: auto; left: 50%; top: 58%; transform: translate(-50%, -50%); font-size: calc(var(--cw, 40px) * .72); }
+[data-face="minimal"] .card .cs { display: none; }
+[data-face="minimal"] .card .cr { left: 50%; top: 12%; transform: translateX(-50%); font-size: calc(var(--cw, 40px) * .5); font-weight: 700; }
+[data-face="minimal"] .card .cb { right: auto; left: 50%; bottom: 12%; transform: translateX(-50%); font-size: calc(var(--cw, 40px) * .46); }
+[data-face="tinted"] .card:not(.back) { background: currentColor; box-shadow: var(--card-shadow), inset 0 0 0 calc(var(--cw, 40px) * .05) rgba(255,255,255,.35); }
+[data-face="tinted"] .card:not(.back) > span { color: #fff; }
+[data-face="tinted"] .card.s-s:not(.back) { color: #2b2f36; }
+[data-face="dark"] .card:not(.back), [data-face="neon"] .card:not(.back) { background: linear-gradient(160deg, #262b33, #171a1f); }
+[data-face="dark"] .card:not(.back) { box-shadow: var(--card-shadow), inset 0 0 0 1px #3a414b; }
+[data-face="dark"] .card.s-s, [data-face="neon"] .card.s-s { color: #eef1f4; }
+[data-face="dark"] .card.s-h, [data-face="neon"] .card.s-h { color: #ff6b72; }
+[data-face="dark"] .card.s-d, [data-face="neon"] .card.s-d { color: #5aa2ff; }
+[data-face="dark"] .card.s-c, [data-face="neon"] .card.s-c { color: #3fd27a; }
+[data-face="dark"] .two-color .card.s-d, [data-face="neon"] .two-color .card.s-d { color: #ff6b72; }
+[data-face="dark"] .two-color .card.s-c, [data-face="neon"] .two-color .card.s-c { color: #eef1f4; }
+[data-face="neon"] .card:not(.back) { box-shadow: 0 0 0 1.5px currentColor, 0 0 10px -1px currentColor, var(--card-shadow); text-shadow: 0 0 6px currentColor; }
+[data-face="vintage"] .card:not(.back) { background: linear-gradient(160deg, #fffaf0, #eadfc4); font-family: Georgia, 'Times New Roman', serif; box-shadow: var(--card-shadow), inset 0 0 0 1px #c9b98f, inset 0 0 0 calc(var(--cw, 40px) * .06) #fffaf0, inset 0 0 0 calc(var(--cw, 40px) * .075) #c9b98f; }
+[data-face="vintage"] .card.s-h { color: #a3242c; } [data-face="vintage"] .card.s-s { color: #2a2420; }
+[data-face="vintage"] .two-color .card.s-d { color: #a3242c; } [data-face="vintage"] .two-color .card.s-c { color: #2a2420; }
+[data-face="bold"] .card .cr { font-size: calc(var(--cw, 40px) * .62); font-weight: 900; left: 7%; top: 3%; letter-spacing: -.08em; }
+[data-face="bold"] .card .cs { display: none; }
+[data-face="bold"] .card .cb { font-size: calc(var(--cw, 40px) * .5); right: 7%; bottom: 5%; }
+[data-face="bold"] .card:not(.back) { box-shadow: var(--card-shadow), inset 0 calc(var(--cw, 40px) * -.08) 0 currentColor; }
+/* Card back patterns, drawn in the chosen back colours. */
+[data-pattern="diamonds"] .card.back { background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.16) 4px 5px), repeating-linear-gradient(-45deg, var(--back-1) 0 4px, var(--back-2) 4px 5px); }
+[data-pattern="dots"] .card.back { background: radial-gradient(circle, rgba(255,255,255,.28) 22%, transparent 26%) 0 0 / 6px 6px, var(--back-1); }
+[data-pattern="checker"] .card.back { background: conic-gradient(var(--back-1) 25%, var(--back-2) 0 50%, var(--back-1) 0 75%, var(--back-2) 0) 0 0 / 8px 8px; }
+[data-pattern="plain"] .card.back { background: radial-gradient(ellipse at 50% 40%, var(--back-1), var(--back-2)); }
+[data-pattern="plain"] .card.back::after { content: '♠'; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: calc(var(--cw, 40px) * .55); color: rgba(255,255,255,.4); line-height: 1; }
+[data-pattern="rings"] .card.back { background: repeating-radial-gradient(circle at 50% 50%, var(--back-1) 0 3px, var(--back-2) 3px 5px); }
+.ap-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-pills .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 .swatch { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; padding: 0; box-shadow: inset 0 0 0 3px var(--surface); }
 .swatch[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--surface), 0 0 0 2px var(--accent); }

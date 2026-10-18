@@ -270,9 +270,12 @@ test suite and lists pass/fail results. The suite covers:
   - table felt: green, blue, red, purple, charcoal or brown
   - card backs: blue, red, green, purple, black or gold
   - table rail: dark wood, light wood or black
-  - card faces: classic or **large print** (bigger rank and suit, same card size, so nothing on the
-    table moves)
-  - four-color deck
+  - card style: Classic, Large print, Big center suit, Minimal, Suit-coloured (the whole card in
+    its suit's colour), Dark, Neon, Vintage (ivory and serif) or Bold block. Every style keeps the
+    same card size, so nothing on the table moves.
+  - back pattern: stripes, diamonds, dots, checkerboard, plain with a spade, or rings (in the chosen
+    back colour)
+  - four-color deck (off by default; it turns diamonds blue and clubs green)
 
   These are saved in your browser only and survive **Clear my data** if you keep display preferences.
 - **Keyboard shortcuts:**

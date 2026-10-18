@@ -65,14 +65,18 @@ const Theme = {
   /** Appearance choices: [value, label, swatch colour]. The first of each list is the default. */
   FELTS: [['green', 'Green', '#138069'], ['blue', 'Blue', '#1f6fa8'], ['red', 'Red', '#a83a3a'], ['purple', 'Purple', '#6b4aa8'], ['charcoal', 'Charcoal', '#3a4048'], ['brown', 'Brown', '#8a6237']],
   BACKS: [['blue', 'Blue', '#1d6f8c'], ['red', 'Red', '#b5323a'], ['green', 'Green', '#1e7a4f'], ['purple', 'Purple', '#6a3fb0'], ['black', 'Black', '#2b2f36'], ['gold', 'Gold', '#b58a1e']],
+  FACES: [['classic', 'Classic'], ['large', 'Large print'], ['center', 'Big center suit'], ['minimal', 'Minimal'], ['tinted', 'Suit-coloured'], ['dark', 'Dark'], ['neon', 'Neon'], ['vintage', 'Vintage'], ['bold', 'Bold block']],
+  PATTERNS: [['stripes', 'Stripes'], ['diamonds', 'Diamonds'], ['dots', 'Dots'], ['checker', 'Checkerboard'], ['plain', 'Plain with spade'], ['rings', 'Rings']],
   RAILS: [['wood', 'Dark wood', '#3a2a1f'], ['light', 'Light wood', '#8a6a48'], ['black', 'Black', '#24272c']],
-  pick(key, list) { const v = Prefs.get(key, list[0][0]); return list.some((x) => x[0] === v) ? v : list[0][0]; },
+  /** Card face style; the old "large print" switch carries over. */
+  face() { return Prefs.get('cardFace', null) || (Prefs.get('bigPrint', false) === true ? 'large' : 'classic'); },
+  pick(key, list) { const v = key === 'cardFace' ? Theme.face() : Prefs.get(key, list[0][0]); return list.some((x) => x[0] === v) ? v : list[0][0]; },
   apply() {
     const d = document.documentElement.dataset;
     d.theme = Prefs.get('theme', 'dark');
     d.felt = Theme.pick('felt', Theme.FELTS); d.back = Theme.pick('cardBack', Theme.BACKS); d.rail = Theme.pick('rail', Theme.RAILS);
-    document.body.classList.toggle('two-color', !Prefs.get('fourColor', true));
-    document.body.classList.toggle('big-print', Prefs.get('bigPrint', false) === true);
+    d.face = Theme.pick('cardFace', Theme.FACES); d.pattern = Theme.pick('backPattern', Theme.PATTERNS);
+    document.body.classList.toggle('two-color', !Prefs.get('fourColor', false));
   },
   toggle() { Prefs.set('theme', Prefs.get('theme', 'dark') === 'dark' ? 'light' : 'dark'); Theme.apply(); },
   icon() { return Prefs.get('theme', 'dark') === 'dark' ? icon('sun') : icon('moon'); },

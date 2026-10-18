@@ -68,14 +68,16 @@ function DeviceScreen(next) {
 function appearanceModal() {
   const sw = (key, list) => `<div class="swatches" role="radiogroup" data-ap="${key}">${list.map(([v, l, c]) => `<button type="button" class="swatch" role="radio" data-v="${v}" aria-checked="${Theme.pick(key, list) === v}" aria-label="${l}" title="${l}" style="background:${c}"></button>`).join('')}</div>`;
   const seg = (key, opts, cur) => `<div class="seg" role="radiogroup" data-ap="${key}">${opts.map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === cur}" aria-checked="${v === cur}">${l}</button>`).join('')}</div>`;
+  const pills = (key, list) => `<div class="ap-pills" role="radiogroup" data-ap="${key}">${list.map(([v, l]) => `<button type="button" class="btn sm" role="radio" data-v="${v}" aria-pressed="${Theme.pick(key, list) === v}" aria-checked="${Theme.pick(key, list) === v}">${l}</button>`).join('')}</div>`;
   const m = openModal(`<h2>${icon('palette')} Appearance</h2>
     <div class="ap-preview" aria-hidden="true">${cardHtml('As')}${cardHtml('Kh')}${cardHtml('Qd')}${cardHtml('Tc')}${cardHtml(null)}</div>
     <div class="ap-row"><span>Theme</span>${seg('theme', [['dark', 'Dark'], ['light', 'Light']], Prefs.get('theme', 'dark'))}</div>
     <div class="ap-row"><span>Table felt</span>${sw('felt', Theme.FELTS)}</div>
     <div class="ap-row"><span>Card backs</span>${sw('cardBack', Theme.BACKS)}</div>
     <div class="ap-row"><span>Table rail</span>${sw('rail', Theme.RAILS)}</div>
-    <div class="ap-row"><span>Card faces</span>${seg('bigPrint', [['no', 'Classic'], ['yes', 'Large print']], Prefs.get('bigPrint', false) === true ? 'yes' : 'no')}</div>
-    <label class="check"><input type="checkbox" id="ap-4c" ${Prefs.get('fourColor', true) ? 'checked' : ''}> Four-color deck (blue diamonds, green clubs)</label>
+    <div class="ap-row"><span>Card style</span>${pills('cardFace', Theme.FACES)}</div>
+    <div class="ap-row"><span>Back pattern</span>${pills('backPattern', Theme.PATTERNS)}</div>
+    <label class="check"><input type="checkbox" id="ap-4c" ${Prefs.get('fourColor', false) ? 'checked' : ''}> Four-color deck (blue diamonds, green clubs)</label>
     <p class="hint">Saved in this browser only. Other players see their own choices.</p>
     <div class="modal-foot"><button class="btn" id="ap-reset">Reset to default</button><button class="btn primary" data-close>Done</button></div>`, { label: 'Appearance' });
   const sync = () => {
@@ -83,21 +85,21 @@ function appearanceModal() {
     $$('[data-theme-toggle]').forEach((x) => { x.innerHTML = Theme.icon(); });
     $$('[data-ap]', m.el).forEach((g) => {
       const key = g.dataset.ap;
-      const cur = key === 'theme' ? Prefs.get('theme', 'dark') : key === 'bigPrint' ? (Prefs.get('bigPrint', false) === true ? 'yes' : 'no') : Theme.pick(key, { felt: Theme.FELTS, cardBack: Theme.BACKS, rail: Theme.RAILS }[key]);
+      const cur = key === 'theme' ? Prefs.get('theme', 'dark') : Theme.pick(key, { felt: Theme.FELTS, cardBack: Theme.BACKS, rail: Theme.RAILS, cardFace: Theme.FACES, backPattern: Theme.PATTERNS }[key]);
       $$('[data-v]', g).forEach((b) => { b.setAttribute('aria-checked', String(b.dataset.v === cur)); if (b.hasAttribute('aria-pressed')) b.setAttribute('aria-pressed', String(b.dataset.v === cur)); });
     });
-    $('#ap-4c', m.el).checked = Prefs.get('fourColor', true);
+    $('#ap-4c', m.el).checked = Prefs.get('fourColor', false);
   };
   m.el.addEventListener('click', (e) => {
     const b = e.target.closest('[data-ap] [data-v]');
     if (b) {
       const key = b.closest('[data-ap]').dataset.ap;
-      Prefs.set(key, key === 'bigPrint' ? b.dataset.v === 'yes' : b.dataset.v);
+      Prefs.set(key, b.dataset.v);
       sync();
     }
   });
   $('#ap-4c', m.el).addEventListener('change', (e) => { Prefs.set('fourColor', e.target.checked); sync(); });
-  $('#ap-reset', m.el).addEventListener('click', () => { ['felt', 'cardBack', 'rail', 'bigPrint'].forEach((k) => Prefs.del(k)); Prefs.set('fourColor', true); sync(); });
+  $('#ap-reset', m.el).addEventListener('click', () => { ['felt', 'cardBack', 'rail', 'bigPrint', 'cardFace', 'backPattern', 'fourColor'].forEach((k) => Prefs.del(k)); sync(); });
 }
 
 /** Lets a player erase everything Feltroom remembers in this browser. */
@@ -787,7 +789,7 @@ function GameScreen(session) {
     menuEl = document.createElement('div');
     menuEl.className = 'menu'; menuEl.setAttribute('role', 'menu');
     menuEl.innerHTML = `
-      <label><input type="checkbox" id="m-4c" ${Prefs.get('fourColor', true) ? 'checked' : ''}> Four-color deck</label>
+      <label><input type="checkbox" id="m-4c" ${Prefs.get('fourColor', false) ? 'checked' : ''}> Four-color deck</label>
       <label><input type="checkbox" id="m-chatpop" ${Prefs.get('chatPopups', true) ? 'checked' : ''}> Show chat on the table</label>
       ${y ? `<label><input type="checkbox" id="m-muck" ${y.autoMuck ? 'checked' : ''}> Auto-muck losing hands</label>` : ''}
       ${seated ? `<label><input type="checkbox" id="m-sitout" ${y.sittingOut ? 'checked' : ''}> Sit out next hands</label>` : ''}
