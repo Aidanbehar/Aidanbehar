@@ -216,6 +216,8 @@ const Engine = {
       no: o.no || 1, sb: o.sb, bb: o.bb, ante: o.ante || 0, button: o.button,
       game: o.game === 'omaha' ? 'omaha' : 'holdem', limit: ['pl', 'fl'].includes(o.limit) ? o.limit : 'nl',
       holeCount: o.holeCount || (o.game === 'omaha' ? 4 : 2),
+      // House rake: pct of the pot, at most cap chips (0 = no cap), taken only once a flop is dealt.
+      rake: o.rake && o.rake.pct > 0 ? { pct: Math.min(25, Number(o.rake.pct)), cap: Math.max(0, Math.floor(Number(o.rake.cap) || 0)) } : null,
       players: o.players.map((p, i) => ({
         name: p.name, startStack: p.stack, stack: p.stack, bet: 0, committed: 0,
         folded: false, allIn: false, acted: false, actedBet: 0,
@@ -434,10 +436,17 @@ const Engine = {
       p.stack += d; p.committed -= d; p.bet = Math.max(0, p.bet - d); p.allIn = p.stack === 0;
       h.log.push({ t: 'return', p: top, amt: d });
     }
+    // 2) The rake: a share of the pot (up to the cap), only in hands that saw a flop ("no flop, no drop").
+    let rake = 0;
+    if (h.rake && h.board.length >= 3) {
+      rake = Math.floor((Engine.potTotal(h) * h.rake.pct) / 100);
+      if (h.rake.cap) rake = Math.min(rake, h.rake.cap);
+      if (rake > 0) h.log.push({ t: 'rake', amt: rake });
+    }
     const live = P.map((p, i) => i).filter((i) => !P[i].folded);
-    const results = { pots: [], payouts: P.map(() => 0), showdown: false };
+    const results = { pots: [], payouts: P.map(() => 0), showdown: false, rake };
     if (live.length === 1) {
-      const w = live[0], amt = Engine.potTotal(h);
+      const w = live[0], amt = Engine.potTotal(h) - rake;
       P[w].stack += amt; results.payouts[w] = amt;
       results.pots.push({ amount: amt, eligible: [w], winners: [w] });
       h.log.push({ t: 'win', p: w, amt, pot: 0, npots: 1, desc: null });
@@ -452,6 +461,9 @@ const Engine = {
       const evs = P.map((p) => (p.shown && p.hole ? Eval.forGame(h.game, p.hole, h.board) : null));
       results.evals = evs.map((e) => e && { score: e.score, desc: Eval.describe(e), best: e.best });
       const pots = Engine.computePots(P.map((p) => p.committed), P.map((p) => p.folded));
+      // the rake comes out of the main pot first
+      let left = rake;
+      for (const pot of pots) { const take = Math.min(left, pot.amount); pot.amount -= take; left -= take; }
       pots.forEach((pot, k) => {
         let contenders = pot.eligible.filter((i) => evs[i]);
         if (!contenders.length) contenders = pot.eligible.slice(0, 1); // cannot happen with a valid plan
@@ -495,6 +507,7 @@ const Engine = {
       case 'show': return `${nm} shows ${e.cards.map(Cards.pretty).join(' ')}` + (h.board.length >= 3 ? ` (${Eval.describe(Eval.forGame(h.game, e.cards, h.board))})` : '');
       case 'muck': return `${nm} mucks`;
       case 'return': return `Uncalled ${U.fmt(e.amt)} returned to ${nm}`;
+      case 'rake': return `Rake: ${U.fmt(e.amt)} taken from the pot`;
       case 'win': return `${nm} wins ${U.fmt(e.amt)}${e.npots > 1 ? ' from ' + Notation.potLabel(e.pot) : ''}${e.desc ? ' with ' + e.desc : ''}`;
     }
     return '';

@@ -230,6 +230,12 @@ test suite and lists pass/fail results. The suite covers:
   - table name and your display name
   - small blind, big blind and an optional ante
   - starting stack, and optionally **blinds that go up** every 10, 20 or 30 hands
+  - **rake** (off by default, also in Play vs Bots, never against Cepheus): 2.5%, 5% or 10% of each
+    pot, with a cap of 1, 3 or 5 big blinds or no cap. It is taken only in hands that see a flop ("no
+    flop, no drop"), comes out of the main pot first, and leaves the table. Every raked hand says so
+    in the log ("Rake: 3 taken from the pot") and in the record (a `[Rake "3"]` hand tag, with the rule
+    in the game's `[Rake "5% cap 3bb"]` tag), so replays and every player's fair-play check reproduce
+    it exactly; a record whose rake does not match the rule is flagged.
   - 2–9 seats
   - action timer (off, 15s, 30s or 60s)
   - rebuys: none, 1, 2 or 3 per player, or unlimited

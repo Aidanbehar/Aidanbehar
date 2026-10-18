@@ -587,6 +587,7 @@ const Safe = (() => {
       recordHole: oneOf(t.recordHole, ['All', 'Showdown'], 'Showdown'), startingStack: num(t.startingStack),
       variant: oneOf(t.variant, Object.keys(VARIANTS), 'NLHE'), holeCount: int(t.holeCount, 2, 5, 2), limit: oneOf(t.limit, ['nl', 'pl', 'fl'], 'nl'),
       levelHands: int(t.levelHands, 0, 1000, 0), level: int(t.level, 0, 1000, 1), hostPlays: bool(t.hostPlays),
+      rakePct: oneOf(t.rakePct, [0, 2.5, 5, 10], 0), rakeCap: oneOf(t.rakeCap, [0, 1, 3, 5], 0),
       nextLevelIn: int(t.nextLevelIn, 0, 1000, 0), botTakeover: bool(t.botTakeover), vsBots: bool(t.vsBots), sra: bool(t.sra),
       spectators: bool(t.spectators), viewerChat: bool(t.viewerChat), botChat: bool(t.botChat), listed: bool(t.listed),
       hostAdjust: bool(t.hostAdjust), hostKick: bool(t.hostKick),
@@ -646,6 +647,7 @@ const Safe = (() => {
       maxSeats: int(x.maxSeats, 2, 9, 9), timer: int(x.timer, 0, 600, 0), rebuys: bool(x.rebuys), maxRebuys: int(x.maxRebuys, 0, 99, 0),
       recordHole: oneOf(x.recordHole, ['All', 'Showdown'], 'Showdown'), game: oneOf(x.game, ['holdem', 'omaha4', 'omaha5'], 'holdem'),
       limit: oneOf(x.limit, ['nl', 'pl', 'fl'], 'nl'), levelHands: int(x.levelHands, 0, 1000, 0), hostPlays: true,
+      rakePct: oneOf(x.rakePct, [0, 2.5, 5, 10], 0), rakeCap: oneOf(x.rakeCap, [0, 1, 3, 5], 0),
       botTakeover: bool(x.botTakeover) && !bool(x.sra), sra: bool(x.sra), spectators: bool(x.spectators), viewerChat: bool(x.spectators) && bool(x.viewerChat),
       listed: false, hostAdjust: bool(x.hostAdjust), hostKick: bool(x.hostKick),
     };

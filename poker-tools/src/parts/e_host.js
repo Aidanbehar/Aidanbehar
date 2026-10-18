@@ -222,6 +222,8 @@ class HostTable {
   constructor(settings, hostName, hostToken) {
     this.s = { game: 'holdem', limit: 'nl', levelHands: 0, maxRebuys: 0, hostPlays: true, spectators: false, viewerChat: false, botChat: false, hostAdjust: false, hostKick: false, ...settings };
     this.s.viewerChat = !!(this.s.spectators && this.s.viewerChat);
+    this.s.rakePct = [0, 2.5, 5, 10].includes(Number(this.s.rakePct)) && !this.s.cepheus ? Number(this.s.rakePct) : 0;
+    this.s.rakeCap = [0, 1, 3, 5].includes(Number(this.s.rakeCap)) ? Number(this.s.rakeCap) : 0;
     this.gameKind = this.s.game === 'holdem' ? 'holdem' : 'omaha';
     this.holeCount = this.s.game === 'omaha5' ? 5 : this.s.game === 'omaha4' ? 4 : 2;
     this.variant = Notation.variantCode(this.gameKind, this.s.limit, this.holeCount);
@@ -733,6 +735,7 @@ class HostTable {
       no: sh.no, players: sh.elig.map((e) => ({ name: sh.names[e.pid], stack: sh.stacks[e.pid] })),
       button: sh.bi, sb: sh.blinds.sb, bb: sh.blinds.bb, ante: sh.blinds.ante, hole: sh.elig.map((e) => holeOf[e.pid] || null),
       game: this.gameKind, limit: this.s.limit, holeCount: hc,
+      rake: this.s.rakePct > 0 && !this.s.cepheus ? { pct: this.s.rakePct, cap: this.s.rakeCap ? this.s.rakeCap * sh.blinds.bb : 0 } : null,
     });
     this.logCursor = 0;
     this._log(`Hand #${sh.no}`, 'hand');
@@ -935,6 +938,7 @@ class HostTable {
       ['Mode', s.cepheus ? 'Play Against Cepheus' : s.vsBots ? 'Play vs Bots' : 'Hosted'], ['Game', VARIANTS[this.variant].name], ['MaxSeats', s.maxSeats],
       ['ActionTimer', s.timer ? `${s.timer}s` : 'Off'], ['BlindsUp', s.levelHands ? `Every ${s.levelHands} hands` : 'Never'],
       ['Rebuys', !s.rebuys ? 'None' : s.maxRebuys ? `${s.maxRebuys} each` : 'Unlimited'],
+      ['Rake', s.rakePct > 0 && !s.cepheus ? `${s.rakePct}%${s.rakeCap ? ` cap ${s.rakeCap}bb` : ''}` : 'Off'],
     ];
     if (s.vsBots) {
       const bots = [...this.players.values()].filter((p) => p.isBot);
@@ -1017,7 +1021,7 @@ class HostTable {
         name: this.s.tableName, sb: this.blinds.sb, bb: this.blinds.bb, ante: this.blinds.ante, baseSb: this.s.sb, baseBb: this.s.bb,
         maxSeats: this.s.maxSeats, timer: this.s.timer, rebuys: this.s.rebuys, maxRebuys: this.s.maxRebuys || 0, recordHole: this.s.recordHole,
         startingStack: this.s.startingStack, variant: this.variant, variantName: VARIANTS[this.variant].name, holeCount: this.holeCount,
-        limit: this.s.limit, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
+        limit: this.s.limit, rakePct: this.s.cepheus ? 0 : this.s.rakePct || 0, rakeCap: this.s.rakeCap || 0, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
         botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots, sra: this.sra,
         spectators: !!this.s.spectators, viewerChat: !!this.s.viewerChat, botChat: !!this.s.botChat, listed: !!this.s.listed,
         hostAdjust: !!this.s.hostAdjust, hostKick: !!this.s.hostKick,

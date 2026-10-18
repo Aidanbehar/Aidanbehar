@@ -49,6 +49,8 @@ const Notation = {
     // Hands where a bot made decisions say so (only ever present in a "full" record).
     if (h.botNames && h.botNames.length) rec.tags.push(['Bots', h.botNames.join(',')]);
     h.players.forEach((p, i) => { rec.hole[p.name] = known(i) && p.hole ? p.hole.slice() : null; });
+    const rk = h.log.find((e) => e.t === 'rake');
+    if (rk) rec.tags.push(['Rake', String(rk.amt)]);
     for (const e of h.log) {
       if (e.t === 'post') rec.posts.push({ name: names[e.p], kind: e.kind, amt: e.amt });
       else if (e.t === 'deal') rec.streets.push({ board: e.cards.slice(), actions: [] });
@@ -290,6 +292,11 @@ const Notation = {
    4b. REPLAY + STATS  (pure; re-simulates records through the Engine)
    ===================================================================== */
 const Replay = {
+  /** The game's [Rake "5% cap 3bb"] tag (or "Off"): { pct, capBB } or null. */
+  rakeOf(s) {
+    const m = /^(\d+(?:\.\d+)?)%(?: cap (\d+(?:\.\d+)?)bb)?$/.exec(String(s || '').trim());
+    return m && Number(m[1]) > 0 ? { pct: Number(m[1]), capBB: m[2] ? Number(m[2]) : 0 } : null;
+  },
   /** Snapshot-by-snapshot re-simulation of one HandRecord. */
   hand(r, cfg) {
     const issues = [];
@@ -308,6 +315,7 @@ const Replay = {
         no: r.no, players: r.stacks.map(([name, stack]) => ({ name, stack })), button: idx(r.button),
         sb: lvl.sb, bb: lvl.bb, ante: lvl.ante, hole: names.map((n) => r.hole[n]),
         game: cfg.game, limit: cfg.limit, holeCount: cfg.holeCount,
+        rake: cfg.rake ? { pct: cfg.rake.pct, cap: cfg.rake.capBB * lvl.bb } : null,
       });
     } catch (e) { issue(e.message); return { rec: r, steps, issues, hand: null }; }
     const snap = (label, extra = {}) => steps.push({ label, hand: U.clone(h), street: h.street, ...extra });
@@ -359,6 +367,8 @@ const Replay = {
         r.results.forEach((w) => { want[w.name] = (want[w.name] || 0) + w.amt; });
         const fmt = (o) => Object.keys(o).sort().map((k) => `${k} ${o[k]}`).join(', ');
         if (fmt(got) !== fmt(want)) issue(`result says "${fmt(want)}" but the rules give "${fmt(got)}"`);
+        const rk = h.log.find((e) => e.t === 'rake'), said = ht('Rake');
+        if (String(rk ? rk.amt : 0) !== String(said || 0)) issue(`the record says the rake was ${said || 0} but the table's rake rule gives ${rk ? rk.amt : 0}`);
         snap(h.log.filter((e) => e.t === 'win').map((e) => Engine.describeEntry(h, e)).join(' · '), { kind: 'result' });
       }
     }
@@ -369,7 +379,7 @@ const Replay = {
     const tag = (k) => (g.tags.find((t) => t[0] === k) || [])[1];
     const [sb, bb] = (tag('Blinds') || '1/2').split('/').map(Number);
     const v = (Object.hasOwn(VARIANTS, tag('Variant') || 'NLHE') && VARIANTS[tag('Variant') || 'NLHE']) || VARIANTS.NLHE;
-    const cfg = { sb, bb, ante: Number(tag('Ante') || 0), game: v.game, limit: v.limit, holeCount: v.holeCount, variant: v };
+    const cfg = { sb, bb, ante: Number(tag('Ante') || 0), game: v.game, limit: v.limit, holeCount: v.holeCount, variant: v, rake: Replay.rakeOf(tag('Rake')) };
     const hands = g.hands.map((r) => Replay.hand(r, cfg));
     const notes = [];
     for (let k = 1; k < hands.length; k++) {

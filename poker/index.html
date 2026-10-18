@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-uBT6nAC7l7ihfmyE7xmHq5mO9vecyFnC3yoEyTvNacw=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-VwA6HMPdliNJGzKRdG284asphiVCVTACvvJOq6joKpI=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -1184,6 +1184,8 @@ const Engine = {
       no: o.no || 1, sb: o.sb, bb: o.bb, ante: o.ante || 0, button: o.button,
       game: o.game === 'omaha' ? 'omaha' : 'holdem', limit: ['pl', 'fl'].includes(o.limit) ? o.limit : 'nl',
       holeCount: o.holeCount || (o.game === 'omaha' ? 4 : 2),
+      // House rake: pct of the pot, at most cap chips (0 = no cap), taken only once a flop is dealt.
+      rake: o.rake && o.rake.pct > 0 ? { pct: Math.min(25, Number(o.rake.pct)), cap: Math.max(0, Math.floor(Number(o.rake.cap) || 0)) } : null,
       players: o.players.map((p, i) => ({
         name: p.name, startStack: p.stack, stack: p.stack, bet: 0, committed: 0,
         folded: false, allIn: false, acted: false, actedBet: 0,
@@ -1402,10 +1404,17 @@ const Engine = {
       p.stack += d; p.committed -= d; p.bet = Math.max(0, p.bet - d); p.allIn = p.stack === 0;
       h.log.push({ t: 'return', p: top, amt: d });
     }
+    // 2) The rake: a share of the pot (up to the cap), only in hands that saw a flop ("no flop, no drop").
+    let rake = 0;
+    if (h.rake && h.board.length >= 3) {
+      rake = Math.floor((Engine.potTotal(h) * h.rake.pct) / 100);
+      if (h.rake.cap) rake = Math.min(rake, h.rake.cap);
+      if (rake > 0) h.log.push({ t: 'rake', amt: rake });
+    }
     const live = P.map((p, i) => i).filter((i) => !P[i].folded);
-    const results = { pots: [], payouts: P.map(() => 0), showdown: false };
+    const results = { pots: [], payouts: P.map(() => 0), showdown: false, rake };
     if (live.length === 1) {
-      const w = live[0], amt = Engine.potTotal(h);
+      const w = live[0], amt = Engine.potTotal(h) - rake;
       P[w].stack += amt; results.payouts[w] = amt;
       results.pots.push({ amount: amt, eligible: [w], winners: [w] });
       h.log.push({ t: 'win', p: w, amt, pot: 0, npots: 1, desc: null });
@@ -1420,6 +1429,9 @@ const Engine = {
       const evs = P.map((p) => (p.shown && p.hole ? Eval.forGame(h.game, p.hole, h.board) : null));
       results.evals = evs.map((e) => e && { score: e.score, desc: Eval.describe(e), best: e.best });
       const pots = Engine.computePots(P.map((p) => p.committed), P.map((p) => p.folded));
+      // the rake comes out of the main pot first
+      let left = rake;
+      for (const pot of pots) { const take = Math.min(left, pot.amount); pot.amount -= take; left -= take; }
       pots.forEach((pot, k) => {
         let contenders = pot.eligible.filter((i) => evs[i]);
         if (!contenders.length) contenders = pot.eligible.slice(0, 1); // cannot happen with a valid plan
@@ -1463,6 +1475,7 @@ const Engine = {
       case 'show': return `${nm} shows ${e.cards.map(Cards.pretty).join(' ')}` + (h.board.length >= 3 ? ` (${Eval.describe(Eval.forGame(h.game, e.cards, h.board))})` : '');
       case 'muck': return `${nm} mucks`;
       case 'return': return `Uncalled ${U.fmt(e.amt)} returned to ${nm}`;
+      case 'rake': return `Rake: ${U.fmt(e.amt)} taken from the pot`;
       case 'win': return `${nm} wins ${U.fmt(e.amt)}${e.npots > 1 ? ' from ' + Notation.potLabel(e.pot) : ''}${e.desc ? ' with ' + e.desc : ''}`;
     }
     return '';
@@ -2978,6 +2991,8 @@ const Notation = {
     // Hands where a bot made decisions say so (only ever present in a "full" record).
     if (h.botNames && h.botNames.length) rec.tags.push(['Bots', h.botNames.join(',')]);
     h.players.forEach((p, i) => { rec.hole[p.name] = known(i) && p.hole ? p.hole.slice() : null; });
+    const rk = h.log.find((e) => e.t === 'rake');
+    if (rk) rec.tags.push(['Rake', String(rk.amt)]);
     for (const e of h.log) {
       if (e.t === 'post') rec.posts.push({ name: names[e.p], kind: e.kind, amt: e.amt });
       else if (e.t === 'deal') rec.streets.push({ board: e.cards.slice(), actions: [] });
@@ -3219,6 +3234,11 @@ const Notation = {
    4b. REPLAY + STATS  (pure; re-simulates records through the Engine)
    ===================================================================== */
 const Replay = {
+  /** The game's [Rake "5% cap 3bb"] tag (or "Off"): { pct, capBB } or null. */
+  rakeOf(s) {
+    const m = /^(\d+(?:\.\d+)?)%(?: cap (\d+(?:\.\d+)?)bb)?$/.exec(String(s || '').trim());
+    return m && Number(m[1]) > 0 ? { pct: Number(m[1]), capBB: m[2] ? Number(m[2]) : 0 } : null;
+  },
   /** Snapshot-by-snapshot re-simulation of one HandRecord. */
   hand(r, cfg) {
     const issues = [];
@@ -3237,6 +3257,7 @@ const Replay = {
         no: r.no, players: r.stacks.map(([name, stack]) => ({ name, stack })), button: idx(r.button),
         sb: lvl.sb, bb: lvl.bb, ante: lvl.ante, hole: names.map((n) => r.hole[n]),
         game: cfg.game, limit: cfg.limit, holeCount: cfg.holeCount,
+        rake: cfg.rake ? { pct: cfg.rake.pct, cap: cfg.rake.capBB * lvl.bb } : null,
       });
     } catch (e) { issue(e.message); return { rec: r, steps, issues, hand: null }; }
     const snap = (label, extra = {}) => steps.push({ label, hand: U.clone(h), street: h.street, ...extra });
@@ -3288,6 +3309,8 @@ const Replay = {
         r.results.forEach((w) => { want[w.name] = (want[w.name] || 0) + w.amt; });
         const fmt = (o) => Object.keys(o).sort().map((k) => `${k} ${o[k]}`).join(', ');
         if (fmt(got) !== fmt(want)) issue(`result says "${fmt(want)}" but the rules give "${fmt(got)}"`);
+        const rk = h.log.find((e) => e.t === 'rake'), said = ht('Rake');
+        if (String(rk ? rk.amt : 0) !== String(said || 0)) issue(`the record says the rake was ${said || 0} but the table's rake rule gives ${rk ? rk.amt : 0}`);
         snap(h.log.filter((e) => e.t === 'win').map((e) => Engine.describeEntry(h, e)).join(' · '), { kind: 'result' });
       }
     }
@@ -3298,7 +3321,7 @@ const Replay = {
     const tag = (k) => (g.tags.find((t) => t[0] === k) || [])[1];
     const [sb, bb] = (tag('Blinds') || '1/2').split('/').map(Number);
     const v = (Object.hasOwn(VARIANTS, tag('Variant') || 'NLHE') && VARIANTS[tag('Variant') || 'NLHE']) || VARIANTS.NLHE;
-    const cfg = { sb, bb, ante: Number(tag('Ante') || 0), game: v.game, limit: v.limit, holeCount: v.holeCount, variant: v };
+    const cfg = { sb, bb, ante: Number(tag('Ante') || 0), game: v.game, limit: v.limit, holeCount: v.holeCount, variant: v, rake: Replay.rakeOf(tag('Rake')) };
     const hands = g.hands.map((r) => Replay.hand(r, cfg));
     const notes = [];
     for (let k = 1; k < hands.length; k++) {
@@ -4214,6 +4237,8 @@ class HostTable {
   constructor(settings, hostName, hostToken) {
     this.s = { game: 'holdem', limit: 'nl', levelHands: 0, maxRebuys: 0, hostPlays: true, spectators: false, viewerChat: false, botChat: false, hostAdjust: false, hostKick: false, ...settings };
     this.s.viewerChat = !!(this.s.spectators && this.s.viewerChat);
+    this.s.rakePct = [0, 2.5, 5, 10].includes(Number(this.s.rakePct)) && !this.s.cepheus ? Number(this.s.rakePct) : 0;
+    this.s.rakeCap = [0, 1, 3, 5].includes(Number(this.s.rakeCap)) ? Number(this.s.rakeCap) : 0;
     this.gameKind = this.s.game === 'holdem' ? 'holdem' : 'omaha';
     this.holeCount = this.s.game === 'omaha5' ? 5 : this.s.game === 'omaha4' ? 4 : 2;
     this.variant = Notation.variantCode(this.gameKind, this.s.limit, this.holeCount);
@@ -4725,6 +4750,7 @@ class HostTable {
       no: sh.no, players: sh.elig.map((e) => ({ name: sh.names[e.pid], stack: sh.stacks[e.pid] })),
       button: sh.bi, sb: sh.blinds.sb, bb: sh.blinds.bb, ante: sh.blinds.ante, hole: sh.elig.map((e) => holeOf[e.pid] || null),
       game: this.gameKind, limit: this.s.limit, holeCount: hc,
+      rake: this.s.rakePct > 0 && !this.s.cepheus ? { pct: this.s.rakePct, cap: this.s.rakeCap ? this.s.rakeCap * sh.blinds.bb : 0 } : null,
     });
     this.logCursor = 0;
     this._log(`Hand #${sh.no}`, 'hand');
@@ -4927,6 +4953,7 @@ class HostTable {
       ['Mode', s.cepheus ? 'Play Against Cepheus' : s.vsBots ? 'Play vs Bots' : 'Hosted'], ['Game', VARIANTS[this.variant].name], ['MaxSeats', s.maxSeats],
       ['ActionTimer', s.timer ? `${s.timer}s` : 'Off'], ['BlindsUp', s.levelHands ? `Every ${s.levelHands} hands` : 'Never'],
       ['Rebuys', !s.rebuys ? 'None' : s.maxRebuys ? `${s.maxRebuys} each` : 'Unlimited'],
+      ['Rake', s.rakePct > 0 && !s.cepheus ? `${s.rakePct}%${s.rakeCap ? ` cap ${s.rakeCap}bb` : ''}` : 'Off'],
     ];
     if (s.vsBots) {
       const bots = [...this.players.values()].filter((p) => p.isBot);
@@ -5009,7 +5036,7 @@ class HostTable {
         name: this.s.tableName, sb: this.blinds.sb, bb: this.blinds.bb, ante: this.blinds.ante, baseSb: this.s.sb, baseBb: this.s.bb,
         maxSeats: this.s.maxSeats, timer: this.s.timer, rebuys: this.s.rebuys, maxRebuys: this.s.maxRebuys || 0, recordHole: this.s.recordHole,
         startingStack: this.s.startingStack, variant: this.variant, variantName: VARIANTS[this.variant].name, holeCount: this.holeCount,
-        limit: this.s.limit, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
+        limit: this.s.limit, rakePct: this.s.cepheus ? 0 : this.s.rakePct || 0, rakeCap: this.s.rakeCap || 0, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
         botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots, sra: this.sra,
         spectators: !!this.s.spectators, viewerChat: !!this.s.viewerChat, botChat: !!this.s.botChat, listed: !!this.s.listed,
         hostAdjust: !!this.s.hostAdjust, hostKick: !!this.s.hostKick,
@@ -5640,6 +5667,7 @@ const Safe = (() => {
       recordHole: oneOf(t.recordHole, ['All', 'Showdown'], 'Showdown'), startingStack: num(t.startingStack),
       variant: oneOf(t.variant, Object.keys(VARIANTS), 'NLHE'), holeCount: int(t.holeCount, 2, 5, 2), limit: oneOf(t.limit, ['nl', 'pl', 'fl'], 'nl'),
       levelHands: int(t.levelHands, 0, 1000, 0), level: int(t.level, 0, 1000, 1), hostPlays: bool(t.hostPlays),
+      rakePct: oneOf(t.rakePct, [0, 2.5, 5, 10], 0), rakeCap: oneOf(t.rakeCap, [0, 1, 3, 5], 0),
       nextLevelIn: int(t.nextLevelIn, 0, 1000, 0), botTakeover: bool(t.botTakeover), vsBots: bool(t.vsBots), sra: bool(t.sra),
       spectators: bool(t.spectators), viewerChat: bool(t.viewerChat), botChat: bool(t.botChat), listed: bool(t.listed),
       hostAdjust: bool(t.hostAdjust), hostKick: bool(t.hostKick),
@@ -5699,6 +5727,7 @@ const Safe = (() => {
       maxSeats: int(x.maxSeats, 2, 9, 9), timer: int(x.timer, 0, 600, 0), rebuys: bool(x.rebuys), maxRebuys: int(x.maxRebuys, 0, 99, 0),
       recordHole: oneOf(x.recordHole, ['All', 'Showdown'], 'Showdown'), game: oneOf(x.game, ['holdem', 'omaha4', 'omaha5'], 'holdem'),
       limit: oneOf(x.limit, ['nl', 'pl', 'fl'], 'nl'), levelHands: int(x.levelHands, 0, 1000, 0), hostPlays: true,
+      rakePct: oneOf(x.rakePct, [0, 2.5, 5, 10], 0), rakeCap: oneOf(x.rakeCap, [0, 1, 3, 5], 0),
       botTakeover: bool(x.botTakeover) && !bool(x.sra), sra: bool(x.sra), spectators: bool(x.spectators), viewerChat: bool(x.spectators) && bool(x.viewerChat),
       listed: false, hostAdjust: bool(x.hostAdjust), hostKick: bool(x.hostKick),
     };
@@ -7729,6 +7758,33 @@ const SelfTest = (() => {
     } finally { CepheusBot.model = saved; }
   });
 
+  test('Rake', 'Takes the right share once a flop is dealt, never preflop, and replays exactly', () => {
+    const mk = (rake) => Engine.createHand({ players: [{ name: 'A', stack: 1000 }, { name: 'B', stack: 1000 }, { name: 'C', stack: 1000 }], button: 0, sb: 5, bb: 10, rake, hole: [['As', 'Ad'], ['Kc', 'Kd'], ['7h', '2c']] });
+    const total = (h) => U.sum(h.players.map((p) => p.stack));
+    // no flop, no drop
+    let h = mk({ pct: 5, cap: 30 });
+    Engine.applyAction(h, { type: 'r', to: 40 }); Engine.applyAction(h, { type: 'f' }); Engine.applyAction(h, { type: 'f' });
+    Engine.settle(h); eq(h.results.rake, 0); eq(total(h), 3000);
+    // 5% of a 600 pot is 30, under a 30 cap; uncontested on the flop still pays
+    h = mk({ pct: 5, cap: 30 });
+    Engine.applyAction(h, { type: 'r', to: 200 }); Engine.applyAction(h, { type: 'c' }); Engine.applyAction(h, { type: 'c' });
+    Engine.dealBoard(h, ['3s', '8d', 'Jh']);
+    Engine.applyAction(h, { type: 'x' }); Engine.applyAction(h, { type: 'b', to: 100 }); Engine.applyAction(h, { type: 'f' }); Engine.applyAction(h, { type: 'f' });
+    Engine.settle(h); eq(h.results.rake, 30); eq(total(h), 2970);
+    // the cap holds on a big pot, and showdown pots are paid net of rake
+    h = mk({ pct: 10, cap: 25 });
+    Engine.applyAction(h, { type: 'c' }); Engine.applyAction(h, { type: 'c' }); Engine.applyAction(h, { type: 'x' });
+    Engine.dealBoard(h, ['3s', '8d', 'Jh']);
+    for (const c of [['4c'], ['9s']]) { while (h.phase === 'betting') Engine.applyAction(h, { type: Engine.legal(h).canCheck ? 'x' : 'c' }); Engine.dealBoard(h, c); }
+    while (h.phase === 'betting') Engine.applyAction(h, { type: 'x' });
+    Engine.settle(h, Engine.planShowdown(h, () => false)); eq(h.results.rake, 3); eq(total(h), 2997);
+    // a record of a raked game replays with no issues; a doctored rake is caught
+    const tags = Notation.gameTags({ event: 't', date: '2026.01.01', sb: 5, bb: 10, ante: 0, startingStack: 1000, players: ['A', 'B', 'C'], holeCards: 'All', variant: 'NLHE', settings: [['Rake', '10% cap 2.5bb']] });
+    const rec = Notation.fromHand(h, 0, 'All');
+    eq(Replay.game({ tags, hands: [rec] }).issues.length, 0);
+    rec.tags = rec.tags.map(([k, v]) => (k === 'Rake' ? [k, '9'] : [k, v]));
+    ok(Replay.game({ tags, hands: [rec] }).issues.some((x) => /rake/.test(x)), 'wrong rake reported');
+  });
   test('Training', 'Every drill makes valid questions at every level, with one right answer', () => {
     if (typeof Drills === 'undefined') return;
     for (const d of Drills.LIST) for (let lv = 0; lv < 4; lv++) {
@@ -8365,6 +8421,12 @@ function appearanceModal() {
   $('#ap-reset', m.el).addEventListener('click', () => { ['felt', 'cardBack', 'rail', 'bigPrint', 'cardFace', 'backPattern', 'fourColor', 'anim', 'soundPack', 'volume'].forEach((k) => Prefs.del(k)); $('#ap-vol', m.el).value = Sound.volume; sync(); });
 }
 
+/** Setup screens: the rake cap only matters once a rake is chosen. */
+function showRakeCap(root) {
+  const on = Number(($('[data-seg="rakePct"] [aria-pressed="true"]', root) || {}).dataset?.v || 0) > 0;
+  $$('.rake-cap', root).forEach((e) => e.classList.toggle('hidden', !on));
+}
+
 /** Lets a player erase everything Feltroom remembers in this browser. */
 function wipeModal() {
   const s = Prefs.summary();
@@ -8418,6 +8480,9 @@ function HostSetupScreen() {
           <div class="two"><label class="field"><span>Ante (optional)</span><input class="input num" name="ante" type="number" min="0" step="1" inputmode="numeric" value="${d.ante}"></label>
           <label class="field"><span>Starting stack</span><input class="input num" name="startingStack" type="number" min="2" step="1" inputmode="numeric" value="${d.startingStack}"></label></div>
           <div class="field"><span>Blinds go up</span>${seg('levelHands', [[0, 'Never'], [10, 'Every 10 hands'], [20, '20'], [30, '30']], d.levelHands)}</div>
+          <div class="field"><span>Rake (the house takes a share of each pot)</span>${seg('rakePct', [[0, 'Off'], [2.5, '2.5%'], [5, '5%'], [10, '10%']], 0)}</div>
+          <div class="field rake-cap hidden"><span>Rake cap (most taken from one pot)</span>${seg('rakeCap', [[0, 'No cap'], [1, '1 big blind'], [3, '3 big blinds'], [5, '5 big blinds']], 3)}</div>
+          <p class="hint rake-cap hidden" style="margin:0">Only in hands that see a flop ("no flop, no drop"). The rake leaves the table, so everyone's chips shrink a little over time, like in a casino.</p>
         </section>
         <section class="card-ui setup-section"><h3>Pace</h3>
           <div class="field"><span>Action timer</span>${seg('timer', [[0, 'Off'], [15, '15s'], [30, '30s'], [60, '60s']], d.timer)}</div>
@@ -8455,6 +8520,7 @@ function HostSetupScreen() {
   $$('[data-seg]', App.root).forEach((g) => g.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     $$('button', g).forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); });
+    if (g.dataset.seg === 'rakePct') showRakeCap(App.root);
   }));
   const form = $('#setup');
   const fairHint = () => {
@@ -8493,7 +8559,7 @@ function HostSetupScreen() {
       sb: Math.floor(Number(form.sb.value)), bb: Math.floor(Number(form.bb.value)), ante: Math.floor(Number(form.ante.value || 0)),
       startingStack: Math.floor(Number(form.startingStack.value)), maxSeats: Number(segv('maxSeats')), timer: Number(segv('timer')),
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : Number(segv('rebuys')), recordHole: segv('recordHole'),
-      game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), hostPlays: form.hostPlays.checked, botTakeover: form.botTakeover.checked && !form.sra.checked, sra: form.sra.checked,
+      game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), rakePct: Number(segv('rakePct')), rakeCap: Number(segv('rakeCap')), hostPlays: form.hostPlays.checked, botTakeover: form.botTakeover.checked && !form.sra.checked, sra: form.sra.checked,
       spectators: form.spectators.checked, viewerChat: form.spectators.checked && form.viewerChat.checked, listed: form.listed.checked,
       hostAdjust: form.hostAdjust.checked, hostKick: form.hostKick.checked,
     };
@@ -8510,7 +8576,7 @@ function HostSetupScreen() {
     if (errs.length) { box.innerHTML = `${icon('alert')}<div>${errs.map(U.esc).join('<br>')}</div>`; box.classList.remove('hidden'); return; }
     box.classList.add('hidden');
     // The viewer options are deliberately not remembered: they start switched off for every new table.
-    const { spectators, viewerChat, listed, hostAdjust, hostKick, ...remember } = s; void spectators; void viewerChat; void listed; void hostAdjust; void hostKick;
+    const { spectators, viewerChat, listed, hostAdjust, hostKick, rakePct, rakeCap, ...remember } = s; void spectators; void viewerChat; void listed; void hostAdjust; void hostKick; void rakePct; void rakeCap;
     Prefs.set('lastSettings', remember); Prefs.set('name', name);
     await startHosting(s, name);
   });
@@ -8552,6 +8618,9 @@ function BotSetupScreen() {
         <div class="two"><label class="field"><span>Ante</span><input class="input num" name="ante" type="number" min="0" value="${d.ante}"></label><label class="field"><span>Starting stack</span><input class="input num" name="startingStack" type="number" min="2" value="${d.startingStack}"></label></div>
         <div class="field"><span>Blinds go up</span>${seg('levelHands', [[0, 'Never'], [10, 'Every 10 hands'], [20, '20'], [30, '30']], d.levelHands)}</div>
         <div class="field"><span>Rebuys (bots rebuy automatically)</span>${seg('rebuys', [['no', 'None'], [1, '1 each'], [3, '3 each'], ['any', 'Unlimited']], d.rebuys)}</div>
+        <div class="field"><span>Rake (the house takes a share of each pot)</span>${seg('rakePct', [[0, 'Off'], [2.5, '2.5%'], [5, '5%'], [10, '10%']], 0)}</div>
+        <div class="field rake-cap hidden"><span>Rake cap (most taken from one pot)</span>${seg('rakeCap', [[0, 'No cap'], [1, '1 big blind'], [3, '3 big blinds'], [5, '5 big blinds']], 3)}</div>
+        <p class="hint rake-cap hidden" style="margin:0">Only in hands that see a flop ("no flop, no drop"). The rake leaves the table, so everyone's chips shrink a little over time, like in a casino.</p>
       </section>
       <section class="card-ui setup-section" style="grid-column:1/-1"><h3>Extras</h3>
         <div class="two">
@@ -8577,6 +8646,7 @@ function BotSetupScreen() {
   $$('[data-seg]', App.root).forEach((g) => g.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     $$('button', g).forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); });
+    if (g.dataset.seg === 'rakePct') showRakeCap(App.root);
     hint();
   }));
   const segv = (n) => $(`[data-seg="${n}"] [aria-pressed="true"]`).dataset.v;
@@ -8598,7 +8668,7 @@ function BotSetupScreen() {
     const name = U.sanitizeName(f.name.value) || 'You';
     const s = {
       tableName: 'Practice vs Bots', sb: Math.floor(+f.sb.value), bb: Math.floor(+f.bb.value), ante: Math.floor(+f.ante.value || 0),
-      startingStack: Math.floor(+f.startingStack.value), game: segv('game'), limit: segv('limit'), levelHands: +segv('levelHands'),
+      startingStack: Math.floor(+f.startingStack.value), game: segv('game'), limit: segv('limit'), levelHands: +segv('levelHands'), rakePct: +segv('rakePct'), rakeCap: +segv('rakeCap'),
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : +segv('rebuys'),
       timer: 0, recordHole: 'All', botSpeed: segv('botSpeed'),
       botChat: f.botChat.checked, spectators: f.spectators.checked, viewerChat: f.spectators.checked && f.viewerChat.checked,
@@ -9298,6 +9368,7 @@ function GameScreen(session) {
         <div class="sum-tile"><b>${t.timer ? t.timer + 's' : 'Off'}</b><span>Action timer</span></div>
         <div class="sum-tile"><b>${!t.rebuys ? 'No' : t.maxRebuys ? `${t.maxRebuys} each` : 'Unlimited'}</b><span>Rebuys</span></div>
         <div class="sum-tile"><b>${t.recordHole === 'All' ? 'All cards' : 'Showdown only'}</b><span>Hole cards in record</span></div>
+        <div class="sum-tile"><b>${t.rakePct ? `${t.rakePct}%${t.rakeCap ? `, cap ${t.rakeCap} bb` : ', no cap'}` : 'None'}</b><span>Rake</span></div>
         <div class="sum-tile" style="grid-column:span 2">${t.sra ? `<b>${icon('lock')} Encrypted deal</b><span>Nobody can see other players' cards, not even the host</span>` : `<b>${icon('shieldOk')} Provably fair shuffle</b><span>${t.hostPlays ? 'Host is also playing' : 'Host deals only (does not play)'}${t.botTakeover ? ' · bots replace dropouts' : ''}</span>`}</div>
       </div>
       ${v.you && v.you.isHost
@@ -9509,7 +9580,7 @@ function GameScreen(session) {
     const me = v.table.cepheus && v.you && v.players.find((p) => p.pid === v.you.pid);
     // Play Against Cepheus: the running result comes first so it stays visible on a phone.
     const score = me ? `You ${me.net > 0 ? '+' : ''}${U.fmt(me.net)} over ${v.table.handsDone} hand${v.table.handsDone === 1 ? '' : 's'}${v.table.handsDone ? ` (${(me.net / v.table.bb / v.table.handsDone).toFixed(2)} bb/hand)` : ''} · ` : '';
-    $('#g-sub').textContent = `${score}${v.table.variant} · Blinds ${U.fmt(v.table.sb)}/${U.fmt(v.table.bb)}${v.table.ante ? ` · Ante ${U.fmt(v.table.ante)}` : ''}${v.table.levelHands && v.status === 'playing' ? ` · Level ${v.table.level} (up in ${v.table.nextLevelIn})` : ''} · ${v.status === 'lobby' ? 'Lobby' : v.handNo ? 'Hand #' + v.handNo : 'Starting'}${me ? ' · stacks reset each hand' : ` · ${seated}/${v.table.maxSeats} seated`}`;
+    $('#g-sub').textContent = `${score}${v.table.variant} · Blinds ${U.fmt(v.table.sb)}/${U.fmt(v.table.bb)}${v.table.ante ? ` · Ante ${U.fmt(v.table.ante)}` : ''}${v.table.rakePct ? ` · Rake ${v.table.rakePct}%${v.table.rakeCap ? ` (cap ${v.table.rakeCap} bb)` : ''}` : ''}${v.table.levelHands && v.status === 'playing' ? ` · Level ${v.table.level} (up in ${v.table.nextLevelIn})` : ''} · ${v.status === 'lobby' ? 'Lobby' : v.handNo ? 'Hand #' + v.handNo : 'Starting'}${me ? ' · stacks reset each hand' : ` · ${seated}/${v.table.maxSeats} seated`}`;
     renderFairBadge();
     if (session.cepheus) renderStats(false);
     if (!isWatcher) { CompactCache.prime(record(false)); CompactCache.prime(record(true)); }

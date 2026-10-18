@@ -109,6 +109,12 @@ function appearanceModal() {
   $('#ap-reset', m.el).addEventListener('click', () => { ['felt', 'cardBack', 'rail', 'bigPrint', 'cardFace', 'backPattern', 'fourColor', 'anim', 'soundPack', 'volume'].forEach((k) => Prefs.del(k)); $('#ap-vol', m.el).value = Sound.volume; sync(); });
 }
 
+/** Setup screens: the rake cap only matters once a rake is chosen. */
+function showRakeCap(root) {
+  const on = Number(($('[data-seg="rakePct"] [aria-pressed="true"]', root) || {}).dataset?.v || 0) > 0;
+  $$('.rake-cap', root).forEach((e) => e.classList.toggle('hidden', !on));
+}
+
 /** Lets a player erase everything Feltroom remembers in this browser. */
 function wipeModal() {
   const s = Prefs.summary();
@@ -162,6 +168,9 @@ function HostSetupScreen() {
           <div class="two"><label class="field"><span>Ante (optional)</span><input class="input num" name="ante" type="number" min="0" step="1" inputmode="numeric" value="${d.ante}"></label>
           <label class="field"><span>Starting stack</span><input class="input num" name="startingStack" type="number" min="2" step="1" inputmode="numeric" value="${d.startingStack}"></label></div>
           <div class="field"><span>Blinds go up</span>${seg('levelHands', [[0, 'Never'], [10, 'Every 10 hands'], [20, '20'], [30, '30']], d.levelHands)}</div>
+          <div class="field"><span>Rake (the house takes a share of each pot)</span>${seg('rakePct', [[0, 'Off'], [2.5, '2.5%'], [5, '5%'], [10, '10%']], 0)}</div>
+          <div class="field rake-cap hidden"><span>Rake cap (most taken from one pot)</span>${seg('rakeCap', [[0, 'No cap'], [1, '1 big blind'], [3, '3 big blinds'], [5, '5 big blinds']], 3)}</div>
+          <p class="hint rake-cap hidden" style="margin:0">Only in hands that see a flop ("no flop, no drop"). The rake leaves the table, so everyone's chips shrink a little over time, like in a casino.</p>
         </section>
         <section class="card-ui setup-section"><h3>Pace</h3>
           <div class="field"><span>Action timer</span>${seg('timer', [[0, 'Off'], [15, '15s'], [30, '30s'], [60, '60s']], d.timer)}</div>
@@ -199,6 +208,7 @@ function HostSetupScreen() {
   $$('[data-seg]', App.root).forEach((g) => g.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     $$('button', g).forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); });
+    if (g.dataset.seg === 'rakePct') showRakeCap(App.root);
   }));
   const form = $('#setup');
   const fairHint = () => {
@@ -237,7 +247,7 @@ function HostSetupScreen() {
       sb: Math.floor(Number(form.sb.value)), bb: Math.floor(Number(form.bb.value)), ante: Math.floor(Number(form.ante.value || 0)),
       startingStack: Math.floor(Number(form.startingStack.value)), maxSeats: Number(segv('maxSeats')), timer: Number(segv('timer')),
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : Number(segv('rebuys')), recordHole: segv('recordHole'),
-      game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), hostPlays: form.hostPlays.checked, botTakeover: form.botTakeover.checked && !form.sra.checked, sra: form.sra.checked,
+      game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), rakePct: Number(segv('rakePct')), rakeCap: Number(segv('rakeCap')), hostPlays: form.hostPlays.checked, botTakeover: form.botTakeover.checked && !form.sra.checked, sra: form.sra.checked,
       spectators: form.spectators.checked, viewerChat: form.spectators.checked && form.viewerChat.checked, listed: form.listed.checked,
       hostAdjust: form.hostAdjust.checked, hostKick: form.hostKick.checked,
     };
@@ -254,7 +264,7 @@ function HostSetupScreen() {
     if (errs.length) { box.innerHTML = `${icon('alert')}<div>${errs.map(U.esc).join('<br>')}</div>`; box.classList.remove('hidden'); return; }
     box.classList.add('hidden');
     // The viewer options are deliberately not remembered: they start switched off for every new table.
-    const { spectators, viewerChat, listed, hostAdjust, hostKick, ...remember } = s; void spectators; void viewerChat; void listed; void hostAdjust; void hostKick;
+    const { spectators, viewerChat, listed, hostAdjust, hostKick, rakePct, rakeCap, ...remember } = s; void spectators; void viewerChat; void listed; void hostAdjust; void hostKick; void rakePct; void rakeCap;
     Prefs.set('lastSettings', remember); Prefs.set('name', name);
     await startHosting(s, name);
   });
@@ -296,6 +306,9 @@ function BotSetupScreen() {
         <div class="two"><label class="field"><span>Ante</span><input class="input num" name="ante" type="number" min="0" value="${d.ante}"></label><label class="field"><span>Starting stack</span><input class="input num" name="startingStack" type="number" min="2" value="${d.startingStack}"></label></div>
         <div class="field"><span>Blinds go up</span>${seg('levelHands', [[0, 'Never'], [10, 'Every 10 hands'], [20, '20'], [30, '30']], d.levelHands)}</div>
         <div class="field"><span>Rebuys (bots rebuy automatically)</span>${seg('rebuys', [['no', 'None'], [1, '1 each'], [3, '3 each'], ['any', 'Unlimited']], d.rebuys)}</div>
+        <div class="field"><span>Rake (the house takes a share of each pot)</span>${seg('rakePct', [[0, 'Off'], [2.5, '2.5%'], [5, '5%'], [10, '10%']], 0)}</div>
+        <div class="field rake-cap hidden"><span>Rake cap (most taken from one pot)</span>${seg('rakeCap', [[0, 'No cap'], [1, '1 big blind'], [3, '3 big blinds'], [5, '5 big blinds']], 3)}</div>
+        <p class="hint rake-cap hidden" style="margin:0">Only in hands that see a flop ("no flop, no drop"). The rake leaves the table, so everyone's chips shrink a little over time, like in a casino.</p>
       </section>
       <section class="card-ui setup-section" style="grid-column:1/-1"><h3>Extras</h3>
         <div class="two">
@@ -321,6 +334,7 @@ function BotSetupScreen() {
   $$('[data-seg]', App.root).forEach((g) => g.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     $$('button', g).forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); });
+    if (g.dataset.seg === 'rakePct') showRakeCap(App.root);
     hint();
   }));
   const segv = (n) => $(`[data-seg="${n}"] [aria-pressed="true"]`).dataset.v;
@@ -342,7 +356,7 @@ function BotSetupScreen() {
     const name = U.sanitizeName(f.name.value) || 'You';
     const s = {
       tableName: 'Practice vs Bots', sb: Math.floor(+f.sb.value), bb: Math.floor(+f.bb.value), ante: Math.floor(+f.ante.value || 0),
-      startingStack: Math.floor(+f.startingStack.value), game: segv('game'), limit: segv('limit'), levelHands: +segv('levelHands'),
+      startingStack: Math.floor(+f.startingStack.value), game: segv('game'), limit: segv('limit'), levelHands: +segv('levelHands'), rakePct: +segv('rakePct'), rakeCap: +segv('rakeCap'),
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : +segv('rebuys'),
       timer: 0, recordHole: 'All', botSpeed: segv('botSpeed'),
       botChat: f.botChat.checked, spectators: f.spectators.checked, viewerChat: f.spectators.checked && f.viewerChat.checked,
@@ -1042,6 +1056,7 @@ function GameScreen(session) {
         <div class="sum-tile"><b>${t.timer ? t.timer + 's' : 'Off'}</b><span>Action timer</span></div>
         <div class="sum-tile"><b>${!t.rebuys ? 'No' : t.maxRebuys ? `${t.maxRebuys} each` : 'Unlimited'}</b><span>Rebuys</span></div>
         <div class="sum-tile"><b>${t.recordHole === 'All' ? 'All cards' : 'Showdown only'}</b><span>Hole cards in record</span></div>
+        <div class="sum-tile"><b>${t.rakePct ? `${t.rakePct}%${t.rakeCap ? `, cap ${t.rakeCap} bb` : ', no cap'}` : 'None'}</b><span>Rake</span></div>
         <div class="sum-tile" style="grid-column:span 2">${t.sra ? `<b>${icon('lock')} Encrypted deal</b><span>Nobody can see other players' cards, not even the host</span>` : `<b>${icon('shieldOk')} Provably fair shuffle</b><span>${t.hostPlays ? 'Host is also playing' : 'Host deals only (does not play)'}${t.botTakeover ? ' · bots replace dropouts' : ''}</span>`}</div>
       </div>
       ${v.you && v.you.isHost
@@ -1253,7 +1268,7 @@ function GameScreen(session) {
     const me = v.table.cepheus && v.you && v.players.find((p) => p.pid === v.you.pid);
     // Play Against Cepheus: the running result comes first so it stays visible on a phone.
     const score = me ? `You ${me.net > 0 ? '+' : ''}${U.fmt(me.net)} over ${v.table.handsDone} hand${v.table.handsDone === 1 ? '' : 's'}${v.table.handsDone ? ` (${(me.net / v.table.bb / v.table.handsDone).toFixed(2)} bb/hand)` : ''} · ` : '';
-    $('#g-sub').textContent = `${score}${v.table.variant} · Blinds ${U.fmt(v.table.sb)}/${U.fmt(v.table.bb)}${v.table.ante ? ` · Ante ${U.fmt(v.table.ante)}` : ''}${v.table.levelHands && v.status === 'playing' ? ` · Level ${v.table.level} (up in ${v.table.nextLevelIn})` : ''} · ${v.status === 'lobby' ? 'Lobby' : v.handNo ? 'Hand #' + v.handNo : 'Starting'}${me ? ' · stacks reset each hand' : ` · ${seated}/${v.table.maxSeats} seated`}`;
+    $('#g-sub').textContent = `${score}${v.table.variant} · Blinds ${U.fmt(v.table.sb)}/${U.fmt(v.table.bb)}${v.table.ante ? ` · Ante ${U.fmt(v.table.ante)}` : ''}${v.table.rakePct ? ` · Rake ${v.table.rakePct}%${v.table.rakeCap ? ` (cap ${v.table.rakeCap} bb)` : ''}` : ''}${v.table.levelHands && v.status === 'playing' ? ` · Level ${v.table.level} (up in ${v.table.nextLevelIn})` : ''} · ${v.status === 'lobby' ? 'Lobby' : v.handNo ? 'Hand #' + v.handNo : 'Starting'}${me ? ' · stacks reset each hand' : ` · ${seated}/${v.table.maxSeats} seated`}`;
     renderFairBadge();
     if (session.cepheus) renderStats(false);
     if (!isWatcher) { CompactCache.prime(record(false)); CompactCache.prime(record(true)); }

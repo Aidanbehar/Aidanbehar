@@ -760,6 +760,33 @@ const SelfTest = (() => {
     } finally { CepheusBot.model = saved; }
   });
 
+  test('Rake', 'Takes the right share once a flop is dealt, never preflop, and replays exactly', () => {
+    const mk = (rake) => Engine.createHand({ players: [{ name: 'A', stack: 1000 }, { name: 'B', stack: 1000 }, { name: 'C', stack: 1000 }], button: 0, sb: 5, bb: 10, rake, hole: [['As', 'Ad'], ['Kc', 'Kd'], ['7h', '2c']] });
+    const total = (h) => U.sum(h.players.map((p) => p.stack));
+    // no flop, no drop
+    let h = mk({ pct: 5, cap: 30 });
+    Engine.applyAction(h, { type: 'r', to: 40 }); Engine.applyAction(h, { type: 'f' }); Engine.applyAction(h, { type: 'f' });
+    Engine.settle(h); eq(h.results.rake, 0); eq(total(h), 3000);
+    // 5% of a 600 pot is 30, under a 30 cap; uncontested on the flop still pays
+    h = mk({ pct: 5, cap: 30 });
+    Engine.applyAction(h, { type: 'r', to: 200 }); Engine.applyAction(h, { type: 'c' }); Engine.applyAction(h, { type: 'c' });
+    Engine.dealBoard(h, ['3s', '8d', 'Jh']);
+    Engine.applyAction(h, { type: 'x' }); Engine.applyAction(h, { type: 'b', to: 100 }); Engine.applyAction(h, { type: 'f' }); Engine.applyAction(h, { type: 'f' });
+    Engine.settle(h); eq(h.results.rake, 30); eq(total(h), 2970);
+    // the cap holds on a big pot, and showdown pots are paid net of rake
+    h = mk({ pct: 10, cap: 25 });
+    Engine.applyAction(h, { type: 'c' }); Engine.applyAction(h, { type: 'c' }); Engine.applyAction(h, { type: 'x' });
+    Engine.dealBoard(h, ['3s', '8d', 'Jh']);
+    for (const c of [['4c'], ['9s']]) { while (h.phase === 'betting') Engine.applyAction(h, { type: Engine.legal(h).canCheck ? 'x' : 'c' }); Engine.dealBoard(h, c); }
+    while (h.phase === 'betting') Engine.applyAction(h, { type: 'x' });
+    Engine.settle(h, Engine.planShowdown(h, () => false)); eq(h.results.rake, 3); eq(total(h), 2997);
+    // a record of a raked game replays with no issues; a doctored rake is caught
+    const tags = Notation.gameTags({ event: 't', date: '2026.01.01', sb: 5, bb: 10, ante: 0, startingStack: 1000, players: ['A', 'B', 'C'], holeCards: 'All', variant: 'NLHE', settings: [['Rake', '10% cap 2.5bb']] });
+    const rec = Notation.fromHand(h, 0, 'All');
+    eq(Replay.game({ tags, hands: [rec] }).issues.length, 0);
+    rec.tags = rec.tags.map(([k, v]) => (k === 'Rake' ? [k, '9'] : [k, v]));
+    ok(Replay.game({ tags, hands: [rec] }).issues.some((x) => /rake/.test(x)), 'wrong rake reported');
+  });
   test('Training', 'Every drill makes valid questions at every level, with one right answer', () => {
     if (typeof Drills === 'undefined') return;
     for (const d of Drills.LIST) for (let lv = 0; lv < 4; lv++) {
