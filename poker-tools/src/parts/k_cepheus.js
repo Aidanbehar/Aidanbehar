@@ -158,7 +158,7 @@ const CepheusStats = (() => {
       <circle class="cs-dot" r="4" visibility="hidden" style="fill:var(--surface);stroke:var(--text);stroke-width:2"/>
       <rect class="cs-hit" x="${l}" y="0" width="${W - l - r}" height="${H}" fill="transparent"/></svg><div class="tip hidden"></div></div>`;
   }
-  function bindLine(root, id, pts, xStep, fmt) {
+  function bindLine(root, id, pts, xStep, fmt, zoom) {
     const box = root.querySelector(`[data-chart="${id}"]`); if (!box) return;
     const svg = box.querySelector('svg'), hit = box.querySelector('.cs-hit'), tip = box.querySelector('.tip'), cross = box.querySelector('.cs-cross'), dot = box.querySelector('.cs-dot');
     const W = 320, l = 34, r = 8, n = Math.max(1, pts.length - 1);
@@ -173,6 +173,17 @@ const CepheusStats = (() => {
       tip.style.left = Math.min(rc.width - tip.offsetWidth - 4, Math.max(4, (x / W) * rc.width + 10)) + 'px'; tip.style.top = '6px';
     });
     hit.addEventListener('pointerleave', () => { tip.classList.add('hidden'); cross.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); });
+    if (!zoom || typeof ZoomChart === 'undefined') return;
+    // Click or tap: the same chart, large, to zoom in and read every point.
+    box.classList.add('zc-small'); box.title = 'Click to open in detail';
+    hit.addEventListener('click', (ev) => {
+      const rc = svg.getBoundingClientRect(), px = ((ev.clientX - rc.left) / rc.width) * W;
+      const i = Math.max(0, Math.min(n, Math.round(((px - l) / (W - l - r)) * n)));
+      ZoomChart.open({
+        ...zoom, startAt: i * xStep, zeroLine: true,
+        series: [{ name: zoom.unit, color: (pts[pts.length - 1] || 0) >= 0 ? 'var(--accent)' : 'var(--danger)', pts: pts.map((v, k) => ({ x: k * xStep, y: v })) }],
+      });
+    });
   }
   /** Horizontal bars around zero with 95% whiskers; positive = Cepheus wins. */
   function barChart(rows, aria) {
@@ -310,12 +321,14 @@ const CepheusStats = (() => {
     el.scrollTop = top;
     const t = session.table, me = t.players.get(session.pid), bb = t.s.bb;
     const curve = [0]; let c = 0; for (const f of t.finished) { const p = f.hand.players.find((q) => q.name === me.name); if (p) { c += (p.stack - p.startStack) / bb; curve.push(+c.toFixed(1)); } }
-    bindLine(el, 'session', curve, 1, (i, v) => `<b>After ${i} hand${i === 1 ? '' : 's'}</b><div>You: <b class="num">${sgn(v)} bb</b></div>`);
+    bindLine(el, 'session', curve, 1, (i, v) => `<b>After ${i} hand${i === 1 ? '' : 's'}</b><div>You: <b class="num">${sgn(v)} bb</b></div>`,
+      { title: 'Your running result against Cepheus', unit: 'Big blinds', yFmt: (v) => `${sgn(v, 1)} bb`, dFmt: (d) => `${sgn(d, 1)} bb`, xName: (x) => (x ? `After hand ${x.toLocaleString()}` : 'Start') });
     if (data) {
       const conv = data.convergence;
       bindLine(el, 'conv', conv.map((x) => x.vsCall / 10), conv.length > 1 ? conv[1].minutes - conv[0].minutes : 1, (m, v) => `<b>After ${m} minutes of training</b><div>${sgn(v)} bb/100 vs always-call</div>`);
       const ext = data.matchups.find((m) => m.opponent === 'extreme');
-      bindLine(el, 'run', [0, ...runOf(ext).pts], runOf(ext).step, (i, v) => `<b>After ${i.toLocaleString()} hands</b><div>Cepheus: <b class="num">${sgn(v)} bb</b></div>`);
+      bindLine(el, 'run', [0, ...runOf(ext).pts], runOf(ext).step, (i, v) => `<b>After ${i.toLocaleString()} hands</b><div>Cepheus: <b class="num">${sgn(v)} bb</b></div>`,
+        { title: 'Cepheus against Extreme: a sample run', unit: 'Big blinds', yFmt: (v) => `${sgn(v, 0)} bb`, dFmt: (d) => `${sgn(d, 0)} bb`, xName: (x) => (x ? `After ${x.toLocaleString()} hands` : 'Start') });
       bindBars(el);
     } else if (!failed) {
       load().then(() => render(el, session), () => { const l = el.querySelector('#cs-loading'); if (l) l.textContent = 'The test results could not be loaded. Your session numbers above still work.'; });

@@ -4,6 +4,8 @@
    ===================================================================== */
 const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
+  expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
   history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
   copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
@@ -335,6 +337,261 @@ function openModal(html, { onClose, label = 'Dialog', dismissable = true } = {})
   setTimeout(() => { const f = $('[autofocus], .modal-foot .btn.primary, .modal-foot .btn', back); if (f) f.focus(); }, 30);
   return { el: back, close };
 }
+
+/**
+ * A chart opened in its own window to look at in detail: zoom (wheel, pinch, double-click, the
+ * buttons or + / −), drag to move, an overview strip underneath to pick any stretch, and the exact
+ * numbers for whichever point you hover or tap. Long series (tens of thousands of hands) are drawn
+ * at one minimum and one maximum per screen pixel, so nothing spiky is lost and drawing stays quick.
+ *
+ * opts: { title, series: [{ name, color, pts: [{x, y, d?} | null] }] (d: the change in that hand), xName(x): tooltip heading,
+ *         yFmt(v), unit, zeroLine, pick: { label(x), go(x) } }
+ */
+const ZoomChart = (() => {
+  const nice = (span, want) => {
+    const raw = span / Math.max(1, want), mag = Math.pow(10, Math.floor(Math.log10(raw || 1)));
+    const f = raw / mag;
+    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * mag;
+  };
+  const ticks = (lo, hi, want) => {
+    const st = nice(hi - lo, want), out = [];
+    for (let v = Math.ceil(lo / st) * st; v <= hi + st * 1e-9; v += st) out.push(+v.toFixed(10));
+    return out;
+  };
+  // Series as flat arrays: x ascending, y NaN where the line has a gap.
+  const flat = (pts) => {
+    const xs = [], ys = [], ds = [];
+    let lastX = -Infinity;
+    for (const p of pts) {
+      if (p) { xs.push(p.x); ys.push(p.y); ds.push(p.d); lastX = p.x; } else if (xs.length && !Number.isNaN(ys[ys.length - 1])) { xs.push(lastX); ys.push(NaN); ds.push(undefined); }
+    }
+    return { xs, ys, ds };
+  };
+  const lowerBound = (xs, x) => { let a = 0, b = xs.length; while (a < b) { const m = (a + b) >> 1; if (xs[m] < x) a = m + 1; else b = m; } return a; };
+
+  function open(o) {
+    const S = o.series.map((s) => ({ ...s, ...flat(s.pts), on: true }));
+    let X0 = Infinity, X1 = -Infinity;
+    for (const s of S) if (s.xs.length) { X0 = Math.min(X0, s.xs[0]); X1 = Math.max(X1, s.xs[s.xs.length - 1]); }
+    if (!(X1 > X0)) { X0 = 0; X1 = Math.max(1, X1); }
+    const minSpan = Math.min(X1 - X0, 8);
+    let a = X0, b = X1, fit = true, picked = null, hoverX = null;
+    const yFmt = o.yFmt || ((v) => U.fmt(Math.round(v)));
+    const multi = S.length > 1;
+    const m = openModal(`<h2>${icon('expand')} ${U.esc(o.title)}</h2>
+      <div class="zc-tools">
+        <div class="seg zc-zoom" role="group" aria-label="Zoom"><button type="button" data-z="out" aria-label="Zoom out">${icon('minus')}</button><button type="button" data-z="in" aria-label="Zoom in">${icon('plus')}</button><button type="button" data-z="all">Show all</button></div>
+        <label class="zc-fit"><input type="checkbox" checked data-fit> Fit height to what's shown</label>
+        <span class="grow"></span><span class="hint zc-range" aria-live="polite"></span>
+      </div>
+      <div class="chart zc-box" tabindex="0" aria-label="${U.esc(o.title)}: use plus and minus to zoom and the arrow keys to move"><svg class="zc-svg" role="img"></svg><div class="tip hidden"></div></div>
+      <div class="zc-over" aria-hidden="true"><svg class="zc-osvg"></svg></div>
+      ${multi ? `<div class="legend zc-legend">${S.map((s, i) => `<button type="button" class="zc-key" data-k="${i}" aria-pressed="true"><i style="background:${s.color}"></i>${U.esc(s.name)}</button>`).join('')}</div>` : ''}
+      <div class="zc-detail" aria-live="polite"><p class="hint" style="margin:0">Hover or tap the chart to see the numbers for one hand.</p></div>
+      <p class="hint">Scroll or pinch to zoom · drag the chart to move along · drag across the strip below to pick a stretch · double-click to zoom in</p>
+      <div class="modal-foot"><button class="btn primary" data-close>Close</button></div>`, { label: o.title, onClose: () => { removeEventListener('resize', draw); } });
+    const root = m.el, md = $('.modal', root);
+    md.classList.add('wide', 'zc-modal');
+    const box = $('.zc-box', root), svg = $('.zc-svg', root), tip = $('.tip', box), osvg = $('.zc-osvg', root), over = $('.zc-over', root), det = $('.zc-detail', root);
+    let G = null; // geometry of the last drawing
+
+    const setRange = (na, nb) => {
+      let span = Math.max(minSpan, Math.min(X1 - X0, nb - na));
+      let c = (na + nb) / 2;
+      na = c - span / 2; nb = c + span / 2;
+      if (na < X0) { nb += X0 - na; na = X0; }
+      if (nb > X1) { na -= nb - X1; nb = X1; }
+      a = Math.max(X0, na); b = Math.min(X1, nb);
+      draw();
+    };
+    const zoomAt = (cx, f) => setRange(cx - (cx - a) * f, cx + (b - cx) * f);
+
+    // Points of one series between x = lo and hi, thinned to about two per pixel.
+    function visible(s, lo, hi, px) {
+      const i0 = Math.max(0, lowerBound(s.xs, lo) - 1), i1 = Math.min(s.xs.length, lowerBound(s.xs, hi) + 2);
+      const n = i1 - i0, out = [];
+      if (n <= px * 2) { for (let i = i0; i < i1; i++) out.push([s.xs[i], s.ys[i]]); return out; }
+      const w = (hi - lo) / px;
+      let col = null, mn = null, mx = null, gap = false;
+      const flush = () => { if (mn) { if (mn[0] <= mx[0]) out.push(mn, mx); else out.push(mx, mn); } if (gap) out.push([out.length ? out[out.length - 1][0] : lo, NaN]); mn = mx = null; gap = false; };
+      for (let i = i0; i < i1; i++) {
+        const c = Math.floor((s.xs[i] - lo) / w);
+        if (c !== col) { flush(); col = c; }
+        const y = s.ys[i];
+        if (Number.isNaN(y)) { gap = true; continue; }
+        if (!mn || y < mn[1]) mn = [s.xs[i], y];
+        if (!mx || y > mx[1]) mx = [s.xs[i], y];
+      }
+      flush();
+      return out;
+    }
+    function yRange(lo, hi, px) {
+      let y0 = Infinity, y1 = -Infinity;
+      for (const s of S) {
+        if (!s.on) continue;
+        const pts = fit ? visible(s, lo, hi, px) : s.xs.map((x, i) => [x, s.ys[i]]);
+        for (const [x, y] of pts) if (!Number.isNaN(y) && (!fit || (x >= lo && x <= hi))) { if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      }
+      if (!(y1 >= y0)) { y0 = 0; y1 = 1; }
+      if (o.zeroLine || !fit) { y0 = Math.min(y0, 0); y1 = Math.max(y1, 0); }
+      const pad = Math.max((y1 - y0) * 0.08, 1);
+      return [!o.zeroLine && y0 >= 0 ? Math.max(0, y0 - pad) : y0 - pad, y1 + pad]; // stacks never dip below zero
+    }
+    const pathOf = (pts, X, Y) => { let d = '', pen = false; for (const [x, y] of pts) { if (Number.isNaN(y)) { pen = false; continue; } d += `${pen ? 'L' : 'M'}${X(x).toFixed(1)} ${Y(y).toFixed(1)}`; pen = true; } return d; };
+
+    function draw() {
+      const W = Math.max(280, box.clientWidth - 20), H = Math.round(Math.max(220, Math.min(460, W * 0.52)));
+      const L = 56, R = 12, T = 12, B = 26, pw = W - L - R;
+      const [y0, y1] = yRange(a, b, pw);
+      const X = (x) => L + ((x - a) / (b - a || 1)) * pw, Y = (y) => T + (1 - (y - y0) / (y1 - y0 || 1)) * (H - T - B);
+      G = { W, H, L, R, T, B, X, Y, pw };
+      const yt = ticks(y0, y1, 6), xt = ticks(a, b, Math.max(3, Math.floor(pw / 90))).filter((x) => Number.isInteger(x));
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      svg.setAttribute('aria-label', `${o.title}, ${o.xName ? o.xName(Math.round(a)) : Math.round(a)} to ${o.xName ? o.xName(Math.round(b)) : Math.round(b)}`);
+      svg.innerHTML = `<defs><clipPath id="zc-clip"><rect x="${L}" y="${T - 4}" width="${pw}" height="${H - T - B + 8}"/></clipPath></defs>
+        <g class="grid">${yt.map((v) => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>`).join('')}</g>
+        ${o.zeroLine && y0 < 0 && y1 > 0 ? `<line x1="${L}" x2="${W - R}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--text-3)"/>` : ''}
+        <g class="axis">${yt.map((v) => `<text x="${L - 6}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end">${U.esc(yFmt(v))}</text>`).join('')}
+          ${xt.map((x) => `<text x="${X(x).toFixed(1)}" y="${H - 7}" text-anchor="middle">${x === 0 ? 'Start' : U.fmt(x)}</text>`).join('')}</g>
+        <g class="series" clip-path="url(#zc-clip)">${S.map((s) => (s.on ? `<path d="${pathOf(visible(s, a, b, pw), X, Y)}" style="stroke:${s.color}"/>` : '')).join('')}</g>
+        <g class="zc-marks"></g>
+        <rect class="zc-hit" x="${L}" y="0" width="${pw}" height="${H}" fill="transparent"/>`;
+      // Overview: everything, with the part on screen highlighted.
+      const OW = W, OH = 46, ox = (x) => L + ((x - X0) / (X1 - X0)) * pw;
+      const [oy0, oy1] = (() => { let lo = Infinity, hi = -Infinity; for (const s of S) if (s.on) for (const y of s.ys) if (!Number.isNaN(y)) { if (y < lo) lo = y; if (y > hi) hi = y; } return hi >= lo ? [lo, hi + (hi === lo ? 1 : 0)] : [0, 1]; })();
+      const oy = (y) => 4 + (1 - (y - oy0) / (oy1 - oy0)) * (OH - 8);
+      osvg.setAttribute('viewBox', `0 0 ${OW} ${OH}`);
+      osvg.innerHTML = `<rect x="${L}" y="0" width="${pw}" height="${OH}" rx="6" class="zc-obg"/>
+        <g class="series">${S.map((s) => (s.on ? `<path d="${pathOf(visible(s, X0, X1, pw), ox, oy)}" style="stroke:${s.color}"/>` : '')).join('')}</g>
+        <rect class="zc-win" x="${ox(a).toFixed(1)}" y="1" width="${Math.max(3, ox(b) - ox(a)).toFixed(1)}" height="${OH - 2}" rx="5"/>`;
+      G.ox = ox; G.OW = OW;
+      const ra = Math.round(a), rb = Math.round(b);
+      $('.zc-range', root).textContent = a <= X0 && b >= X1 ? `All ${U.fmt(X1 - X0)} hands` : `Hands ${U.fmt(ra)}–${U.fmt(rb)} of ${U.fmt(X1)}`;
+      marks();
+    }
+    // Value of a series at hand x (the last point at or before x), or null in a gap.
+    const idx = (s, x) => { const i = lowerBound(s.xs, x + 1e-9) - 1; return i >= 0 && s.xs[i] === x && !Number.isNaN(s.ys[i]) ? i : -1; };
+    const before = (s, x) => { let i = lowerBound(s.xs, x) - 1; while (i >= 0 && Number.isNaN(s.ys[i])) i--; return i >= 0 ? s.ys[i] : null; };
+    function rowsAt(x) {
+      // The change in that hand: given with the point (it leaves out rebuys), else the step from the point before.
+      return S.filter((s) => s.on).map((s) => {
+        const i = idx(s, x);
+        if (i < 0) return null;
+        const y = s.ys[i], p = before(s, x);
+        return { s, y, d: s.ds[i] != null ? s.ds[i] : p == null ? null : y - p };
+      }).filter(Boolean).sort((p, q) => q.y - p.y);
+    }
+    const sgnFmt = o.dFmt || ((d) => (d > 0 ? '+' : d < 0 ? '−' : '±') + yFmt(Math.abs(d)));
+    function marks() {
+      const g = $('.zc-marks', svg);
+      if (!g || !G) return;
+      const x = hoverX != null ? hoverX : picked;
+      if (x == null || x < a || x > b) { g.innerHTML = ''; tip.classList.add('hidden'); return; }
+      const { X, Y, T, H, B } = G, rows = rowsAt(x);
+      g.innerHTML = `<line x1="${X(x)}" x2="${X(x)}" y1="${T}" y2="${H - B}" stroke="var(--text-3)" stroke-dasharray="3 3"/>` +
+        rows.map((r) => `<circle cx="${X(x)}" cy="${Y(r.y)}" r="4" style="fill:var(--surface);stroke:${r.s.color};stroke-width:2"/>`).join('');
+      if (hoverX == null) { tip.classList.add('hidden'); return; }
+      tip.innerHTML = `<b>${U.esc(o.xName ? o.xName(x) : String(x))}</b>${rows.slice(0, 9).map((r) => `<div><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${r.s.color};margin-right:6px"></i>${multi ? U.esc(r.s.name) + ' ' : ''}<b class="num">${U.esc(yFmt(r.y))}</b>${r.d != null && x > X0 ? ` <span class="${r.d > 0 ? 'net-pos' : r.d < 0 ? 'net-neg' : 'muted'} num">${sgnFmt(r.d)}</span>` : ''}</div>`).join('')}`;
+      tip.classList.remove('hidden');
+      const rc = svg.getBoundingClientRect(), left = (X(x) / G.W) * rc.width;
+      tip.style.left = (left + 14 + tip.offsetWidth > rc.width ? left - tip.offsetWidth - 14 : left + 14) + 'px';
+      tip.style.top = '10px';
+    }
+    function detail(x) {
+      picked = x;
+      const rows = rowsAt(x);
+      det.innerHTML = `<div class="row" style="gap:8px;flex-wrap:wrap"><b>${U.esc(o.xName ? o.xName(x) : String(x))}</b><span class="grow"></span>${o.pick && x > X0 ? `<button class="btn sm" data-go>${icon('play')}${U.esc(o.pick.label(x))}</button>` : ''}</div>
+        <table class="zc-table num"><thead><tr>${multi ? '<th>Player</th>' : ''}<th>${U.esc(o.unit || 'Value')}</th><th>This hand</th></tr></thead><tbody>${rows.map((r) => `<tr>${multi ? `<td><i style="background:${r.s.color}"></i>${U.esc(r.s.name)}</td>` : ''}<td>${U.esc(yFmt(r.y))}</td><td class="${r.d > 0 ? 'net-pos' : r.d < 0 ? 'net-neg' : ''}">${r.d == null || x <= X0 ? '–' : sgnFmt(r.d)}</td></tr>`).join('') || `<tr><td colspan="3">No one was dealt in.</td></tr>`}</tbody></table>`;
+      const go = $('[data-go]', det);
+      if (go) go.addEventListener('click', () => { m.close(); o.pick.go(x); });
+      marks();
+    }
+    const xAt = (ev) => {
+      const rc = svg.getBoundingClientRect(), px = ((ev.clientX - rc.left) / rc.width) * G.W;
+      return Math.max(X0, Math.min(X1, Math.round(a + ((px - G.L) / G.pw) * (b - a))));
+    };
+    const xRaw = (ev) => { const rc = svg.getBoundingClientRect(), px = ((ev.clientX - rc.left) / rc.width) * G.W; return a + ((px - G.L) / G.pw) * (b - a); };
+
+    // Main chart: hover, tap, drag to move, pinch and wheel to zoom.
+    const ptr = new Map();
+    let drag = null, pinch = null;
+    svg.addEventListener('pointerdown', (ev) => {
+      svg.setPointerCapture(ev.pointerId);
+      ptr.set(ev.pointerId, ev.clientX);
+      if (ptr.size === 2) { const [p, q] = [...ptr.values()]; pinch = { d: Math.abs(p - q) || 1, a, b, c: xRaw({ clientX: (p + q) / 2 }) }; drag = null; }
+      else drag = { x: ev.clientX, a, b, moved: false };
+    });
+    svg.addEventListener('pointermove', (ev) => {
+      if (ptr.has(ev.pointerId)) ptr.set(ev.pointerId, ev.clientX);
+      if (pinch && ptr.size === 2) {
+        const [p, q] = [...ptr.values()], f = pinch.d / (Math.abs(p - q) || 1);
+        setRange(pinch.c - (pinch.c - pinch.a) * f, pinch.c + (pinch.b - pinch.c) * f);
+        return;
+      }
+      if (drag) {
+        const rc = svg.getBoundingClientRect(), dx = ((ev.clientX - drag.x) / rc.width) * G.W;
+        if (Math.abs(dx) > 4) drag.moved = true;
+        if (drag.moved) { const sh = (dx / G.pw) * (drag.b - drag.a); setRange(drag.a - sh, drag.b - sh); box.classList.add('zc-grab'); return; }
+      }
+      if (ev.pointerType === 'mouse') { hoverX = xAt(ev); marks(); }
+    });
+    const up = (ev) => {
+      ptr.delete(ev.pointerId);
+      box.classList.remove('zc-grab');
+      if (ptr.size < 2) pinch = null;
+      if (drag && !drag.moved && ev.type === 'pointerup') detail(xAt(ev));
+      drag = null;
+    };
+    svg.addEventListener('pointerup', up);
+    svg.addEventListener('pointercancel', up);
+    svg.addEventListener('pointerleave', () => { hoverX = null; marks(); });
+    svg.addEventListener('wheel', (ev) => { ev.preventDefault(); zoomAt(xRaw(ev), Math.pow(1.0015, ev.deltaY)); }, { passive: false });
+    svg.addEventListener('dblclick', (ev) => { ev.preventDefault(); zoomAt(xRaw(ev), 0.5); });
+
+    // Overview strip: drag the window, or drag across any stretch to show just that.
+    let od = null;
+    const oxAt = (ev) => { const rc = osvg.getBoundingClientRect(), px = ((ev.clientX - rc.left) / rc.width) * G.OW; return Math.max(X0, Math.min(X1, X0 + ((px - G.L) / G.pw) * (X1 - X0))); };
+    osvg.addEventListener('pointerdown', (ev) => {
+      osvg.setPointerCapture(ev.pointerId);
+      const x = oxAt(ev);
+      od = x >= a && x <= b && b - a < X1 - X0 ? { mode: 'move', x, a, b } : { mode: 'pick', x };
+    });
+    osvg.addEventListener('pointermove', (ev) => {
+      if (!od) return;
+      const x = oxAt(ev);
+      if (od.mode === 'move') setRange(od.a + x - od.x, od.b + x - od.x);
+      else if (Math.abs(x - od.x) > (X1 - X0) / 200) { od.moved = true; setRange(Math.min(od.x, x), Math.max(od.x, x)); }
+    });
+    osvg.addEventListener('pointerup', (ev) => {
+      if (od && od.mode === 'pick' && !od.moved) { const x = oxAt(ev), span = b - a; setRange(x - span / 2, x + span / 2); }
+      od = null;
+    });
+    over.addEventListener('wheel', (ev) => { ev.preventDefault(); zoomAt((a + b) / 2, Math.pow(1.0015, ev.deltaY)); }, { passive: false });
+
+    root.addEventListener('click', (ev) => {
+      const z = ev.target.closest('[data-z]');
+      if (z) { const c = picked != null && picked >= a && picked <= b ? picked : (a + b) / 2; if (z.dataset.z === 'all') setRange(X0, X1); else zoomAt(c, z.dataset.z === 'in' ? 0.5 : 2); }
+      const k = ev.target.closest('[data-k]');
+      if (k) { const s = S[+k.dataset.k]; s.on = !s.on; if (!S.some((t) => t.on)) s.on = true; k.setAttribute('aria-pressed', String(s.on)); k.classList.toggle('off', !s.on); draw(); if (picked != null) detail(picked); }
+    });
+    $('[data-fit]', root).addEventListener('change', (e) => { fit = e.target.checked; draw(); });
+    box.addEventListener('keydown', (e) => {
+      const span = b - a, step = Math.max(1, Math.round(span / 10));
+      if (e.key === '+' || e.key === '=') zoomAt(picked != null ? picked : (a + b) / 2, 0.5);
+      else if (e.key === '-' || e.key === '_') zoomAt((a + b) / 2, 2);
+      else if (e.key === '0') setRange(X0, X1);
+      else if (e.key === 'ArrowLeft') setRange(a - step, b - step);
+      else if (e.key === 'ArrowRight') setRange(a + step, b + step);
+      else return;
+      e.preventDefault();
+    });
+    addEventListener('resize', draw);
+    draw();
+    if (o.startAt != null) detail(o.startAt);
+    return m;
+  }
+  return { open };
+})();
 
 function helpOverlay(mode) {
   const rows = mode === 'viewer'

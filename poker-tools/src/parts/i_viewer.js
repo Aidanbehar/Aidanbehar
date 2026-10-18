@@ -276,8 +276,8 @@ function ViewerScreen() {
       ${S.botHands ? `<p class="hint">🤖 ${S.botHands} hand${S.botHands > 1 ? 's' : ''} in this record had a bot making decisions (marked in the hand list).</p>` : ''}
       ${S.winningHands.length ? `<div class="section-title" title="${U.esc(KEY['Winning hands'])}">Winning hands at showdown</div>
       <div class="bars">${S.winningHands.slice().reverse().map((w) => `<div class="bar-row"><span>${w.name}</span><div class="bar"><i style="width:${(100 * w.count) / maxCat}%"></i></div><b class="num">${w.count}</b></div>`).join('')}</div>` : ''}
-      <div class="section-title">Chip stacks over time</div>
-      <div class="chart" id="v-chart">${chartSvg()}<div class="tip hidden" id="v-tip"></div></div>
+      <div class="row section-title" style="gap:8px">Chip stacks over time<span class="grow"></span><button class="btn sm ghost" id="v-zoom" title="Open the chart large, to zoom in and see every hand">${icon('expand')}Open in detail</button></div>
+      <div class="chart zc-small" id="v-chart" title="Click to open in detail">${chartSvg()}<div class="tip hidden" id="v-tip"></div></div>
       <div class="legend">${S.players.map((pl) => `<span><i style="background:${colorOf(pl.name)}"></i>${U.esc(pl.name)}</span>`).join('')}</div>
       <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">Show stacks as a table</summary>${stackTable()}</details>
       <div class="section-title">Players</div>
@@ -320,7 +320,7 @@ function ViewerScreen() {
         const h = V.replay.hands[k].hand;
         const p = h && h.players.find((q) => q.name === pl.name);
         if (k === firstHand && p) pts.push({ x: k, y: p.startStack });
-        pts.push(p && h.phase === 'done' ? { x: k + 1, y: p.stack } : null);
+        pts.push(p && h.phase === 'done' ? { x: k + 1, y: p.stack, d: p.stack - p.startStack } : null);
       }
       if (firstHand < 0 && start) pts.unshift({ x: 0, y: start });
       return { name: pl.name, pts };
@@ -376,6 +376,25 @@ function ViewerScreen() {
     };
     hit.addEventListener('pointermove', move);
     hit.addEventListener('pointerleave', () => { tip.classList.add('hidden'); cross.setAttribute('visibility', 'hidden'); });
+    // Click (or tap) the chart, or the button, to look at it large and zoom in.
+    hit.addEventListener('click', (ev) => {
+      const r = svg.getBoundingClientRect(), px = ((ev.clientX - r.left) / r.width) * CH.w;
+      openChart(Math.max(0, Math.min(n, Math.round(((px - CH.l) / (CH.w - CH.l - CH.r)) * n))));
+    });
+    const zb = $('#v-zoom');
+    if (zb) zb.addEventListener('click', () => openChart(null));
+  }
+  function openChart(startAt) {
+    const handNo = (x) => (V.replay.hands[x - 1] ? V.replay.hands[x - 1].rec.no : x);
+    ZoomChart.open({
+      title: 'Chip stacks over time', unit: 'Chips', startAt,
+      series: chartData().map((d) => ({ name: d.name, color: colorOf(d.name), pts: d.pts })),
+      xName: (x) => (x === 0 ? 'Start' : `After hand #${handNo(x)}`),
+      pick: {
+        label: (x) => `Show hand #${handNo(x)}`,
+        go: (x) => { stop(); V.hk = x - 1; V.si = cur().steps.length - 1; show(false); const st = $('#v-stage'); if (st) st.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' }); },
+      },
+    });
   }
   function stackTable() {
     const S = V.stats;

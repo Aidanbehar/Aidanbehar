@@ -81,6 +81,15 @@ The site has four parts:
   [Play Against Cepheus](#play-against-cepheus).
 - **The Hand History Viewer** (`#/viewer`): paste a game record and replay every hand on the same
   table UI, with stats and a chart of chip stacks over time. The viewer works offline.
+  - **The chip chart in detail:** click or tap the chart (or **Open in detail**) to open it large.
+    Zoom with the mouse wheel, a pinch, a double-click, the − / + buttons or the `+` / `−` keys;
+    drag the chart to move along it; drag across the overview strip underneath to jump to any
+    stretch of hands. **Fit height to what's shown** rescales the chip axis to the hands on screen,
+    so small swings become visible. Hover (or tap) any hand to see every player's stack and how
+    much they won or lost in that hand (rebuys are not counted as winnings), tap a name to hide or
+    show that player, and press **Show hand #N** to replay that hand. Even records of tens of
+    thousands of hands (Instant mode) stay quick, since each screen pixel draws only the highest
+    and lowest point it covers.
   - **Per player:** hands, wins, net chips, bb/100, VPIP, PFR, 3-bet, fold to 3-bet, limp,
     aggression factor and frequency, c-bet, fold to c-bet, check-raises, WTSD, W$SD, WWSF, all-ins,
     streaks and more.
@@ -551,7 +560,8 @@ goes on, which shows it is converging.
 Players:
 
 - **Your session:** your result, an honest "too early to tell" verdict based on how much luck
-  could explain, a chart of your running total, and your play-style numbers next to Cepheus's.
+  could explain, a chart of your running total (click it to open it large and zoom in), and your
+  play-style numbers next to Cepheus's.
 - **How good is Cepheus?** In plain language: how often it wins a hand, and the chance you would
   be ahead after 10, 100, 1,000 or 10,000 hands. Then a win-rate chart against every opponent,
   with 95% ranges.
