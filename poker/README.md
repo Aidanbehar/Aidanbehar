@@ -450,14 +450,20 @@ exact rules and algorithm; an approximation, not Cepheus's own strategy).
   is remembered in your browser, so you can come back to it.
 - **What to do:** on your turn it shows the strategy's exact mix for this spot (for example "Raise
   98%, call 2%") and the best play in plain words. The strategy mixes on purpose so it can't be read.
+  - **River:** solved exactly for your spot (every hand either player could hold, the real stacks
+    and blinds), with more iterations than the live bot uses.
+  - **Turn:** re-solved exactly (a few seconds), then checked. The answer shown is the re-solve only
+    if a best-responding opponent would win less against it than against the strategy table in that
+    spot, and the screen says by how much; otherwise it shows the table's answer and says so.
+  - **Preflop and flop:** the strategy table.
 - **Chance of winning:** your chance of winning if the hand were checked down, against any two cards
   and against the hands the opponent is likely to hold given their betting. For the second number,
   every hand they could have is weighted by how often the strategy would have made their actions with
   it. River and turn numbers are exact over every hand they could hold (and every river card); flop
   and preflop numbers use a fixed sample of board run-outs. Ties count half.
-- **Limits:** the strategy was solved with the small blind at half the big blind and stacks of at
-  least 24 big blinds (what a fully capped hand can cost); other settings work but the advice is
-  approximate, and the screen says so.
+- **Limits:** the strategy table was solved with the small blind at half the big blind and stacks of
+  at least 24 big blinds (what a fully capped hand can cost); other settings work but preflop and flop
+  advice is approximate, and the screen says so. River re-solves use the real stacks and blinds.
 
 ## Play Against Cepheus
 
@@ -477,15 +483,31 @@ but no strategy.
   flop, turn and river. This keeps the strategy to a 579 KB file.
 - Hands are ranked with the archive's own evaluator, in the solver and in the browser.
 - The strategy was computed in 100 minutes on 4 CPU cores (14,273 iterations).
+- **River re-solving during play.** When Cepheus reaches the river, it does not use its 50 strength
+  groups. It solves that exact spot in the browser (about 0.1 to 0.3 seconds):
+  1. *Ranges:* every hand each player could hold is weighted by how often the strategy would have
+     bet the way that player actually did (only the board, the betting and the seats are used; its
+     own cards are not used to build either range).
+  2. *An exact small game:* the real river betting tree (real stacks and blinds) with every two-card
+     hand for both players, card removal included.
+  3. *CFR+* on that small game, with a safety step: at the start the opponent may instead "take"
+     what each of their hands wins against the strategy table, so the new strategy never hands them
+     more than the table would. Then it looks up its own hand.
+  In testing, a best-responding opponent won less against the river re-solve than against the table
+  on every one of 16 test spots (7% to 111% less).
+- **The turn stays on the table in live play.** A turn re-solve (exact turn betting, with the river
+  played by the table for every river card) is built in, but at a speed suitable for live play it
+  was better than the table on only about 60 to 80% of test spots, so the live bot does not use it.
+  The Heads-Up Limit Solver uses it with a bigger budget and checks every spot (see below).
 
-How strong it is, in exact expected value over 1,000 sampled boards, playing both seats with
-every hand:
+How strong the strategy table is, in exact expected value over 6,000 sampled boards, playing both
+seats with every hand (the river re-solving is measured separately, in the game tests below):
 
 | Opponent | Big blinds per 100 hands |
 |---|---|
-| Always call | +50.6 |
-| Always raise | +34.0 |
-| Random play | +78.6 |
+| Always call | +51.0 |
+| Always raise | +34.5 |
+| Random play | +78.5 |
 
 It also beats its own earlier training snapshots by a little, and that margin shrinks as training
 goes on, which shows it is converging.

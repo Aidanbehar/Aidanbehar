@@ -55,6 +55,11 @@ const CepheusBot = {
     return { seat: i === h.button ? 1 : 0, hole: h.players[i].hole.slice(), board: h.board.slice(), history };
   },
 
+  /**
+   * The river is re-solved exactly during play (see Resolver); false uses the table everywhere. The turn
+   * stays on the table: a turn re-solve fast enough to play was not reliably better in testing.
+   */
+  resolve: true, resolveStreets: [3],
   /** An action the engine accepts. Returns { action, fallback } (fallback = why the strategy could not be used). */
   decide(h, i) {
     const L = Engine.legal(h);
@@ -64,7 +69,23 @@ const CepheusBot = {
     try {
       if (h.limit !== 'fl' || h.game !== 'holdem' || h.players.length !== 2) throw new Error('this is not heads-up limit Hold\'em');
       if (!this.rng) this.rng = Bots.makeRng(); // secure-seeded; used only to sample the strategy's mixed actions
-      d = this.model.decide(this.observe(h, i), this.rng.next);
+      const obs = this.observe(h, i);
+      // River: solve this exact spot (only public information and its own cards are used).
+      if (this.resolve && this.resolveStreets.includes(h.street) && typeof Resolver !== 'undefined') {
+        const t0 = Date.now();
+        let r = null;
+        try { r = Resolver.decide(this.model, h, i, obs.hole, this.memo || (this.memo = {})); } catch (e) { this.resolveFails = (this.resolveFails || 0) + 1; if (typeof window !== 'undefined') console.warn('re-solve failed, using the table', e); }
+        if (!r) this.resolveMisses = (this.resolveMisses || 0) + 1;
+        if (r) {
+          this.resolveMs = (this.resolveMs || 0) + (Date.now() - t0); this.resolves = (this.resolves || 0) + 1;
+          const u = this.rng.next(); let k = 0, acc = r.probs[0];
+          while (k < r.codes.length - 1 && u >= acc) acc += r.probs[++k];
+          const code = r.codes[k], probs = { fold: 0, call: 0, raise: 0 };
+          r.codes.forEach((c, j) => { probs[{ f: 'fold', c: 'call', r: 'raise' }[c]] = r.probs[j]; });
+          d = { action: { f: 'fold', c: 'call', r: 'raise' }[code], probs, resolved: true };
+        }
+      }
+      if (!d) d = this.model.decide(obs, this.rng.next);
     } catch (e) { return { action: passive(), fallback: e.message }; }
     if (d.action === 'raise' && L.canRaise) return { action: { type: L.isBet ? 'b' : 'r', to: L.minTo }, d };
     if (d.action === 'fold' && !L.canCheck) return { action: { type: 'f' }, d };
@@ -89,7 +110,7 @@ const CepheusStats = (() => {
   const pct = (x, d = 0) => (x == null ? '–' : `${(100 * x).toFixed(d)}%`);
   const sgn = (x, d = 1) => `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x).toFixed(d)}`;
   const esc = (s) => U.esc(String(s));
-  const NAMES = { call: 'Always calls', raise: 'Always raises', random: 'Random clicks', uniform: 'Random clicks', self: 'Itself (mirror match)', beginner: 'Beginner bot', casual: 'Casual bot', intermediate: 'Intermediate bot', advanced: 'Advanced bot', professional: 'Professional bot', elite: 'Elite bot', extreme: 'Extreme bot', 'elite:maniac': 'Elite Maniac', 'elite:loosepassive': 'Elite Loose-passive', 'elite:tightpassive': 'Elite Tight-passive', 'elite:trapper': 'Elite Trapper', 'extreme:gto': 'Extreme GTO-inspired' };
+  const NAMES = { table: 'Previous version (table only)', call: 'Always calls', raise: 'Always raises', random: 'Random clicks', uniform: 'Random clicks', self: 'Itself (mirror match)', beginner: 'Beginner bot', casual: 'Casual bot', intermediate: 'Intermediate bot', advanced: 'Advanced bot', professional: 'Professional bot', elite: 'Elite bot', extreme: 'Extreme bot', 'elite:maniac': 'Elite Maniac', 'elite:loosepassive': 'Elite Loose-passive', 'elite:tightpassive': 'Elite Tight-passive', 'elite:trapper': 'Elite Trapper', 'extreme:gto': 'Extreme GTO-inspired' };
   const nameOf = (k) => NAMES[k] || k;
   // the sample run: newer results files store { curve, curveStep }, older ones curveEvery30
   const runOf = (m) => (m.curve ? { pts: m.curve, step: m.curveStep || 50 } : { pts: m.curveEvery30 || [], step: 30 });
@@ -229,8 +250,9 @@ const CepheusStats = (() => {
       <div class="cs-cards">
         <div class="cs-card"><b class="num">${pct(ext.wonPct)}</b><span>of hands won against our strongest bot (Extreme). It folds the rest early when that is cheaper.</span></div>
         <div class="cs-card"><b class="num">${sgn(ext.bb100, 0)}</b><span>big blinds per 100 hands against Extreme: about ${Math.round(ext.bb100 * d.bb).toLocaleString()} chips at these blinds.</span></div>
-        <div class="cs-card"><b class="num">${sgn(call.mbb / 10, 0)}</b><span>big blinds per 100 hands against someone who always calls (exact calculation).</span></div>
+        <div class="cs-card"><b class="num">${sgn(call.mbb / 10, 0)}</b><span>big blinds per 100 hands against someone who always calls (exact calculation, strategy table).</span></div>
       </div>
+      ${(() => { const t = d.matchups.find((m) => m.opponent === 'table'); return t ? `<p class="cs-plain"><b>River re-solving.</b> On the river Cepheus now solves the exact spot during play, with every hand either player could hold, instead of using its 50 strength groups. Against the previous version, which used the table on every street, it wins <b class="num">${sgn(t.bb100, 1)} bb/100</b> (95% range ±${t.ci95bb100.toFixed(1)}) over ${t.hands.toLocaleString()} hands.</p>` : ''; })()}
       <p class="cs-plain"><b>Luck vs skill.</b> If you played exactly like our Extreme bot, here is the chance you would be ahead of Cepheus after:</p>
       <div class="cs-meter">${[10, 100, 1000, 10000].map((N) => { const p = ahead(ext, N); return `<div><span>${N.toLocaleString()} hands</span><div class="cs-track" role="img" aria-label="${pct(p)} chance"><i style="width:${(100 * p).toFixed(1)}%"></i></div><b class="num">${p < 0.001 ? '<0.1%' : pct(p)}</b></div>`; }).join('')}</div>
       <p class="cs-plain">Short sessions are mostly luck; over thousands of hands the better player almost always comes out ahead.</p>
@@ -249,7 +271,7 @@ const CepheusStats = (() => {
       </tbody></table></div><p class="cs-note">Each deal was played twice with the seats swapped (duplicate poker), which cancels much of the luck. bb/100 is big blinds won per 100 hands; ± is the 95% range. Green means the win is bigger than luck explains. *Against itself the true result is exactly zero (the exact calculation below confirms it); the small number here is ordinary random variation. With ${ms.length} matchups, one landing just outside its 95% range is expected now and then.</p></details>
       <details><summary>Exact calculations (no luck at all)</summary><table class="cs-table"><thead><tr><th>Against</th><th>bb/100</th><th>On the button</th><th>In the big blind</th></tr></thead><tbody>
         ${d.exact.map((x) => `<tr><td>${esc(nameOf(x.b))}</td><td class="num">${sgn(x.mbb / 10)}</td><td class="num">${sgn(x.asButton / 10)}</td><td class="num">${sgn(x.asBB / 10)}</td></tr>`).join('')}
-      </tbody></table><p class="cs-note">Computed by the offline solver over ${d.exact[0].boards.toLocaleString()} random boards, adding up every possible pair of hands on each board exactly. Against a copy of itself the result is exactly zero, as it should be.</p></details>
+      </tbody></table><p class="cs-note">Computed by the offline solver over ${d.exact[0].boards.toLocaleString()} random boards, adding up every possible pair of hands on each board exactly. Against a copy of itself the result is exactly zero, as it should be. These figures are for the strategy table alone: the river re-solving happens during play, so it is measured by the ${d.totalHands.toLocaleString()} test hands above (see "Previous version").</p></details>
       <details><summary>How it learned</summary>${conv && conv.length > 1 ? lineChart('conv', conv.map((c) => c.vsCall / 10), { xLabel: 'minutes', xStep: conv[1].minutes - conv[0].minutes, aria: 'Win rate against an always-calling player as training went on' }) : ''}
         <p class="cs-note">Win rate against an always-calling player (bb/100) at each saved point of the ${d.strategy.minutes}-minute CFR+ run. ${d.vsSnapshots.map((s) => `The final version beats its ${s.minutes}-minute self by ${sgn(s.mbb / 10, 2)} bb/100.`).join(' ')} Gains that small mean training had settled.</p></details>
       <details><summary>Its playing style</summary><table class="cs-table"><tbody>
@@ -271,6 +293,7 @@ const CepheusStats = (() => {
         <li>${d.totalHands.toLocaleString()} hands through Feltroom's own game engine, with every bet checked for the right size and the 4-bet cap. Fallbacks (spots the strategy did not cover): ${d.totalFallbacks}.</li>
         <li>Exact expected values from the offline CFR+ solver, which add up every pair of hands on ${d.exact[0].boards.toLocaleString()} random boards.</li>
         <li>Strategy: ${esc(d.strategy.summary)}</li>
+        ${d.resolve ? `<li>River re-solving: ${d.resolve.count.toLocaleString()} river spots were solved exactly during the test games, about ${Math.round(d.resolve.ms)} ms each; ${d.resolve.fails} fell back to the table.</li>` : ''}
         <li>Remember: this is a CFR+ approximation of Cepheus, not Cepheus's own strategy. Tested ${esc(d.date)}.</li></ul></details>
     </section>`;
   }

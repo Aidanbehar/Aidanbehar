@@ -51,6 +51,37 @@ const LimitSolver = (() => {
     return { h, hero: s.hero, opp, needBoard, applied };
   }
 
+  /**
+   * Re-solved advice. River: solved exactly (more iterations than the live bot). Turn: re-solved with a
+   * bigger budget and then checked: the re-solve is used only if a best-responding opponent would win
+   * less against it than against the table in this spot. Returns null for the table's answer.
+   */
+  function adviseResolved(model, B, hole, memo) {
+    const h = B.h;
+    if (!hole || h.phase !== 'betting' || h.toAct !== B.hero || h.street < 2 || typeof Resolver === 'undefined') return null;
+    const L = Engine.legal(h);
+    const mixOf = (r) => { const p = { f: 0, c: 0, r: 0 }; r.codes.forEach((c, j) => { p[c] = r.probs[j]; }); return { fold: L.canCheck ? 0 : p.f, call: p.c + (L.canCheck ? p.f : 0), raise: L.canRaise ? p.r : 0 }; };
+    memo.checks = memo.checks || new Map();
+    if (h.street === 2) {
+      const key = Resolver.keyOf(h, 2) + '|' + B.hero;
+      let chk = memo.checks.get(key);
+      if (!chk) {
+        memo.sols = memo.sols || {}; memo.cache = memo.cache || new Map();
+        const reach = Resolver.ranges(model, h, 2, memo.sols, memo.cache);
+        const sol = new Resolver.Solve(model, h, 2, B.hero, reach, memo.cache, { turnIters: 300, turnSamples: 2, safetyRivers: 48 }).run();
+        const ex = sol.exploit();
+        chk = { better: ex.vsSolved < ex.vsTable, gain: ex.vsTable !== 0 ? (ex.vsTable - ex.vsSolved) / Math.abs(ex.vsTable) : 0, sol };
+        memo.checks.set(key, chk);
+        if (chk.better) { sol.key = Resolver.keyOf(h, 2); memo.sols[2] = sol; } else delete memo.sols[2];
+      }
+      if (!chk.better) return { mix: null, L, source: 'turn-table', gain: chk.gain };
+      const r = chk.sol.at(h, hole);
+      return r ? { mix: mixOf(r), L, source: 'turn', gain: chk.gain } : null;
+    }
+    const r = Resolver.decide(model, h, B.hero, hole, memo, { riverIters: 200 });
+    return r ? { mix: mixOf(r), L, source: 'river' } : null;
+  }
+
   /** The strategy's mix for your seat, mapped onto what the table allows. */
   function advise(model, B, hole) {
     const h = B.h;
@@ -109,11 +140,18 @@ const LimitSolver = (() => {
    * Chance of winning (ties count half): against any hand, and against the opponent's likely hands
    * given their actions. Runs in chunks; returns null if cancelled().
    */
-  async function odds(model, B, hole, { cancelled = () => false, progress = () => {} } = {}) {
+  async function odds(model, B, hole, opts = {}) {
+    const { cancelled = () => false, progress = () => {} } = opts;
     const board = B.h.board.slice(), F = Bots.Fast;
     const combos = pairs([...hole, ...board]);
     const weights = new Float64Array(combos.length).fill(1);
-    if (B.opp.length && model) {
+    if (B.opp.length && model && typeof Resolver !== 'undefined' && opts.memo) {
+      // the same ranges the re-solver uses (exact strength buckets on the turn and river)
+      const m = opts.memo; m.cache = m.cache || new Map();
+      progress(0.1); await new Promise((r) => setTimeout(r, 0)); if (cancelled()) return null;
+      const reach = Resolver.rangesNow(model, B.h, m.sols, m.cache)[1 - B.hero];
+      for (let k = 0; k < combos.length; k++) weights[k] = reach[Resolver.handOf(combos[k])];
+    } else if (B.opp.length && model) {
       const M = quickModel(model);
       for (let k = 0; k < combos.length; k++) {
         if (k % 40 === 0) { progress(k / combos.length / 2); await new Promise((r) => setTimeout(r, 0)); if (cancelled()) return null; }
@@ -161,7 +199,7 @@ const LimitSolver = (() => {
     return { any: any / combos.length, range: rangeW > 0 ? rangeSum / rangeW : null, ranged: B.opp.length > 0, combos: combos.length, likely: rangeW };
   }
 
-  return { build, advise, odds, history, quickModel };
+  return { build, advise, adviseResolved, odds, history, quickModel };
 })();
 
 function SolverScreen() {
@@ -171,6 +209,7 @@ function SolverScreen() {
   const S = Object.assign({ hero: 0, sb: 5, bb: 10, stackBB: 100, cards: [null, null, null, null, null, null, null], actions: [], slot: 0 }, saved || {});
   if (!Array.isArray(S.cards) || S.cards.length !== 7) S.cards = [null, null, null, null, null, null, null];
   let model = null, alive = true, token = 0;
+  const memo = {}; // re-solves for this spot (kept while you step through the hand)
   const C = CepheusBot;
   App.root.innerHTML = `<div class="page"><div class="page-inner sv-page">
     <div class="page-head"><a class="btn ghost icon-btn" href="#/" aria-label="Back to home">${icon('back')}</a><h2>${icon('calc')} Heads-Up Limit Solver</h2><span class="grow"></span>${topIconButtons()}</div>
@@ -244,8 +283,20 @@ function SolverScreen() {
     else if (h.phase !== 'betting') html += `<p class="hint">${B.needBoard ? 'Pick the next board card(s) to continue.' : 'The betting in this hand is over.'}</p>`;
     else if (h.toAct !== B.hero) html += '<p>It is the opponent\'s turn. Record their action to see your next move.</p>';
     else {
-      let a = null;
-      try { a = LimitSolver.advise(model, B, hc); } catch (e) { html += `<div class="err-box">${icon('alert')}<div>The strategy has no answer for this exact line (${U.esc(e.message)}). It was solved for the standard game, with at most four bets a round.</div></div>`; }
+      let a = null, res = null;
+      if (h.street >= 2) {
+        box.innerHTML = `<h3>What to do</h3><p class="hint"><span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:-2px"></span> Solving this exact ${h.street === 3 ? 'river' : 'turn'} spot with every hand…${h.street === 2 ? ' (a few seconds)' : ''}</p>`;
+        await new Promise((r) => setTimeout(r, 40));
+        if (my !== token || !alive) return;
+        try { res = LimitSolver.adviseResolved(model, B, hc, memo); } catch (e) { console.warn(e); }
+      }
+      if (res && res.mix) a = res;
+      else { try { a = LimitSolver.advise(model, B, hc); } catch (e) { html += `<div class="err-box">${icon('alert')}<div>The strategy has no answer for this exact line (${U.esc(e.message)}). It was solved for the standard game, with at most four bets a round.</div></div>`; } }
+      const src = res && res.source === 'river' ? 'Exact river re-solve: every hand either player could hold, with the real stacks and blinds.'
+        : res && res.source === 'turn' ? `Exact turn re-solve, checked: ${Math.round(res.gain * 100)}% harder to beat than the strategy table in this spot.`
+        : res && res.source === 'turn-table' ? 'Strategy table: an exact turn re-solve was tried but was not safer than the table in this spot.'
+        : 'Strategy table (169 starting-hand classes, 50 strength groups after the flop).';
+      if (a) html += `<p class="sv-src">${icon(res && res.mix ? 'check' : 'calc')}${src}</p>`;
       if (a) {
         const opts = [['fold', 'Fold'], ['call', a.L.canCheck ? 'Check' : `Call ${U.fmt(a.L.toCall)}`], ['raise', `${a.L.isBet ? 'Bet' : 'Raise to'} ${U.fmt(a.L.minTo)}`]].filter(([k]) => k !== 'fold' || !a.L.canCheck).filter(([k]) => k !== 'raise' || a.L.canRaise);
         const best = opts.reduce((x, y) => (a.mix[y[0]] > a.mix[x[0]] ? y : x));
@@ -260,7 +311,7 @@ function SolverScreen() {
       <h3 style="margin-top:14px">Chance of winning</h3><div id="sv-odds">${hc ? '<div class="rv-bar"><span id="sv-oprog"></span></div><p class="hint">Working it out…</p>' : '<p class="hint">Pick your two cards.</p>'}</div>`;
     box.innerHTML = html;
     if (!hc) return;
-    const res = await LimitSolver.odds(model, B, hc, { cancelled: () => my !== token || !alive, progress: (x) => { const p = $('#sv-oprog'); if (p) p.style.width = `${Math.round(x * 100)}%`; } }).catch((e) => { console.warn(e); return null; });
+    const res = await LimitSolver.odds(model, B, hc, { memo, cancelled: () => my !== token || !alive, progress: (x) => { const p = $('#sv-oprog'); if (p) p.style.width = `${Math.round(x * 100)}%`; } }).catch((e) => { console.warn(e); return null; });
     if (!res || my !== token || !alive) return;
     const pct = (x) => `${(x * 100).toFixed(1)}%`;
     $('#sv-odds').innerHTML = `<div class="summary">
