@@ -539,26 +539,33 @@ Players:
   calculations, how it learned during training, its playing style (VPIP, PFR, 3-bet, aggression,
   c-bet, fold rates, WTSD, W$SD), how much a single hand swings, and a sample long run.
 
-The test results (`cepheus/cepheus-stats.json`, 33 KB) load only when the tab is opened. They
-come from 480,000 hands through Feltroom's own engine: 30,000 per matchup, every deal played
-twice with the seats swapped, with zero strategy fallbacks. Cepheus beat every opponent by more
-than luck explains:
+The test results (`cepheus/cepheus-stats.json`, 36 KB) load only when the tab is opened. They
+come from 510,000 hands through Feltroom's own engine: 30,000 per matchup, every deal played
+twice with the seats swapped, with the river re-solving switched on and zero strategy fallbacks.
+Cepheus re-solved 297,655 river spots in these games (about 88 ms each, none failed). It beat
+every bot by more than luck explains:
 
 | Opponent | bb/100 |
 |---|---|
-| Beginner bot | +69.4 ± 3.0 |
-| Casual bot | +28.0 ± 3.5 |
-| Intermediate bot | +21.6 ± 3.1 |
-| Advanced bot | +23.6 ± 2.9 |
-| Professional bot | +19.6 ± 3.0 |
-| Elite bot | +25.4 ± 2.9 |
-| Extreme bot | +22.1 ± 2.9 |
-| Extreme GTO-inspired | +23.6 ± 2.9 |
+| Beginner bot | +71.7 ± 3.0 |
+| Casual bot | +25.4 ± 3.4 |
+| Intermediate bot | +22.4 ± 3.2 |
+| Advanced bot | +19.2 ± 3.0 |
+| Professional bot | +21.1 ± 2.9 |
+| Elite bot | +20.6 ± 3.1 |
+| Extreme bot | +21.9 ± 2.9 |
+| Extreme GTO-inspired | +20.8 ± 3.1 |
+| Previous version (table only) | −0.4 ± 2.1 |
 
-Against itself the true result is exactly zero. The solver confirms it, and the engine measured
-−2.5 ± 2.0, which is ordinary variation across 16 matchups. The game-engine results agree with
-the solver's exact calculations over 6,000 boards: against always-call, +50.3 ± 2.4 through the
-engine and +51.0 exact. The tab also shows a 10,000-hand sample run against Extreme.
+Against the previous version, which uses the strategy table on every street, the river
+re-solving shows no measurable gain or loss over 30,000 hands (−0.4 ± 2.1). The two strategies
+are both close to unbeatable, so the difference between them is smaller than this test can
+detect. The re-solve's benefit is that it is harder for a perfect opponent to exploit (see
+above), which does not show up as extra winnings against a near-identical opponent.
+
+Against itself the true result is exactly zero; the engine measured −0.9 ± 2.2. Against
+always-call the engine measured +54.3 ± 2.4, compared with +51.0 for the strategy table alone
+(exact, 6,000 boards). The tab also shows a 10,000-hand sample run against Extreme.
 
 **Loading.** The engine (`cepheus/cepheus.js`, 12 KB) and the strategy
 (`cepheus/cepheus-strategy.bin`, 579 KB) are separate static files. They are downloaded only when

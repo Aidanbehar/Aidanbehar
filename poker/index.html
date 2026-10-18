@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-+HMFXoqu7ZezQaxf/2xRRRT7FztPLKL97ttLfmfvK24=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-ozLKbw0g+XkzwTkn+zUJk2/A5FuYPfZHwVaf5HyNsDo=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -8538,7 +8538,7 @@ const CepheusBot = {
 
 /* ----- The "Stats" tab of a Play Against Cepheus game: how good the bot is, and how you are doing. ----- */
 const CepheusStats = (() => {
-  const URL = 'cepheus/cepheus-stats.json', SHA = 'c5421069deeded426b6da9b2e236f4ddcab4fddf06dbc277fe2fbecbbcc4b21b';
+  const URL = 'cepheus/cepheus-stats.json', SHA = '66251f7255edb41a066574589c90d670a5a1f214881808703e4e33dea7118439';
   let data = null, loading = null, failed = false;
   const load = () => {
     if (data) return Promise.resolve(data);
@@ -8694,7 +8694,7 @@ const CepheusStats = (() => {
         <div class="cs-card"><b class="num">${sgn(ext.bb100, 0)}</b><span>big blinds per 100 hands against Extreme: about ${Math.round(ext.bb100 * d.bb).toLocaleString()} chips at these blinds.</span></div>
         <div class="cs-card"><b class="num">${sgn(call.mbb / 10, 0)}</b><span>big blinds per 100 hands against someone who always calls (exact calculation, strategy table).</span></div>
       </div>
-      ${(() => { const t = d.matchups.find((m) => m.opponent === 'table'); return t ? `<p class="cs-plain"><b>River re-solving.</b> On the river Cepheus now solves the exact spot during play, with every hand either player could hold, instead of using its 50 strength groups. Against the previous version, which used the table on every street, it wins <b class="num">${sgn(t.bb100, 1)} bb/100</b> (95% range ±${t.ci95bb100.toFixed(1)}) over ${t.hands.toLocaleString()} hands.</p>` : ''; })()}
+      ${(() => { const t = d.matchups.find((m) => m.opponent === 'table'); return t ? `<p class="cs-plain"><b>River re-solving.</b> On the river Cepheus now solves the exact spot during play, with every hand either player could hold, instead of using its 50 strength groups. Against the previous version, which used the table on every street, it scored <b class="num">${sgn(t.bb100, 1)} bb/100</b> (95% range ±${t.ci95bb100.toFixed(1)}) over ${t.hands.toLocaleString()} hands.${Math.abs(t.bb100) <= t.ci95bb100 ? ' That is within luck: both versions are close to unbeatable, so any difference between them is too small to measure here. The re-solve\'s gain is that a perfect opponent can win less from it.' : ''}</p>` : ''; })()}
       <p class="cs-plain"><b>Luck vs skill.</b> If you played exactly like our Extreme bot, here is the chance you would be ahead of Cepheus after:</p>
       <div class="cs-meter">${[10, 100, 1000, 10000].map((N) => { const p = ahead(ext, N); return `<div><span>${N.toLocaleString()} hands</span><div class="cs-track" role="img" aria-label="${pct(p)} chance"><i style="width:${(100 * p).toFixed(1)}%"></i></div><b class="num">${p < 0.001 ? '<0.1%' : pct(p)}</b></div>`; }).join('')}</div>
       <p class="cs-plain">Short sessions are mostly luck; over thousands of hands the better player almost always comes out ahead.</p>
