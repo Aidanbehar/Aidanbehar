@@ -294,7 +294,8 @@ function BotSetupScreen() {
         <p class="hint" style="margin:0">Every bot gets its own version of its play style and its mood drifts from hand to hand, so a label is a tendency, not a script.</p>
         <div class="two">
           <label class="field"><span>Play style</span><select class="input" name="personality"><option value="mixed">Mixed (a different style at every seat)</option>${Object.entries(Bots.PERSONALITIES).map(([k, v]) => `<option value="${k}" ${d.personality === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></label>
-          <div class="field"><span>Bot speed</span>${seg('botSpeed', [['ultra', 'Ultra fast'], ['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']], d.botSpeed)}</div>
+          <div class="field"><span>Bot speed</span>${seg('botSpeed', BOT_SPEEDS, d.botSpeed)}</div>
+          <p class="hint">Instant plays hands as fast as your device can, with auto-play on for you (call, check, bet the minimum, rebuy). The table updates a few times a second; stop auto-play to take over.</p>
         </div>
       </section>
       <section class="card-ui setup-section"><h3>You</h3>
@@ -370,7 +371,7 @@ function BotSetupScreen() {
     const box = $('#bsetup-err');
     if (errs.length) { box.innerHTML = `${icon('alert')}<div>${errs.join('<br>')}</div>`; box.classList.remove('hidden'); return; }
     s.maxSeats = nBots + 1;
-    Prefs.set('botSettings', { bots: nBots, difficulty: segv('difficulty'), personality: f.personality.value, game: s.game, limit: s.limit, sb: s.sb, bb: s.bb, ante: s.ante, startingStack: s.startingStack, levelHands: s.levelHands, rebuys: segv('rebuys'), botSpeed: s.botSpeed });
+    Prefs.set('botSettings', { bots: nBots, difficulty: segv('difficulty'), personality: f.personality.value, game: s.game, limit: s.limit, sb: s.sb, bb: s.bb, ante: s.ante, startingStack: s.startingStack, levelHands: s.levelHands, rebuys: segv('rebuys'), botSpeed: savedSpeed(s.botSpeed, 'botSettings') });
     Prefs.set('name', name);
     const styles = Object.keys(Bots.PERSONALITIES);
     const names = Cards.shuffle(Bots.NAMES.slice());
@@ -401,7 +402,7 @@ function CepheusScreen() {
       </section>
       <section class="card-ui setup-section"><h3>You</h3>
         <label class="field"><span>Your name</span><input class="input" name="name" maxlength="18" value="${U.esc(d.name)}" placeholder="e.g. Alice" autocomplete="off"></label>
-        <div class="field"><span>Cepheus's speed</span><div class="seg" role="radiogroup" data-seg="botSpeed">${[['ultra', 'Ultra fast'], ['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']].map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === d.botSpeed}" aria-checked="${v === d.botSpeed}">${l}</button>`).join('')}</div></div>
+        <div class="field"><span>Cepheus's speed</span><div class="seg" role="radiogroup" data-seg="botSpeed">${BOT_SPEEDS.map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === d.botSpeed}" aria-checked="${v === d.botSpeed}">${l}</button>`).join('')}</div></div>
       </section>
       <section class="card-ui setup-section"><h3>The game (Cepheus's rules)</h3>
         <ul class="hint" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px">
@@ -426,7 +427,7 @@ function CepheusScreen() {
     e.preventDefault();
     const f = e.target, btn = $('#c-start'), box = $('#csetup-err'), st = $('#csetup-status');
     const name = U.sanitizeName(f.name.value) || 'You';
-    Prefs.set('name', name); Prefs.set('cepheusSettings', { botSpeed: segv('botSpeed') });
+    Prefs.set('name', name); Prefs.set('cepheusSettings', { botSpeed: savedSpeed(segv('botSpeed'), 'cepheusSettings') });
     box.classList.add('hidden'); btn.disabled = true;
     st.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:-2px"></span> Loading Cepheus…';
     try { await C.load(); }
@@ -631,6 +632,11 @@ async function viewerLinkModal(url) {
 }
 
 /* ---------- Live table ---------- */
+/** Bot speeds. Instant plays with no pauses at all and turns auto-play on; it is never remembered for next time. */
+const BOT_SPEEDS = [['instant', 'Instant'], ['ultra', 'Ultra fast'], ['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']];
+const speedName = (v) => (BOT_SPEEDS.find((x) => x[0] === v) || BOT_SPEEDS[3])[1];
+const savedSpeed = (v, key) => (v === 'instant' ? Prefs.get(key, {}).botSpeed || 'normal' : v);
+
 function GameScreen(session) {
   const isHost = session.role === 'host';
   const isWatcher = session.role === 'watcher';
@@ -827,7 +833,7 @@ function GameScreen(session) {
       <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>`}
       ${isWatcher || !seated ? '' : `<button id="m-auto" role="menuitem">${icon('bot')}${G.auto ? 'Stop auto-play' : 'Auto-play (call, check, min-bet, rebuy)'}</button>`}
       ${isWatcher ? '' : `<button id="m-review" role="menuitem">${icon('calc')}Review my play</button>`}
-      ${session.offline && session.table ? `<button id="m-speed" role="menuitem">${icon('play')}Bot speed: ${{ ultra: 'Ultra fast', fast: 'Fast', normal: 'Normal', slow: 'Slow' }[session.table.s.botSpeed || 'normal']} (tap to change)</button>` : ''}
+      ${session.offline && session.table ? `<button id="m-speed" role="menuitem">${icon('play')}Bot speed: ${speedName(session.table.s.botSpeed || 'normal')} (tap to change)</button>` : ''}
       ${session.offline ? `<button id="m-again" role="menuitem">${icon('history')}Play again (same settings)</button>` : canRematch() ? `<button id="m-rematch" role="menuitem">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}
       <button id="m-look" role="menuitem">${icon('palette')}Appearance (felt, cards, theme)…</button>
       <button id="m-theme" role="menuitem">${Theme.icon()}Light / dark theme</button>
@@ -857,9 +863,11 @@ function GameScreen(session) {
     on('m-review', reviewMine);
     on('m-auto', () => setAuto(!G.auto));
     on('m-speed', () => {
-      const order = ['ultra', 'fast', 'normal', 'slow'], t = session.table, cur = order.indexOf(t.s.botSpeed || 'normal');
-      t.s.botSpeed = order[(cur + 1) % order.length];
-      toast(`Bot speed: ${{ ultra: 'Ultra fast', fast: 'Fast', normal: 'Normal', slow: 'Slow' }[t.s.botSpeed]}`, 'info');
+      const order = BOT_SPEEDS.map((x) => x[0]), t = session.table, cur = order.indexOf(t.s.botSpeed || 'normal');
+      const next = order[(cur + 1) % order.length];
+      session.send({ t: 'speed', speed: next });
+      toast(`Bot speed: ${speedName(next)}`, 'info');
+      if (next === 'instant' && !G.auto) setAuto(true);
       t.changed();
     });
     on('m-again', playAgain); on('m-rematch', startRematch);
@@ -1097,6 +1105,18 @@ function GameScreen(session) {
     if (i && from !== 'input') i.value = x;
     if (b) b.innerHTML = `${x === L.maxTo && !L.capped ? 'All-in' : L.isBet ? 'Bet' : 'Raise to'} ${U.fmt(x)}<small>R · Enter</small>`;
   }
+  /** Instant games: hands per minute over the last few seconds, and your running result. */
+  function instantRate(v) {
+    const now = Date.now(), q = G.rate || (G.rate = []);
+    if (!q.length || q[q.length - 1][1] !== v.handNo) q.push([now, v.handNo]);
+    while (q.length > 2 && now - q[0][0] > 6000) q.shift();
+    const [t0, n0] = q[0], dt = now - t0;
+    return dt > 1500 && v.handNo > n0 ? ` · <b class="num">${U.fmt(Math.round(((v.handNo - n0) * 60000) / dt))}</b> hands a minute` : '';
+  }
+  function instantNet(v) {
+    const me = v.players.find((p) => v.you && p.pid === v.you.pid), n = me ? me.net : 0;
+    return `${n > 0 ? '+' : n < 0 ? '−' : ''}${U.fmt(Math.abs(n))}`;
+  }
   function myHandName(v) { const s = v.you && v.you.seat != null ? v.seats[v.you.seat] : null; return s && s.handName; }
   function renderBar() {
     const v = G.view, y = v.you, L = v.legal;
@@ -1121,6 +1141,8 @@ function GameScreen(session) {
       html = y.isHost
         ? `<div class="ab-msg"><span>${seatedCount} seated</span><button class="btn primary lg" data-do="start" ${seatedCount < 2 ? 'disabled' : ''}>${icon('play')}Start Game</button></div>`
         : `<div class="ab-msg"><div class="spinner" style="width:20px;height:20px;border-width:2px"></div>Waiting for ${U.esc(v.hostName)} to start the game…</div>`;
+    } else if (G.auto && v.table.botSpeed === 'instant') {
+      html = `<div class="ab-msg auto-on instant-on">${icon('play')}<span><b>Instant:</b> hand <b class="num">#${U.fmt(v.handNo)}</b>${instantRate(v)} · you <b class="num">${instantNet(v)}</b></span><button class="btn primary" data-do="autooff">Stop auto-play <kbd>A</kbd></button></div>`;
     } else if (G.auto) {
       html = `<div class="ab-msg auto-on">${icon('bot')}<span><b>Auto-play on:</b> call, check or bet the minimum${v.table.rebuys ? ', auto-rebuy' : ''}.${hn && y.inHand ? ` <span class="strength">Your hand: <b>${U.esc(hn)}</b></span>` : ''}</span><button class="btn primary" data-do="autooff">Stop auto-play <kbd>A</kbd></button></div>`;
     } else if (L) {
@@ -1197,6 +1219,7 @@ function GameScreen(session) {
    */
   function setAuto(on) {
     G.auto = !!on; G.autoKey = null; G.pre = null; G.barKey = null;
+    if (session.offline) session.send({ t: 'autoplay', on: G.auto }); // Instant games: the table plays your seat itself
     if (G.view) renderBar();
     toast(on ? 'Auto-play on: calling, checking and betting the minimum for you.' : 'Auto-play off. You are back in control.', 'info');
     announce(on ? 'Auto-play on.' : 'Auto-play off.');
@@ -1207,7 +1230,7 @@ function GameScreen(session) {
     if (!y || G.ended || v.status !== 'playing' || isWatcher) return;
     if (y.canRebuy && G.autoRebuy !== `${v.handNo}:${y.rebuys || 0}`) { G.autoRebuy = `${v.handNo}:${y.rebuys || 0}`; session.send({ t: 'rebuy' }); }
     const L = v.legal;
-    if (!L) return;
+    if (!L || v.table.botSpeed === 'instant') return;
     const key = `${v.handNo}:${v.street}:${L.currentBet}:${L.myBet}:${L.toCall}`;
     if (key === G.autoKey) return;
     G.autoKey = key;
@@ -1313,8 +1336,10 @@ function GameScreen(session) {
     const score = me ? `You ${me.net > 0 ? '+' : ''}${U.fmt(me.net)} over ${v.table.handsDone} hand${v.table.handsDone === 1 ? '' : 's'}${v.table.handsDone ? ` (${(me.net / v.table.bb / v.table.handsDone).toFixed(2)} bb/hand)` : ''} · ` : '';
     $('#g-sub').textContent = `${score}${v.table.variant} · Blinds ${U.fmt(v.table.sb)}/${U.fmt(v.table.bb)}${v.table.ante ? ` · Ante ${U.fmt(v.table.ante)}` : ''}${v.table.rakePct ? ` · Rake ${v.table.rakePct}%${v.table.rakeCap ? ` (cap ${v.table.rakeCap} bb)` : ''}` : ''}${v.table.levelHands && v.status === 'playing' ? ` · Level ${v.table.level} (up in ${v.table.nextLevelIn})` : ''} · ${v.status === 'lobby' ? 'Lobby' : v.handNo ? 'Hand #' + v.handNo : 'Starting'}${me ? ' · stacks reset each hand' : ` · ${seated}/${v.table.maxSeats} seated`}`;
     renderFairBadge();
-    if (session.cepheus) renderStats(false);
-    if (!isWatcher) { CompactCache.prime(record(false)); CompactCache.prime(record(true)); }
+    // Instant games finish many hands a second: the Stats tab catches up every two seconds instead.
+    if (session.cepheus && (v.table.botSpeed !== 'instant' || !(Date.now() - (G.statsAt || 0) < 2000))) { G.statsAt = Date.now(); renderStats(false); }
+    // (Instant games skip this: the record changes every few seconds, so it is compacted when you copy it.)
+    if (!isWatcher && v.table.botSpeed !== 'instant') { CompactCache.prime(record(false)); CompactCache.prime(record(true)); }
     $('#g-watchlink').classList.toggle('hidden', !(v.table.spectators && session.watchUrl));
     if (isWatcher) {
       // Viewers chat only if the table allows it.
@@ -1344,7 +1369,7 @@ function GameScreen(session) {
       seats: v.seats, board: v.board, pots: v.pots, street: v.shuffling ? (v.table.sra ? 'Encrypting deck…' : 'Shuffling…') : v.handNo ? v.street : v.status === 'lobby' ? 'Waiting for players' : '',
       results: v.results, timer: v.timer, readOnly: false, feltText: v.table.name,
       canSit: !!v.you && v.you.seat == null && v.status !== 'ended' && !(v.you.isHost && !v.table.hostPlays),
-    });
+    }, { animate: v.table.botSpeed !== 'instant' }); // Instant: no motion or sounds, just the latest picture
     renderBar();
     renderSide(v);
     // Rematch: a player who accepted takes the first free seat; heads-up, the new host deals once both are seated.
@@ -1380,11 +1405,12 @@ function GameScreen(session) {
   // A session can outlive this screen (a rematch closes the old table a moment later), so a closed screen ignores it.
   const live = (fn) => (...a) => { if (!G.dead) fn(...a); };
   session.on('view', live(update));
-  session.on('event', live((kind, text) => toast(text, kind)));
+  session.on('event', live((kind, text) => { if (!(kind === 'info' && G.view && G.view.table.botSpeed === 'instant')) toast(text, kind); }));
   session.on('error', live((text) => { toast(text, 'error'); G.sending = false; G.barKey = null; if (G.view) renderBar(); }));
   session.on('ended', live((reason) => showEnded(reason)));
   session.on('rematch', live(() => showRematchCard()));
   if (session.rematch) setTimeout(showRematchCard, 0);
+  if (session.offline && session.table && session.table.s.botSpeed === 'instant') setAuto(true);
   session.on('fair', live((f, msg) => {
     if (G.alerted !== f.no) { G.alerted = f.no; toast(`Fair-play check failed on hand #${f.no}: ${msg}`, 'error', 9000); announce('Warning: fair play check failed.'); }
     renderFairBadge();

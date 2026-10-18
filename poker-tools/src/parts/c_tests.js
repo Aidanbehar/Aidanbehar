@@ -636,6 +636,24 @@ const SelfTest = (() => {
     eq(t._fairView().reveals.length, 0, 'nothing beyond public cards is proven in showdown-only mode');
   });
 
+  test('Bots', 'Instant mode plays hundreds of hands with auto-play, and the record stays exact', async () => {
+    if (typeof HostTable === 'undefined') return;
+    const t = new HostTable({ tableName: 'T', sb: 1, bb: 2, ante: 0, startingStack: 100, maxSeats: 4, timer: 0, rebuys: true, recordHole: 'All', vsBots: true, botSpeed: 'instant' }, 'Me', 'a'.repeat(32));
+    for (const name of ['B1', 'B2', 'B3']) t.addBot({ name, difficulty: 'beginner', personality: 'balanced' });
+    t.handle(t.hostPid, { t: 'autoplay', on: true });
+    t.handle(t.hostPid, { t: 'start' });
+    const t0 = Date.now();
+    while (t.finished.length < 340 && Date.now() - t0 < 30000) await new Promise((r) => setTimeout(r, 50));
+    t.handle(t.hostPid, { t: 'speed', speed: 'normal' }); // leaving Instant saves the record at once
+    t.end('done');
+    ok(t.finished.length >= 340, `${t.finished.length} hands in ${Date.now() - t0} ms`);
+    ok(t.finished.some((f) => f.lite) && !t.finished[t.finished.length - 1].lite, 'older hands keep only their record text');
+    const g = Notation.parse(t.recordFor(t.hostPid, true)), r = Replay.game(g);
+    eq(g.hands.length, t.finished.length);
+    eq(r.issues.length, 0, r.issues[0]);
+    ok(g.hands.every((h, k) => h.no === k + 1), 'every hand, in order');
+  });
+
   /* ---------- Statistical randomness checks ---------- */
   // Chi-square goodness of fit against a uniform distribution. With these thresholds an honest
   // generator fails less than about once in a million runs; a biased shuffle fails at once.

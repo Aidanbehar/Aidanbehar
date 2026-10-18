@@ -857,6 +857,7 @@ class ClientSession {
 }
 
 /* ---------- Play vs Bots: the same HostTable, fully offline ---------- */
+const INSTANT_VIEW_MS = 200;
 class BotSession {
   constructor(settings, name, bots) {
     this.role = 'host';
@@ -879,15 +880,23 @@ class BotSession {
     t.onChange = () => {
       if (this.bq) return;
       this.bq = true;
-      queueMicrotask(() => {
-        this.bq = false;
+      const fire = () => {
+        this.bq = false; this.lastView = Date.now();
         this.handlers.view(t.viewFor(this.pid));
         this.watchers.broadcast();
         if (t.status === 'ended' && !this.endedSent) { this.endedSent = true; this.watchers.end('The game is over.'); this.handlers.ended('Game over.'); }
-      });
+      };
+      // Instant games change many times a second; the screen is redrawn about five times a second
+      // instead, and straight away whenever you have a decision to make.
+      const h = t.hand, me = t.players.get(this.pid);
+      const yours = h && h.phase === 'betting' && t.handPids[h.toAct] === this.pid && !(me && me.autoPlay);
+      if (t._instant() && t.status === 'playing' && !t.paused && !yours) setTimeout(fire, Math.max(0, (this.lastView || 0) + INSTANT_VIEW_MS - Date.now()));
+      else queueMicrotask(fire);
     };
     t.onEvent = (kind, text) => { this.handlers.event(kind, text); this.watchers.event(kind, text); };
-    t.onRecord = (pid, text, full) => { if (pid === this.pid) { this.record = full; this.recordFull = full; Prefs.set('record.offline', full); } };
+    // A very long game (Instant mode) is not copied into browser storage: it would fill the space the
+    // rest of the site's settings need. It stays available from the game screen as usual.
+    t.onRecord = (pid, text, full) => { if (pid === this.pid) { this.record = full; this.recordFull = full; if (full.length < 1e6) Prefs.set('record.offline', full); else Prefs.del('record.offline'); } };
     t.onDirect = (pid, m) => { if (pid === this.pid && m.t === 'error') this.handlers.error(m.text); };
     t.handle(this.pid, { t: 'start' });
     return this;

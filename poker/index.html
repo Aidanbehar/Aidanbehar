@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-ozLKbw0g+XkzwTkn+zUJk2/A5FuYPfZHwVaf5HyNsDo=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-POkmAWLKc9gJO5bFRZo2ZJP8P/aDE63we7ExfihKzIw=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -4064,7 +4064,31 @@ const SEED_WAIT_MS = 2500;     // how long the host waits for each round of shuf
 // Blind levels (multiples of the starting blinds) when "blinds go up every N hands" is on.
 const LEVEL_FACTORS = [1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 80, 100, 150, 200, 300, 500, 800, 1000];
 
-const SRA_REPLY_MS = 30000;    // a connected player's browser has this long to answer an encrypted-deal step
+const SRA_REPLY_MS = 30000;
+const INSTANT_RECORD_MS = 3000; // Instant bot games save the record at most this often (and when they stop)
+const KEEP_FULL_HANDS = 300;    // Instant bot games keep this many recent hands complete (older ones: record text only)
+
+/**
+ * Timers that can also run "as soon as possible": Instant bot games use a message channel, which
+ * runs the next step straight after the browser has had its chance to draw, without the 4 ms
+ * minimum that chained setTimeout calls get. Later.clear cancels either kind.
+ */
+const Later = {
+  q: new Map(), id: 0, ch: null,
+  set(fn, ms, fast) {
+    if (!fast || typeof MessageChannel === 'undefined') return setTimeout(fn, ms);
+    if (!this.ch) {
+      this.ch = new MessageChannel();
+      this.ch.port1.onmessage = (e) => { const f = this.q.get(e.data); if (f) { this.q.delete(e.data); f(); } };
+      if (this.ch.port1.unref) this.ch.port1.unref(); // Node: never keep the process alive for this
+    }
+    const h = { fast: ++this.id };
+    this.q.set(h.fast, fn);
+    this.ch.port2.postMessage(h.fast);
+    return h;
+  },
+  clear(h) { if (h && typeof h === 'object') this.q.delete(h.fast); else clearTimeout(h); },
+};    // a connected player's browser has this long to answer an encrypted-deal step
 
 /**
  * The host's side of the encrypted deal. It only passes locked cards and keys between players: it
@@ -4334,9 +4358,9 @@ class HostTable {
   _botTurn() {
     if (this.botTimer) return;
     const h = this.hand, i = h.toAct, pid = this.handPids[i];
-    const speed = { ultra: 0.04, fast: 0.3, normal: 1, slow: 1.8 }[this.s.botSpeed || 'normal'] || 1;
+    const speed = this._instant() ? 0 : { ultra: 0.04, fast: 0.3, normal: 1, slow: 1.8 }[this.s.botSpeed || 'normal'] || 1;
     const live = () => this.hand === h && h.phase === 'betting' && h.toAct === i && !this.paused && this.status === 'playing';
-    this.botTimer = setTimeout(async () => {
+    this.botTimer = Later.set(async () => {
       this.botTimer = null;
       if (!live()) return;
       const p = this.players.get(pid);
@@ -4352,7 +4376,8 @@ class HostTable {
       // decision can start for this seat.
       this.botTimer = 'thinking';
       let a = null;
-      try { a = await Bots.decideAsync(ctx); } catch (e) { console.error(e); }
+      // Instant games decide Hold'em in one go (a few milliseconds); Omaha's longer simulation still runs in chunks.
+      try { a = this._instant() && this.gameKind === 'holdem' ? Bots.decide(ctx) : await Bots.decideAsync(ctx); } catch (e) { console.error(e); }
       this.botTimer = null;
       if (!live()) return; // paused, ended or changed meanwhile: resuming asks again
       try { Engine.applyAction(h, a || { type: 'fold' }); }
@@ -4365,11 +4390,20 @@ class HostTable {
         this.onEvent('info', `A bot is playing for ${p.name} until they reconnect`, null);
       }
       this._afterAction();
-    }, (350 + Math.random() * 900) * speed); // think time (cosmetic, not security-relevant randomness)
+    }, (350 + Math.random() * 900) * speed, this._instant()); // think time (cosmetic, not security-relevant randomness)
   }
 
   /** Ultra-fast bot games shorten the pauses between cards and hands (games with people keep the normal pace). */
-  _pace() { return this.s.vsBots && this.s.botSpeed === 'ultra' ? 0.1 : 1; }
+  _pace() { return this._instant() ? 0 : this.s.vsBots && this.s.botSpeed === 'ultra' ? 0.1 : 1; }
+  /** Instant: a bot game with no pauses at all. Only you can hold it up, by not having auto-play on. */
+  _instant() { return !!this.s.vsBots && this.s.botSpeed === 'instant'; }
+  /** Auto-play run by the table itself (Instant games): the same rule as the Auto-play button. */
+  _autoAct(h) {
+    const L = Engine.legal(h);
+    if (L.toCall > 0) Engine.applyAction(h, { type: 'call' });
+    else if (L.isBet && L.canRaise) Engine.applyAction(h, { type: 'bet', to: L.minTo });
+    else Engine.applyAction(h, { type: 'check' });
+  }
 
   /** Play Against Cepheus: the strategy picks fold/call/raise; anything it cannot handle checks or calls, visibly. */
   _cepheusAct(h, i, p) {
@@ -4465,6 +4499,8 @@ class HostTable {
       }
       case 'sitout': p.sittingOut = !!m.on; if (!m.on) this._maybeDeal(); break;
       case 'automuck': p.autoMuck = !!m.on; break;
+      // Auto-play: normally your own browser sends the actions; in an Instant bot game the table makes them itself.
+      case 'autoplay': p.autoPlay = !!m.on && !!this.s.vsBots; this._kick(pid); break;
       case 'action': {
         const h = this.hand;
         if (this.status !== 'playing' || !h) return err('There is no hand in progress.');
@@ -4485,7 +4521,7 @@ class HostTable {
           if (!cards) return;
           h.players[idx].hole = cards;
         }
-        if (Engine.showCards(h, idx)) { this._syncLog(); this._sendRecords(); }
+        if (Engine.showCards(h, idx)) { delete h.recText; this._syncLog(); this._sendRecords(); }
         break;
       }
       case 'rebuy': {
@@ -4530,6 +4566,14 @@ class HostTable {
         if (!isHost || this.status !== 'playing') return;
         this._setPaused(!!m.on);
         break;
+      case 'speed': {
+        if (!isHost || !this.s.vsBots || !['instant', 'ultra', 'fast', 'normal', 'slow'].includes(m.speed)) return;
+        const was = this._instant();
+        this.s.botSpeed = m.speed;
+        if (was && !this._instant() && this.recTimer) this._sendRecords();
+        this._kick(pid);
+        break;
+      }
       case 'kick': {
         if (!isHost) return;
         if (!this.s.hostKick) return err('Removing players is turned off at this table.');
@@ -4631,14 +4675,20 @@ class HostTable {
       this._log(Engine.describeEntry(h, e), e.t === 'win' ? 'win' : '');
     }
   }
+  /** Instant game, your turn, auto-play just switched on: act now instead of waiting. */
+  _kick(pid) {
+    const h = this.hand, p = this.players.get(pid);
+    if (p && p.autoPlay && this._instant() && !this.paused && h && h.phase === 'betting' && this.handPids[h.toAct] === pid) { this._clearTurn(); this._proceed(); }
+  }
   _setPaused(on) {
     if (this.paused === on) return;
     this.paused = on;
+    if (on && this.recTimer) this._sendRecords();
     this._log(on ? 'Game paused by the host' : 'Game resumed');
     this.onEvent('info', on ? 'Game paused' : 'Game resumed', null);
     if (on) {
       if (this.turn) { clearTimeout(this.turn.handle); this.turn.frozen = this.turn.deadline ? Math.max(0, this.turn.deadline - Date.now()) : null; }
-      clearTimeout(this.nextTimer); this.nextTimer = null;
+      Later.clear(this.nextTimer); this.nextTimer = null;
     } else {
       if (this.turn && this.turn.frozen != null) this._armTurn(this.turn.frozen, this.turn.total);
       if (!this.hand || this.hand.phase === 'done') this._startHand();
@@ -4652,7 +4702,7 @@ class HostTable {
   }
 
   _startHand() {
-    clearTimeout(this.nextTimer); this.nextTimer = null;
+    Later.clear(this.nextTimer); this.nextTimer = null;
     if (this.status !== 'playing' || this.paused || this.shuffling) return this.changed();
     // Bots' moods wander a little from hand to hand, so their style labels stay tendencies.
     for (const p of this.players.values()) if (p.isBot && p.botTraits) Bots.driftTraits(p.botTraits);
@@ -4719,7 +4769,7 @@ class HostTable {
   _voidHand(why) {
     const h = this.hand;
     if (!h || h.phase === 'done') return;
-    this._clearTurn(); clearTimeout(this.dealTimer); this.dealTimer = null;
+    this._clearTurn(); Later.clear(this.dealTimer); this.dealTimer = null;
     if (this.sraDealer) this.sraDealer.cancel();
     h.players.forEach((hp, i) => {
       hp.stack = hp.startStack; hp.bet = 0; hp.committed = 0; hp.allIn = false;
@@ -4731,7 +4781,7 @@ class HostTable {
     this._log(`Hand #${h.no} was cancelled and all chips were returned: ${why}`);
     this.onEvent('warn', `Hand cancelled: ${why}. Chips returned.`, null);
     for (const pid of this.handPids) { const p = this.players.get(pid); if (p && p.leaving) this._remove(pid); }
-    clearTimeout(this.nextTimer);
+    Later.clear(this.nextTimer);
     this.nextTimer = setTimeout(() => { this.nextTimer = null; this._startHand(); }, 3000);
     this.changed();
   }
@@ -4826,11 +4876,12 @@ class HostTable {
   _proceed() {
     const h = this.hand;
     if (!h) return this.changed();
-    for (let guard = 0; guard < 50; guard++) {
+    for (let guard = 0; guard < 400; guard++) {
       if (h.phase === 'betting') {
         const p = this.players.get(this.handPids[h.toAct]);
         if (!p || p.leaving) { Engine.applyAction(h, { type: 'fold' }); this._syncLog(); continue; }
         if (this._botControlled(p)) { this._clearTurn(); this._botTurn(); break; }
+        if (p.autoPlay && this._instant() && !this.paused) { this._clearTurn(); this._autoAct(h); this._syncLog(); continue; }
         if (!this.turn || this.turn.idx !== h.toAct || this.turn.street !== h.street || this.turn.no !== h.no) this._startTurnTimer();
         break;
       }
@@ -4856,7 +4907,7 @@ class HostTable {
       if (h.phase === 'deal') {
         if (!this.dealTimer && !this.paused) {
           const runout = h.players.filter((p) => !p.folded && !p.allIn).length <= 1;
-          this.dealTimer = setTimeout(() => {
+          this.dealTimer = Later.set(() => {
             this.dealTimer = null;
             if (this.hand !== h || h.phase !== 'deal' || this.status !== 'playing') return;
             if (this.paused) return;
@@ -4866,7 +4917,7 @@ class HostTable {
             Engine.dealBoard(h, cards);
             this._syncLog();
             this._proceed();
-          }, (runout ? 1300 : 650) * this._pace());
+          }, (runout ? 1300 : 650) * this._pace(), this._instant());
         }
         break;
       }
@@ -4900,11 +4951,12 @@ class HostTable {
     this._syncLog();
     h.players.forEach((hp, i) => { const p = this.players.get(this.handPids[i]); if (p) p.stack = hp.stack; });
     this.finished.push({ hand: h, pids: this.handPids.slice() });
+    if (this._instant() && !this.s.cepheus) this._compact(this.finished[this.finished.length - KEEP_FULL_HANDS - 1]);
     for (const pid of this.handPids) {
       const p = this.players.get(pid);
       if (!p) continue;
       if (p.leaving) { this._remove(pid); continue; }
-      if (p.stack === 0 && p.isBot && this.s.rebuys && (!this.s.maxRebuys || p.rebuys < this.s.maxRebuys)) {
+      if (p.stack === 0 && (p.isBot || (p.autoPlay && this._instant())) && this.s.rebuys && (!this.s.maxRebuys || p.rebuys < this.s.maxRebuys)) {
         p.stack = this.s.startingStack; p.rebuys++; p.bought += this.s.startingStack;
         this._log(`${p.name} rebuys for ${U.fmt(this.s.startingStack)}`);
       } else if (p.stack === 0) {
@@ -4913,9 +4965,9 @@ class HostTable {
         this._log(this.s.rebuys ? `${p.name} is out of chips (rebuy available)` : `${p.name} is out of chips`);
       }
     }
-    this._sendRecords();
-    if (this.sra && this.s.recordHole === 'All' && this.sraDealer) this.sraDealer.revealAll(h, () => this._sendRecords());
-    if (this.s.botChat) {
+    if (this._instant()) this._recordsSoon(); else this._sendRecords();
+    if (this.sra && this.s.recordHole === 'All' && this.sraDealer) this.sraDealer.revealAll(h, () => { delete h.recText; this._sendRecords(); });
+    if (this.s.botChat && !this._instant()) {
       const hi = this.handPids.indexOf(this.hostPid), won = hi >= 0 ? h.results.payouts[hi] : 0;
       const host = this.players.get(this.hostPid);
       if (hi >= 0 && won > 0 && won >= 10 * h.bb) this._botSay('bigWin');
@@ -4923,9 +4975,9 @@ class HostTable {
       else if (hi >= 0 && won > 0) this._botSay('win');
       else if (Math.random() < 0.3) this._botSay('any');
     }
-    clearTimeout(this.nextTimer);
+    Later.clear(this.nextTimer);
     if (this._eligible().length < 2) this.waiting = true;
-    this.nextTimer = setTimeout(() => { this.nextTimer = null; this._startHand(); }, (HAND_PAUSE_MS + (h.results.showdown ? 1200 : 0)) * this._pace());
+    this.nextTimer = Later.set(() => { this.nextTimer = null; this._startHand(); }, (HAND_PAUSE_MS + (h.results.showdown ? 1200 : 0)) * this._pace(), this._instant());
   }
 
   /* ---------------- action clock ---------------- */
@@ -4960,7 +5012,7 @@ class HostTable {
   end(reason) {
     if (this.status === 'ended') return;
     this.status = 'ended';
-    this._clearTurn(); clearTimeout(this.nextTimer); clearTimeout(this.dealTimer); clearTimeout(this.botTimer);
+    this._clearTurn(); Later.clear(this.nextTimer); Later.clear(this.dealTimer); Later.clear(this.botTimer);
     this.shuffling = null;
     if (this.sraDealer) this.sraDealer.cancel();
     this._log('The game has ended');
@@ -4982,9 +5034,9 @@ class HostTable {
       startingStack: this.s.startingStack, players: this.names, holeCards: this.s.recordHole, variant: this.variant,
       settings: this.settingTags(),
     });
-    const hands = this.finished.filter(({ hand }) => full || !(hand.botNames && hand.botNames.length))
-      .map(({ hand, pids }) => Notation.fromHand(hand, pids.indexOf(pid), this.s.recordHole, { levels: !!this.s.levelHands }));
-    return Notation.serialize({ tags, hands });
+    // Each finished hand's text is kept, so a long game does not rebuild every hand each time.
+    const texts = this.finished.filter(({ hand }) => full || !(hand.botNames && hand.botNames.length)).map(({ hand, pids }) => this._handText(hand, pids.indexOf(pid)));
+    return Notation.serialize({ tags, hands: [] }).replace(/\n$/, '') + texts.map((x) => '\n\n' + x).join('') + '\n';
   }
   /** All of this table's settings as record header tags. */
   settingTags() {
@@ -5007,7 +5059,28 @@ class HostTable {
     t.push(['Viewers', yn(s.spectators)], ['ViewerChat', yn(s.viewerChat)], ['HostCanChangeStacks', yn(s.hostAdjust)], ['HostCanRemovePlayers', yn(s.hostKick)]);
     return t;
   }
-  _sendRecords() { for (const [pid, p] of this.players) if (!p.isBot) this.onRecord(pid, this.recordFor(pid, false), this.recordFor(pid, true)); }
+  _sendRecords() {
+    clearTimeout(this.recTimer); this.recTimer = null;
+    for (const [pid, p] of this.players) if (!p.isBot) this.onRecord(pid, this.recordFor(pid, false), this.recordFor(pid, true));
+  }
+  /**
+   * Instant games can play tens of thousands of hands. Older hands keep only their finished record
+   * text (for each person at the table), not the whole hand, so memory stays small. The last
+   * KEEP_FULL_HANDS stay complete for the bots' reads of their opponents.
+   */
+  _compact(f) {
+    if (!f || f.lite) return;
+    const h = f.hand, ks = [...this.players.values()].filter((p) => !p.isBot).map((p) => f.pids.indexOf(p.pid));
+    for (const k of ks) this._handText(h, k);
+    f.hand = { no: h.no, botNames: h.botNames, recText: h.recText };
+    f.lite = true;
+  }
+  _handText(hand, k) {
+    const c = hand.recText || (hand.recText = {});
+    return c[k] || (c[k] = Notation.serializeHand(Notation.fromHand(hand, k, this.s.recordHole, { levels: !!this.s.levelHands })));
+  }
+  /** Instant games: hands finish many times a second, so the record is saved every few seconds instead. */
+  _recordsSoon() { if (!this.recTimer) this.recTimer = setTimeout(() => this._sendRecords(), INSTANT_RECORD_MS); }
 
   changed() { this.onChange(); }
 
@@ -5977,6 +6050,7 @@ class ClientSession {
 }
 
 /* ---------- Play vs Bots: the same HostTable, fully offline ---------- */
+const INSTANT_VIEW_MS = 200;
 class BotSession {
   constructor(settings, name, bots) {
     this.role = 'host';
@@ -5999,15 +6073,23 @@ class BotSession {
     t.onChange = () => {
       if (this.bq) return;
       this.bq = true;
-      queueMicrotask(() => {
-        this.bq = false;
+      const fire = () => {
+        this.bq = false; this.lastView = Date.now();
         this.handlers.view(t.viewFor(this.pid));
         this.watchers.broadcast();
         if (t.status === 'ended' && !this.endedSent) { this.endedSent = true; this.watchers.end('The game is over.'); this.handlers.ended('Game over.'); }
-      });
+      };
+      // Instant games change many times a second; the screen is redrawn about five times a second
+      // instead, and straight away whenever you have a decision to make.
+      const h = t.hand, me = t.players.get(this.pid);
+      const yours = h && h.phase === 'betting' && t.handPids[h.toAct] === this.pid && !(me && me.autoPlay);
+      if (t._instant() && t.status === 'playing' && !t.paused && !yours) setTimeout(fire, Math.max(0, (this.lastView || 0) + INSTANT_VIEW_MS - Date.now()));
+      else queueMicrotask(fire);
     };
     t.onEvent = (kind, text) => { this.handlers.event(kind, text); this.watchers.event(kind, text); };
-    t.onRecord = (pid, text, full) => { if (pid === this.pid) { this.record = full; this.recordFull = full; Prefs.set('record.offline', full); } };
+    // A very long game (Instant mode) is not copied into browser storage: it would fill the space the
+    // rest of the site's settings need. It stays available from the game screen as usual.
+    t.onRecord = (pid, text, full) => { if (pid === this.pid) { this.record = full; this.recordFull = full; if (full.length < 1e6) Prefs.set('record.offline', full); else Prefs.del('record.offline'); } };
     t.onDirect = (pid, m) => { if (pid === this.pid && m.t === 'error') this.handlers.error(m.text); };
     t.handle(this.pid, { t: 'start' });
     return this;
@@ -7674,6 +7756,24 @@ const SelfTest = (() => {
     eq(t._fairView().reveals.length, 0, 'nothing beyond public cards is proven in showdown-only mode');
   });
 
+  test('Bots', 'Instant mode plays hundreds of hands with auto-play, and the record stays exact', async () => {
+    if (typeof HostTable === 'undefined') return;
+    const t = new HostTable({ tableName: 'T', sb: 1, bb: 2, ante: 0, startingStack: 100, maxSeats: 4, timer: 0, rebuys: true, recordHole: 'All', vsBots: true, botSpeed: 'instant' }, 'Me', 'a'.repeat(32));
+    for (const name of ['B1', 'B2', 'B3']) t.addBot({ name, difficulty: 'beginner', personality: 'balanced' });
+    t.handle(t.hostPid, { t: 'autoplay', on: true });
+    t.handle(t.hostPid, { t: 'start' });
+    const t0 = Date.now();
+    while (t.finished.length < 340 && Date.now() - t0 < 30000) await new Promise((r) => setTimeout(r, 50));
+    t.handle(t.hostPid, { t: 'speed', speed: 'normal' }); // leaving Instant saves the record at once
+    t.end('done');
+    ok(t.finished.length >= 340, `${t.finished.length} hands in ${Date.now() - t0} ms`);
+    ok(t.finished.some((f) => f.lite) && !t.finished[t.finished.length - 1].lite, 'older hands keep only their record text');
+    const g = Notation.parse(t.recordFor(t.hostPid, true)), r = Replay.game(g);
+    eq(g.hands.length, t.finished.length);
+    eq(r.issues.length, 0, r.issues[0]);
+    ok(g.hands.every((h, k) => h.no === k + 1), 'every hand, in order');
+  });
+
   /* ---------- Statistical randomness checks ---------- */
   // Chi-square goodness of fit against a uniform distribution. With these thresholds an honest
   // generator fails less than about once in a million runs; a biased shuffle fails at once.
@@ -8776,6 +8876,7 @@ const CepheusStats = (() => {
 const HandReview = (() => {
   const SAMPLES = 48;      // how many times the reference player decides each spot (it mixes its play)
   const MAX_SPOTS = 400;   // very long games: the most recent decisions
+  const RECENT_HANDS = 3000; // ...found among this many most recent hands
   const WORD = { fold: 'fold', check: 'check', call: 'call', raise: 'bet or raise' };
   const group = (t) => ({ f: 'fold', fold: 'fold', x: 'check', check: 'check', c: 'call', call: 'call', b: 'raise', r: 'raise', bet: 'raise', raise: 'raise' }[t] || 'check');
   const pct = (x) => `${Math.round(100 * x)}%`;
@@ -8784,6 +8885,10 @@ const HandReview = (() => {
   /** Every decision `name` made in a readable record, with the table exactly as it was just before it. */
   function spots(text, name) {
     const g = Notation.parse(text);
+    // Very long games (Instant mode): only the most recent hands can matter, since at most MAX_SPOTS
+    // decisions are reviewed. Each hand states its own stacks, so it replays the same on its own.
+    const total = g.hands.length;
+    if (total > RECENT_HANDS) g.hands = g.hands.slice(-RECENT_HANDS);
     const rp = Replay.game(g);
     const out = [], finished = [];
     for (const rh of rp.hands) {
@@ -8800,7 +8905,7 @@ const HandReview = (() => {
       }
       if (rh.hand && rh.hand.phase === 'done') finished.push(rh.hand);
     }
-    return { spots: out.slice(-MAX_SPOTS), cut: Math.max(0, out.length - MAX_SPOTS), hands: rp.hands.length, cfg: rp.cfg };
+    return { spots: out.slice(-MAX_SPOTS), cut: Math.max(0, out.length - MAX_SPOTS) + (total > RECENT_HANDS ? 1 : 0), hands: total, cfg: rp.cfg };
   }
 
   /** The reference player's mix of actions in one spot, plus the numbers behind it. */
@@ -9232,7 +9337,8 @@ function BotSetupScreen() {
         <p class="hint" style="margin:0">Every bot gets its own version of its play style and its mood drifts from hand to hand, so a label is a tendency, not a script.</p>
         <div class="two">
           <label class="field"><span>Play style</span><select class="input" name="personality"><option value="mixed">Mixed (a different style at every seat)</option>${Object.entries(Bots.PERSONALITIES).map(([k, v]) => `<option value="${k}" ${d.personality === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></label>
-          <div class="field"><span>Bot speed</span>${seg('botSpeed', [['ultra', 'Ultra fast'], ['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']], d.botSpeed)}</div>
+          <div class="field"><span>Bot speed</span>${seg('botSpeed', BOT_SPEEDS, d.botSpeed)}</div>
+          <p class="hint">Instant plays hands as fast as your device can, with auto-play on for you (call, check, bet the minimum, rebuy). The table updates a few times a second; stop auto-play to take over.</p>
         </div>
       </section>
       <section class="card-ui setup-section"><h3>You</h3>
@@ -9308,7 +9414,7 @@ function BotSetupScreen() {
     const box = $('#bsetup-err');
     if (errs.length) { box.innerHTML = `${icon('alert')}<div>${errs.join('<br>')}</div>`; box.classList.remove('hidden'); return; }
     s.maxSeats = nBots + 1;
-    Prefs.set('botSettings', { bots: nBots, difficulty: segv('difficulty'), personality: f.personality.value, game: s.game, limit: s.limit, sb: s.sb, bb: s.bb, ante: s.ante, startingStack: s.startingStack, levelHands: s.levelHands, rebuys: segv('rebuys'), botSpeed: s.botSpeed });
+    Prefs.set('botSettings', { bots: nBots, difficulty: segv('difficulty'), personality: f.personality.value, game: s.game, limit: s.limit, sb: s.sb, bb: s.bb, ante: s.ante, startingStack: s.startingStack, levelHands: s.levelHands, rebuys: segv('rebuys'), botSpeed: savedSpeed(s.botSpeed, 'botSettings') });
     Prefs.set('name', name);
     const styles = Object.keys(Bots.PERSONALITIES);
     const names = Cards.shuffle(Bots.NAMES.slice());
@@ -9339,7 +9445,7 @@ function CepheusScreen() {
       </section>
       <section class="card-ui setup-section"><h3>You</h3>
         <label class="field"><span>Your name</span><input class="input" name="name" maxlength="18" value="${U.esc(d.name)}" placeholder="e.g. Alice" autocomplete="off"></label>
-        <div class="field"><span>Cepheus's speed</span><div class="seg" role="radiogroup" data-seg="botSpeed">${[['ultra', 'Ultra fast'], ['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']].map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === d.botSpeed}" aria-checked="${v === d.botSpeed}">${l}</button>`).join('')}</div></div>
+        <div class="field"><span>Cepheus's speed</span><div class="seg" role="radiogroup" data-seg="botSpeed">${BOT_SPEEDS.map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === d.botSpeed}" aria-checked="${v === d.botSpeed}">${l}</button>`).join('')}</div></div>
       </section>
       <section class="card-ui setup-section"><h3>The game (Cepheus's rules)</h3>
         <ul class="hint" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px">
@@ -9364,7 +9470,7 @@ function CepheusScreen() {
     e.preventDefault();
     const f = e.target, btn = $('#c-start'), box = $('#csetup-err'), st = $('#csetup-status');
     const name = U.sanitizeName(f.name.value) || 'You';
-    Prefs.set('name', name); Prefs.set('cepheusSettings', { botSpeed: segv('botSpeed') });
+    Prefs.set('name', name); Prefs.set('cepheusSettings', { botSpeed: savedSpeed(segv('botSpeed'), 'cepheusSettings') });
     box.classList.add('hidden'); btn.disabled = true;
     st.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:-2px"></span> Loading Cepheus…';
     try { await C.load(); }
@@ -9569,6 +9675,11 @@ async function viewerLinkModal(url) {
 }
 
 /* ---------- Live table ---------- */
+/** Bot speeds. Instant plays with no pauses at all and turns auto-play on; it is never remembered for next time. */
+const BOT_SPEEDS = [['instant', 'Instant'], ['ultra', 'Ultra fast'], ['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']];
+const speedName = (v) => (BOT_SPEEDS.find((x) => x[0] === v) || BOT_SPEEDS[3])[1];
+const savedSpeed = (v, key) => (v === 'instant' ? Prefs.get(key, {}).botSpeed || 'normal' : v);
+
 function GameScreen(session) {
   const isHost = session.role === 'host';
   const isWatcher = session.role === 'watcher';
@@ -9765,7 +9876,7 @@ function GameScreen(session) {
       <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>`}
       ${isWatcher || !seated ? '' : `<button id="m-auto" role="menuitem">${icon('bot')}${G.auto ? 'Stop auto-play' : 'Auto-play (call, check, min-bet, rebuy)'}</button>`}
       ${isWatcher ? '' : `<button id="m-review" role="menuitem">${icon('calc')}Review my play</button>`}
-      ${session.offline && session.table ? `<button id="m-speed" role="menuitem">${icon('play')}Bot speed: ${{ ultra: 'Ultra fast', fast: 'Fast', normal: 'Normal', slow: 'Slow' }[session.table.s.botSpeed || 'normal']} (tap to change)</button>` : ''}
+      ${session.offline && session.table ? `<button id="m-speed" role="menuitem">${icon('play')}Bot speed: ${speedName(session.table.s.botSpeed || 'normal')} (tap to change)</button>` : ''}
       ${session.offline ? `<button id="m-again" role="menuitem">${icon('history')}Play again (same settings)</button>` : canRematch() ? `<button id="m-rematch" role="menuitem">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}
       <button id="m-look" role="menuitem">${icon('palette')}Appearance (felt, cards, theme)…</button>
       <button id="m-theme" role="menuitem">${Theme.icon()}Light / dark theme</button>
@@ -9795,9 +9906,11 @@ function GameScreen(session) {
     on('m-review', reviewMine);
     on('m-auto', () => setAuto(!G.auto));
     on('m-speed', () => {
-      const order = ['ultra', 'fast', 'normal', 'slow'], t = session.table, cur = order.indexOf(t.s.botSpeed || 'normal');
-      t.s.botSpeed = order[(cur + 1) % order.length];
-      toast(`Bot speed: ${{ ultra: 'Ultra fast', fast: 'Fast', normal: 'Normal', slow: 'Slow' }[t.s.botSpeed]}`, 'info');
+      const order = BOT_SPEEDS.map((x) => x[0]), t = session.table, cur = order.indexOf(t.s.botSpeed || 'normal');
+      const next = order[(cur + 1) % order.length];
+      session.send({ t: 'speed', speed: next });
+      toast(`Bot speed: ${speedName(next)}`, 'info');
+      if (next === 'instant' && !G.auto) setAuto(true);
       t.changed();
     });
     on('m-again', playAgain); on('m-rematch', startRematch);
@@ -10035,6 +10148,18 @@ function GameScreen(session) {
     if (i && from !== 'input') i.value = x;
     if (b) b.innerHTML = `${x === L.maxTo && !L.capped ? 'All-in' : L.isBet ? 'Bet' : 'Raise to'} ${U.fmt(x)}<small>R · Enter</small>`;
   }
+  /** Instant games: hands per minute over the last few seconds, and your running result. */
+  function instantRate(v) {
+    const now = Date.now(), q = G.rate || (G.rate = []);
+    if (!q.length || q[q.length - 1][1] !== v.handNo) q.push([now, v.handNo]);
+    while (q.length > 2 && now - q[0][0] > 6000) q.shift();
+    const [t0, n0] = q[0], dt = now - t0;
+    return dt > 1500 && v.handNo > n0 ? ` · <b class="num">${U.fmt(Math.round(((v.handNo - n0) * 60000) / dt))}</b> hands a minute` : '';
+  }
+  function instantNet(v) {
+    const me = v.players.find((p) => v.you && p.pid === v.you.pid), n = me ? me.net : 0;
+    return `${n > 0 ? '+' : n < 0 ? '−' : ''}${U.fmt(Math.abs(n))}`;
+  }
   function myHandName(v) { const s = v.you && v.you.seat != null ? v.seats[v.you.seat] : null; return s && s.handName; }
   function renderBar() {
     const v = G.view, y = v.you, L = v.legal;
@@ -10059,6 +10184,8 @@ function GameScreen(session) {
       html = y.isHost
         ? `<div class="ab-msg"><span>${seatedCount} seated</span><button class="btn primary lg" data-do="start" ${seatedCount < 2 ? 'disabled' : ''}>${icon('play')}Start Game</button></div>`
         : `<div class="ab-msg"><div class="spinner" style="width:20px;height:20px;border-width:2px"></div>Waiting for ${U.esc(v.hostName)} to start the game…</div>`;
+    } else if (G.auto && v.table.botSpeed === 'instant') {
+      html = `<div class="ab-msg auto-on instant-on">${icon('play')}<span><b>Instant:</b> hand <b class="num">#${U.fmt(v.handNo)}</b>${instantRate(v)} · you <b class="num">${instantNet(v)}</b></span><button class="btn primary" data-do="autooff">Stop auto-play <kbd>A</kbd></button></div>`;
     } else if (G.auto) {
       html = `<div class="ab-msg auto-on">${icon('bot')}<span><b>Auto-play on:</b> call, check or bet the minimum${v.table.rebuys ? ', auto-rebuy' : ''}.${hn && y.inHand ? ` <span class="strength">Your hand: <b>${U.esc(hn)}</b></span>` : ''}</span><button class="btn primary" data-do="autooff">Stop auto-play <kbd>A</kbd></button></div>`;
     } else if (L) {
@@ -10135,6 +10262,7 @@ function GameScreen(session) {
    */
   function setAuto(on) {
     G.auto = !!on; G.autoKey = null; G.pre = null; G.barKey = null;
+    if (session.offline) session.send({ t: 'autoplay', on: G.auto }); // Instant games: the table plays your seat itself
     if (G.view) renderBar();
     toast(on ? 'Auto-play on: calling, checking and betting the minimum for you.' : 'Auto-play off. You are back in control.', 'info');
     announce(on ? 'Auto-play on.' : 'Auto-play off.');
@@ -10145,7 +10273,7 @@ function GameScreen(session) {
     if (!y || G.ended || v.status !== 'playing' || isWatcher) return;
     if (y.canRebuy && G.autoRebuy !== `${v.handNo}:${y.rebuys || 0}`) { G.autoRebuy = `${v.handNo}:${y.rebuys || 0}`; session.send({ t: 'rebuy' }); }
     const L = v.legal;
-    if (!L) return;
+    if (!L || v.table.botSpeed === 'instant') return;
     const key = `${v.handNo}:${v.street}:${L.currentBet}:${L.myBet}:${L.toCall}`;
     if (key === G.autoKey) return;
     G.autoKey = key;
@@ -10251,8 +10379,10 @@ function GameScreen(session) {
     const score = me ? `You ${me.net > 0 ? '+' : ''}${U.fmt(me.net)} over ${v.table.handsDone} hand${v.table.handsDone === 1 ? '' : 's'}${v.table.handsDone ? ` (${(me.net / v.table.bb / v.table.handsDone).toFixed(2)} bb/hand)` : ''} · ` : '';
     $('#g-sub').textContent = `${score}${v.table.variant} · Blinds ${U.fmt(v.table.sb)}/${U.fmt(v.table.bb)}${v.table.ante ? ` · Ante ${U.fmt(v.table.ante)}` : ''}${v.table.rakePct ? ` · Rake ${v.table.rakePct}%${v.table.rakeCap ? ` (cap ${v.table.rakeCap} bb)` : ''}` : ''}${v.table.levelHands && v.status === 'playing' ? ` · Level ${v.table.level} (up in ${v.table.nextLevelIn})` : ''} · ${v.status === 'lobby' ? 'Lobby' : v.handNo ? 'Hand #' + v.handNo : 'Starting'}${me ? ' · stacks reset each hand' : ` · ${seated}/${v.table.maxSeats} seated`}`;
     renderFairBadge();
-    if (session.cepheus) renderStats(false);
-    if (!isWatcher) { CompactCache.prime(record(false)); CompactCache.prime(record(true)); }
+    // Instant games finish many hands a second: the Stats tab catches up every two seconds instead.
+    if (session.cepheus && (v.table.botSpeed !== 'instant' || !(Date.now() - (G.statsAt || 0) < 2000))) { G.statsAt = Date.now(); renderStats(false); }
+    // (Instant games skip this: the record changes every few seconds, so it is compacted when you copy it.)
+    if (!isWatcher && v.table.botSpeed !== 'instant') { CompactCache.prime(record(false)); CompactCache.prime(record(true)); }
     $('#g-watchlink').classList.toggle('hidden', !(v.table.spectators && session.watchUrl));
     if (isWatcher) {
       // Viewers chat only if the table allows it.
@@ -10282,7 +10412,7 @@ function GameScreen(session) {
       seats: v.seats, board: v.board, pots: v.pots, street: v.shuffling ? (v.table.sra ? 'Encrypting deck…' : 'Shuffling…') : v.handNo ? v.street : v.status === 'lobby' ? 'Waiting for players' : '',
       results: v.results, timer: v.timer, readOnly: false, feltText: v.table.name,
       canSit: !!v.you && v.you.seat == null && v.status !== 'ended' && !(v.you.isHost && !v.table.hostPlays),
-    });
+    }, { animate: v.table.botSpeed !== 'instant' }); // Instant: no motion or sounds, just the latest picture
     renderBar();
     renderSide(v);
     // Rematch: a player who accepted takes the first free seat; heads-up, the new host deals once both are seated.
@@ -10318,11 +10448,12 @@ function GameScreen(session) {
   // A session can outlive this screen (a rematch closes the old table a moment later), so a closed screen ignores it.
   const live = (fn) => (...a) => { if (!G.dead) fn(...a); };
   session.on('view', live(update));
-  session.on('event', live((kind, text) => toast(text, kind)));
+  session.on('event', live((kind, text) => { if (!(kind === 'info' && G.view && G.view.table.botSpeed === 'instant')) toast(text, kind); }));
   session.on('error', live((text) => { toast(text, 'error'); G.sending = false; G.barKey = null; if (G.view) renderBar(); }));
   session.on('ended', live((reason) => showEnded(reason)));
   session.on('rematch', live(() => showRematchCard()));
   if (session.rematch) setTimeout(showRematchCard, 0);
+  if (session.offline && session.table && session.table.s.botSpeed === 'instant') setAuto(true);
   session.on('fair', live((f, msg) => {
     if (G.alerted !== f.no) { G.alerted = f.no; toast(`Fair-play check failed on hand #${f.no}: ${msg}`, 'error', 9000); announce('Warning: fair play check failed.'); }
     renderFairBadge();

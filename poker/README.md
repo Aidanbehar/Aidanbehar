@@ -273,6 +273,26 @@ test suite and lists pass/fail results. The suite covers:
   to 40 hands a minute with auto-play). The bots think exactly as hard as before. In a bot game the
   ⋯ menu has **Bot speed** to switch speeds without restarting. Games with people keep their normal
   pace.
+- **Instant bots:** the fastest **Bot speed**. Hands are played with no pauses at all and auto-play
+  (below) switches on for your seat. The table does not animate each action; it shows the latest
+  hand about five times a second, with a bar giving the hand number, hands per minute and your
+  running result. Measured in Chrome on a laptop:
+
+  | Table | Hands a minute |
+  |---|---|
+  | 9 players, Beginner bots | about 22,000 |
+  | 6 players, Extreme bots | about 1,350 |
+  | Play Against Cepheus | about 550 (each river is solved during play) |
+  | 6 players, Omaha, Extreme bots | about 45 (each decision runs a real simulation) |
+
+  The bots play exactly as they do at any other speed: only the pauses are gone. Every hand is
+  dealt with the same fair-play proofs and goes into the game record; the record is saved every few
+  seconds while Instant runs, and at once when you stop it. Stop auto-play and the game waits for
+  you at your next decision, while the bots still act instantly. Very long runs stay light: hands
+  older than the last 300 keep only their record text, and Review my play looks at your latest 400
+  decisions. A record over about a million characters (a few thousand hands) is not copied into
+  browser storage, so it cannot crowd out your settings; copy or download it from the game. Instant
+  is never remembered for the next game.
 - **Auto-play:** press **Auto-play** (in the action bar, the ⋯ menu, or the `A` key) and your seat
   plays itself with one simple rule: facing a bet it calls, when nobody has bet on the street it bets
   the minimum, otherwise (the big blind's option) it checks. When you run out of chips it rebuys

@@ -9,6 +9,7 @@
 const HandReview = (() => {
   const SAMPLES = 48;      // how many times the reference player decides each spot (it mixes its play)
   const MAX_SPOTS = 400;   // very long games: the most recent decisions
+  const RECENT_HANDS = 3000; // ...found among this many most recent hands
   const WORD = { fold: 'fold', check: 'check', call: 'call', raise: 'bet or raise' };
   const group = (t) => ({ f: 'fold', fold: 'fold', x: 'check', check: 'check', c: 'call', call: 'call', b: 'raise', r: 'raise', bet: 'raise', raise: 'raise' }[t] || 'check');
   const pct = (x) => `${Math.round(100 * x)}%`;
@@ -17,6 +18,10 @@ const HandReview = (() => {
   /** Every decision `name` made in a readable record, with the table exactly as it was just before it. */
   function spots(text, name) {
     const g = Notation.parse(text);
+    // Very long games (Instant mode): only the most recent hands can matter, since at most MAX_SPOTS
+    // decisions are reviewed. Each hand states its own stacks, so it replays the same on its own.
+    const total = g.hands.length;
+    if (total > RECENT_HANDS) g.hands = g.hands.slice(-RECENT_HANDS);
     const rp = Replay.game(g);
     const out = [], finished = [];
     for (const rh of rp.hands) {
@@ -33,7 +38,7 @@ const HandReview = (() => {
       }
       if (rh.hand && rh.hand.phase === 'done') finished.push(rh.hand);
     }
-    return { spots: out.slice(-MAX_SPOTS), cut: Math.max(0, out.length - MAX_SPOTS), hands: rp.hands.length, cfg: rp.cfg };
+    return { spots: out.slice(-MAX_SPOTS), cut: Math.max(0, out.length - MAX_SPOTS) + (total > RECENT_HANDS ? 1 : 0), hands: total, cfg: rp.cfg };
   }
 
   /** The reference player's mix of actions in one spot, plus the numbers behind it. */
