@@ -32,11 +32,12 @@ function HomeScreen() {
       <div class="pill-row"><span class="pill">100% free</span><span class="pill">No sign-up</span><span class="pill">Peer-to-peer</span><span class="pill">Encrypted, provably fair deal</span><span class="pill">No ads or tracking</span></div>
     </div></section>
     <footer class="home-foot">Every player's browser helps shuffle and only you can unlock your cards. Everything travels directly between players; nothing is stored on a server.
-      <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn sm ghost" id="h-device">${icon(Device.mobile ? 'monitor' : 'phone')}Switch to ${Device.mobile ? 'computer' : 'mobile'} layout</button><button class="btn sm ghost" id="h-wipe">${icon('x')}Clear my data on this device</button></div></footer>
+      <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn sm ghost" id="h-device">${icon(Device.mobile ? 'monitor' : 'phone')}Switch to ${Device.mobile ? 'computer' : 'mobile'} layout</button><button class="btn sm ghost" id="h-look">${icon('palette')}Appearance</button><button class="btn sm ghost" id="h-wipe">${icon('x')}Clear my data on this device</button></div></footer>
   </div></div>`;
   bindThemeToggles(App.root);
   $$('[data-go]', App.root).forEach((b) => b.addEventListener('click', () => { location.hash = b.dataset.go; }));
   $('#h-wipe').addEventListener('click', wipeModal);
+  $('#h-look').addEventListener('click', appearanceModal);
   $('#h-device').addEventListener('click', () => { Device.set(Device.mobile ? 'computer' : 'mobile'); route(true); });
   return {};
 }
@@ -63,6 +64,42 @@ function DeviceScreen(next) {
   return {};
 }
 
+/** Appearance: theme, felt, card backs, rail, card faces. Every change shows at once and is remembered on this device. */
+function appearanceModal() {
+  const sw = (key, list) => `<div class="swatches" role="radiogroup" data-ap="${key}">${list.map(([v, l, c]) => `<button type="button" class="swatch" role="radio" data-v="${v}" aria-checked="${Theme.pick(key, list) === v}" aria-label="${l}" title="${l}" style="background:${c}"></button>`).join('')}</div>`;
+  const seg = (key, opts, cur) => `<div class="seg" role="radiogroup" data-ap="${key}">${opts.map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === cur}" aria-checked="${v === cur}">${l}</button>`).join('')}</div>`;
+  const m = openModal(`<h2>${icon('palette')} Appearance</h2>
+    <div class="ap-preview" aria-hidden="true">${cardHtml('As')}${cardHtml('Kh')}${cardHtml('Qd')}${cardHtml('Tc')}${cardHtml(null)}</div>
+    <div class="ap-row"><span>Theme</span>${seg('theme', [['dark', 'Dark'], ['light', 'Light']], Prefs.get('theme', 'dark'))}</div>
+    <div class="ap-row"><span>Table felt</span>${sw('felt', Theme.FELTS)}</div>
+    <div class="ap-row"><span>Card backs</span>${sw('cardBack', Theme.BACKS)}</div>
+    <div class="ap-row"><span>Table rail</span>${sw('rail', Theme.RAILS)}</div>
+    <div class="ap-row"><span>Card faces</span>${seg('bigPrint', [['no', 'Classic'], ['yes', 'Large print']], Prefs.get('bigPrint', false) === true ? 'yes' : 'no')}</div>
+    <label class="check"><input type="checkbox" id="ap-4c" ${Prefs.get('fourColor', true) ? 'checked' : ''}> Four-color deck (blue diamonds, green clubs)</label>
+    <p class="hint">Saved in this browser only. Other players see their own choices.</p>
+    <div class="modal-foot"><button class="btn" id="ap-reset">Reset to default</button><button class="btn primary" data-close>Done</button></div>`, { label: 'Appearance' });
+  const sync = () => {
+    Theme.apply();
+    $$('[data-theme-toggle]').forEach((x) => { x.innerHTML = Theme.icon(); });
+    $$('[data-ap]', m.el).forEach((g) => {
+      const key = g.dataset.ap;
+      const cur = key === 'theme' ? Prefs.get('theme', 'dark') : key === 'bigPrint' ? (Prefs.get('bigPrint', false) === true ? 'yes' : 'no') : Theme.pick(key, { felt: Theme.FELTS, cardBack: Theme.BACKS, rail: Theme.RAILS }[key]);
+      $$('[data-v]', g).forEach((b) => { b.setAttribute('aria-checked', String(b.dataset.v === cur)); if (b.hasAttribute('aria-pressed')) b.setAttribute('aria-pressed', String(b.dataset.v === cur)); });
+    });
+    $('#ap-4c', m.el).checked = Prefs.get('fourColor', true);
+  };
+  m.el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ap] [data-v]');
+    if (b) {
+      const key = b.closest('[data-ap]').dataset.ap;
+      Prefs.set(key, key === 'bigPrint' ? b.dataset.v === 'yes' : b.dataset.v);
+      sync();
+    }
+  });
+  $('#ap-4c', m.el).addEventListener('change', (e) => { Prefs.set('fourColor', e.target.checked); sync(); });
+  $('#ap-reset', m.el).addEventListener('click', () => { ['felt', 'cardBack', 'rail', 'bigPrint'].forEach((k) => Prefs.del(k)); Prefs.set('fourColor', true); sync(); });
+}
+
 /** Lets a player erase everything Feltroom remembers in this browser. */
 function wipeModal() {
   const s = Prefs.summary();
@@ -75,7 +112,7 @@ function wipeModal() {
   const m = openModal(`<h2>Clear my data</h2>
     <p class="muted" style="margin-top:0">Feltroom keeps a few things in this browser only. Nothing is stored on any server. Clearing removes:</p>
     <ul style="margin:0 0 12px;padding-left:20px;line-height:1.7">${items.map((x) => `<li>${x}</li>`).join('')}</ul>
-    <label class="check"><input type="checkbox" id="w-display" checked> Keep my display preferences (theme, sound, card colours)</label>
+    <label class="check"><input type="checkbox" id="w-display" checked> Keep my display preferences (theme, table and card colours, sound)</label>
     <p class="hint">Copy any game records you want to keep first. This cannot be undone.</p>
     <div class="modal-foot"><button class="btn" data-close>Cancel</button><button class="btn danger" id="w-go">Clear my data</button></div>`, { label: 'Clear my data' });
   $('#w-go', m.el).addEventListener('click', () => {
@@ -447,11 +484,12 @@ function JoinScreen(hostId) {
       connect(name, !!rejoinName);
     });
   };
-  const connect = async (name, fresh) => {
+  const connect = async (name, fresh, autoSit) => {
     App.root.innerHTML = `<div class="page"><div class="center-card card-ui" style="margin:auto"><div class="spinner" aria-hidden="true"></div><h2>Connecting to the host…</h2><p class="muted">Finding the game through the free PeerJS broker, then connecting directly.</p></div></div>`;
     const sess = new ClientSession(hostId, name, { fresh });
     try {
       await sess.connect();
+      sess.autoSit = !!autoSit;
       App.session = sess;
       App.screen = GameScreen(sess);
     } catch (e) {
@@ -468,7 +506,10 @@ function JoinScreen(hostId) {
       }
     }
   };
-  if (token && sameTab) connect(rejoinName || saved, false); else form();
+  // Accepted a rematch invitation: join straight away under the same name and take a seat.
+  const auto = App.autoJoin; App.autoJoin = null;
+  if (auto && auto.id === hostId) connect(auto.name, true, true);
+  else if (token && sameTab) connect(rejoinName || saved, false); else form();
   return {};
 }
 
@@ -759,6 +800,9 @@ function GameScreen(session) {
       <button id="m-view" role="menuitem">${icon('history')}${twoRecords() ? 'Open player-only record in viewer' : 'Open record in viewer'}</button>
       <button id="m-copytext" role="menuitem">${icon('copy')}Copy readable record (text)</button>
       <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>`}
+      ${isWatcher ? '' : `<button id="m-review" role="menuitem">${icon('calc')}Review my play</button>`}
+      ${session.offline ? `<button id="m-again" role="menuitem">${icon('history')}Play again (same settings)</button>` : canRematch() ? `<button id="m-rematch" role="menuitem">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}
+      <button id="m-look" role="menuitem">${icon('palette')}Appearance (felt, cards, theme)…</button>
       <button id="m-theme" role="menuitem">${Theme.icon()}Light / dark theme</button>
       ${isHost && v && v.status !== 'ended' ? `<hr>
         ${v.status === 'lobby' ? `<button id="m-start" role="menuitem">${icon('play')}Start game</button>` : `<button id="m-pause" role="menuitem">${icon(v.paused ? 'play' : 'pause')}${v.paused ? 'Resume game' : 'Pause game'}</button>`}
@@ -782,6 +826,9 @@ function GameScreen(session) {
     on('m-adjust', () => { if (G.view.phase && G.view.phase !== 'done') return toast('Stacks can be adjusted between hands. Pause the game, then wait for this hand to finish.', 'info', 5000); adjustModal(); });
     on('m-end', () => confirmModal('End the game?', 'Everyone keeps their game record. This cannot be undone.', 'End game', () => session.send({ t: 'end' })));
     on('m-leave', leaveTable);
+    on('m-look', appearanceModal);
+    on('m-review', reviewMine);
+    on('m-again', playAgain); on('m-rematch', startRematch);
     const first = $('input, button', menuEl); if (first) first.focus();
   }
 
@@ -857,11 +904,102 @@ function GameScreen(session) {
     }
     const m = openModal(`<div class="state-ic err" style="margin-bottom:12px">${icon('flag')}</div><h2 style="text-align:center">${U.esc(reason)}</h2>
       <p class="muted" style="text-align:center">Your game record up to this point is saved in this browser. Copy it, download it, or replay it in the viewer.</p>
-      <div class="modal-foot" style="justify-content:center"><a class="btn" href="#/" data-close>${icon('home')}Home</a><button class="btn" id="e-dl">${icon('download')}Download</button><button class="btn" id="e-view">${icon('history')}Open in viewer</button><button class="btn primary" id="e-copy">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy Game Record'}</button>${twoRecords() ? `<button class="btn" id="e-full">${icon('bot')}Copy full record</button>` : ''}</div>`, { label: 'Game ended' });
+      <div class="modal-foot" style="justify-content:center"><a class="btn" href="#/" data-close>${icon('home')}Home</a>${session.offline ? `<button class="btn primary" id="e-again">${icon('history')}Play again</button>` : canRematch() ? `<button class="btn primary" id="e-rematch">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}<button class="btn" id="e-review">${icon('calc')}Review my play</button><button class="btn" id="e-dl">${icon('download')}Download</button><button class="btn" id="e-view">${icon('history')}Open in viewer</button><button class="btn primary" id="e-copy">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy Game Record'}</button>${twoRecords() ? `<button class="btn" id="e-full">${icon('bot')}Copy full record</button>` : ''}</div>`, { label: 'Game ended' });
     $('#e-copy', m.el).addEventListener('click', () => copyRecord(false));
     if ($('#e-full', m.el)) $('#e-full', m.el).addEventListener('click', () => copyRecord(true));
     $('#e-view', m.el).addEventListener('click', openInViewer);
     $('#e-dl', m.el).addEventListener('click', downloadRecord);
+    $('#e-review', m.el).addEventListener('click', () => { m.close(); reviewMine(); });
+    const ea = $('#e-again', m.el); if (ea) ea.addEventListener('click', () => { m.close(); playAgain(); });
+    const er = $('#e-rematch', m.el); if (er) er.addEventListener('click', () => { m.close(); startRematch(); });
+  }
+
+  /** Hand review of this player's decisions, from the full record (it has all of their own cards). */
+  function reviewMine() {
+    const r = record(true);
+    if (!r || !/#\d+/.test(r)) return toast('No finished hands to review yet.', 'info');
+    reviewModal(r, myName(), { cepheus: !!session.cepheus });
+  }
+
+  /* ----- rematch (online) and play again (bots) ----- */
+  const myName = () => (G.view && G.view.you && G.view.you.name) || session.name;
+  function canRematch() { return !isWatcher && !session.offline && (!!session.rematch || Rematch.allowedView(G.view)); }
+  function rematchLabel() { const r = session.rematch; return r ? `Join ${r.from}'s rematch` : G.rematching ? 'Setting up the rematch…' : 'Rematch'; }
+  function rematchBtn() {
+    if (session.offline) return `<button class="btn primary" data-do="again">${icon('history')}Play again</button>`;
+    return canRematch() ? `<button class="btn primary" data-do="rematch" ${G.rematching ? 'disabled' : ''}>${icon('users')}${U.esc(rematchLabel())}</button>` : '';
+  }
+  /** The host of a game still being played ends it for everyone by leaving, so ask first. */
+  function hostStillPlaying() { const v = G.view; return isHost && v && v.status === 'playing' && !v.waiting; }
+  function startRematch() {
+    if (session.rematch) return joinRematch();
+    if (G.rematching) return;
+    if (isHost && session.rematchAsk && Date.now() - session.rematchAsk.at < 20000) return toast('Another player is setting up a rematch. Their invitation is on its way.', 'info');
+    if (hostStillPlaying()) return confirmModal('Start a rematch?', 'You are the host, so this game ends for everyone. They all get an invitation to the rematch.', 'Start rematch', openRematch, false);
+    openRematch();
+  }
+  async function openRematch() {
+    G.rematching = true; G.barKey = null; if (G.view) renderBar();
+    const done = () => { G.rematching = false; G.barKey = null; if (G.view) renderBar(); };
+    try {
+      const settings = isHost ? { ...session.settings } : await session.askRematch();
+      if (!settings) { done(); if (session.rematch) showRematchCard(); else toast('The host did not answer, so the rematch could not be set up.', 'error'); return; }
+      toast('Opening the rematch table…', 'info');
+      const v = G.view, humans = v ? v.players.filter((p) => !p.isBot).length : 0;
+      const sess = new HostSession(settings, myName());
+      await sess.start();
+      sess.rematchOf = { headsUp: humans === 2 || settings.maxSeats === 2, started: false };
+      if (isHost) session.offerRematch(myName(), sess.id, session.pid);
+      else session.send({ t: 'rematch-ready', id: sess.id });
+      // Give the invitation a moment to go out before this table closes.
+      const old = session;
+      setTimeout(() => { try { old.leave(); } catch { /* ignore */ } }, 1200);
+      App.session = sess;
+      if (location.hash.startsWith('#/host')) route(true); else location.hash = '#/host';
+      toast(sess.rematchOf.headsUp ? 'Rematch table open. The game deals as soon as your opponent sits down.' : 'Rematch table open. Everyone has been invited; press Start when they are seated.', 'info', 6000);
+    } catch (e) { done(); toast(`Could not open the rematch table: ${Net.friendly(e).title}`, 'error'); }
+  }
+  function joinRematch() {
+    const r = session.rematch;
+    if (!r) return;
+    const go = () => {
+      App.autoJoin = { id: r.id, name: myName() };
+      App.session = null;
+      try { session.leave(); } catch { /* ignore */ }
+      location.hash = '#join=' + r.id;
+    };
+    if (hostStillPlaying()) return confirmModal('Join the rematch?', 'You are the host, so leaving ends this game for everyone still playing.', 'Join rematch', go, false);
+    go();
+  }
+  let rcard = null;
+  function hideRematchCard() { if (rcard) { rcard.remove(); rcard = null; } }
+  function showRematchCard() {
+    const r = session.rematch;
+    if (!r || isWatcher) return;
+    hideRematchCard();
+    rcard = document.createElement('div');
+    rcard.className = 'rematch-card'; rcard.setAttribute('role', 'alertdialog'); rcard.setAttribute('aria-label', 'Rematch invitation');
+    rcard.innerHTML = `<div class="rc-text"><b>${U.esc(r.from)} wants a rematch</b><span>Same settings, fresh stacks. ${U.esc(r.from)} hosts the new table.</span></div>
+      <div class="rc-btns"><button class="btn" data-rc="no">No thanks</button><button class="btn primary" data-rc="yes">${icon('users')}Join rematch</button></div>`;
+    rcard.addEventListener('click', (e) => { const b = e.target.closest('[data-rc]'); if (!b) return; hideRematchCard(); if (b.dataset.rc === 'yes') joinRematch(); });
+    document.body.appendChild(rcard);
+    Sound.play('chime');
+    if (document.hidden) TitleFlash.start(`🔁 ${r.from} wants a rematch`);
+    announce(`${r.from} wants a rematch.`);
+    G.barKey = null; if (G.view) renderBar();
+  }
+  function playAgain() {
+    const go = () => {
+      const old = session;
+      old.leave();
+      const sess = new BotSession({ ...old.settings }, old.name, old.bots.map((b) => ({ ...b })));
+      sess.cepheus = old.cepheus;
+      App.session = sess.start();
+      route(true);
+    };
+    const v = G.view;
+    if (v && v.status === 'playing' && !(v.you && v.you.busted) && !v.waiting) return confirmModal('Start a new game?', 'This game ends and a new one starts with the same settings and opponents.', 'Play again', go, false);
+    go();
   }
 
   /* ----- lobby dock ----- */
@@ -928,7 +1066,7 @@ function GameScreen(session) {
   function renderBar() {
     const v = G.view, y = v.you, L = v.legal;
     const seatedCount = v.seats.filter(Boolean).length;
-    const key = JSON.stringify([v.status, y && [y.seat, y.inHand, y.dealt, y.canShow, y.canRebuy, y.sittingOut, y.busted, y.toCallPreview > 0, y.stack], L, v.handNo, v.street, G.pre, v.paused, seatedCount, myHandName(v), G.ended, G.status]);
+    const key = JSON.stringify([session.rematch && session.rematch.id, G.rematching, Rematch.allowedView(v), v.status, y && [y.seat, y.inHand, y.dealt, y.canShow, y.canRebuy, y.sittingOut, y.busted, y.toCallPreview > 0, y.stack], L, v.handNo, v.street, G.pre, v.paused, seatedCount, myHandName(v), G.ended, G.status]);
     if (key === G.barKey) return;
     G.barKey = key;
     G.sending = false;
@@ -937,7 +1075,7 @@ function GameScreen(session) {
     if (isWatcher && !(G.ended || v.status === 'ended')) {
       html = `<div class="ab-msg">${icon('eye')}You're watching${v.status === 'lobby' ? ': the game hasn\'t started yet' : ''}. Hole cards stay hidden; you'll see hands only when they're shown.</div>`;
     } else if (G.ended || v.status === 'ended') {
-      html = `<div class="ab-msg">Game over.<button class="btn primary" data-do="copy">${icon('copy')}Copy Game Record</button><button class="btn" data-do="viewer">${icon('history')}Open in viewer</button></div>`;
+      html = `<div class="ab-msg">Game over.${isWatcher ? '' : rematchBtn() + `<button class="btn" data-do="review">${icon('calc')}Review my play</button>`}<button class="btn ${isWatcher || !rematchBtn() ? 'primary' : ''}" data-do="copy">${icon('copy')}Copy Game Record</button><button class="btn" data-do="viewer">${icon('history')}Open in viewer</button></div>`;
     } else if (!y || y.seat == null) {
       const free = v.seats.some((s) => !s);
       const dealer = y && y.isHost && !v.table.hostPlays;
@@ -979,6 +1117,7 @@ function GameScreen(session) {
       if (y.canShow && v.phase === 'done') bits.push(`<button class="btn" data-do="show">Show my cards</button>`);
       if (y.canRebuy) bits.push(`<button class="btn primary" data-do="rebuy">${icon('plus')}Rebuy ${U.fmt(v.table.startingStack)}</button>`);
       if (y.busted && !v.table.rebuys) bits.push('<span>You are out of chips. Thanks for playing!</span>');
+      if ((session.offline && y.busted && !y.canRebuy) || (!session.offline && canRematch())) bits.push(rematchBtn());
       else if (y.sittingOut && !y.busted) bits.push(`<span>You are sitting out.</span><button class="btn primary" data-do="back">I'm back</button>`);
       else if (!y.busted) bits.push(`<span>${v.paused ? 'Game paused.' : y.dealt && v.phase !== 'done' ? 'You folded. Waiting for the next hand…' : 'Waiting for the next hand…'}</span><button class="btn ghost" data-do="sitout">Sit out</button>`);
       html = `<div class="ab-msg">${hn && y.dealt ? `<span class="strength">Your hand: <b>${U.esc(hn)}</b></span>` : ''}${bits.join('')}</div>`;
@@ -1000,6 +1139,9 @@ function GameScreen(session) {
     else if (d === 'sitout') session.send({ t: 'sitout', on: true });
     else if (d === 'copy') copyRecord();
     else if (d === 'viewer') openInViewer();
+    else if (d === 'rematch') startRematch();
+    else if (d === 'review') reviewMine();
+    else if (d === 'again') playAgain();
   });
   bar.addEventListener('input', (e) => {
     if (e.target.id === 'ab-range') setAmt(e.target.value, 'range');
@@ -1137,6 +1279,17 @@ function GameScreen(session) {
     });
     renderBar();
     renderSide(v);
+    // Rematch: a player who accepted takes the first free seat; heads-up, the new host deals once both are seated.
+    if (session.autoSit && v.status === 'lobby' && v.you && v.you.seat == null) {
+      session.autoSit = false;
+      const free = v.seats.findIndex((x) => !x);
+      if (free >= 0) session.send({ t: 'sit', seat: free });
+    }
+    const rm = session.rematchOf;
+    if (isHost && rm && rm.headsUp && !rm.started && v.status === 'lobby' && seated >= 2) {
+      rm.started = true;
+      setTimeout(() => { if (G.view && G.view.status === 'lobby') session.send({ t: 'start' }); }, 1200);
+    }
     // Your turn
     const myTurn = !!v.legal;
     if (myTurn && !(prev && prev.legal)) {
@@ -1154,15 +1307,19 @@ function GameScreen(session) {
     if (v.status === 'ended' && !G.ended) showEnded(isHost ? 'You ended the game.' : 'The host ended the game.');
   }
 
-  session.on('view', update);
-  session.on('event', (kind, text) => toast(text, kind));
-  session.on('error', (text) => { toast(text, 'error'); G.sending = false; G.barKey = null; if (G.view) renderBar(); });
-  session.on('ended', (reason) => showEnded(reason));
-  session.on('fair', (f, msg) => {
+  // A session can outlive this screen (a rematch closes the old table a moment later), so a closed screen ignores it.
+  const live = (fn) => (...a) => { if (!G.dead) fn(...a); };
+  session.on('view', live(update));
+  session.on('event', live((kind, text) => toast(text, kind)));
+  session.on('error', live((text) => { toast(text, 'error'); G.sending = false; G.barKey = null; if (G.view) renderBar(); }));
+  session.on('ended', live((reason) => showEnded(reason)));
+  session.on('rematch', live(() => showRematchCard()));
+  if (session.rematch) setTimeout(showRematchCard, 0);
+  session.on('fair', live((f, msg) => {
     if (G.alerted !== f.no) { G.alerted = f.no; toast(`Fair-play check failed on hand #${f.no}: ${msg}`, 'error', 9000); announce('Warning: fair play check failed.'); }
     renderFairBadge();
-  });
-  if (session.on && !isHost) session.on('status', (st) => { G.status = st; if (G.view) update(G.view); });
+  }));
+  if (session.on && !isHost) session.on('status', live((st) => { G.status = st; if (G.view) update(G.view); }));
 
   /* ----- keyboard ----- */
   function onKey(e) {
@@ -1198,6 +1355,6 @@ function GameScreen(session) {
   if (isHost) session.table.changed();
   else if (session.lastView) update(session.lastView);
   return {
-    destroy() { removeEventListener('keydown', onKey); removeEventListener('resize', onResize); table.destroy(); closeMenu(); TitleFlash.stop(); },
+    destroy() { G.dead = true; removeEventListener('keydown', onKey); removeEventListener('resize', onResize); table.destroy(); closeMenu(); hideRematchCard(); TitleFlash.stop(); },
   };
 }

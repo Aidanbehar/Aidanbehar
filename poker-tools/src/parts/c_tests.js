@@ -760,6 +760,22 @@ const SelfTest = (() => {
     } finally { CepheusBot.model = saved; }
   });
 
+  test('Hand review', 'Reviews only your own decisions, never with anyone else\'s cards, and grades each one', async () => {
+    if (typeof SAMPLE_RECORD === 'undefined' || typeof HandReview === 'undefined') return;
+    const S = HandReview.spots(SAMPLE_RECORD, 'Alice');
+    ok(S.spots.length > 0, 'Alice has decisions');
+    ok(S.spots.every((x) => x.hand.players[x.i].name === 'Alice' && x.hand.players.every((p, j) => j === x.i || !p.hole)), 'only her cards are present');
+    const x = await HandReview.analyse(S.spots[0], { work: 0.2 });
+    ok(['good', 'close', 'mistake'].includes(x.grade), 'graded');
+    const tot = Object.values(x.freq).reduce((a, b) => a + b, 0);
+    ok(Math.abs(tot - 1) < 1e-6, 'the reference mix adds up to 100%');
+    // folding when a check is free is always a mistake
+    const h = Engine.createHand({ players: [{ name: 'A', stack: 1000 }, { name: 'B', stack: 1000 }], button: 0, sb: 5, bb: 10, hole: [['2c', '7d'], ['As', 'Ad']] });
+    Engine.applyAction(h, { type: 'c' });
+    const g = HandReview.grade({ no: 1, hand: h, i: 1, act: { type: 'f' } }, { L: Engine.legal(h), pot: 20, toCall: 0, facing: false, potOdds: 0, eq: 0.8, freq: { fold: 0.3, check: 0.7, call: 0, raise: 0 }, size: null, source: 'bot' });
+    eq(g.grade, 'mistake'); eq(g.kind, 'loose-fold');
+  });
+
   async function run(onResult) {
     const out = [];
     for (const t of T) {

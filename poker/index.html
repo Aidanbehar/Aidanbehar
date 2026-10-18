@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-8I8YRX+OmBXhRdWM9X4SeRG6ngmub8wAvg16fmxaO/k=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-Iv2U+p7vkQZadnNo341blkFK1iQNDO38ln21RSiqzZ4=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -442,6 +442,50 @@ button.seat-empty:hover { background: var(--accent-soft); border-color: var(--ac
 /* =====================================================================
    OVERLAYS: toasts, modal, help
    ===================================================================== */
+.modal.wide { max-width: 720px; }
+.rv-bar { height: 10px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.rv-bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.rv-score { display: flex; gap: 16px; align-items: center; margin-bottom: 12px; }
+.rv-big { font-size: 44px; font-weight: 900; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+.rv-big small { font-size: 16px; color: var(--text-3); font-weight: 700; }
+.rv-streets { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.rv-kinds { margin: 0; padding-left: 20px; line-height: 1.7; }
+.rv-spot { border: 1px solid var(--border-soft); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; background: var(--surface-2); }
+.rv-spot p { margin: 6px 0 0; }
+.rv-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rv-cards { display: flex; gap: 14px; margin-top: 8px; --cw: 30px; flex-wrap: wrap; }
+.rv-cards > span { display: flex; gap: 3px; }
+.rv-tag { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 99px; }
+.rv-good { background: var(--accent-soft); color: var(--accent); } .rv-close { background: rgba(242, 184, 75, .16); color: var(--warn); } .rv-bad { background: var(--danger-soft); color: var(--danger); }
+.rv-good-t { color: var(--accent); } .rv-close-t { color: var(--warn); } .rv-bad-t { color: var(--danger); }
+.rv-all { margin-top: 12px; } .rv-all summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
+/* Appearance: felt, card back and rail colours, and large-print card faces (see Theme). */
+:root[data-felt="blue"] { --felt-1: #1f6fa8; --felt-2: #154f7a; --felt-3: #0d3554; }
+:root[data-felt="red"] { --felt-1: #a83a3a; --felt-2: #7d2626; --felt-3: #551818; }
+:root[data-felt="purple"] { --felt-1: #6b4aa8; --felt-2: #4d327d; --felt-3: #331f55; }
+:root[data-felt="charcoal"] { --felt-1: #4a515b; --felt-2: #31363e; --felt-3: #1d2025; }
+:root[data-felt="brown"] { --felt-1: #8a6237; --felt-2: #6a4825; --felt-3: #4a3018; }
+:root[data-back="red"] { --back-1: #b5323a; --back-2: #8f242b; }
+:root[data-back="green"] { --back-1: #1e7a4f; --back-2: #155d3b; }
+:root[data-back="purple"] { --back-1: #6a3fb0; --back-2: #512f89; }
+:root[data-back="black"] { --back-1: #2b2f36; --back-2: #1a1d22; }
+:root[data-back="gold"] { --back-1: #b58a1e; --back-2: #8c6a12; }
+:root[data-rail="light"] { --rail-1: #8a6a48; --rail-2: #5e4630; }
+:root[data-rail="black"] { --rail-1: #24272c; --rail-2: #141619; }
+.big-print .card .cr { font-size: calc(var(--cw, 40px) * .56); left: 8%; top: 4%; }
+.big-print .card .cs { display: none; }
+.big-print .card .cb { font-size: calc(var(--cw, 40px) * .66); right: 6%; bottom: 3%; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; padding: 0; box-shadow: inset 0 0 0 3px var(--surface); }
+.swatch[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--surface), 0 0 0 2px var(--accent); }
+.ap-preview { position: relative; height: 120px; border-radius: 999px; margin: 4px 6px 14px; background: radial-gradient(ellipse at 50% 50%, var(--felt-1) 0%, var(--felt-2) 62%, var(--felt-3) 100%); box-shadow: 0 0 0 8px var(--rail-1), 0 0 0 10px var(--rail-2); display: flex; align-items: center; justify-content: center; gap: 6px; --cw: 44px; }
+.ap-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.ap-row > span { font-weight: 600; font-size: 14px; }
+.rematch-card { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 960; width: min(440px, calc(100vw - 32px)); background: var(--surface); border: 2px solid var(--accent); border-radius: 16px; box-shadow: var(--shadow-2); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; animation: fadeIn .2s ease-out; }
+.rematch-card .rc-text { display: flex; flex-direction: column; gap: 2px; }
+.rematch-card .rc-text b { font-size: 16px; }
+.rematch-card .rc-text span { color: var(--text-2); font-size: 13px; }
+.rematch-card .rc-btns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 #toasts { position: fixed; top: 14px; right: 14px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; max-width: calc(100vw - 28px); }
 .toast { pointer-events: auto; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--info); border-radius: 12px; padding: 10px 14px; box-shadow: var(--shadow-2); font-size: 14px; max-width: 340px; animation: toastIn .25s ease-out; }
 .toast.success { border-left-color: var(--accent); } .toast.warn { border-left-color: var(--warn); } .toast.error { border-left-color: var(--danger); }
@@ -4942,7 +4986,7 @@ const Prefs = {
   },
   /** Wipe saved names, settings, rejoin links and records; optionally keep display preferences. */
   wipe(keepDisplay) {
-    const display = ['theme', 'muted', 'fourColor', 'panelOpen', 'vSpeed', 'device'];
+    const display = ['theme', 'muted', 'fourColor', 'panelOpen', 'vSpeed', 'device', 'felt', 'cardBack', 'rail', 'bigPrint'];
     for (const k of Prefs.keys()) if (!(keepDisplay && display.includes(k))) Prefs.del(k);
     try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('feltroom.')) sessionStorage.removeItem(k); } catch { /* ignore */ }
   },
@@ -5296,7 +5340,7 @@ class HostSession {
     this.name = name;
     this.conns = new Map();
     this.record = '';
-    this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {} };
+    this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {}, rematch: () => {} };
   }
   on(ev, fn) { this.handlers[ev] = fn; return this; }
 
@@ -5394,6 +5438,7 @@ class HostSession {
     if (m.t === 'ping') { this._send(c, { t: 'pong' }); return; }
     if (m.t === 'pong' || !c.pid || c.replaced) return;
     if (['start', 'pause', 'kick', 'adjust', 'end'].includes(m.t)) return; // host-only intents never come from the network
+    if (m.t === 'rematch-ask' || m.t === 'rematch-ready') { this._rematchMsg(c, m); return; }
     t.handle(c.pid, m);
   }
 
@@ -5438,6 +5483,32 @@ class HostSession {
   send(m) {
     if (m.t === 'show' && this.sraLink && this.table.hand) m = { ...m, keys: this.sraLink.showKeys(this.table.hand.no) };
     this.table.handle(this.pid, m);
+  }
+
+  /*
+   * Rematch. Whoever asks first hosts the new table with this table's settings and everyone else
+   * gets an invitation. A player asks the host for the settings ('rematch-ask' -> 'rematch-go'),
+   * opens the new table, then reports its ID ('rematch-ready'); this host passes the ID on.
+   */
+  _rematchMsg(c, m) {
+    const p = this.table.players.get(c.pid);
+    if (!p) return;
+    if (this.rematch) { this._send(c, { t: 'rematch', from: this.rematch.from, id: this.rematch.id }); return; }
+    if (!Rematch.allowed(this.table)) { this._send(c, { t: 'error', text: 'A rematch can be offered once the game is over or someone is out of chips.' }); return; }
+    if (m.t === 'rematch-ask') {
+      if (this.rematchAsk && this.rematchAsk.pid !== c.pid && Date.now() - this.rematchAsk.at < 20000) { this._send(c, { t: 'error', text: 'Another player is setting up a rematch. Their invitation is on its way.' }); return; }
+      this.rematchAsk = { pid: c.pid, at: Date.now() };
+      this._send(c, { t: 'rematch-go', settings: this.settings });
+      return;
+    }
+    if (!this.rematchAsk || this.rematchAsk.pid !== c.pid || typeof m.id !== 'string' || !REMATCH_ID.test(m.id)) return;
+    this.offerRematch(p.name, m.id, c.pid);
+  }
+  /** Invite everyone at this table (except the player hosting it) to the rematch table. */
+  offerRematch(from, id, exceptPid) {
+    this.rematch = { from, id };
+    for (const [pid, c] of this.conns) if (pid !== exceptPid) this._send(c, { t: 'rematch', from, id });
+    if (exceptPid !== this.pid && this.handlers.rematch) this.handlers.rematch(from, id);
   }
 
   /** Host leaves: tell everyone (so they can still copy their records), then shut down. */
@@ -5531,8 +5602,36 @@ const Safe = (() => {
       watching: bool(v.watching), watchId: typeof v.watchId === 'string' && /^[a-z0-9-]{4,40}$/.test(v.watchId) ? v.watchId : null,
     };
   }
-  return { view };
+  /** Rematch: table settings sent by another player's browser, rebuilt into a known shape. */
+  function settings(x) {
+    if (!x || typeof x !== 'object') return null;
+    const sb = int(x.sb, 1, 1e9, null), bb = int(x.bb, 1, 1e9, null), st = int(x.startingStack, 2, 1e12, null);
+    if (sb == null || bb == null || bb < sb || st == null || st < bb * 2) return null;
+    return {
+      tableName: str(x.tableName, 40).replace(/["\[\]\\]/g, '').trim() || 'Rematch', sb, bb, ante: int(x.ante, 0, bb, 0), startingStack: st,
+      maxSeats: int(x.maxSeats, 2, 9, 9), timer: int(x.timer, 0, 600, 0), rebuys: bool(x.rebuys), maxRebuys: int(x.maxRebuys, 0, 99, 0),
+      recordHole: oneOf(x.recordHole, ['All', 'Showdown'], 'Showdown'), game: oneOf(x.game, ['holdem', 'omaha4', 'omaha5'], 'holdem'),
+      limit: oneOf(x.limit, ['nl', 'pl', 'fl'], 'nl'), levelHands: int(x.levelHands, 0, 1000, 0), hostPlays: true,
+      botTakeover: bool(x.botTakeover) && !bool(x.sra), sra: bool(x.sra), spectators: bool(x.spectators), viewerChat: bool(x.spectators) && bool(x.viewerChat),
+      listed: false, hostAdjust: bool(x.hostAdjust), hostKick: bool(x.hostKick),
+    };
+  }
+  return { view, settings };
 })();
+
+/** Peer IDs that a rematch invitation may point to. */
+const REMATCH_ID = /^nlhe-[a-z2-9]{4}-[a-z2-9]{4}$/;
+/** A rematch can be offered once at least one hand is done and the game is over or someone is out of chips. */
+const Rematch = {
+  allowed(t) {
+    if (!t.finished.length) return false;
+    return t.status === 'ended' || [...t.players.values()].some((p) => p.busted);
+  },
+  allowedView(v) {
+    if (!v || !v.handNo || v.status === 'lobby') return false;
+    return v.status === 'ended' || v.players.some((p) => p.busted) || !!(v.you && v.you.busted);
+  },
+};
 
 
 class ClientSession {
@@ -5544,7 +5643,7 @@ class ClientSession {
     this.name = name;
     this.record = Prefs.get('record.' + hostId, '');
     this.recordFull = Prefs.get('recordFull.' + hostId, this.record);
-    this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {}, status: () => {}, fair: () => {} };
+    this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {}, status: () => {}, fair: () => {}, rematch: () => {} };
     this.ended = false;
     this.fair = new Fair.Checker((f, msg) => this.handlers.fair(f, msg));
   }
@@ -5634,10 +5733,18 @@ class ClientSession {
       case 'fair2': { const r = this.fair.fair2(m); if (r) this.send(r); break; }
       case 'fair3': this.fair.fair3(m); break;
       case 'fairown': this.fair.own(m, this.name); break;
-      case 'error': this.handlers.error(m.text); break;
+      case 'error': this._rematchDone(null); this.handlers.error(m.text); break;
       case 'ping': this.send({ t: 'pong' }); break;
       case 'kicked': this._end('You were removed from the table by the host.'); break;
-      case 'ended': this._end(m.reason || 'Host left, game ended.'); break;
+      // The connection stays open after the game ends, so a rematch invitation can still arrive.
+      case 'ended': this._end(m.reason || 'Host left, game ended.', true); break;
+      case 'rematch':
+        if (this.watch || typeof m.id !== 'string' || !REMATCH_ID.test(m.id) || m.id === this.id) break;
+        this._rematchDone(null);
+        this.rematch = { from: String(m.from || 'A player').slice(0, 24), id: m.id };
+        this.handlers.rematch(this.rematch.from, m.id);
+        break;
+      case 'rematch-go': if (!this.watch) this._rematchDone(Safe.settings(m.settings)); break;
       // Encrypted deal steps go to our own SraPlayer.
       default: if (SraLink.is(m) && !this.watch) { if (!this.sraLink) this._sra(); this.sraLink.msg(m); } break;
     }
@@ -5686,13 +5793,23 @@ class ClientSession {
     this._end('Host left, game ended.');
   }
 
-  _end(reason) {
+  _end(reason, keepOpen) {
     if (this.ended) return;
     this.ended = true;
     clearInterval(this.dog);
     this.handlers.ended(reason);
-    setTimeout(() => { try { this.peer.destroy(); } catch { /* ignore */ } }, 500);
+    if (!keepOpen) setTimeout(() => { try { this.peer.destroy(); } catch { /* ignore */ } }, 500);
   }
+
+  /** Ask the host for this table's settings so this player can host the rematch. Resolves null if the host doesn't answer. */
+  askRematch() {
+    return new Promise((resolve) => {
+      const to = setTimeout(() => { if (this.rematchWait) { this.rematchWait = null; resolve(null); } }, 8000);
+      this.rematchWait = (s) => { clearTimeout(to); resolve(s); };
+      this.send({ t: 'rematch-ask' });
+    });
+  }
+  _rematchDone(s) { const w = this.rematchWait; this.rematchWait = null; if (w) w(s); }
 
   send(m) {
     if (m.t === 'show' && this.sraLink && this.lastView) m = { ...m, keys: this.sraLink.showKeys(this.lastView.handNo) };
@@ -5700,7 +5817,7 @@ class ClientSession {
   }
   leave() {
     try { sessionStorage.removeItem('feltroom.active'); } catch { /* ignore */ }
-    this.ended = true; clearInterval(this.dog); try { this.conn && this.conn.close(); this.peer.destroy(); } catch { /* ignore */ } }
+    this.ended = true; this.closed = true; clearInterval(this.dog); if (this.unload) removeEventListener('pagehide', this.unload); try { this.conn && this.conn.close(); this.peer.destroy(); } catch { /* ignore */ } }
 }
 
 /* ---------- Play vs Bots: the same HostTable, fully offline ---------- */
@@ -5760,6 +5877,7 @@ const ICONS = {
   copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
   sound: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
   mute: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.9-.7-1.2-.7-2 0-.9.7-1.6 1.6-1.6H17a4 4 0 0 0 4-4C21 6.7 17 3 12 3z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10.5" cy="7" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
@@ -5812,9 +5930,17 @@ const Device = {
 
 /* ---------- Theme & display prefs ---------- */
 const Theme = {
+  /** Appearance choices: [value, label, swatch colour]. The first of each list is the default. */
+  FELTS: [['green', 'Green', '#138069'], ['blue', 'Blue', '#1f6fa8'], ['red', 'Red', '#a83a3a'], ['purple', 'Purple', '#6b4aa8'], ['charcoal', 'Charcoal', '#3a4048'], ['brown', 'Brown', '#8a6237']],
+  BACKS: [['blue', 'Blue', '#1d6f8c'], ['red', 'Red', '#b5323a'], ['green', 'Green', '#1e7a4f'], ['purple', 'Purple', '#6a3fb0'], ['black', 'Black', '#2b2f36'], ['gold', 'Gold', '#b58a1e']],
+  RAILS: [['wood', 'Dark wood', '#3a2a1f'], ['light', 'Light wood', '#8a6a48'], ['black', 'Black', '#24272c']],
+  pick(key, list) { const v = Prefs.get(key, list[0][0]); return list.some((x) => x[0] === v) ? v : list[0][0]; },
   apply() {
-    document.documentElement.dataset.theme = Prefs.get('theme', 'dark');
+    const d = document.documentElement.dataset;
+    d.theme = Prefs.get('theme', 'dark');
+    d.felt = Theme.pick('felt', Theme.FELTS); d.back = Theme.pick('cardBack', Theme.BACKS); d.rail = Theme.pick('rail', Theme.RAILS);
     document.body.classList.toggle('two-color', !Prefs.get('fourColor', true));
+    document.body.classList.toggle('big-print', Prefs.get('bigPrint', false) === true);
   },
   toggle() { Prefs.set('theme', Prefs.get('theme', 'dark') === 'dark' ? 'light' : 'dark'); Theme.apply(); },
   icon() { return Prefs.get('theme', 'dark') === 'dark' ? icon('sun') : icon('moon'); },
@@ -7354,6 +7480,22 @@ const SelfTest = (() => {
     } finally { CepheusBot.model = saved; }
   });
 
+  test('Hand review', 'Reviews only your own decisions, never with anyone else\'s cards, and grades each one', async () => {
+    if (typeof SAMPLE_RECORD === 'undefined' || typeof HandReview === 'undefined') return;
+    const S = HandReview.spots(SAMPLE_RECORD, 'Alice');
+    ok(S.spots.length > 0, 'Alice has decisions');
+    ok(S.spots.every((x) => x.hand.players[x.i].name === 'Alice' && x.hand.players.every((p, j) => j === x.i || !p.hole)), 'only her cards are present');
+    const x = await HandReview.analyse(S.spots[0], { work: 0.2 });
+    ok(['good', 'close', 'mistake'].includes(x.grade), 'graded');
+    const tot = Object.values(x.freq).reduce((a, b) => a + b, 0);
+    ok(Math.abs(tot - 1) < 1e-6, 'the reference mix adds up to 100%');
+    // folding when a check is free is always a mistake
+    const h = Engine.createHand({ players: [{ name: 'A', stack: 1000 }, { name: 'B', stack: 1000 }], button: 0, sb: 5, bb: 10, hole: [['2c', '7d'], ['As', 'Ad']] });
+    Engine.applyAction(h, { type: 'c' });
+    const g = HandReview.grade({ no: 1, hand: h, i: 1, act: { type: 'f' } }, { L: Engine.legal(h), pot: 20, toCall: 0, facing: false, potOdds: 0, eq: 0.8, freq: { fold: 0.3, check: 0.7, call: 0, raise: 0 }, size: null, source: 'bot' });
+    eq(g.grade, 'mistake'); eq(g.kind, 'loose-fold');
+  });
+
   async function run(onResult) {
     const out = [];
     for (const t of T) {
@@ -7669,6 +7811,177 @@ const CepheusStats = (() => {
   }
   return { render, load, profile };
 })();
+/* =====================================================================
+   7g. HAND REVIEW
+   Every decision you made is replayed from your game record and compared with what
+   Feltroom's strongest bot (Extreme, GTO-inspired style) would do in the same spot, or,
+   in a Play Against Cepheus game, with the CFR+ strategy. Only what you could see is
+   used: your own cards, the board and the betting. Everyone else's cards are removed
+   before anything is analysed, even when the record has them.
+   ===================================================================== */
+const HandReview = (() => {
+  const SAMPLES = 48;      // how many times the reference player decides each spot (it mixes its play)
+  const MAX_SPOTS = 400;   // very long games: the most recent decisions
+  const WORD = { fold: 'fold', check: 'check', call: 'call', raise: 'bet or raise' };
+  const group = (t) => ({ f: 'fold', fold: 'fold', x: 'check', check: 'check', c: 'call', call: 'call', b: 'raise', r: 'raise', bet: 'raise', raise: 'raise' }[t] || 'check');
+  const pct = (x) => `${Math.round(100 * x)}%`;
+  const STREET = ['Preflop', 'Flop', 'Turn', 'River'];
+
+  /** Every decision `name` made in a readable record, with the table exactly as it was just before it. */
+  function spots(text, name) {
+    const g = Notation.parse(text);
+    const rp = Replay.game(g);
+    const out = [], finished = [];
+    for (const rh of rp.hands) {
+      const r = rh.rec, me = r.stacks.findIndex(([n]) => n === name);
+      if (me >= 0 && r.hole[name] && rh.hand) {
+        for (let k = 1; k < rh.steps.length; k++) {
+          const st = rh.steps[k];
+          if (st.kind !== 'act' || st.actor !== me) continue;
+          const before = U.clone(rh.steps[k - 1].hand);
+          before.players.forEach((p, j) => { if (j !== me) { p.hole = null; p.shown = false; } });
+          const e = st.hand.log[st.hand.log.length - 1];
+          out.push({ no: r.no, hand: before, i: me, act: { type: e.type, to: e.to }, prior: finished.slice(-80) });
+        }
+      }
+      if (rh.hand && rh.hand.phase === 'done') finished.push(rh.hand);
+    }
+    return { spots: out.slice(-MAX_SPOTS), cut: Math.max(0, out.length - MAX_SPOTS), hands: rp.hands.length, cfg: rp.cfg };
+  }
+
+  /** The reference player's mix of actions in one spot, plus the numbers behind it. */
+  async function analyse(spot, opts = {}) {
+    const h = spot.hand, i = spot.i, L = Engine.legal(h);
+    const pot = L.pot, toCall = L.toCall, facing = toCall > 0;
+    const potOdds = facing ? toCall / (pot + toCall) : 0;
+    if (!spot.models) spot.models = Bots.buildModels(spot.prior);
+    const ctx = Bots.contextFor(h, i, { models: spot.models, difficulty: 'extreme', personality: 'gto', work: opts.work || 0.6 });
+    const freq = { fold: 0, check: 0, call: 0, raise: 0 }, sizes = [];
+    const tally = (a) => { const k = group(a.type); freq[k] += 1 / SAMPLES; if (k === 'raise' && a.to) sizes.push(a.to); };
+    const first = await Bots.decideAsync(ctx);
+    tally(first);
+    for (let k = 1; k < SAMPLES; k++) tally(Bots.decide(ctx));
+    let eq = ctx._p && ctx._p.eq !== undefined ? ctx._p.eq : first.meta && first.meta.eq;
+    if (typeof eq !== 'number') eq = null;
+    let source = 'bot';
+    // Against Cepheus, the CFR+ strategy itself is the reference (heads-up limit Hold'em only).
+    if (opts.cepheus && typeof CepheusBot !== 'undefined' && CepheusBot.model && h.limit === 'fl' && h.game === 'holdem' && h.players.length === 2) {
+      try {
+        const d = CepheusBot.model.decide(CepheusBot.observe(h, i), Math.random);
+        const p = d.probs;
+        freq.fold = L.canCheck ? 0 : p.fold; freq.check = L.canCheck ? p.call + p.fold : 0; freq.call = L.canCheck ? 0 : p.call; freq.raise = L.canRaise ? p.raise : 0;
+        if (!L.canRaise) { if (L.canCheck) freq.check += p.raise; else freq.call += p.raise; }
+        source = 'cepheus';
+      } catch { /* keep the bot's answer */ }
+    }
+    return grade(spot, { L, pot, toCall, facing, potOdds, eq, freq, size: sizes.length ? sizes.sort((a, b) => a - b)[sizes.length >> 1] : null, source });
+  }
+
+  /** good / close / mistake, with a plain-language reason. */
+  function grade(spot, a) {
+    const mine = group(spot.act.type), f = a.freq[mine] || 0;
+    const best = Object.keys(a.freq).reduce((x, y) => (a.freq[y] > a.freq[x] ? y : x), mine);
+    let g = f >= 0.25 ? 'good' : f >= 0.06 ? 'close' : 'mistake';
+    if (mine === 'fold' && a.L.canCheck) g = 'mistake';
+    const h = spot.hand, bb = h.bb || 1;
+    const eqT = a.eq != null ? pct(a.eq) : null;
+    const facts = [];
+    if (a.facing) facts.push(`You had to call ${U.fmt(a.toCall)} to win a pot of ${U.fmt(a.pot)}, so a call needed to win at least ${pct(a.potOdds)} of the time.`);
+    else facts.push(a.pot ? `Nobody had bet yet; the pot was ${U.fmt(a.pot)}.` : 'Nobody had bet yet.');
+    if (eqT) facts.push(`Against the hands your opponents were likely to hold, yours would win about ${eqT} of the time.`);
+    let why = '', kind = null;
+    const say = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+    if (g === 'good') why = best === mine || a.freq[mine] >= 0.6 ? `${say(WORD[mine])} is what a strong player does here.` : `${say(WORD[mine])} is a fine choice. A strong player would also ${WORD[best]} here ${pct(a.freq[best])} of the time.`;
+    else {
+      if (mine === 'fold' && a.L.canCheck) { why = 'You folded when checking was free. Checking keeps your hand alive at no cost.'; kind = 'loose-fold'; }
+      else if (mine === 'fold' && a.eq != null && a.eq > a.potOdds + 0.06) { why = 'Folding gave up a profitable call: your chance of winning was better than the price you were offered.'; kind = 'overfold'; }
+      else if (mine === 'call' && a.eq != null && a.eq < a.potOdds - 0.06) { why = 'Calling costs chips over time here: the price was higher than your chance of winning.'; kind = 'overcall'; }
+      else if (mine === 'raise' && (best === 'fold' || best === 'check' || best === 'call') && a.eq != null && a.eq < 0.5) { why = 'This bet was likely to be called by better hands and rarely made better hands fold.'; kind = 'risky'; }
+      else if ((mine === 'check' || mine === 'call') && best === 'raise' && a.eq != null && a.eq >= 0.6) { why = 'With a hand this strong, betting or raising wins more chips from worse hands.'; kind = 'passive'; }
+      else why = `A strong player would usually ${WORD[best]} here (${pct(a.freq[best])} of the time) and only rarely ${WORD[mine]}.`;
+      if (g === 'close') why = `Close. ${why}`;
+    }
+    if (mine === 'raise' && a.size && spot.act.to && g !== 'mistake') {
+      const r = spot.act.to / a.size;
+      if (r > 2 || r < 0.5) facts.push(`Size: you made it ${U.fmt(spot.act.to)}; a typical size here is about ${U.fmt(a.size)}.`);
+    }
+    // How much the decision mattered: bigger pots and clearer mistakes first.
+    const weight = (1 - f) * (a.pot + a.toCall) / bb;
+    return { no: spot.no, street: h.street, hole: h.players[spot.i].hole, board: h.board.slice(), mine, did: spot.act, best, freq: a.freq, grade: g, why, facts, kind, weight, pot: a.pot, source: a.source, eq: a.eq, potOdds: a.potOdds };
+  }
+
+  /** Analyse a whole record, yielding to the page as it goes. onProgress(done, total). */
+  async function run(text, name, opts = {}) {
+    const S = spots(text, name);
+    const items = [];
+    for (let k = 0; k < S.spots.length; k++) {
+      if (opts.cancelled && opts.cancelled()) return null;
+      items.push(await analyse(S.spots[k], opts));
+      if (opts.onProgress) opts.onProgress(k + 1, S.spots.length);
+      if (k % 4 === 3) await new Promise((r) => setTimeout(r, 0));
+    }
+    return summarise(items, S);
+  }
+
+  function summarise(items, S) {
+    const n = items.length, by = (g) => items.filter((x) => x.grade === g).length;
+    const good = by('good'), close = by('close'), mistakes = by('mistake');
+    const streets = STREET.map((label, s) => {
+      const xs = items.filter((x) => x.street === s);
+      return { label, n: xs.length, score: xs.length ? (xs.filter((x) => x.grade === 'good').length + 0.5 * xs.filter((x) => x.grade === 'close').length) / xs.length : null };
+    });
+    const kinds = {};
+    for (const x of items) if (x.kind && x.grade !== 'good') kinds[x.kind] = (kinds[x.kind] || 0) + 1;
+    const worst = items.filter((x) => x.grade !== 'good').sort((a, b) => b.weight - a.weight).slice(0, 6);
+    const bestPlays = items.filter((x) => x.grade === 'good' && x.freq[x.mine] >= 0.5 && (x.mine === 'raise' || x.mine === 'call' || (x.mine === 'fold' && x.pot > 0)))
+      .sort((a, b) => b.pot - a.pot).slice(0, 3);
+    return { items, n, good, close, mistakes, score: n ? (good + 0.5 * close) / n : null, streets, kinds, worst, bestPlays, hands: S.hands, cut: S.cut, source: items.some((x) => x.source === 'cepheus') ? 'cepheus' : 'bot' };
+  }
+
+  return { spots, analyse, grade, run, summarise, group };
+})();
+
+/* ----- The review window ----- */
+function reviewModal(text, name, opts = {}) {
+  if (!text || !/#\d+/.test(text)) return toast('No finished hands to review yet.', 'info');
+  let stop = false;
+  const m = openModal(`<h2>${icon('calc')} Hand review</h2><div id="rv-body">
+    <p class="muted" style="margin-top:0">Checking each of your decisions against ${opts.cepheus ? 'the CFR+ strategy' : 'Feltroom\'s strongest bot'}, using only what you could see at the time…</p>
+    <div class="rv-bar"><span id="rv-fill"></span></div><p class="hint" id="rv-count">Starting…</p></div>
+    <div class="modal-foot"><button class="btn" data-close>Close</button></div>`, { label: 'Hand review', onClose: () => { stop = true; } });
+  $('.modal', m.el).classList.add('wide');
+  const body = $('#rv-body', m.el);
+  const cards = (cs) => (cs || []).map((c) => cardHtml(c)).join('');
+  const GRADE = { good: ['Good', 'rv-good'], close: ['Close', 'rv-close'], mistake: ['Mistake', 'rv-bad'] };
+  const KINDS = { overfold: 'Folded when calling was profitable', overcall: 'Called when the price was too high', passive: 'Checked or called with a strong hand', risky: 'Bet or raised with a weak hand', 'loose-fold': 'Folded when you could check for free' };
+  const did = (x) => `${{ fold: 'Fold', check: 'Check', call: 'Call', raise: x.did.type === 'b' ? 'Bet' : 'Raise' }[x.mine]}${x.mine === 'raise' && x.did.to ? ' to ' + U.fmt(x.did.to) : ''}`;
+  const mix = (x) => ['fold', 'check', 'call', 'raise'].filter((k) => x.freq[k] > 0.005).map((k) => `${{ fold: 'fold', check: 'check', call: 'call', raise: 'bet/raise' }[k]} ${Math.round(100 * x.freq[k])}%`).join(' · ');
+  const spotHtml = (x) => `<div class="rv-spot">
+      <div class="rv-head"><span class="rv-tag ${GRADE[x.grade][1]}">${GRADE[x.grade][0]}</span><b>Hand #${x.no} · ${['Preflop', 'Flop', 'Turn', 'River'][x.street]}</b><span class="grow"></span><span class="hint">You: <b>${did(x)}</b></span></div>
+      <div class="rv-cards"><span class="rv-hole">${cards(x.hole)}</span>${x.board.length ? `<span class="rv-board">${cards(x.board)}</span>` : ''}</div>
+      <p>${U.esc(x.why)}</p><p class="hint">${x.facts.map(U.esc).join(' ')}</p>
+      <p class="hint">${x.source === 'cepheus' ? 'CFR+ strategy' : 'Strong player'}: ${mix(x)}</p></div>`;
+  HandReview.run(text, name, {
+    cepheus: opts.cepheus,
+    cancelled: () => stop,
+    onProgress: (k, n) => { const f = $('#rv-fill', m.el), c = $('#rv-count', m.el); if (f) f.style.width = `${(100 * k) / n}%`; if (c) c.textContent = `${k} of ${n} decisions checked`; },
+  }).then((R) => {
+    if (!R || stop) return;
+    if (!R.n) { body.innerHTML = '<p>You have not made any decisions in the finished hands yet. Play a few hands, then review again.</p>'; return; }
+    const score = Math.round(100 * R.score);
+    const verdict = score >= 85 ? 'Excellent: very close to how a strong player plays.' : score >= 70 ? 'Solid, with a few leaks to work on.' : score >= 55 ? 'Some good decisions, and some costly habits to fix.' : 'Plenty to work on. The biggest mistakes below are the place to start.';
+    const kinds = Object.entries(R.kinds).sort((a, b) => b[1] - a[1]);
+    body.innerHTML = `
+      <div class="rv-score"><div class="rv-big">${score}<small>/100</small></div><div><b>${verdict}</b>
+        <div class="hint">${R.n} decision${R.n === 1 ? '' : 's'} over ${R.hands} hand${R.hands === 1 ? '' : 's'}: <span class="rv-good-t">${R.good} good</span> · <span class="rv-close-t">${R.close} close</span> · <span class="rv-bad-t">${R.mistakes} mistake${R.mistakes === 1 ? '' : 's'}</span>${R.cut ? ` (the most recent ${R.n} decisions)` : ''}</div></div></div>
+      <div class="rv-streets">${R.streets.filter((s) => s.n).map((s) => `<div class="sum-tile"><b>${Math.round(100 * s.score)}</b><span>${s.label} · ${s.n}</span></div>`).join('')}</div>
+      ${kinds.length ? `<div class="section-title">Your habits to watch</div><ul class="rv-kinds">${kinds.map(([k, c]) => `<li>${U.esc(KINDS[k])}: <b>${c}</b> time${c === 1 ? '' : 's'}</li>`).join('')}</ul>` : ''}
+      ${R.worst.length ? `<div class="section-title">Decisions to look at again</div>${R.worst.map(spotHtml).join('')}` : '<p><b>No mistakes found.</b> Nicely played.</p>'}
+      ${R.bestPlays.length ? `<div class="section-title">Best plays</div>${R.bestPlays.map(spotHtml).join('')}` : ''}
+      <details class="rv-all"><summary>Every decision (${R.n})</summary>${R.items.map(spotHtml).join('')}</details>
+      <p class="hint">How this works: each spot is replayed with only your cards, the board and the betting, then ${R.source === 'cepheus' ? 'the CFR+ strategy\'s own action mix for that spot is used' : 'Feltroom\'s Extreme bot decides it ' + 48 + ' times (it mixes its play)'}. "Good" means a strong player makes that choice at least a quarter of the time. These are estimates from a strong player, not a perfect solver, and a single hand never proves a play right or wrong.</p>`;
+  }).catch((e) => { if (!stop) body.innerHTML = `<div class="err-box">${icon('alert')}<div>The review could not be completed: ${U.esc(e.message)}</div></div>`; });
+}
 
 /* =====================================================================
    7b. UI SCREENS  (home, host setup, join, live table, ended)
@@ -7703,11 +8016,12 @@ function HomeScreen() {
       <div class="pill-row"><span class="pill">100% free</span><span class="pill">No sign-up</span><span class="pill">Peer-to-peer</span><span class="pill">Encrypted, provably fair deal</span><span class="pill">No ads or tracking</span></div>
     </div></section>
     <footer class="home-foot">Every player's browser helps shuffle and only you can unlock your cards. Everything travels directly between players; nothing is stored on a server.
-      <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn sm ghost" id="h-device">${icon(Device.mobile ? 'monitor' : 'phone')}Switch to ${Device.mobile ? 'computer' : 'mobile'} layout</button><button class="btn sm ghost" id="h-wipe">${icon('x')}Clear my data on this device</button></div></footer>
+      <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn sm ghost" id="h-device">${icon(Device.mobile ? 'monitor' : 'phone')}Switch to ${Device.mobile ? 'computer' : 'mobile'} layout</button><button class="btn sm ghost" id="h-look">${icon('palette')}Appearance</button><button class="btn sm ghost" id="h-wipe">${icon('x')}Clear my data on this device</button></div></footer>
   </div></div>`;
   bindThemeToggles(App.root);
   $$('[data-go]', App.root).forEach((b) => b.addEventListener('click', () => { location.hash = b.dataset.go; }));
   $('#h-wipe').addEventListener('click', wipeModal);
+  $('#h-look').addEventListener('click', appearanceModal);
   $('#h-device').addEventListener('click', () => { Device.set(Device.mobile ? 'computer' : 'mobile'); route(true); });
   return {};
 }
@@ -7734,6 +8048,42 @@ function DeviceScreen(next) {
   return {};
 }
 
+/** Appearance: theme, felt, card backs, rail, card faces. Every change shows at once and is remembered on this device. */
+function appearanceModal() {
+  const sw = (key, list) => `<div class="swatches" role="radiogroup" data-ap="${key}">${list.map(([v, l, c]) => `<button type="button" class="swatch" role="radio" data-v="${v}" aria-checked="${Theme.pick(key, list) === v}" aria-label="${l}" title="${l}" style="background:${c}"></button>`).join('')}</div>`;
+  const seg = (key, opts, cur) => `<div class="seg" role="radiogroup" data-ap="${key}">${opts.map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === cur}" aria-checked="${v === cur}">${l}</button>`).join('')}</div>`;
+  const m = openModal(`<h2>${icon('palette')} Appearance</h2>
+    <div class="ap-preview" aria-hidden="true">${cardHtml('As')}${cardHtml('Kh')}${cardHtml('Qd')}${cardHtml('Tc')}${cardHtml(null)}</div>
+    <div class="ap-row"><span>Theme</span>${seg('theme', [['dark', 'Dark'], ['light', 'Light']], Prefs.get('theme', 'dark'))}</div>
+    <div class="ap-row"><span>Table felt</span>${sw('felt', Theme.FELTS)}</div>
+    <div class="ap-row"><span>Card backs</span>${sw('cardBack', Theme.BACKS)}</div>
+    <div class="ap-row"><span>Table rail</span>${sw('rail', Theme.RAILS)}</div>
+    <div class="ap-row"><span>Card faces</span>${seg('bigPrint', [['no', 'Classic'], ['yes', 'Large print']], Prefs.get('bigPrint', false) === true ? 'yes' : 'no')}</div>
+    <label class="check"><input type="checkbox" id="ap-4c" ${Prefs.get('fourColor', true) ? 'checked' : ''}> Four-color deck (blue diamonds, green clubs)</label>
+    <p class="hint">Saved in this browser only. Other players see their own choices.</p>
+    <div class="modal-foot"><button class="btn" id="ap-reset">Reset to default</button><button class="btn primary" data-close>Done</button></div>`, { label: 'Appearance' });
+  const sync = () => {
+    Theme.apply();
+    $$('[data-theme-toggle]').forEach((x) => { x.innerHTML = Theme.icon(); });
+    $$('[data-ap]', m.el).forEach((g) => {
+      const key = g.dataset.ap;
+      const cur = key === 'theme' ? Prefs.get('theme', 'dark') : key === 'bigPrint' ? (Prefs.get('bigPrint', false) === true ? 'yes' : 'no') : Theme.pick(key, { felt: Theme.FELTS, cardBack: Theme.BACKS, rail: Theme.RAILS }[key]);
+      $$('[data-v]', g).forEach((b) => { b.setAttribute('aria-checked', String(b.dataset.v === cur)); if (b.hasAttribute('aria-pressed')) b.setAttribute('aria-pressed', String(b.dataset.v === cur)); });
+    });
+    $('#ap-4c', m.el).checked = Prefs.get('fourColor', true);
+  };
+  m.el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ap] [data-v]');
+    if (b) {
+      const key = b.closest('[data-ap]').dataset.ap;
+      Prefs.set(key, key === 'bigPrint' ? b.dataset.v === 'yes' : b.dataset.v);
+      sync();
+    }
+  });
+  $('#ap-4c', m.el).addEventListener('change', (e) => { Prefs.set('fourColor', e.target.checked); sync(); });
+  $('#ap-reset', m.el).addEventListener('click', () => { ['felt', 'cardBack', 'rail', 'bigPrint'].forEach((k) => Prefs.del(k)); Prefs.set('fourColor', true); sync(); });
+}
+
 /** Lets a player erase everything Feltroom remembers in this browser. */
 function wipeModal() {
   const s = Prefs.summary();
@@ -7746,7 +8096,7 @@ function wipeModal() {
   const m = openModal(`<h2>Clear my data</h2>
     <p class="muted" style="margin-top:0">Feltroom keeps a few things in this browser only. Nothing is stored on any server. Clearing removes:</p>
     <ul style="margin:0 0 12px;padding-left:20px;line-height:1.7">${items.map((x) => `<li>${x}</li>`).join('')}</ul>
-    <label class="check"><input type="checkbox" id="w-display" checked> Keep my display preferences (theme, sound, card colours)</label>
+    <label class="check"><input type="checkbox" id="w-display" checked> Keep my display preferences (theme, table and card colours, sound)</label>
     <p class="hint">Copy any game records you want to keep first. This cannot be undone.</p>
     <div class="modal-foot"><button class="btn" data-close>Cancel</button><button class="btn danger" id="w-go">Clear my data</button></div>`, { label: 'Clear my data' });
   $('#w-go', m.el).addEventListener('click', () => {
@@ -8118,11 +8468,12 @@ function JoinScreen(hostId) {
       connect(name, !!rejoinName);
     });
   };
-  const connect = async (name, fresh) => {
+  const connect = async (name, fresh, autoSit) => {
     App.root.innerHTML = `<div class="page"><div class="center-card card-ui" style="margin:auto"><div class="spinner" aria-hidden="true"></div><h2>Connecting to the host…</h2><p class="muted">Finding the game through the free PeerJS broker, then connecting directly.</p></div></div>`;
     const sess = new ClientSession(hostId, name, { fresh });
     try {
       await sess.connect();
+      sess.autoSit = !!autoSit;
       App.session = sess;
       App.screen = GameScreen(sess);
     } catch (e) {
@@ -8139,7 +8490,10 @@ function JoinScreen(hostId) {
       }
     }
   };
-  if (token && sameTab) connect(rejoinName || saved, false); else form();
+  // Accepted a rematch invitation: join straight away under the same name and take a seat.
+  const auto = App.autoJoin; App.autoJoin = null;
+  if (auto && auto.id === hostId) connect(auto.name, true, true);
+  else if (token && sameTab) connect(rejoinName || saved, false); else form();
   return {};
 }
 
@@ -8430,6 +8784,9 @@ function GameScreen(session) {
       <button id="m-view" role="menuitem">${icon('history')}${twoRecords() ? 'Open player-only record in viewer' : 'Open record in viewer'}</button>
       <button id="m-copytext" role="menuitem">${icon('copy')}Copy readable record (text)</button>
       <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>`}
+      ${isWatcher ? '' : `<button id="m-review" role="menuitem">${icon('calc')}Review my play</button>`}
+      ${session.offline ? `<button id="m-again" role="menuitem">${icon('history')}Play again (same settings)</button>` : canRematch() ? `<button id="m-rematch" role="menuitem">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}
+      <button id="m-look" role="menuitem">${icon('palette')}Appearance (felt, cards, theme)…</button>
       <button id="m-theme" role="menuitem">${Theme.icon()}Light / dark theme</button>
       ${isHost && v && v.status !== 'ended' ? `<hr>
         ${v.status === 'lobby' ? `<button id="m-start" role="menuitem">${icon('play')}Start game</button>` : `<button id="m-pause" role="menuitem">${icon(v.paused ? 'play' : 'pause')}${v.paused ? 'Resume game' : 'Pause game'}</button>`}
@@ -8453,6 +8810,9 @@ function GameScreen(session) {
     on('m-adjust', () => { if (G.view.phase && G.view.phase !== 'done') return toast('Stacks can be adjusted between hands. Pause the game, then wait for this hand to finish.', 'info', 5000); adjustModal(); });
     on('m-end', () => confirmModal('End the game?', 'Everyone keeps their game record. This cannot be undone.', 'End game', () => session.send({ t: 'end' })));
     on('m-leave', leaveTable);
+    on('m-look', appearanceModal);
+    on('m-review', reviewMine);
+    on('m-again', playAgain); on('m-rematch', startRematch);
     const first = $('input, button', menuEl); if (first) first.focus();
   }
 
@@ -8528,11 +8888,102 @@ function GameScreen(session) {
     }
     const m = openModal(`<div class="state-ic err" style="margin-bottom:12px">${icon('flag')}</div><h2 style="text-align:center">${U.esc(reason)}</h2>
       <p class="muted" style="text-align:center">Your game record up to this point is saved in this browser. Copy it, download it, or replay it in the viewer.</p>
-      <div class="modal-foot" style="justify-content:center"><a class="btn" href="#/" data-close>${icon('home')}Home</a><button class="btn" id="e-dl">${icon('download')}Download</button><button class="btn" id="e-view">${icon('history')}Open in viewer</button><button class="btn primary" id="e-copy">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy Game Record'}</button>${twoRecords() ? `<button class="btn" id="e-full">${icon('bot')}Copy full record</button>` : ''}</div>`, { label: 'Game ended' });
+      <div class="modal-foot" style="justify-content:center"><a class="btn" href="#/" data-close>${icon('home')}Home</a>${session.offline ? `<button class="btn primary" id="e-again">${icon('history')}Play again</button>` : canRematch() ? `<button class="btn primary" id="e-rematch">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}<button class="btn" id="e-review">${icon('calc')}Review my play</button><button class="btn" id="e-dl">${icon('download')}Download</button><button class="btn" id="e-view">${icon('history')}Open in viewer</button><button class="btn primary" id="e-copy">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy Game Record'}</button>${twoRecords() ? `<button class="btn" id="e-full">${icon('bot')}Copy full record</button>` : ''}</div>`, { label: 'Game ended' });
     $('#e-copy', m.el).addEventListener('click', () => copyRecord(false));
     if ($('#e-full', m.el)) $('#e-full', m.el).addEventListener('click', () => copyRecord(true));
     $('#e-view', m.el).addEventListener('click', openInViewer);
     $('#e-dl', m.el).addEventListener('click', downloadRecord);
+    $('#e-review', m.el).addEventListener('click', () => { m.close(); reviewMine(); });
+    const ea = $('#e-again', m.el); if (ea) ea.addEventListener('click', () => { m.close(); playAgain(); });
+    const er = $('#e-rematch', m.el); if (er) er.addEventListener('click', () => { m.close(); startRematch(); });
+  }
+
+  /** Hand review of this player's decisions, from the full record (it has all of their own cards). */
+  function reviewMine() {
+    const r = record(true);
+    if (!r || !/#\d+/.test(r)) return toast('No finished hands to review yet.', 'info');
+    reviewModal(r, myName(), { cepheus: !!session.cepheus });
+  }
+
+  /* ----- rematch (online) and play again (bots) ----- */
+  const myName = () => (G.view && G.view.you && G.view.you.name) || session.name;
+  function canRematch() { return !isWatcher && !session.offline && (!!session.rematch || Rematch.allowedView(G.view)); }
+  function rematchLabel() { const r = session.rematch; return r ? `Join ${r.from}'s rematch` : G.rematching ? 'Setting up the rematch…' : 'Rematch'; }
+  function rematchBtn() {
+    if (session.offline) return `<button class="btn primary" data-do="again">${icon('history')}Play again</button>`;
+    return canRematch() ? `<button class="btn primary" data-do="rematch" ${G.rematching ? 'disabled' : ''}>${icon('users')}${U.esc(rematchLabel())}</button>` : '';
+  }
+  /** The host of a game still being played ends it for everyone by leaving, so ask first. */
+  function hostStillPlaying() { const v = G.view; return isHost && v && v.status === 'playing' && !v.waiting; }
+  function startRematch() {
+    if (session.rematch) return joinRematch();
+    if (G.rematching) return;
+    if (isHost && session.rematchAsk && Date.now() - session.rematchAsk.at < 20000) return toast('Another player is setting up a rematch. Their invitation is on its way.', 'info');
+    if (hostStillPlaying()) return confirmModal('Start a rematch?', 'You are the host, so this game ends for everyone. They all get an invitation to the rematch.', 'Start rematch', openRematch, false);
+    openRematch();
+  }
+  async function openRematch() {
+    G.rematching = true; G.barKey = null; if (G.view) renderBar();
+    const done = () => { G.rematching = false; G.barKey = null; if (G.view) renderBar(); };
+    try {
+      const settings = isHost ? { ...session.settings } : await session.askRematch();
+      if (!settings) { done(); if (session.rematch) showRematchCard(); else toast('The host did not answer, so the rematch could not be set up.', 'error'); return; }
+      toast('Opening the rematch table…', 'info');
+      const v = G.view, humans = v ? v.players.filter((p) => !p.isBot).length : 0;
+      const sess = new HostSession(settings, myName());
+      await sess.start();
+      sess.rematchOf = { headsUp: humans === 2 || settings.maxSeats === 2, started: false };
+      if (isHost) session.offerRematch(myName(), sess.id, session.pid);
+      else session.send({ t: 'rematch-ready', id: sess.id });
+      // Give the invitation a moment to go out before this table closes.
+      const old = session;
+      setTimeout(() => { try { old.leave(); } catch { /* ignore */ } }, 1200);
+      App.session = sess;
+      if (location.hash.startsWith('#/host')) route(true); else location.hash = '#/host';
+      toast(sess.rematchOf.headsUp ? 'Rematch table open. The game deals as soon as your opponent sits down.' : 'Rematch table open. Everyone has been invited; press Start when they are seated.', 'info', 6000);
+    } catch (e) { done(); toast(`Could not open the rematch table: ${Net.friendly(e).title}`, 'error'); }
+  }
+  function joinRematch() {
+    const r = session.rematch;
+    if (!r) return;
+    const go = () => {
+      App.autoJoin = { id: r.id, name: myName() };
+      App.session = null;
+      try { session.leave(); } catch { /* ignore */ }
+      location.hash = '#join=' + r.id;
+    };
+    if (hostStillPlaying()) return confirmModal('Join the rematch?', 'You are the host, so leaving ends this game for everyone still playing.', 'Join rematch', go, false);
+    go();
+  }
+  let rcard = null;
+  function hideRematchCard() { if (rcard) { rcard.remove(); rcard = null; } }
+  function showRematchCard() {
+    const r = session.rematch;
+    if (!r || isWatcher) return;
+    hideRematchCard();
+    rcard = document.createElement('div');
+    rcard.className = 'rematch-card'; rcard.setAttribute('role', 'alertdialog'); rcard.setAttribute('aria-label', 'Rematch invitation');
+    rcard.innerHTML = `<div class="rc-text"><b>${U.esc(r.from)} wants a rematch</b><span>Same settings, fresh stacks. ${U.esc(r.from)} hosts the new table.</span></div>
+      <div class="rc-btns"><button class="btn" data-rc="no">No thanks</button><button class="btn primary" data-rc="yes">${icon('users')}Join rematch</button></div>`;
+    rcard.addEventListener('click', (e) => { const b = e.target.closest('[data-rc]'); if (!b) return; hideRematchCard(); if (b.dataset.rc === 'yes') joinRematch(); });
+    document.body.appendChild(rcard);
+    Sound.play('chime');
+    if (document.hidden) TitleFlash.start(`🔁 ${r.from} wants a rematch`);
+    announce(`${r.from} wants a rematch.`);
+    G.barKey = null; if (G.view) renderBar();
+  }
+  function playAgain() {
+    const go = () => {
+      const old = session;
+      old.leave();
+      const sess = new BotSession({ ...old.settings }, old.name, old.bots.map((b) => ({ ...b })));
+      sess.cepheus = old.cepheus;
+      App.session = sess.start();
+      route(true);
+    };
+    const v = G.view;
+    if (v && v.status === 'playing' && !(v.you && v.you.busted) && !v.waiting) return confirmModal('Start a new game?', 'This game ends and a new one starts with the same settings and opponents.', 'Play again', go, false);
+    go();
   }
 
   /* ----- lobby dock ----- */
@@ -8599,7 +9050,7 @@ function GameScreen(session) {
   function renderBar() {
     const v = G.view, y = v.you, L = v.legal;
     const seatedCount = v.seats.filter(Boolean).length;
-    const key = JSON.stringify([v.status, y && [y.seat, y.inHand, y.dealt, y.canShow, y.canRebuy, y.sittingOut, y.busted, y.toCallPreview > 0, y.stack], L, v.handNo, v.street, G.pre, v.paused, seatedCount, myHandName(v), G.ended, G.status]);
+    const key = JSON.stringify([session.rematch && session.rematch.id, G.rematching, Rematch.allowedView(v), v.status, y && [y.seat, y.inHand, y.dealt, y.canShow, y.canRebuy, y.sittingOut, y.busted, y.toCallPreview > 0, y.stack], L, v.handNo, v.street, G.pre, v.paused, seatedCount, myHandName(v), G.ended, G.status]);
     if (key === G.barKey) return;
     G.barKey = key;
     G.sending = false;
@@ -8608,7 +9059,7 @@ function GameScreen(session) {
     if (isWatcher && !(G.ended || v.status === 'ended')) {
       html = `<div class="ab-msg">${icon('eye')}You're watching${v.status === 'lobby' ? ': the game hasn\'t started yet' : ''}. Hole cards stay hidden; you'll see hands only when they're shown.</div>`;
     } else if (G.ended || v.status === 'ended') {
-      html = `<div class="ab-msg">Game over.<button class="btn primary" data-do="copy">${icon('copy')}Copy Game Record</button><button class="btn" data-do="viewer">${icon('history')}Open in viewer</button></div>`;
+      html = `<div class="ab-msg">Game over.${isWatcher ? '' : rematchBtn() + `<button class="btn" data-do="review">${icon('calc')}Review my play</button>`}<button class="btn ${isWatcher || !rematchBtn() ? 'primary' : ''}" data-do="copy">${icon('copy')}Copy Game Record</button><button class="btn" data-do="viewer">${icon('history')}Open in viewer</button></div>`;
     } else if (!y || y.seat == null) {
       const free = v.seats.some((s) => !s);
       const dealer = y && y.isHost && !v.table.hostPlays;
@@ -8650,6 +9101,7 @@ function GameScreen(session) {
       if (y.canShow && v.phase === 'done') bits.push(`<button class="btn" data-do="show">Show my cards</button>`);
       if (y.canRebuy) bits.push(`<button class="btn primary" data-do="rebuy">${icon('plus')}Rebuy ${U.fmt(v.table.startingStack)}</button>`);
       if (y.busted && !v.table.rebuys) bits.push('<span>You are out of chips. Thanks for playing!</span>');
+      if ((session.offline && y.busted && !y.canRebuy) || (!session.offline && canRematch())) bits.push(rematchBtn());
       else if (y.sittingOut && !y.busted) bits.push(`<span>You are sitting out.</span><button class="btn primary" data-do="back">I'm back</button>`);
       else if (!y.busted) bits.push(`<span>${v.paused ? 'Game paused.' : y.dealt && v.phase !== 'done' ? 'You folded. Waiting for the next hand…' : 'Waiting for the next hand…'}</span><button class="btn ghost" data-do="sitout">Sit out</button>`);
       html = `<div class="ab-msg">${hn && y.dealt ? `<span class="strength">Your hand: <b>${U.esc(hn)}</b></span>` : ''}${bits.join('')}</div>`;
@@ -8671,6 +9123,9 @@ function GameScreen(session) {
     else if (d === 'sitout') session.send({ t: 'sitout', on: true });
     else if (d === 'copy') copyRecord();
     else if (d === 'viewer') openInViewer();
+    else if (d === 'rematch') startRematch();
+    else if (d === 'review') reviewMine();
+    else if (d === 'again') playAgain();
   });
   bar.addEventListener('input', (e) => {
     if (e.target.id === 'ab-range') setAmt(e.target.value, 'range');
@@ -8808,6 +9263,17 @@ function GameScreen(session) {
     });
     renderBar();
     renderSide(v);
+    // Rematch: a player who accepted takes the first free seat; heads-up, the new host deals once both are seated.
+    if (session.autoSit && v.status === 'lobby' && v.you && v.you.seat == null) {
+      session.autoSit = false;
+      const free = v.seats.findIndex((x) => !x);
+      if (free >= 0) session.send({ t: 'sit', seat: free });
+    }
+    const rm = session.rematchOf;
+    if (isHost && rm && rm.headsUp && !rm.started && v.status === 'lobby' && seated >= 2) {
+      rm.started = true;
+      setTimeout(() => { if (G.view && G.view.status === 'lobby') session.send({ t: 'start' }); }, 1200);
+    }
     // Your turn
     const myTurn = !!v.legal;
     if (myTurn && !(prev && prev.legal)) {
@@ -8825,15 +9291,19 @@ function GameScreen(session) {
     if (v.status === 'ended' && !G.ended) showEnded(isHost ? 'You ended the game.' : 'The host ended the game.');
   }
 
-  session.on('view', update);
-  session.on('event', (kind, text) => toast(text, kind));
-  session.on('error', (text) => { toast(text, 'error'); G.sending = false; G.barKey = null; if (G.view) renderBar(); });
-  session.on('ended', (reason) => showEnded(reason));
-  session.on('fair', (f, msg) => {
+  // A session can outlive this screen (a rematch closes the old table a moment later), so a closed screen ignores it.
+  const live = (fn) => (...a) => { if (!G.dead) fn(...a); };
+  session.on('view', live(update));
+  session.on('event', live((kind, text) => toast(text, kind)));
+  session.on('error', live((text) => { toast(text, 'error'); G.sending = false; G.barKey = null; if (G.view) renderBar(); }));
+  session.on('ended', live((reason) => showEnded(reason)));
+  session.on('rematch', live(() => showRematchCard()));
+  if (session.rematch) setTimeout(showRematchCard, 0);
+  session.on('fair', live((f, msg) => {
     if (G.alerted !== f.no) { G.alerted = f.no; toast(`Fair-play check failed on hand #${f.no}: ${msg}`, 'error', 9000); announce('Warning: fair play check failed.'); }
     renderFairBadge();
-  });
-  if (session.on && !isHost) session.on('status', (st) => { G.status = st; if (G.view) update(G.view); });
+  }));
+  if (session.on && !isHost) session.on('status', live((st) => { G.status = st; if (G.view) update(G.view); }));
 
   /* ----- keyboard ----- */
   function onKey(e) {
@@ -8869,7 +9339,7 @@ function GameScreen(session) {
   if (isHost) session.table.changed();
   else if (session.lastView) update(session.lastView);
   return {
-    destroy() { removeEventListener('keydown', onKey); removeEventListener('resize', onResize); table.destroy(); closeMenu(); TitleFlash.stop(); },
+    destroy() { G.dead = true; removeEventListener('keydown', onKey); removeEventListener('resize', onResize); table.destroy(); closeMenu(); hideRematchCard(); TitleFlash.stop(); },
   };
 }
 
@@ -9951,7 +10421,8 @@ function route(force) {
     if (!confirm(s.offline ? 'Leave this practice game?' : 'Leave the table? As the host, this ends the game for everyone.')) { history.replaceState(null, '', lastHash); return; }
     s.leave(); App.session = null;
   }
-  if (!force && s && s.role === 'client' && !s.ended && lastHash.startsWith('#join=') && !h.startsWith('#join=')) { s.leave(); App.session = null; }
+  // A client stays connected after its game ends (a rematch invitation can still arrive), so leaving the page closes it.
+  if (!force && s && s.role === 'client' && !s.closed && lastHash.startsWith('#join=') && !h.startsWith('#join=')) { s.leave(); App.session = null; }
   if (!force && s && s.role === 'watcher' && !s.ended && lastHash.startsWith('#watch=') && !h.startsWith('#watch=')) { s.leave(); App.session = null; }
   lastHash = h;
   if (App.screen && App.screen.destroy) App.screen.destroy();

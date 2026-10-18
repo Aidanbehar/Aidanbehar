@@ -1,7 +1,7 @@
 #!/bin/sh
 D=$(dirname "$0")/parts
 OUT=$(dirname "$0")/../../poker/index.html
-cat $D/0_head.html $D/a_engine.js $D/a2_fair.js $D/a3_bots.js $D/a4_sra.js $D/b_notation.js $D/sample.js $D/d_qr.js $D/e_host.js $D/f_net.js $D/g_ui.js $D/c_tests.js $D/k_cepheus.js $D/h_screens.js $D/j_learn.js $D/i_viewer.js > $OUT.tmp
+cat $D/0_head.html $D/a_engine.js $D/a2_fair.js $D/a3_bots.js $D/a4_sra.js $D/b_notation.js $D/sample.js $D/d_qr.js $D/e_host.js $D/f_net.js $D/g_ui.js $D/c_tests.js $D/k_cepheus.js $D/l_review.js $D/h_screens.js $D/j_learn.js $D/i_viewer.js > $OUT.tmp
 printf '</script>\n</body>\n</html>\n' >> $OUT.tmp
 # Content-Security-Policy: only our own two inline scripts (pinned by hash) and the two CDNs may run code.
 python3 - "$OUT.tmp" <<'PY'

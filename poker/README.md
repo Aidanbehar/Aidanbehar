@@ -238,6 +238,43 @@ test suite and lists pass/fail results. The suite covers:
   message. You can turn the on-table popups off with **Show chat on the table** in the ⋯ menu.
 - **If the host leaves:** everyone sees *"Host left, game ended"* and can still copy, download or
   replay their record up to that point. Records are also saved in each player's browser.
+- **Rematch:** once the game is over, or as soon as someone at the table is out of chips, any
+  player (not just the host) can press **Rematch**.
+  - The player who asks first hosts a new table with exactly the same settings and fresh stacks.
+  - Everyone else still on the old table's tab gets an invitation (*"Bob wants a rematch"*) with
+    **Join rematch** and **No thanks**. Joining connects them straight to the new table under the same
+    name and sits them down. If someone says no thanks, the **Join** button stays in the action bar
+    and the ⋯ menu.
+  - Heads-up, the new table deals as soon as the opponent sits down. With more players, the new host
+    presses **Start** once everyone who wants to play has arrived.
+  - If the host offers or accepts a rematch while others are still playing, they are asked to confirm,
+    because leaving ends the old game.
+  - A rematch table is never listed in the public Waiting Room.
+- **Play again (bots and Cepheus):** after the game, or when you are out of chips, **Play again**
+  starts a new game with the same settings and the same opponents. It is also in the ⋯ menu.
+- **Hand review:** **Review my play** (⋯ menu, the game-over bar and the game-over window) checks
+  every decision you made against what Feltroom's strongest bot would do in the same spot, or, in a
+  Cepheus game, against the CFR+ strategy itself.
+  - Only what you could see is used: your own cards, the board and the betting. Everyone else's cards
+    are removed first, even when the record contains them.
+  - Each decision is marked **Good** (a strong player makes that choice at least a quarter of the
+    time), **Close** or **Mistake**, with the reason in plain words: the price of a call, your chance
+    of winning against the hands opponents were likely to hold, and what a strong player would do.
+  - You get a score out of 100, a score for each street, your most common leaks (for example
+    *"Called when the price was too high"*), the decisions most worth looking at again, your best
+    plays, and every decision.
+  - The bot mixes its play, so it decides each spot 48 times and the review compares your choice with
+    that mix. These are estimates from a strong player, not a perfect solver.
+- **Appearance:** the ⋯ menu and the home screen have **Appearance**, with a live preview:
+  - dark or light theme
+  - table felt: green, blue, red, purple, charcoal or brown
+  - card backs: blue, red, green, purple, black or gold
+  - table rail: dark wood, light wood or black
+  - card faces: classic or **large print** (bigger rank and suit, same card size, so nothing on the
+    table moves)
+  - four-color deck
+
+  These are saved in your browser only and survive **Clear my data** if you keep display preferences.
 - **Keyboard shortcuts:**
   - `F` fold, `C` check or call, `R` focus the raise amount
   - arrow keys change the bet by one big blind; `Enter` confirms
@@ -761,8 +798,10 @@ include the line number, and a **Show line** button selects the line in the text
    and the screens
 9. **QR code generator:** a tiny inline encoder (byte mode, error correction level M)
 10. **Self-tests**
-11. **Learn Poker:** lessons, quizzes and calculators
-12. **Router**
+11. **Hand review:** replays your decisions from the record and compares them with the Extreme bot
+    or the CFR+ strategy
+12. **Learn Poker:** lessons, quizzes and calculators
+13. **Router**
 
 ---
 

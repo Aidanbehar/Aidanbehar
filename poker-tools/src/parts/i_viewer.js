@@ -436,7 +436,8 @@ function route(force) {
     if (!confirm(s.offline ? 'Leave this practice game?' : 'Leave the table? As the host, this ends the game for everyone.')) { history.replaceState(null, '', lastHash); return; }
     s.leave(); App.session = null;
   }
-  if (!force && s && s.role === 'client' && !s.ended && lastHash.startsWith('#join=') && !h.startsWith('#join=')) { s.leave(); App.session = null; }
+  // A client stays connected after its game ends (a rematch invitation can still arrive), so leaving the page closes it.
+  if (!force && s && s.role === 'client' && !s.closed && lastHash.startsWith('#join=') && !h.startsWith('#join=')) { s.leave(); App.session = null; }
   if (!force && s && s.role === 'watcher' && !s.ended && lastHash.startsWith('#watch=') && !h.startsWith('#watch=')) { s.leave(); App.session = null; }
   lastHash = h;
   if (App.screen && App.screen.destroy) App.screen.destroy();

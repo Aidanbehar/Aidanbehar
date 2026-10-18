@@ -9,6 +9,7 @@ const ICONS = {
   copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
   sound: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
   mute: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.9-.7-1.2-.7-2 0-.9.7-1.6 1.6-1.6H17a4 4 0 0 0 4-4C21 6.7 17 3 12 3z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10.5" cy="7" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
@@ -61,9 +62,17 @@ const Device = {
 
 /* ---------- Theme & display prefs ---------- */
 const Theme = {
+  /** Appearance choices: [value, label, swatch colour]. The first of each list is the default. */
+  FELTS: [['green', 'Green', '#138069'], ['blue', 'Blue', '#1f6fa8'], ['red', 'Red', '#a83a3a'], ['purple', 'Purple', '#6b4aa8'], ['charcoal', 'Charcoal', '#3a4048'], ['brown', 'Brown', '#8a6237']],
+  BACKS: [['blue', 'Blue', '#1d6f8c'], ['red', 'Red', '#b5323a'], ['green', 'Green', '#1e7a4f'], ['purple', 'Purple', '#6a3fb0'], ['black', 'Black', '#2b2f36'], ['gold', 'Gold', '#b58a1e']],
+  RAILS: [['wood', 'Dark wood', '#3a2a1f'], ['light', 'Light wood', '#8a6a48'], ['black', 'Black', '#24272c']],
+  pick(key, list) { const v = Prefs.get(key, list[0][0]); return list.some((x) => x[0] === v) ? v : list[0][0]; },
   apply() {
-    document.documentElement.dataset.theme = Prefs.get('theme', 'dark');
+    const d = document.documentElement.dataset;
+    d.theme = Prefs.get('theme', 'dark');
+    d.felt = Theme.pick('felt', Theme.FELTS); d.back = Theme.pick('cardBack', Theme.BACKS); d.rail = Theme.pick('rail', Theme.RAILS);
     document.body.classList.toggle('two-color', !Prefs.get('fourColor', true));
+    document.body.classList.toggle('big-print', Prefs.get('bigPrint', false) === true);
   },
   toggle() { Prefs.set('theme', Prefs.get('theme', 'dark') === 'dark' ? 'light' : 'dark'); Theme.apply(); },
   icon() { return Prefs.get('theme', 'dark') === 'dark' ? icon('sun') : icon('moon'); },

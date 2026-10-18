@@ -20,7 +20,7 @@ const Prefs = {
   },
   /** Wipe saved names, settings, rejoin links and records; optionally keep display preferences. */
   wipe(keepDisplay) {
-    const display = ['theme', 'muted', 'fourColor', 'panelOpen', 'vSpeed', 'device'];
+    const display = ['theme', 'muted', 'fourColor', 'panelOpen', 'vSpeed', 'device', 'felt', 'cardBack', 'rail', 'bigPrint'];
     for (const k of Prefs.keys()) if (!(keepDisplay && display.includes(k))) Prefs.del(k);
     try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('feltroom.')) sessionStorage.removeItem(k); } catch { /* ignore */ }
   },
@@ -374,7 +374,7 @@ class HostSession {
     this.name = name;
     this.conns = new Map();
     this.record = '';
-    this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {} };
+    this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {}, rematch: () => {} };
   }
   on(ev, fn) { this.handlers[ev] = fn; return this; }
 
@@ -472,6 +472,7 @@ class HostSession {
     if (m.t === 'ping') { this._send(c, { t: 'pong' }); return; }
     if (m.t === 'pong' || !c.pid || c.replaced) return;
     if (['start', 'pause', 'kick', 'adjust', 'end'].includes(m.t)) return; // host-only intents never come from the network
+    if (m.t === 'rematch-ask' || m.t === 'rematch-ready') { this._rematchMsg(c, m); return; }
     t.handle(c.pid, m);
   }
 
@@ -516,6 +517,32 @@ class HostSession {
   send(m) {
     if (m.t === 'show' && this.sraLink && this.table.hand) m = { ...m, keys: this.sraLink.showKeys(this.table.hand.no) };
     this.table.handle(this.pid, m);
+  }
+
+  /*
+   * Rematch. Whoever asks first hosts the new table with this table's settings and everyone else
+   * gets an invitation. A player asks the host for the settings ('rematch-ask' -> 'rematch-go'),
+   * opens the new table, then reports its ID ('rematch-ready'); this host passes the ID on.
+   */
+  _rematchMsg(c, m) {
+    const p = this.table.players.get(c.pid);
+    if (!p) return;
+    if (this.rematch) { this._send(c, { t: 'rematch', from: this.rematch.from, id: this.rematch.id }); return; }
+    if (!Rematch.allowed(this.table)) { this._send(c, { t: 'error', text: 'A rematch can be offered once the game is over or someone is out of chips.' }); return; }
+    if (m.t === 'rematch-ask') {
+      if (this.rematchAsk && this.rematchAsk.pid !== c.pid && Date.now() - this.rematchAsk.at < 20000) { this._send(c, { t: 'error', text: 'Another player is setting up a rematch. Their invitation is on its way.' }); return; }
+      this.rematchAsk = { pid: c.pid, at: Date.now() };
+      this._send(c, { t: 'rematch-go', settings: this.settings });
+      return;
+    }
+    if (!this.rematchAsk || this.rematchAsk.pid !== c.pid || typeof m.id !== 'string' || !REMATCH_ID.test(m.id)) return;
+    this.offerRematch(p.name, m.id, c.pid);
+  }
+  /** Invite everyone at this table (except the player hosting it) to the rematch table. */
+  offerRematch(from, id, exceptPid) {
+    this.rematch = { from, id };
+    for (const [pid, c] of this.conns) if (pid !== exceptPid) this._send(c, { t: 'rematch', from, id });
+    if (exceptPid !== this.pid && this.handlers.rematch) this.handlers.rematch(from, id);
   }
 
   /** Host leaves: tell everyone (so they can still copy their records), then shut down. */
@@ -609,8 +636,36 @@ const Safe = (() => {
       watching: bool(v.watching), watchId: typeof v.watchId === 'string' && /^[a-z0-9-]{4,40}$/.test(v.watchId) ? v.watchId : null,
     };
   }
-  return { view };
+  /** Rematch: table settings sent by another player's browser, rebuilt into a known shape. */
+  function settings(x) {
+    if (!x || typeof x !== 'object') return null;
+    const sb = int(x.sb, 1, 1e9, null), bb = int(x.bb, 1, 1e9, null), st = int(x.startingStack, 2, 1e12, null);
+    if (sb == null || bb == null || bb < sb || st == null || st < bb * 2) return null;
+    return {
+      tableName: str(x.tableName, 40).replace(/["\[\]\\]/g, '').trim() || 'Rematch', sb, bb, ante: int(x.ante, 0, bb, 0), startingStack: st,
+      maxSeats: int(x.maxSeats, 2, 9, 9), timer: int(x.timer, 0, 600, 0), rebuys: bool(x.rebuys), maxRebuys: int(x.maxRebuys, 0, 99, 0),
+      recordHole: oneOf(x.recordHole, ['All', 'Showdown'], 'Showdown'), game: oneOf(x.game, ['holdem', 'omaha4', 'omaha5'], 'holdem'),
+      limit: oneOf(x.limit, ['nl', 'pl', 'fl'], 'nl'), levelHands: int(x.levelHands, 0, 1000, 0), hostPlays: true,
+      botTakeover: bool(x.botTakeover) && !bool(x.sra), sra: bool(x.sra), spectators: bool(x.spectators), viewerChat: bool(x.spectators) && bool(x.viewerChat),
+      listed: false, hostAdjust: bool(x.hostAdjust), hostKick: bool(x.hostKick),
+    };
+  }
+  return { view, settings };
 })();
+
+/** Peer IDs that a rematch invitation may point to. */
+const REMATCH_ID = /^nlhe-[a-z2-9]{4}-[a-z2-9]{4}$/;
+/** A rematch can be offered once at least one hand is done and the game is over or someone is out of chips. */
+const Rematch = {
+  allowed(t) {
+    if (!t.finished.length) return false;
+    return t.status === 'ended' || [...t.players.values()].some((p) => p.busted);
+  },
+  allowedView(v) {
+    if (!v || !v.handNo || v.status === 'lobby') return false;
+    return v.status === 'ended' || v.players.some((p) => p.busted) || !!(v.you && v.you.busted);
+  },
+};
 
 
 class ClientSession {
@@ -622,7 +677,7 @@ class ClientSession {
     this.name = name;
     this.record = Prefs.get('record.' + hostId, '');
     this.recordFull = Prefs.get('recordFull.' + hostId, this.record);
-    this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {}, status: () => {}, fair: () => {} };
+    this.handlers = { view: () => {}, event: () => {}, error: () => {}, ended: () => {}, status: () => {}, fair: () => {}, rematch: () => {} };
     this.ended = false;
     this.fair = new Fair.Checker((f, msg) => this.handlers.fair(f, msg));
   }
@@ -712,10 +767,18 @@ class ClientSession {
       case 'fair2': { const r = this.fair.fair2(m); if (r) this.send(r); break; }
       case 'fair3': this.fair.fair3(m); break;
       case 'fairown': this.fair.own(m, this.name); break;
-      case 'error': this.handlers.error(m.text); break;
+      case 'error': this._rematchDone(null); this.handlers.error(m.text); break;
       case 'ping': this.send({ t: 'pong' }); break;
       case 'kicked': this._end('You were removed from the table by the host.'); break;
-      case 'ended': this._end(m.reason || 'Host left, game ended.'); break;
+      // The connection stays open after the game ends, so a rematch invitation can still arrive.
+      case 'ended': this._end(m.reason || 'Host left, game ended.', true); break;
+      case 'rematch':
+        if (this.watch || typeof m.id !== 'string' || !REMATCH_ID.test(m.id) || m.id === this.id) break;
+        this._rematchDone(null);
+        this.rematch = { from: String(m.from || 'A player').slice(0, 24), id: m.id };
+        this.handlers.rematch(this.rematch.from, m.id);
+        break;
+      case 'rematch-go': if (!this.watch) this._rematchDone(Safe.settings(m.settings)); break;
       // Encrypted deal steps go to our own SraPlayer.
       default: if (SraLink.is(m) && !this.watch) { if (!this.sraLink) this._sra(); this.sraLink.msg(m); } break;
     }
@@ -764,13 +827,23 @@ class ClientSession {
     this._end('Host left, game ended.');
   }
 
-  _end(reason) {
+  _end(reason, keepOpen) {
     if (this.ended) return;
     this.ended = true;
     clearInterval(this.dog);
     this.handlers.ended(reason);
-    setTimeout(() => { try { this.peer.destroy(); } catch { /* ignore */ } }, 500);
+    if (!keepOpen) setTimeout(() => { try { this.peer.destroy(); } catch { /* ignore */ } }, 500);
   }
+
+  /** Ask the host for this table's settings so this player can host the rematch. Resolves null if the host doesn't answer. */
+  askRematch() {
+    return new Promise((resolve) => {
+      const to = setTimeout(() => { if (this.rematchWait) { this.rematchWait = null; resolve(null); } }, 8000);
+      this.rematchWait = (s) => { clearTimeout(to); resolve(s); };
+      this.send({ t: 'rematch-ask' });
+    });
+  }
+  _rematchDone(s) { const w = this.rematchWait; this.rematchWait = null; if (w) w(s); }
 
   send(m) {
     if (m.t === 'show' && this.sraLink && this.lastView) m = { ...m, keys: this.sraLink.showKeys(this.lastView.handNo) };
@@ -778,7 +851,7 @@ class ClientSession {
   }
   leave() {
     try { sessionStorage.removeItem('feltroom.active'); } catch { /* ignore */ }
-    this.ended = true; clearInterval(this.dog); try { this.conn && this.conn.close(); this.peer.destroy(); } catch { /* ignore */ } }
+    this.ended = true; this.closed = true; clearInterval(this.dog); if (this.unload) removeEventListener('pagehide', this.unload); try { this.conn && this.conn.close(); this.peer.destroy(); } catch { /* ignore */ } }
 }
 
 /* ---------- Play vs Bots: the same HostTable, fully offline ---------- */
