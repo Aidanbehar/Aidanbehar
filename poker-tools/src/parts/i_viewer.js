@@ -454,6 +454,7 @@ function route(force) {
   else if (h.startsWith('#/bots')) App.screen = s && s.offline && !s.cepheus && !s.closed ? GameScreen(s) : BotSetupScreen();
   else if (h.startsWith('#/cepheus')) App.screen = s && s.offline && s.cepheus && !s.closed ? GameScreen(s) : CepheusScreen();
   else if (h.startsWith('#/viewer')) App.screen = ViewerScreen();
+  else if (h.startsWith('#/solver')) App.screen = SolverScreen();
   else if (h.startsWith('#/selftest')) App.screen = SelfTestScreen();
   else if (h.startsWith('#/rooms')) App.screen = RoomsScreen();
   else if (h.startsWith('#/learn')) App.screen = LearnScreen(decodeURIComponent(h.slice(8).replace(/^\//, '')));

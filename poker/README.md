@@ -435,6 +435,30 @@ Simulations run in small chunks, so the page stays responsive even with eight bo
 
 ---
 
+## Heads-Up Limit Solver
+
+**Heads-Up Limit Solver** on the home screen (`#/solver`) gives the answer for any heads-up
+fixed-limit Hold'em spot, using the same CFR+ strategy as Play Against Cepheus (built on Cepheus's
+exact rules and algorithm; an approximation, not Cepheus's own strategy).
+
+- **Set up the spot:** your seat (button/small blind or big blind), the blinds, your stack in big
+  blinds, your two cards and the board (pick cards from the deck grid; used cards are greyed out, and
+  **Random hand** deals you two cards).
+- **Record the betting** as the hand goes: the screen always shows who acts next and only the moves
+  the rules allow (fold, check or call, bet or raise one fixed bet; at most four bets a round). When a
+  street's betting is over it asks for the next board card. **Undo** steps back one action. The spot
+  is remembered in your browser, so you can come back to it.
+- **What to do:** on your turn it shows the strategy's exact mix for this spot (for example "Raise
+  98%, call 2%") and the best play in plain words. The strategy mixes on purpose so it can't be read.
+- **Chance of winning:** your chance of winning if the hand were checked down, against any two cards
+  and against the hands the opponent is likely to hold given their betting. For the second number,
+  every hand they could have is weighted by how often the strategy would have made their actions with
+  it. River and turn numbers are exact over every hand they could hold (and every river card); flop
+  and preflop numbers use a fixed sample of board run-outs. Ties count half.
+- **Limits:** the strategy was solved with the small blind at half the big blind and stacks of at
+  least 24 big blinds (what a fully capped hand can cost); other settings work but the advice is
+  approximate, and the screen says so.
+
 ## Play Against Cepheus
 
 **Play Against Cepheus** (`#/cepheus`) is heads-up fixed-limit Texas Hold'em against one strong

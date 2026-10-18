@@ -787,6 +787,16 @@ const SelfTest = (() => {
     rec.tags = rec.tags.map(([k, v]) => (k === 'Rake' ? [k, '9'] : [k, v]));
     ok(Replay.game({ tags, hands: [rec] }).issues.some((x) => /rake/.test(x)), 'wrong rake reported');
   });
+  test('Solver', 'Rebuilds a heads-up limit spot from the recorded betting and waits for board cards', () => {
+    if (typeof LimitSolver === 'undefined') return;
+    let B = LimitSolver.build({ hero: 1, hole: ['Kh', 'Qd'], board: [], sb: 5, bb: 10, stackBB: 100, actions: ['r', 'c'] });
+    eq(B.needBoard, 3); eq(B.opp.length, 1); eq(B.opp[0].seat, 1); eq(B.opp[0].code, 'r');
+    B = LimitSolver.build({ hero: 1, hole: ['Kh', 'Qd'], board: ['Ks', '7c', '2d'], sb: 5, bb: 10, stackBB: 100, actions: ['r', 'c', 'c', 'r', 'r'] });
+    eq(B.h.street, 1); eq(B.h.toAct, 0); eq(Engine.legal(B.h).toCall, 10); eq(JSON.stringify(LimitSolver.history(B.h)), JSON.stringify(['rc', 'crr']));
+    // a fifth bet in a round is not allowed: the extra raise is dropped
+    B = LimitSolver.build({ hero: 0, hole: null, board: [], sb: 5, bb: 10, stackBB: 100, actions: ['r', 'r', 'r', 'r'] });
+    eq(B.applied, 3);
+  });
   test('Training', 'Every drill makes valid questions at every level, with one right answer', () => {
     if (typeof Drills === 'undefined') return;
     for (const d of Drills.LIST) for (let lv = 0; lv < 4; lv++) {

@@ -27,6 +27,7 @@ function HomeScreen() {
         <button class="big-choice" data-go="#/rooms"><span class="bc-ic">${icon('users')}</span><strong>Waiting Room</strong><span>Browse public tables other people are hosting right now, then join or watch with one click.</span></button>
         <button class="big-choice" data-go="#/bots"><span class="bc-ic">${icon('bot')}</span><strong>Play vs Bots</strong><span>Practice offline against computer players, from Beginner to Extreme.</span></button>
         <button class="big-choice" data-go="#/cepheus"><span class="bc-ic">${icon('shield')}</span><strong>Play Against Cepheus</strong><span>Heads-up limit Hold'em against a CFR+ strategy built on Cepheus's exact rules (an approximation, not Cepheus itself).</span></button>
+        <button class="big-choice" data-go="#/solver"><span class="bc-ic">${icon('calc')}</span><strong>Heads-Up Limit Solver</strong><span>Enter your cards, the board and the betting: see exactly how often to fold, call or raise, and your chance of winning.</span></button>
         <button class="big-choice" data-go="#/viewer"><span class="bc-ic">${icon('history')}</span><strong>Hand History Viewer</strong><span>Paste a game record to replay every hand, with stats. Works offline.</span></button>
         <button class="big-choice" data-go="#/learn"><span class="bc-ic">${icon('book')}</span><strong>Learn Poker</strong><span>From the rules to pot odds and expected value, with examples, quizzes and calculators.</span></button>
       </div>
