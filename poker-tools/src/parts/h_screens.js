@@ -293,7 +293,7 @@ function BotSetupScreen() {
         <p class="hint" style="margin:0">Every bot gets its own version of its play style and its mood drifts from hand to hand, so a label is a tendency, not a script.</p>
         <div class="two">
           <label class="field"><span>Play style</span><select class="input" name="personality"><option value="mixed">Mixed (a different style at every seat)</option>${Object.entries(Bots.PERSONALITIES).map(([k, v]) => `<option value="${k}" ${d.personality === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></label>
-          <div class="field"><span>Bot speed</span>${seg('botSpeed', [['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']], d.botSpeed)}</div>
+          <div class="field"><span>Bot speed</span>${seg('botSpeed', [['ultra', 'Ultra fast'], ['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']], d.botSpeed)}</div>
         </div>
       </section>
       <section class="card-ui setup-section"><h3>You</h3>
@@ -400,7 +400,7 @@ function CepheusScreen() {
       </section>
       <section class="card-ui setup-section"><h3>You</h3>
         <label class="field"><span>Your name</span><input class="input" name="name" maxlength="18" value="${U.esc(d.name)}" placeholder="e.g. Alice" autocomplete="off"></label>
-        <div class="field"><span>Cepheus's speed</span><div class="seg" role="radiogroup" data-seg="botSpeed">${[['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']].map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === d.botSpeed}" aria-checked="${v === d.botSpeed}">${l}</button>`).join('')}</div></div>
+        <div class="field"><span>Cepheus's speed</span><div class="seg" role="radiogroup" data-seg="botSpeed">${[['ultra', 'Ultra fast'], ['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']].map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === d.botSpeed}" aria-checked="${v === d.botSpeed}">${l}</button>`).join('')}</div></div>
       </section>
       <section class="card-ui setup-section"><h3>The game (Cepheus's rules)</h3>
         <ul class="hint" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px">
@@ -826,6 +826,7 @@ function GameScreen(session) {
       <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>`}
       ${isWatcher || !seated ? '' : `<button id="m-auto" role="menuitem">${icon('bot')}${G.auto ? 'Stop auto-play' : 'Auto-play (call, check, min-bet, rebuy)'}</button>`}
       ${isWatcher ? '' : `<button id="m-review" role="menuitem">${icon('calc')}Review my play</button>`}
+      ${session.offline && session.table ? `<button id="m-speed" role="menuitem">${icon('play')}Bot speed: ${{ ultra: 'Ultra fast', fast: 'Fast', normal: 'Normal', slow: 'Slow' }[session.table.s.botSpeed || 'normal']} (tap to change)</button>` : ''}
       ${session.offline ? `<button id="m-again" role="menuitem">${icon('history')}Play again (same settings)</button>` : canRematch() ? `<button id="m-rematch" role="menuitem">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}
       <button id="m-look" role="menuitem">${icon('palette')}Appearance (felt, cards, theme)…</button>
       <button id="m-theme" role="menuitem">${Theme.icon()}Light / dark theme</button>
@@ -854,6 +855,12 @@ function GameScreen(session) {
     on('m-look', appearanceModal);
     on('m-review', reviewMine);
     on('m-auto', () => setAuto(!G.auto));
+    on('m-speed', () => {
+      const order = ['ultra', 'fast', 'normal', 'slow'], t = session.table, cur = order.indexOf(t.s.botSpeed || 'normal');
+      t.s.botSpeed = order[(cur + 1) % order.length];
+      toast(`Bot speed: ${{ ultra: 'Ultra fast', fast: 'Fast', normal: 'Normal', slow: 'Slow' }[t.s.botSpeed]}`, 'info');
+      t.changed();
+    });
     on('m-again', playAgain); on('m-rematch', startRematch);
     const first = $('input, button', menuEl); if (first) first.focus();
   }
@@ -1209,7 +1216,7 @@ function GameScreen(session) {
       if (M.toCall > 0) session.send({ t: 'action', action: 'call' });
       else if (M.isBet && M.canRaise) session.send({ t: 'action', action: 'bet', amount: M.minTo });
       else session.send({ t: 'action', action: 'check' });
-    }, 450);
+    }, v.table.botSpeed === 'ultra' ? 60 : 450);
   }
   function act(type) {
     const L = G.view && G.view.legal;

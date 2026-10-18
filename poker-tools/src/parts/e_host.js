@@ -282,7 +282,7 @@ class HostTable {
   _botTurn() {
     if (this.botTimer) return;
     const h = this.hand, i = h.toAct, pid = this.handPids[i];
-    const speed = { fast: 0.3, normal: 1, slow: 1.8 }[this.s.botSpeed || 'normal'] || 1;
+    const speed = { ultra: 0.04, fast: 0.3, normal: 1, slow: 1.8 }[this.s.botSpeed || 'normal'] || 1;
     const live = () => this.hand === h && h.phase === 'betting' && h.toAct === i && !this.paused && this.status === 'playing';
     this.botTimer = setTimeout(async () => {
       this.botTimer = null;
@@ -315,6 +315,9 @@ class HostTable {
       this._afterAction();
     }, (350 + Math.random() * 900) * speed); // think time (cosmetic, not security-relevant randomness)
   }
+
+  /** Ultra-fast bot games shorten the pauses between cards and hands (games with people keep the normal pace). */
+  _pace() { return this.s.vsBots && this.s.botSpeed === 'ultra' ? 0.1 : 1; }
 
   /** Play Against Cepheus: the strategy picks fold/call/raise; anything it cannot handle checks or calls, visibly. */
   _cepheusAct(h, i, p) {
@@ -811,7 +814,7 @@ class HostTable {
             Engine.dealBoard(h, cards);
             this._syncLog();
             this._proceed();
-          }, runout ? 1300 : 650);
+          }, (runout ? 1300 : 650) * this._pace());
         }
         break;
       }
@@ -870,7 +873,7 @@ class HostTable {
     }
     clearTimeout(this.nextTimer);
     if (this._eligible().length < 2) this.waiting = true;
-    this.nextTimer = setTimeout(() => { this.nextTimer = null; this._startHand(); }, HAND_PAUSE_MS + (h.results.showdown ? 1200 : 0));
+    this.nextTimer = setTimeout(() => { this.nextTimer = null; this._startHand(); }, (HAND_PAUSE_MS + (h.results.showdown ? 1200 : 0)) * this._pace());
   }
 
   /* ---------------- action clock ---------------- */
@@ -1021,7 +1024,7 @@ class HostTable {
         name: this.s.tableName, sb: this.blinds.sb, bb: this.blinds.bb, ante: this.blinds.ante, baseSb: this.s.sb, baseBb: this.s.bb,
         maxSeats: this.s.maxSeats, timer: this.s.timer, rebuys: this.s.rebuys, maxRebuys: this.s.maxRebuys || 0, recordHole: this.s.recordHole,
         startingStack: this.s.startingStack, variant: this.variant, variantName: VARIANTS[this.variant].name, holeCount: this.holeCount,
-        limit: this.s.limit, rakePct: this.s.cepheus ? 0 : this.s.rakePct || 0, rakeCap: this.s.rakeCap || 0, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
+        limit: this.s.limit, botSpeed: this.s.vsBots ? this.s.botSpeed || 'normal' : null, rakePct: this.s.cepheus ? 0 : this.s.rakePct || 0, rakeCap: this.s.rakeCap || 0, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
         botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots, sra: this.sra,
         spectators: !!this.s.spectators, viewerChat: !!this.s.viewerChat, botChat: !!this.s.botChat, listed: !!this.s.listed,
         hostAdjust: !!this.s.hostAdjust, hostKick: !!this.s.hostKick,

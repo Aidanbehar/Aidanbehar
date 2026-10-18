@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-C/4EIUV4f7TDpG2OUVpvtVnPoVX2nOtd7ejfMfACntA=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-FlbjEn+7OtFhOlN8PeMVX/OgjO3c4IKWgP/EGf/Vn5U=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -4300,7 +4300,7 @@ class HostTable {
   _botTurn() {
     if (this.botTimer) return;
     const h = this.hand, i = h.toAct, pid = this.handPids[i];
-    const speed = { fast: 0.3, normal: 1, slow: 1.8 }[this.s.botSpeed || 'normal'] || 1;
+    const speed = { ultra: 0.04, fast: 0.3, normal: 1, slow: 1.8 }[this.s.botSpeed || 'normal'] || 1;
     const live = () => this.hand === h && h.phase === 'betting' && h.toAct === i && !this.paused && this.status === 'playing';
     this.botTimer = setTimeout(async () => {
       this.botTimer = null;
@@ -4333,6 +4333,9 @@ class HostTable {
       this._afterAction();
     }, (350 + Math.random() * 900) * speed); // think time (cosmetic, not security-relevant randomness)
   }
+
+  /** Ultra-fast bot games shorten the pauses between cards and hands (games with people keep the normal pace). */
+  _pace() { return this.s.vsBots && this.s.botSpeed === 'ultra' ? 0.1 : 1; }
 
   /** Play Against Cepheus: the strategy picks fold/call/raise; anything it cannot handle checks or calls, visibly. */
   _cepheusAct(h, i, p) {
@@ -4829,7 +4832,7 @@ class HostTable {
             Engine.dealBoard(h, cards);
             this._syncLog();
             this._proceed();
-          }, runout ? 1300 : 650);
+          }, (runout ? 1300 : 650) * this._pace());
         }
         break;
       }
@@ -4888,7 +4891,7 @@ class HostTable {
     }
     clearTimeout(this.nextTimer);
     if (this._eligible().length < 2) this.waiting = true;
-    this.nextTimer = setTimeout(() => { this.nextTimer = null; this._startHand(); }, HAND_PAUSE_MS + (h.results.showdown ? 1200 : 0));
+    this.nextTimer = setTimeout(() => { this.nextTimer = null; this._startHand(); }, (HAND_PAUSE_MS + (h.results.showdown ? 1200 : 0)) * this._pace());
   }
 
   /* ---------------- action clock ---------------- */
@@ -5039,7 +5042,7 @@ class HostTable {
         name: this.s.tableName, sb: this.blinds.sb, bb: this.blinds.bb, ante: this.blinds.ante, baseSb: this.s.sb, baseBb: this.s.bb,
         maxSeats: this.s.maxSeats, timer: this.s.timer, rebuys: this.s.rebuys, maxRebuys: this.s.maxRebuys || 0, recordHole: this.s.recordHole,
         startingStack: this.s.startingStack, variant: this.variant, variantName: VARIANTS[this.variant].name, holeCount: this.holeCount,
-        limit: this.s.limit, rakePct: this.s.cepheus ? 0 : this.s.rakePct || 0, rakeCap: this.s.rakeCap || 0, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
+        limit: this.s.limit, botSpeed: this.s.vsBots ? this.s.botSpeed || 'normal' : null, rakePct: this.s.cepheus ? 0 : this.s.rakePct || 0, rakeCap: this.s.rakeCap || 0, levelHands: this.s.levelHands || 0, level: this.level + 1, hostPlays: this.s.hostPlays !== false,
         botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots, sra: this.sra,
         spectators: !!this.s.spectators, viewerChat: !!this.s.viewerChat, botChat: !!this.s.botChat, listed: !!this.s.listed,
         hostAdjust: !!this.s.hostAdjust, hostKick: !!this.s.hostKick,
@@ -8608,7 +8611,7 @@ function BotSetupScreen() {
         <p class="hint" style="margin:0">Every bot gets its own version of its play style and its mood drifts from hand to hand, so a label is a tendency, not a script.</p>
         <div class="two">
           <label class="field"><span>Play style</span><select class="input" name="personality"><option value="mixed">Mixed (a different style at every seat)</option>${Object.entries(Bots.PERSONALITIES).map(([k, v]) => `<option value="${k}" ${d.personality === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></label>
-          <div class="field"><span>Bot speed</span>${seg('botSpeed', [['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']], d.botSpeed)}</div>
+          <div class="field"><span>Bot speed</span>${seg('botSpeed', [['ultra', 'Ultra fast'], ['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']], d.botSpeed)}</div>
         </div>
       </section>
       <section class="card-ui setup-section"><h3>You</h3>
@@ -8715,7 +8718,7 @@ function CepheusScreen() {
       </section>
       <section class="card-ui setup-section"><h3>You</h3>
         <label class="field"><span>Your name</span><input class="input" name="name" maxlength="18" value="${U.esc(d.name)}" placeholder="e.g. Alice" autocomplete="off"></label>
-        <div class="field"><span>Cepheus's speed</span><div class="seg" role="radiogroup" data-seg="botSpeed">${[['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']].map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === d.botSpeed}" aria-checked="${v === d.botSpeed}">${l}</button>`).join('')}</div></div>
+        <div class="field"><span>Cepheus's speed</span><div class="seg" role="radiogroup" data-seg="botSpeed">${[['ultra', 'Ultra fast'], ['fast', 'Fast'], ['normal', 'Normal'], ['slow', 'Slow']].map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === d.botSpeed}" aria-checked="${v === d.botSpeed}">${l}</button>`).join('')}</div></div>
       </section>
       <section class="card-ui setup-section"><h3>The game (Cepheus's rules)</h3>
         <ul class="hint" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px">
@@ -9141,6 +9144,7 @@ function GameScreen(session) {
       <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>`}
       ${isWatcher || !seated ? '' : `<button id="m-auto" role="menuitem">${icon('bot')}${G.auto ? 'Stop auto-play' : 'Auto-play (call, check, min-bet, rebuy)'}</button>`}
       ${isWatcher ? '' : `<button id="m-review" role="menuitem">${icon('calc')}Review my play</button>`}
+      ${session.offline && session.table ? `<button id="m-speed" role="menuitem">${icon('play')}Bot speed: ${{ ultra: 'Ultra fast', fast: 'Fast', normal: 'Normal', slow: 'Slow' }[session.table.s.botSpeed || 'normal']} (tap to change)</button>` : ''}
       ${session.offline ? `<button id="m-again" role="menuitem">${icon('history')}Play again (same settings)</button>` : canRematch() ? `<button id="m-rematch" role="menuitem">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}
       <button id="m-look" role="menuitem">${icon('palette')}Appearance (felt, cards, theme)…</button>
       <button id="m-theme" role="menuitem">${Theme.icon()}Light / dark theme</button>
@@ -9169,6 +9173,12 @@ function GameScreen(session) {
     on('m-look', appearanceModal);
     on('m-review', reviewMine);
     on('m-auto', () => setAuto(!G.auto));
+    on('m-speed', () => {
+      const order = ['ultra', 'fast', 'normal', 'slow'], t = session.table, cur = order.indexOf(t.s.botSpeed || 'normal');
+      t.s.botSpeed = order[(cur + 1) % order.length];
+      toast(`Bot speed: ${{ ultra: 'Ultra fast', fast: 'Fast', normal: 'Normal', slow: 'Slow' }[t.s.botSpeed]}`, 'info');
+      t.changed();
+    });
     on('m-again', playAgain); on('m-rematch', startRematch);
     const first = $('input, button', menuEl); if (first) first.focus();
   }
@@ -9524,7 +9534,7 @@ function GameScreen(session) {
       if (M.toCall > 0) session.send({ t: 'action', action: 'call' });
       else if (M.isBet && M.canRaise) session.send({ t: 'action', action: 'bet', amount: M.minTo });
       else session.send({ t: 'action', action: 'check' });
-    }, 450);
+    }, v.table.botSpeed === 'ultra' ? 60 : 450);
   }
   function act(type) {
     const L = G.view && G.view.legal;

@@ -267,6 +267,12 @@ test suite and lists pass/fail results. The suite covers:
   message. You can turn the on-table popups off with **Show chat on the table** in the ⋯ menu.
 - **If the host leaves:** everyone sees *"Host left, game ended"* and can still copy, download or
   replay their record up to that point. Records are also saved in each player's browser.
+- **Ultra fast bots:** Play vs Bots and Play Against Cepheus have a **Bot speed** of Ultra fast, Fast,
+  Normal or Slow. Ultra fast makes the bots act almost instantly and cuts the pauses between board
+  cards and between hands to a tenth, so a table runs about ten times faster than Normal (roughly 30
+  to 40 hands a minute with auto-play). The bots think exactly as hard as before. In a bot game the
+  ⋯ menu has **Bot speed** to switch speeds without restarting. Games with people keep their normal
+  pace.
 - **Auto-play:** press **Auto-play** (in the action bar, the ⋯ menu, or the `A` key) and your seat
   plays itself with one simple rule: facing a bet it calls, when nobody has bet on the street it bets
   the minimum, otherwise (the big blind's option) it checks. When you run out of chips it rebuys
