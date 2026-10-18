@@ -69,7 +69,7 @@ function appearanceModal() {
   const sw = (key, list) => `<div class="swatches" role="radiogroup" data-ap="${key}">${list.map(([v, l, c]) => `<button type="button" class="swatch" role="radio" data-v="${v}" aria-checked="${Theme.pick(key, list) === v}" aria-label="${l}" title="${l}" style="background:${c}"></button>`).join('')}</div>`;
   const seg = (key, opts, cur) => `<div class="seg" role="radiogroup" data-ap="${key}">${opts.map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === cur}" aria-checked="${v === cur}">${l}</button>`).join('')}</div>`;
   const pills = (key, list) => `<div class="ap-pills" role="radiogroup" data-ap="${key}">${list.map(([v, l]) => `<button type="button" class="btn sm" role="radio" data-v="${v}" aria-pressed="${Theme.pick(key, list) === v}" aria-checked="${Theme.pick(key, list) === v}">${l}</button>`).join('')}</div>`;
-  const m = openModal(`<h2>${icon('palette')} Appearance</h2>
+  const m = openModal(`<h2>${icon('palette')} Appearance &amp; sound</h2>
     <div class="ap-preview" aria-hidden="true">${cardHtml('As')}${cardHtml('Kh')}${cardHtml('Qd')}${cardHtml('Tc')}${cardHtml(null)}</div>
     <div class="ap-row"><span>Theme</span>${seg('theme', [['dark', 'Dark'], ['light', 'Light']], Prefs.get('theme', 'dark'))}</div>
     <div class="ap-row"><span>Table felt</span>${sw('felt', Theme.FELTS)}</div>
@@ -77,6 +77,9 @@ function appearanceModal() {
     <div class="ap-row"><span>Table rail</span>${sw('rail', Theme.RAILS)}</div>
     <div class="ap-row"><span>Card style</span>${pills('cardFace', Theme.FACES)}</div>
     <div class="ap-row"><span>Back pattern</span>${pills('backPattern', Theme.PATTERNS)}</div>
+    <div class="ap-row"><span>Animations</span>${pills('anim', Motion.LEVELS)}<span class="hint" style="font-weight:400">Full: chips slide into the pot and out to the winner, cards are dealt from the middle and flip over. Simple: lighter effects. Off: nothing moves.</span></div>
+    <div class="ap-row"><span>Sound pack</span>${pills('soundPack', Sound.PACKS)}
+      <div class="ap-sound"><button type="button" class="btn sm" id="ap-play">${icon('play')}Preview</button><label class="ap-vol">${icon('sound')}<input type="range" id="ap-vol" min="0" max="100" step="5" value="${Sound.volume}" aria-label="Volume"></label><label class="check"><input type="checkbox" id="ap-mute" ${Sound.muted ? 'checked' : ''}> Mute</label></div></div>
     <label class="check"><input type="checkbox" id="ap-4c" ${Prefs.get('fourColor', false) ? 'checked' : ''}> Four-color deck (blue diamonds, green clubs)</label>
     <p class="hint">Saved in this browser only. Other players see their own choices.</p>
     <div class="modal-foot"><button class="btn" id="ap-reset">Reset to default</button><button class="btn primary" data-close>Done</button></div>`, { label: 'Appearance' });
@@ -85,7 +88,7 @@ function appearanceModal() {
     $$('[data-theme-toggle]').forEach((x) => { x.innerHTML = Theme.icon(); });
     $$('[data-ap]', m.el).forEach((g) => {
       const key = g.dataset.ap;
-      const cur = key === 'theme' ? Prefs.get('theme', 'dark') : Theme.pick(key, { felt: Theme.FELTS, cardBack: Theme.BACKS, rail: Theme.RAILS, cardFace: Theme.FACES, backPattern: Theme.PATTERNS }[key]);
+      const cur = key === 'theme' ? Prefs.get('theme', 'dark') : Theme.pick(key, { felt: Theme.FELTS, cardBack: Theme.BACKS, rail: Theme.RAILS, cardFace: Theme.FACES, backPattern: Theme.PATTERNS, anim: Motion.LEVELS, soundPack: Sound.PACKS }[key]);
       $$('[data-v]', g).forEach((b) => { b.setAttribute('aria-checked', String(b.dataset.v === cur)); if (b.hasAttribute('aria-pressed')) b.setAttribute('aria-pressed', String(b.dataset.v === cur)); });
     });
     $('#ap-4c', m.el).checked = Prefs.get('fourColor', false);
@@ -96,10 +99,14 @@ function appearanceModal() {
       const key = b.closest('[data-ap]').dataset.ap;
       Prefs.set(key, b.dataset.v);
       sync();
+      if (key === 'soundPack') Sound.preview(b.dataset.v);
     }
   });
+  $('#ap-play', m.el).addEventListener('click', () => Sound.preview(Sound.pack));
+  $('#ap-vol', m.el).addEventListener('change', (e) => { Prefs.set('volume', Number(e.target.value)); Sound.preview(Sound.pack); });
+  $('#ap-mute', m.el).addEventListener('change', (e) => { Prefs.set('muted', e.target.checked); $$('#g-sound').forEach((x) => { x.innerHTML = e.target.checked ? icon('mute') : icon('sound'); }); });
   $('#ap-4c', m.el).addEventListener('change', (e) => { Prefs.set('fourColor', e.target.checked); sync(); });
-  $('#ap-reset', m.el).addEventListener('click', () => { ['felt', 'cardBack', 'rail', 'bigPrint', 'cardFace', 'backPattern', 'fourColor'].forEach((k) => Prefs.del(k)); sync(); });
+  $('#ap-reset', m.el).addEventListener('click', () => { ['felt', 'cardBack', 'rail', 'bigPrint', 'cardFace', 'backPattern', 'fourColor', 'anim', 'soundPack', 'volume'].forEach((k) => Prefs.del(k)); $('#ap-vol', m.el).value = Sound.volume; sync(); });
 }
 
 /** Lets a player erase everything Feltroom remembers in this browser. */

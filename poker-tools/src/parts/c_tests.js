@@ -760,6 +760,29 @@ const SelfTest = (() => {
     } finally { CepheusBot.model = saved; }
   });
 
+  test('Training', 'Every drill makes valid questions at every level, with one right answer', () => {
+    if (typeof Drills === 'undefined') return;
+    for (const d of Drills.LIST) for (let lv = 0; lv < 4; lv++) {
+      if (d.id === 'matchup' && lv > 0) continue; // slow simulations; level 0 covers the code path
+      const q = d.gen(lv);
+      ok(q && q.opts.length >= 2 && new Set(q.opts).size === q.opts.length, `${d.id} ${lv}: distinct options`);
+      ok(Number.isInteger(q.a) && q.a >= 0 && q.a < q.opts.length, `${d.id} ${lv}: answer is one of the options`);
+    }
+    // the flush-draw count is always nine
+    const q = Drills.byId.outs.gen(0); eq(q.opts[q.a], '9');
+    // a flop against a shown hand: exact equity adds up with the other side
+    const a = Drills.exactEquity(['Ah', 'Kh'], ['Qs', 'Qd'], ['2h', '7h', '9c']), b = Drills.exactEquity(['Qs', 'Qd'], ['Ah', 'Kh'], ['2h', '7h', '9c']);
+    ok(Math.abs(a + b - 1) < 1e-9, 'equities add to 100%');
+  });
+  test('Training', 'Every practice scenario deals a hand that matches its story', () => {
+    if (typeof Scenarios === 'undefined') return;
+    for (const sc of Scenarios.LIST) {
+      const st = Scenarios.setup(sc);
+      ok(st.holes.length === sc.n && st.board.length === 5, sc.id);
+      if (sc.hole) ok(sc.hole(st.holes[st.hero]), `${sc.id}: your cards fit`);
+      if (sc.flop) ok(sc.flop(st.holes[st.hero], st.board.slice(0, 3), st.board), `${sc.id}: the board fits`);
+    }
+  });
   test('Hand review', 'Reviews only your own decisions, never with anyone else\'s cards, and grades each one', async () => {
     if (typeof SAMPLE_RECORD === 'undefined' || typeof HandReview === 'undefined') return;
     const S = HandReview.spots(SAMPLE_RECORD, 'Alice');

@@ -591,11 +591,21 @@ function LearnScreen(id) {
   const L = Learn.LESSONS;
   const idx = L.findIndex((x) => x.id === id);
   const head = (title) => `<div class="page-head"><a class="btn ghost icon-btn" href="${idx >= 0 ? '#/learn' : '#/'}" aria-label="Back">${icon('back')}</a><h2>${title}</h2><span class="grow"></span>${topIconButtons()}</div>`;
+  // Training drills and practice scenarios live under Learn too.
+  const sub = String(id || ''), subHead = (back) => (title) => `<div class="page-head"><a class="btn ghost icon-btn" href="${back}" aria-label="Back">${icon('back')}</a><h2>${title}</h2><span class="grow"></span>${topIconButtons()}</div>`;
+  if (sub === 'drills') return DrillsScreen(subHead('#/learn'));
+  let sm = sub.match(/^drill\/([a-z0-9]+)\/(\d)$/);
+  if (sm) return DrillScreen(sm[1], sm[2], subHead('#/learn/drills'));
+  if (sub === 'scenarios') return ScenariosScreen(subHead('#/learn'));
+  sm = sub.match(/^scenario\/([a-z0-9-]+)$/);
+  if (sm) return ScenarioScreen(sm[1], subHead('#/learn/scenarios'));
 
   if (idx < 0) {
     const done = prog().done.filter((x) => L.some((l) => l.id === x)).length;
     App.root.innerHTML = `<div class="page"><div class="page-inner">${head(`${icon('book')} Learn Poker`)}
       <p class="muted" style="margin-top:0">From the rules of the game to the maths behind every decision. Each lesson has worked examples and a short quiz. Your progress stays on this device.</p>
+      <div class="ltrain"><a class="big-choice" href="#/learn/drills"><span class="bc-ic">${icon('calc')}</span><strong>Training drills</strong><span>${Drills.LIST.length} quick-fire drills, each with Beginner to Expert levels: outs, pot odds, call or fold, side pots and more.</span></a>
+        <a class="big-choice" href="#/learn/scenarios"><span class="bc-ic">${icon('play')}</span><strong>Practice scenarios</strong><span>Play the same kind of spot again and again against bots, with feedback on every decision.</span></a></div>
       <div class="lprog"><div class="lprog-bar"><span style="width:${(done / L.length) * 100}%"></span></div><span>${done} of ${L.length} lessons done</span></div>
       ${Learn.CHAPTERS.map((ch, ci) => `<section class="lchap"><h3><span class="lnum">${ci + 1}</span>${ch.title}</h3><p class="hint">${ch.blurb}</p>
         <div class="llist">${L.filter((l) => l.ch === ch.id).map((l) => `<a class="litem ${isDone(l.id) ? 'done' : ''}" href="#/learn/${l.id}"><span class="lcheck">${isDone(l.id) ? icon('check') : ''}</span><span>${U.esc(l.title)}</span>${icon('chevron')}</a>`).join('')}</div></section>`).join('')}

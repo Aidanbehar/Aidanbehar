@@ -76,15 +76,72 @@ const Theme = {
     d.theme = Prefs.get('theme', 'dark');
     d.felt = Theme.pick('felt', Theme.FELTS); d.back = Theme.pick('cardBack', Theme.BACKS); d.rail = Theme.pick('rail', Theme.RAILS);
     d.face = Theme.pick('cardFace', Theme.FACES); d.pattern = Theme.pick('backPattern', Theme.PATTERNS);
+    d.anim = Motion.level();
     document.body.classList.toggle('two-color', !Prefs.get('fourColor', false));
   },
   toggle() { Prefs.set('theme', Prefs.get('theme', 'dark') === 'dark' ? 'light' : 'dark'); Theme.apply(); },
   icon() { return Prefs.get('theme', 'dark') === 'dark' ? icon('sun') : icon('moon'); },
 };
 
+/* ---------- Table animation: chips and cards that travel across the screen ----------
+   "full": chips slide from players to their bets, into the pot and out to the winner; cards are
+   dealt from the middle, folded hands are mucked, cards flip over. "simple": the lighter original
+   effects. "off": nothing moves. A system "reduce motion" setting always wins. */
+const Motion = {
+  LEVELS: [['full', 'Full'], ['simple', 'Simple'], ['off', 'Off']],
+  level() { const v = Prefs.get('anim', 'full'); return ['full', 'simple', 'off'].includes(v) ? v : 'full'; },
+  on() { return Motion.level() === 'full' && !reducedMotion() && !document.hidden; },
+  layer() {
+    let l = document.getElementById('fxl');
+    if (!l) { l = document.createElement('div'); l.id = 'fxl'; l.setAttribute('aria-hidden', 'true'); document.body.appendChild(l); }
+    return l;
+  },
+  center(r) { return r && (r.width || r.height) ? [r.left + r.width / 2, r.top + r.height / 2] : null; },
+  /** Move a piece of HTML from one screen point to another along a small arc, then remove it. */
+  fly(html, from, to, { dur = 520, delay = 0, arc = 40, spin = 0, endScale = 0.85, fade = true, cls = '', s = 0.8 } = {}) {
+    if (!from || !to || !Element.prototype.animate) return;
+    const el = document.createElement('div');
+    el.className = `fxp ${cls}`; el.innerHTML = html; el.style.setProperty('--s', s);
+    el.style.left = from[0] + 'px'; el.style.top = from[1] + 'px';
+    Motion.layer().appendChild(el);
+    const dx = to[0] - from[0], dy = to[1] - from[1];
+    const a = el.animate([
+      { transform: 'translate(-50%, -50%) translate(0, 0) rotate(0deg) scale(1)', opacity: 1 },
+      { transform: `translate(-50%, -50%) translate(${dx / 2}px, ${dy / 2 - arc}px) rotate(${spin / 2}deg) scale(${(1 + endScale) / 2 + 0.08})`, opacity: 1, offset: 0.5 },
+      { transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px) rotate(${spin}deg) scale(${endScale})`, opacity: fade ? 0.15 : 1 },
+    ], { duration: dur, delay, easing: 'cubic-bezier(.3, .7, .3, 1)', fill: 'both' });
+    a.onfinish = () => el.remove();
+    setTimeout(() => el.remove(), dur + delay + 300);
+  },
+  /** A little burst of gold sparks (your big wins). */
+  burst(at, n = 16) {
+    if (!at || !Element.prototype.animate) return;
+    for (let i = 0; i < n; i++) {
+      const el = document.createElement('div');
+      el.className = 'fxspark';
+      el.style.left = at[0] + 'px'; el.style.top = at[1] + 'px';
+      Motion.layer().appendChild(el);
+      const ang = (i / n) * Math.PI * 2 + Math.random() * 0.4, r = 40 + Math.random() * 46;
+      const a = el.animate([{ transform: 'translate(-50%, -50%) scale(1)', opacity: 1 }, { transform: `translate(calc(-50% + ${Math.cos(ang) * r}px), calc(-50% + ${Math.sin(ang) * r}px)) scale(.3)`, opacity: 0 }],
+        { duration: 700 + Math.random() * 300, easing: 'cubic-bezier(.2, .8, .3, 1)', fill: 'both' });
+      a.onfinish = () => el.remove();
+      setTimeout(() => el.remove(), 1300);
+    }
+  },
+};
+
 /* ---------- Web Audio sound effects (generated, no files) ---------- */
 const Sound = {
   ctx: null,
+  PACKS: [['classic', 'Classic'], ['casino', 'Casino'], ['soft', 'Soft'], ['retro', 'Retro 8-bit'], ['minimal', 'Minimal']],
+  get pack() { const v = Prefs.get('soundPack', 'classic'); return Sound.PACKS.some((p) => p[0] === v) ? v : 'classic'; },
+  get volume() { const v = Number(Prefs.get('volume', 80)); return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 80; },
+  /** All sounds go through one volume control. */
+  _out(c) {
+    if (!this.master || this.master.context !== c) { this.master = c.createGain(); this.master.connect(c.destination); }
+    this.master.gain.value = (this.volume / 100) * 1.25;
+    return this.master;
+  },
   get muted() { return Prefs.get('muted', false); },
   toggle() { Prefs.set('muted', !this.muted); if (!this.muted) this.play('chip'); },
   unlock() { this._ctx(); },
@@ -98,20 +155,21 @@ const Sound = {
     o.type = type; o.frequency.setValueAtTime(f, t0);
     if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur);
     g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(g).connect(c.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+    o.connect(g).connect(this._out(c)); o.start(t0); o.stop(t0 + dur + 0.02);
   },
   _noise(c, { t = 0, dur = 0.06, vol = 0.12, freq = 3000, q = 1, type = 'bandpass' }) {
     const len = Math.floor(c.sampleRate * dur), b = c.createBuffer(1, len, c.sampleRate), d = b.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
     const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t0 = c.currentTime + t;
     s.buffer = b; f.type = type; f.frequency.value = freq; f.Q.value = q; g.gain.value = vol;
-    s.connect(f).connect(g).connect(c.destination); s.start(t0);
+    s.connect(f).connect(g).connect(this._out(c)); s.start(t0);
   },
-  play(name, delay = 0) {
-    if (this.muted) return;
+  play(name, delay = 0, pack = this.pack, force = false) {
+    if (this.muted && !force) return;
     const c = this._ctx();
     if (!c || c.state !== 'running') return;
     const t = delay;
+    if (pack !== 'classic') return this._pack(c, pack, name, t);
     switch (name) {
       case 'deal': this._noise(c, { t, dur: 0.07, vol: 0.22, freq: 2600, q: 0.8 }); break;
       case 'chip': this._tone(c, { f: 2300, type: 'triangle', t, dur: 0.05, vol: 0.06 }); this._tone(c, { f: 3100, type: 'triangle', t: t + 0.045, dur: 0.05, vol: 0.05 }); break;
@@ -121,6 +179,53 @@ const Sound = {
       case 'win': [523, 659, 784].forEach((f, i) => this._tone(c, { f, type: 'triangle', t: t + i * 0.09, dur: 0.3, vol: 0.07 })); break;
       case 'fold': this._noise(c, { t, dur: 0.09, vol: 0.06, freq: 1200, q: 0.5 }); break;
     }
+  },
+  _pack(c, pack, name, t) {
+    const T = (o) => this._tone(c, { ...o, t: t + (o.t || 0) }), N = (o) => this._noise(c, { ...o, t: t + (o.t || 0) });
+    const P = {
+      // Real-table feel: clay chips clacking, card swishes, a bell for your turn.
+      casino: {
+        deal: () => { N({ dur: 0.11, vol: 0.2, freq: 1800, q: 0.6 }); N({ t: 0.02, dur: 0.05, vol: 0.08, freq: 5000, q: 1.5 }); },
+        chip: () => [0, 0.035, 0.075].forEach((d, i) => { N({ t: d, dur: 0.025, vol: 0.16 - i * 0.03, freq: 4200, q: 4 }); T({ t: d, f: 2600 + i * 300, type: 'triangle', dur: 0.03, vol: 0.03 }); }),
+        knock: () => { [0, 0.11].forEach((d) => { T({ t: d, f: 180, f2: 90, dur: 0.1, vol: 0.35 }); N({ t: d, dur: 0.03, vol: 0.1, freq: 700, type: 'lowpass' }); }); },
+        chime: () => { T({ f: 880, dur: 0.9, vol: 0.08 }); T({ f: 1760, dur: 0.6, vol: 0.03 }); T({ f: 2637, dur: 0.4, vol: 0.015 }); },
+        chat: () => { T({ f: 990, dur: 0.1, vol: 0.05 }); },
+        win: () => { for (let i = 0; i < 7; i++) N({ t: i * 0.05, dur: 0.025, vol: 0.14, freq: 3800 + (i % 3) * 400, q: 4 }); T({ t: 0.36, f: 1046, dur: 0.7, vol: 0.06 }); T({ t: 0.36, f: 1568, dur: 0.6, vol: 0.03 }); },
+        fold: () => N({ dur: 0.14, vol: 0.09, freq: 1000, q: 0.4 }),
+      },
+      // Quiet and rounded: pure tones, no clicks.
+      soft: {
+        deal: () => N({ dur: 0.08, vol: 0.06, freq: 900, type: 'lowpass' }),
+        chip: () => T({ f: 1200, dur: 0.09, vol: 0.04 }),
+        knock: () => T({ f: 220, f2: 160, dur: 0.14, vol: 0.12 }),
+        chime: () => { T({ f: 523, dur: 0.45, vol: 0.05 }); T({ t: 0.16, f: 784, dur: 0.5, vol: 0.045 }); },
+        chat: () => T({ f: 880, dur: 0.14, vol: 0.03 }),
+        win: () => [392, 494, 587, 784].forEach((f, i) => T({ t: i * 0.11, f, dur: 0.45, vol: 0.04 })),
+        fold: () => T({ f: 300, f2: 200, dur: 0.12, vol: 0.03 }),
+      },
+      // Old video game bleeps.
+      retro: {
+        deal: () => T({ f: 880, type: 'square', dur: 0.04, vol: 0.04 }),
+        chip: () => { T({ f: 1320, type: 'square', dur: 0.03, vol: 0.035 }); T({ t: 0.035, f: 1760, type: 'square', dur: 0.03, vol: 0.03 }); },
+        knock: () => T({ f: 110, type: 'square', dur: 0.07, vol: 0.06 }),
+        chime: () => [660, 880, 1320].forEach((f, i) => T({ t: i * 0.07, f, type: 'square', dur: 0.08, vol: 0.04 })),
+        chat: () => T({ f: 1046, type: 'square', dur: 0.05, vol: 0.03 }),
+        win: () => [523, 659, 784, 1046, 784, 1046].forEach((f, i) => T({ t: i * 0.08, f, type: 'square', dur: i === 5 ? 0.3 : 0.08, vol: 0.04 })),
+        fold: () => T({ f: 440, f2: 180, type: 'square', dur: 0.12, vol: 0.035 }),
+      },
+      // Only what you must not miss: your turn, a chat message, a win.
+      minimal: {
+        chime: () => { T({ f: 660, dur: 0.28, vol: 0.09 }); T({ t: 0.14, f: 990, dur: 0.38, vol: 0.08 }); },
+        chat: () => T({ f: 1175, dur: 0.12, vol: 0.04 }),
+        win: () => [523, 659, 784].forEach((f, i) => T({ t: i * 0.09, f, type: 'triangle', dur: 0.3, vol: 0.06 })),
+      },
+    }[pack];
+    if (P && P[name]) P[name]();
+  },
+  /** A short sample of a pack (Appearance & sound). */
+  preview(pack) {
+    this.unlock();
+    setTimeout(() => ['deal', 'chip', 'knock', 'chime', 'win'].forEach((n, i) => this.play(n, i * 0.45, pack, true)), 60);
   },
 };
 addEventListener('pointerdown', () => Sound.unlock(), { once: false, passive: true });
@@ -387,6 +492,59 @@ class TableView {
   }
 
   render(view, o = {}) {
+    const prev = this.view;
+    const before = prev && o.animate !== false && Motion.on() ? this._grab() : null;
+    this._render(view, o);
+    if (before) { try { this._motion(before, prev, view); } catch (e) { console.warn(e); } }
+  }
+
+  /** Screen positions of everything that can move: each seat's avatar, bet and cards, the pot and the board. */
+  _grab() {
+    const at = (e) => (e ? Motion.center(e.getBoundingClientRect()) : null);
+    const out = { seats: {}, pot: null, board: null };
+    this.layer.querySelectorAll('[data-seat]:not(button)').forEach((el) => {
+      out.seats[el.dataset.seat] = { plate: at(el.querySelector('.avatar')) || at(el), bet: at(el.querySelector('.seat-bet, .mt-bet')), cards: at(el.querySelector('.hole, .ms-cards, .mt-cards, .mt-mycards')) };
+    });
+    out.pot = at(this.layer.querySelector('.pots .pot')) || at(this.layer.querySelector('.pots'));
+    out.board = at(this.layer.querySelector('.board'));
+    return out;
+  }
+
+  /** Full animation: chips and cards travel between the positions before and after this update. */
+  _motion(B, prev, view) {
+    const A = this._grab(), same = prev.handKey === view.handKey;
+    const s = Math.max(0.5, parseFloat(getComputedStyle(this.el).getPropertyValue('--s')) || 0.8);
+    const pot = A.pot || A.board || B.pot || B.board;
+    if (view.handKey && !same) {
+      // Deal: every new card comes from the middle of the table, one after another round the table.
+      const from = A.board || pot;
+      const dealt = [...this.layer.querySelectorAll('.card.deal')], gap = Math.min(55, 900 / Math.max(1, dealt.length));
+      if (from) dealt.forEach((c, i) => {
+        const at = Motion.center(c.getBoundingClientRect());
+        if (!at) return;
+        c.style.setProperty('--dx', `${from[0] - at[0]}px`); c.style.setProperty('--dy', `${from[1] - at[1]}px`);
+        c.style.animationDelay = `${Math.round(i * gap)}ms`;
+      });
+      return;
+    }
+    if (!same) return;
+    view.seats.forEach((st, seat) => {
+      const ps = prev.seats[seat], a = A.seats[seat], b = B.seats[seat];
+      if (!st || !ps) return;
+      if (st.bet > ps.bet && a) Motion.fly(chipsHtml(st.bet - ps.bet, 3), a.plate, a.bet || pot, { s, dur: 420, arc: 18, endScale: 1, fade: false });
+      if (st.folded && !ps.folded && b && b.cards) for (let k = 0; k < 2; k++) Motion.fly(cardHtml(null), b.cards, pot, { s, dur: 500, delay: k * 70, arc: 26, spin: k ? 170 : -170, endScale: 0.45, cls: 'fxcard' });
+    });
+    const streetEnded = view.board.length > prev.board.length || (view.results && !prev.results);
+    if (streetEnded) prev.seats.forEach((ps, seat) => { const b = B.seats[seat]; if (ps && ps.bet > 0 && b && b.bet) Motion.fly(chipsHtml(ps.bet, 3), b.bet, pot, { s, dur: 460, arc: 12 }); });
+    if (view.results && !prev.results) view.seats.forEach((st, seat) => {
+      const a = A.seats[seat];
+      if (!st || !st.won || !a) return;
+      for (let k = 0; k < 3; k++) Motion.fly(chipsHtml(Math.max(1, Math.round(st.won / 3)), 3), pot, a.plate, { s, dur: 640, delay: 480 + k * 120, arc: 54, endScale: 0.9 });
+      if (st.isYou) setTimeout(() => Motion.burst(a.plate), 1150);
+    });
+  }
+
+  _render(view, o) {
     if (Device.mobile) {
       const key = this._mkey(view);
       if (!this.rowsFor.has(key)) {
@@ -505,7 +663,7 @@ class TableView {
         bet = `<div class="seat-bet ${pop ? 'pop' : ''}">${chipsHtml(st.bet)}<span class="bet-amt">${U.fmt(st.bet)}</span></div>`;
       }
       const betFirst = y > 60;
-      parts.push(`<div class="${cls}" style="left:${x}%;top:${y}%" role="group" aria-label="${U.esc(label)}">
+      parts.push(`<div class="${cls}" data-seat="${seat}" style="left:${x}%;top:${y}%" role="group" aria-label="${U.esc(label)}">
         ${betFirst ? bet : ''}<div class="hole${st.cards && st.cards.length > 2 ? ' many' : ''}">${hole}</div>
         <div class="plate">${avatarHtml(st.name, ring)}<div class="p-info"><div class="nm">${U.esc(st.name)}${st.isHost ? ' <span title="Host" aria-label="host">★</span>' : ''}</div><div class="stack">${st.allIn && !st.stack ? 'All-in' : U.fmt(st.stack)}</div></div></div>
         ${st.handName ? `<div class="hand-name">${U.esc(st.handName)}</div>` : ''}
@@ -833,7 +991,7 @@ class TableView {
   }
 
   fly(from, to, amount) {
-    if (reducedMotion() || Device.mobile) return;
+    if (reducedMotion() || Device.mobile || Motion.level() !== 'simple') return; // "full" has its own chip motion
     const el = document.createElement('div');
     el.className = 'fly';
     el.innerHTML = chipsHtml(amount, 4);

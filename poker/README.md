@@ -94,6 +94,29 @@ The site has four parts:
   computed by the game's own engine, so they always agree with the table. A Tools lesson has a pot
   odds and EV calculator, an outs calculator, a bet-size calculator and an equity calculator.
   Progress is saved in your browser.
+  - **Training drills** (`#/learn/drills`): 13 quick-fire drills, each at four levels (Beginner,
+    Intermediate, Advanced, Expert). Questions are generated fresh every time and every answer is
+    worked out exactly by the game's own evaluator and explained afterwards. Advanced gives 30
+    seconds a question and Expert 15. A round is 10 questions; your best score per level is kept.
+    - *Reading hands:* Who wins? (from two five-card hands up to three-way Omaha showdowns), Name
+      your hand, Count your outs (flush draws, straight draws, combo draws, then outs that actually
+      beat a shown hand).
+    - *Poker maths:* Odds of hitting (rule of 2 and 4, exact percentages, odds against), Pot odds
+      (up to calling a raise), Call or fold? (exact equity against a shown all-in hand, with the margin
+      shrinking at each level), Bluffing maths (break-even folds, minimum defence, bluff EV),
+      Expected value (with implied odds at Expert), Counting combos (with blockers).
+    - *Rules:* Pot-limit maximum, Side pots (up to four players with a folded player's chips).
+    - *Strategy:* Open or fold? (a common 6-handed opening guide; the hands get closer to the line at
+      each level), Preflop matchups (who is ahead, and by how much, up to three-way).
+  - **Practice scenarios** (`#/learn/scenarios`): 15 spots you can replay as often as you like against
+    bots: button steal, defending the big blind, push or fold at 10 big blinds, a 20-big-blind short
+    stack, facing an open with a strong hand, set mining, a flush draw, top pair against a
+    loose-aggressive player, an overpair on a scary board, a multiway pot with middle pair, a river
+    bluff catcher against a maniac, heads-up at 50 big blinds, beating a calling station, surviving a
+    maniac and pot-limit Omaha. The story before your first decision is scripted (for example
+    "everyone folds to you on the button"), the cards are new every hand, and after each hand every
+    decision you made is graded like the hand review. Hands played, big blinds won and your share of
+    good decisions are kept per scenario.
 
 Everything is in one file, `index.html` (HTML, CSS and JavaScript inline). The only external
 resource is the PeerJS library, loaded from a free CDN.
@@ -276,6 +299,14 @@ test suite and lists pass/fail results. The suite covers:
   - back pattern: stripes, diamonds, dots, checkerboard, plain with a spade, or rings (in the chosen
     back colour)
   - four-color deck (off by default; it turns diamonds blue and clubs green)
+  - **animations:** *Full* (the default) slides chips from each player to their bet, into the pot at
+    the end of a round and out to the winner, deals every card from the middle of the table, flips
+    cards over in 3D, sends folded cards into the muck, and makes the winner's seat glow (with a burst
+    of sparks when you win). *Simple* keeps the lighter original effects; *Off* stops all movement. A
+    "reduce motion" setting on your device always wins.
+  - **sound pack:** Classic, Casino (clay chips and a bell), Soft, Retro 8-bit, or Minimal (only your
+    turn, chat and wins), with a preview button, a volume slider and mute. All sounds are generated in
+    the browser; there are no sound files.
 
   These are saved in your browser only and survive **Clear my data** if you keep display preferences.
 - **Keyboard shortcuts:**
@@ -803,7 +834,8 @@ include the line number, and a **Show line** button selects the line in the text
 10. **Self-tests**
 11. **Hand review:** replays your decisions from the record and compares them with the Extreme bot
     or the CFR+ strategy
-12. **Learn Poker:** lessons, quizzes and calculators
+12. **Learn Poker:** lessons, quizzes and calculators, plus the training drills and practice
+    scenarios
 13. **Router**
 
 ---
