@@ -267,6 +267,11 @@ test suite and lists pass/fail results. The suite covers:
   message. You can turn the on-table popups off with **Show chat on the table** in the ⋯ menu.
 - **If the host leaves:** everyone sees *"Host left, game ended"* and can still copy, download or
   replay their record up to that point. Records are also saved in each player's browser.
+- **Auto-play:** press **Auto-play** (in the action bar, the ⋯ menu, or the `A` key) and your seat
+  plays itself with one simple rule: facing a bet it calls, when nobody has bet on the street it bets
+  the minimum, otherwise (the big blind's option) it checks. When you run out of chips it rebuys
+  automatically if the table allows rebuys. It never folds. Press **Stop auto-play** (or `A`) to take
+  over again. It works in hosted games and against bots, and is never remembered for the next game.
 - **Rematch:** once the game is over, or as soon as someone at the table is out of chips, any
   player (not just the host) can press **Rematch**.
   - The player who asks first hosts a new table with exactly the same settings and fresh stacks.

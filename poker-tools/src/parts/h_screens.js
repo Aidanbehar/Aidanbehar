@@ -824,6 +824,7 @@ function GameScreen(session) {
       <button id="m-view" role="menuitem">${icon('history')}${twoRecords() ? 'Open player-only record in viewer' : 'Open record in viewer'}</button>
       <button id="m-copytext" role="menuitem">${icon('copy')}Copy readable record (text)</button>
       <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>`}
+      ${isWatcher || !seated ? '' : `<button id="m-auto" role="menuitem">${icon('bot')}${G.auto ? 'Stop auto-play' : 'Auto-play (call, check, min-bet, rebuy)'}</button>`}
       ${isWatcher ? '' : `<button id="m-review" role="menuitem">${icon('calc')}Review my play</button>`}
       ${session.offline ? `<button id="m-again" role="menuitem">${icon('history')}Play again (same settings)</button>` : canRematch() ? `<button id="m-rematch" role="menuitem">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}
       <button id="m-look" role="menuitem">${icon('palette')}Appearance (felt, cards, theme)…</button>
@@ -852,6 +853,7 @@ function GameScreen(session) {
     on('m-leave', leaveTable);
     on('m-look', appearanceModal);
     on('m-review', reviewMine);
+    on('m-auto', () => setAuto(!G.auto));
     on('m-again', playAgain); on('m-rematch', startRematch);
     const first = $('input, button', menuEl); if (first) first.focus();
   }
@@ -1091,7 +1093,7 @@ function GameScreen(session) {
   function renderBar() {
     const v = G.view, y = v.you, L = v.legal;
     const seatedCount = v.seats.filter(Boolean).length;
-    const key = JSON.stringify([session.rematch && session.rematch.id, G.rematching, Rematch.allowedView(v), v.status, y && [y.seat, y.inHand, y.dealt, y.canShow, y.canRebuy, y.sittingOut, y.busted, y.toCallPreview > 0, y.stack], L, v.handNo, v.street, G.pre, v.paused, seatedCount, myHandName(v), G.ended, G.status]);
+    const key = JSON.stringify([G.auto, session.rematch && session.rematch.id, G.rematching, Rematch.allowedView(v), v.status, y && [y.seat, y.inHand, y.dealt, y.canShow, y.canRebuy, y.sittingOut, y.busted, y.toCallPreview > 0, y.stack], L, v.handNo, v.street, G.pre, v.paused, seatedCount, myHandName(v), G.ended, G.status]);
     if (key === G.barKey) return;
     G.barKey = key;
     G.sending = false;
@@ -1111,6 +1113,8 @@ function GameScreen(session) {
       html = y.isHost
         ? `<div class="ab-msg"><span>${seatedCount} seated</span><button class="btn primary lg" data-do="start" ${seatedCount < 2 ? 'disabled' : ''}>${icon('play')}Start Game</button></div>`
         : `<div class="ab-msg"><div class="spinner" style="width:20px;height:20px;border-width:2px"></div>Waiting for ${U.esc(v.hostName)} to start the game…</div>`;
+    } else if (G.auto) {
+      html = `<div class="ab-msg auto-on">${icon('bot')}<span><b>Auto-play on:</b> call, check or bet the minimum${v.table.rebuys ? ', auto-rebuy' : ''}.${hn && y.inHand ? ` <span class="strength">Your hand: <b>${U.esc(hn)}</b></span>` : ''}</span><button class="btn primary" data-do="autooff">Stop auto-play <kbd>A</kbd></button></div>`;
     } else if (L) {
       const qs = quickSizes(L);
       if (G.legalKey !== JSON.stringify(L)) { G.legalKey = JSON.stringify(L); G.raiseAmt = L.minTo; }
@@ -1127,7 +1131,7 @@ function GameScreen(session) {
           <button class="act fold" data-act="fold">Fold<small>F</small></button>
           <button class="act call" data-act="${L.canCheck ? 'check' : 'call'}">${callLabel}<small>C</small></button>
           ${L.canRaise ? '<button class="act raise" data-act="raise" id="ab-raise"></button>' : ''}
-        </div></div>`;
+        </div>${isWatcher ? '' : `<div class="ab-auto"><button class="btn sm ghost" data-do="auto" title="Calls every bet, checks when it can, bets the minimum when nobody has bet, and rebuys automatically (A)">${icon('bot')}Auto-play</button></div>`}</div>`;
     } else if (y.inHand) {
       const toCall = y.toCallPreview;
       html = `<div class="ab-wrap" style="align-items:center">
@@ -1136,7 +1140,7 @@ function GameScreen(session) {
           <label><input type="checkbox" data-pre="checkfold" ${G.pre === 'checkfold' ? 'checked' : ''}> Check/Fold</label>
           <label><input type="checkbox" data-pre="callany" ${G.pre === 'callany' ? 'checked' : ''}> Call any</label>
           <label style="${toCall > 0 ? 'opacity:.5' : ''}"><input type="checkbox" data-pre="check" ${G.pre === 'check' ? 'checked' : ''} ${toCall > 0 ? 'disabled' : ''}> Check</label>
-        </div></div>`;
+        </div><button class="btn sm ghost" data-do="auto" title="Calls every bet, checks when it can, bets the minimum when nobody has bet, and rebuys automatically (A)">${icon('bot')}Auto-play</button></div>`;
     } else {
       const bits = [];
       if (y.canShow && v.phase === 'done') bits.push(`<button class="btn" data-do="show">Show my cards</button>`);
@@ -1144,7 +1148,7 @@ function GameScreen(session) {
       if (y.busted && !v.table.rebuys) bits.push('<span>You are out of chips. Thanks for playing!</span>');
       if ((session.offline && y.busted && !y.canRebuy) || (!session.offline && canRematch())) bits.push(rematchBtn());
       else if (y.sittingOut && !y.busted) bits.push(`<span>You are sitting out.</span><button class="btn primary" data-do="back">I'm back</button>`);
-      else if (!y.busted) bits.push(`<span>${v.paused ? 'Game paused.' : y.dealt && v.phase !== 'done' ? 'You folded. Waiting for the next hand…' : 'Waiting for the next hand…'}</span><button class="btn ghost" data-do="sitout">Sit out</button>`);
+      else if (!y.busted) bits.push(`<span>${v.paused ? 'Game paused.' : y.dealt && v.phase !== 'done' ? 'You folded. Waiting for the next hand…' : 'Waiting for the next hand…'}</span><button class="btn ghost" data-do="sitout">Sit out</button><button class="btn sm ghost" data-do="auto" title="Calls every bet, checks when it can, bets the minimum when nobody has bet, and rebuys automatically (A)">${icon('bot')}Auto-play</button>`);
       html = `<div class="ab-msg">${hn && y.dealt ? `<span class="strength">Your hand: <b>${U.esc(hn)}</b></span>` : ''}${bits.join('')}</div>`;
     }
     bar.innerHTML = html;
@@ -1166,6 +1170,8 @@ function GameScreen(session) {
     else if (d === 'viewer') openInViewer();
     else if (d === 'rematch') startRematch();
     else if (d === 'review') reviewMine();
+    else if (d === 'auto') setAuto(true);
+    else if (d === 'autooff') setAuto(false);
     else if (d === 'again') playAgain();
   });
   bar.addEventListener('input', (e) => {
@@ -1176,6 +1182,35 @@ function GameScreen(session) {
     if (e.target.id === 'ab-amt') setAmt(e.target.value);
     if (e.target.dataset.pre) { G.pre = e.target.checked ? e.target.dataset.pre : null; G.barKey = null; renderBar(); }
   });
+  /*
+   * Auto-play: a simple, fixed strategy for your seat. Facing a bet: call. Nobody has bet on this
+   * street: bet the minimum. Otherwise (the big blind's option): check. Out of chips: rebuy when allowed.
+   * It only ever sends the same actions your own buttons would, and stops when you press Stop.
+   */
+  function setAuto(on) {
+    G.auto = !!on; G.autoKey = null; G.pre = null; G.barKey = null;
+    if (G.view) renderBar();
+    toast(on ? 'Auto-play on: calling, checking and betting the minimum for you.' : 'Auto-play off. You are back in control.', 'info');
+    announce(on ? 'Auto-play on.' : 'Auto-play off.');
+    if (on && G.view) update(G.view);
+  }
+  function autoPlay(v) {
+    const y = v.you;
+    if (!y || G.ended || v.status !== 'playing' || isWatcher) return;
+    if (y.canRebuy && G.autoRebuy !== `${v.handNo}:${y.rebuys || 0}`) { G.autoRebuy = `${v.handNo}:${y.rebuys || 0}`; session.send({ t: 'rebuy' }); }
+    const L = v.legal;
+    if (!L) return;
+    const key = `${v.handNo}:${v.street}:${L.currentBet}:${L.myBet}:${L.toCall}`;
+    if (key === G.autoKey) return;
+    G.autoKey = key;
+    setTimeout(() => {
+      const w = G.view, M = w && w.legal;
+      if (!G.auto || G.dead || !M || `${w.handNo}:${w.street}:${M.currentBet}:${M.myBet}:${M.toCall}` !== key) return;
+      if (M.toCall > 0) session.send({ t: 'action', action: 'call' });
+      else if (M.isBet && M.canRaise) session.send({ t: 'action', action: 'bet', amount: M.minTo });
+      else session.send({ t: 'action', action: 'check' });
+    }, 450);
+  }
   function act(type) {
     const L = G.view && G.view.legal;
     if (!L || G.sending) return;
@@ -1315,8 +1350,10 @@ function GameScreen(session) {
       rm.started = true;
       setTimeout(() => { if (G.view && G.view.status === 'lobby') session.send({ t: 'start' }); }, 1200);
     }
+    if (G.auto) autoPlay(v);
     // Your turn
     const myTurn = !!v.legal;
+    if (G.auto) { if (G.turnFlash) { TitleFlash.stop(); G.turnFlash = false; } if (v.status === 'ended' && !G.ended) showEnded(isHost ? 'You ended the game.' : 'The host ended the game.'); return; }
     if (myTurn && !(prev && prev.legal)) {
       const L = v.legal;
       if (G.pre) {
@@ -1364,6 +1401,7 @@ function GameScreen(session) {
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (k === '?') { e.preventDefault(); return helpOverlay('game'); }
     if (k === 'm') { Sound.toggle(); soundBtn(); return; }
+    if (k === 'a' && !isWatcher && G.view && G.view.you && G.view.you.seat != null && !G.ended) { e.preventDefault(); setAuto(!G.auto); return; }
     if (!L) return;
     if (k === 'f') { e.preventDefault(); act('fold'); }
     else if (k === 'c') { e.preventDefault(); act(L.canCheck ? 'check' : 'call'); }
