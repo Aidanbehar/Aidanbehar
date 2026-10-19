@@ -923,6 +923,16 @@ class HostTable {
       else if (hi >= 0 && won > 0) this._botSay('win');
       else if (Math.random() < 0.3) this._botSay('any');
     }
+    // Play Against Cepheus with kept stacks: the match is over when either player has no chips left.
+    if (this.s.cepheus && !this.s.resetStacks) {
+      const out = this.handPids.map((pid) => this.players.get(pid)).find((p) => p && p.stack === 0);
+      if (out) {
+        const msg = out.botKind === 'cepheus' ? `Cepheus is out of chips. You win the match after ${this.finished.length.toLocaleString()} hands!` : `You are out of chips. Cepheus wins the match after ${this.finished.length.toLocaleString()} hands.`;
+        this._log(msg);
+        this.end(msg, true);
+        return;
+      }
+    }
     Later.clear(this.nextTimer);
     if (this._eligible().length < 2) this.waiting = true;
     this.nextTimer = Later.set(() => { this.nextTimer = null; this._startHand(); }, (HAND_PAUSE_MS + (h.results.showdown ? 1200 : 0)) * this._pace(), this._instant());
@@ -957,9 +967,10 @@ class HostTable {
   }
   _clearTurn() { if (this.turn) clearTimeout(this.turn.handle); this.turn = null; }
 
-  end(reason) {
+  end(reason, tellPlayers) {
     if (this.status === 'ended') return;
     this.status = 'ended';
+    if (tellPlayers) this.endReason = reason; // shown as the game-over message (otherwise "You ended the game")
     this._clearTurn(); Later.clear(this.nextTimer); Later.clear(this.dealTimer); Later.clear(this.botTimer);
     this.shuffling = null;
     if (this.sraDealer) this.sraDealer.cancel();
@@ -1105,7 +1116,7 @@ class HostTable {
         nextLevelIn: this.s.levelHands ? this.s.levelHands - ((Math.max(1, this.handNo) - 1) % this.s.levelHands) : 0,
       },
       watchId: this.s.spectators ? this.watchId || null : null, shuffling: !!this.shuffling, fair: this._fairView(), sraWait: this.sraDealer ? this.sraDealer.waiting() : [], voided: !!(h && h.voided),
-      status: this.status, paused: this.paused, waiting: !!this.waiting, handNo: h ? h.no : 0,
+      status: this.status, endReason: this.endReason || null, paused: this.paused, waiting: !!this.waiting, handNo: h ? h.no : 0,
       phase: h ? h.phase : null, street: h ? (done ? (h.results.showdown ? 'Showdown' : STREETS[h.street]) : STREETS[h.street]) : '',
       board: h ? h.board.slice() : [], pots, potTotal: h && !done ? Engine.potTotal(h) : 0,
       seats, legal, timer, results,

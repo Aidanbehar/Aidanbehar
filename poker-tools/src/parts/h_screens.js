@@ -409,8 +409,15 @@ function CepheusScreen() {
           <li>Heads-up fixed-limit Texas Hold'em, blinds ${C.SB}/${C.BB}. The button posts the small blind and acts first before the flop.</li>
           <li>Bets and raises are ${C.BB} before the flop and on the flop, ${C.BB * 2} on the turn and river.</li>
           <li>At most 4 bets per round (before the flop the big blind counts as the first).</li>
-          <li>Both stacks reset to ${U.fmt(C.STACK)} at the start of every hand, so nobody is ever all-in; your running result is kept in the player list.</li>
         </ul>
+      </section>
+      <section class="card-ui setup-section" style="grid-column:1/-1"><h3>Chips</h3>
+        <div class="field"><span>Between hands</span><div class="seg" role="radiogroup" data-seg="stacks"><button type="button" role="radio" data-v="reset" aria-pressed="true" aria-checked="true">Reset every hand</button><button type="button" role="radio" data-v="keep" aria-pressed="false" aria-checked="false">Keep: play until someone is out</button></div></div>
+        <p class="hint" style="margin:0" id="c-stacks-reset">Both stacks go back to ${U.fmt(C.STACK)} at the start of every hand, exactly as in Cepheus's game, so nobody is ever all-in. Your running result is kept in the player list and the Stats tab.</p>
+        <div class="hidden" id="c-stacks-keep">
+          <div class="field"><span>Starting chips (each)</span><div class="seg" role="radiogroup" data-seg="startChips">${[[500, '500 (50 big blinds)'], [1000, '1,000 (100 bb)'], [2000, '2,000 (200 bb)']].map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === 1000}" aria-checked="${v === 1000}">${l}</button>`).join('')}</div></div>
+          <p class="hint" style="margin:0">Chips carry over from hand to hand, like a real match, and the game ends when either of you has none left. Cepheus's strategy was worked out for stacks that never run low: when a stack gets short it plays its usual strategy, and when it can't raise any more it calls. Its test results in the Stats tab are for the reset game.</p>
+        </div>
       </section>
     </div>
     <div id="csetup-err" class="err-box hidden" role="alert" style="margin-top:16px"></div>
@@ -422,6 +429,7 @@ function CepheusScreen() {
     $$('button', g).forEach((x) => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); });
   }));
   const segv = (n) => $(`[data-seg="${n}"] [aria-pressed="true"]`).dataset.v;
+  $('[data-seg="stacks"]').addEventListener('click', () => { const keep = segv('stacks') === 'keep'; $('#c-stacks-keep').classList.toggle('hidden', !keep); $('#c-stacks-reset').classList.toggle('hidden', keep); });
   let gone = false;
   $('#csetup').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -440,9 +448,9 @@ function CepheusScreen() {
     }
     if (gone) return;
     const s = {
-      tableName: 'Cepheus · CFR+ approximation', sb: C.SB, bb: C.BB, ante: 0, startingStack: C.STACK, game: 'holdem', limit: 'fl', levelHands: 0,
+      tableName: 'Cepheus · CFR+ approximation', sb: C.SB, bb: C.BB, ante: 0, startingStack: segv('stacks') === 'keep' ? +segv('startChips') : C.STACK, game: 'holdem', limit: 'fl', levelHands: 0,
       rebuys: false, maxRebuys: 0, timer: 0, recordHole: 'All', botSpeed: segv('botSpeed'), maxSeats: 2,
-      botChat: false, spectators: false, viewerChat: false, hostAdjust: false, hostKick: false, cepheus: true, resetStacks: true,
+      botChat: false, spectators: false, viewerChat: false, hostAdjust: false, hostKick: false, cepheus: true, resetStacks: segv('stacks') !== 'keep',
     };
     const sess = new BotSession(s, name, [{ name: 'Cepheus', difficulty: 'cepheus', personality: 'cfr', kind: 'cepheus' }]);
     sess.cepheus = true;
@@ -1142,7 +1150,11 @@ function GameScreen(session) {
         ? `<div class="ab-msg"><span>${seatedCount} seated</span><button class="btn primary lg" data-do="start" ${seatedCount < 2 ? 'disabled' : ''}>${icon('play')}Start Game</button></div>`
         : `<div class="ab-msg"><div class="spinner" style="width:20px;height:20px;border-width:2px"></div>Waiting for ${U.esc(v.hostName)} to start the game…</div>`;
     } else if (G.auto && v.table.botSpeed === 'instant') {
-      html = `<div class="ab-msg auto-on instant-on">${icon('play')}<span><b>Instant:</b> hand <b class="num">#${U.fmt(v.handNo)}</b>${instantRate(v)} · you <b class="num">${instantNet(v)}</b></span><button class="btn primary" data-do="autooff">Stop auto-play <kbd>A</kbd></button></div>`;
+      const txt = `<b>Instant:</b> hand <b class="num">#${U.fmt(v.handNo)}</b>${instantRate(v)} · you <b class="num">${instantNet(v)}</b>`;
+      // Only the numbers change while Instant runs, so the Stop button stays put and is easy to press.
+      const live = $('.instant-on .inst-txt', bar);
+      if (live) { live.innerHTML = txt; return; }
+      html = `<div class="ab-msg auto-on instant-on">${icon('play')}<span class="inst-txt">${txt}</span><button class="btn primary" data-do="autooff">Stop auto-play <kbd>A</kbd></button></div>`;
     } else if (G.auto) {
       html = `<div class="ab-msg auto-on">${icon('bot')}<span><b>Auto-play on:</b> call, check or bet the minimum${v.table.rebuys ? ', auto-rebuy' : ''}.${hn && y.inHand ? ` <span class="strength">Your hand: <b>${U.esc(hn)}</b></span>` : ''}</span><button class="btn primary" data-do="autooff">Stop auto-play <kbd>A</kbd></button></div>`;
     } else if (L) {
@@ -1386,7 +1398,7 @@ function GameScreen(session) {
     if (G.auto) autoPlay(v);
     // Your turn
     const myTurn = !!v.legal;
-    if (G.auto) { if (G.turnFlash) { TitleFlash.stop(); G.turnFlash = false; } if (v.status === 'ended' && !G.ended) showEnded(isHost ? 'You ended the game.' : 'The host ended the game.'); return; }
+    if (G.auto) { if (G.turnFlash) { TitleFlash.stop(); G.turnFlash = false; } if (v.status === 'ended' && !G.ended) showEnded(v.endReason || (isHost ? 'You ended the game.' : 'The host ended the game.')); return; }
     if (myTurn && !(prev && prev.legal)) {
       const L = v.legal;
       if (G.pre) {
@@ -1399,7 +1411,7 @@ function GameScreen(session) {
       announce(`Your turn. ${L.canCheck ? 'You can check.' : U.fmt(L.toCall) + ' to call.'}`);
     }
     if (!myTurn && G.turnFlash) { TitleFlash.stop(); G.turnFlash = false; }
-    if (v.status === 'ended' && !G.ended) showEnded(isHost ? 'You ended the game.' : 'The host ended the game.');
+    if (v.status === 'ended' && !G.ended) showEnded(v.endReason || (isHost ? 'You ended the game.' : 'The host ended the game.'));
   }
 
   // A session can outlive this screen (a rematch closes the old table a moment later), so a closed screen ignores it.

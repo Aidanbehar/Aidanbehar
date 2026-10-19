@@ -545,7 +545,15 @@ goes on, which shows it is converging.
 
 - Blinds are 5/10. Bets are 10 before the flop and on the flop, 20 on the turn and river.
 - There are at most 4 bets per round.
-- Both stacks reset to 1,000 every hand, as in Cepheus's game, where stacks are unlimited.
+- **Chips** (chosen when you start; reset is the default and nothing is remembered):
+  - **Reset every hand:** both stacks go back to 1,000 every hand, as in Cepheus's game, where
+    stacks are unlimited. Your running result is the total over all hands.
+  - **Keep: play until someone is out:** each player starts with 500, 1,000 or 2,000 chips, chips
+    carry over like a real match, and the game ends with a winner when either player has none
+    left. Cepheus's strategy was worked out for deep stacks, so when a stack runs short it keeps
+    playing its usual strategy, and when there is nothing left to raise it calls. In testing (more
+    than 2,000 short-stack hands against several opponents, played until someone was out) it
+    never needed a fallback. Its published test results are for the reset game.
 - Your running result appears in the table header and the player list.
 
 **How it plays:**
@@ -559,6 +567,10 @@ goes on, which shows it is converging.
 **The Stats tab.** During a game against Cepheus, a **Stats** tab sits next to Log, Chat and
 Players:
 
+- **Big blinds or chips:** a switch at the top of the tab shows every result in big blinds
+  (poker's usual unit, 1 bb = 10 chips here) or in chips: your total, your rate per 100 hands, the
+  charts (including the zoomed view), the tooltips and all the test results. The choice is
+  remembered in this browser.
 - **Your session:** your result, an honest "too early to tell" verdict based on how much luck
   could explain, a chart of your running total (click it to open it large and zoom in), and your
   play-style numbers next to Cepheus's.
