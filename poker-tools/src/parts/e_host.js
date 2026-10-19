@@ -596,7 +596,8 @@ class HostTable {
 
   /* ---------------- bot table talk (cheerful, optional) ---------------- */
   _botSay(kind, about) {
-    if (!this.s.botChat || this.status === 'ended') return;
+    // The lines cheer on the person at the table, so a bots-only game (you just watching) has none.
+    if (!this.s.botChat || this.status === 'ended' || (this.s.vsBots && this.s.hostPlays === false)) return;
     const bots = [...this.players.values()].filter((p) => p.isBot && p.seat != null);
     if (!bots.length) return;
     const human = this.players.get(this.hostPid);

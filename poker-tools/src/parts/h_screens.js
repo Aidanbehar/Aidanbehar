@@ -356,7 +356,13 @@ function BotSetupScreen() {
   const hint = () => { $('#diff-hint').textContent = HINTS[segv('difficulty')] || ''; };
   hint();
   bindViewerOptions($('#bsetup'));
-  $('input[name=watchOnly]').addEventListener('change', (e) => $('#b-showcards').classList.toggle('hidden', !e.target.checked));
+  $('input[name=watchOnly]').addEventListener('change', (e) => {
+    const on = e.target.checked, bc = $('input[name=botChat]');
+    $('#b-showcards').classList.toggle('hidden', !on);
+    // The bots' cheering talks to you, so it is off while you only watch.
+    bc.disabled = on; if (on) bc.checked = false;
+    bc.closest('label').title = on ? 'The bots cheer on the player, so this is off while you just watch' : '';
+  });
   $('#bsetup').addEventListener('submit', (e) => {
     e.preventDefault();
     const f = e.target;
@@ -366,7 +372,7 @@ function BotSetupScreen() {
       startingStack: Math.floor(+f.startingStack.value), game: segv('game'), limit: segv('limit'), levelHands: +segv('levelHands'), rakePct: +segv('rakePct'), rakeCap: +segv('rakeCap'),
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : +segv('rebuys'),
       timer: 0, recordHole: 'All', botSpeed: segv('botSpeed'),
-      botChat: f.botChat.checked, spectators: f.spectators.checked, viewerChat: f.spectators.checked && f.viewerChat.checked,
+      botChat: f.botChat.checked && !f.watchOnly.checked, spectators: f.spectators.checked, viewerChat: f.spectators.checked && f.viewerChat.checked,
       hostAdjust: f.hostAdjust.checked, hostKick: f.hostKick.checked, startPaused: f.startPaused.checked,
     };
     const nBots = +segv('bots'), errs = [];

@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-NSqzvN05/GcA7umrCNDeFYRRIj6vwz37tmVQn2BvvwQ=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-KM5dCqdxA+Uba7/Yljfi0xFE7e8AkE/8+YoToj/ENYI=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -4677,7 +4677,8 @@ class HostTable {
 
   /* ---------------- bot table talk (cheerful, optional) ---------------- */
   _botSay(kind, about) {
-    if (!this.s.botChat || this.status === 'ended') return;
+    // The lines cheer on the person at the table, so a bots-only game (you just watching) has none.
+    if (!this.s.botChat || this.status === 'ended' || (this.s.vsBots && this.s.hostPlays === false)) return;
     const bots = [...this.players.values()].filter((p) => p.isBot && p.seat != null);
     if (!bots.length) return;
     const human = this.players.get(this.hostPid);
@@ -9762,7 +9763,13 @@ function BotSetupScreen() {
   const hint = () => { $('#diff-hint').textContent = HINTS[segv('difficulty')] || ''; };
   hint();
   bindViewerOptions($('#bsetup'));
-  $('input[name=watchOnly]').addEventListener('change', (e) => $('#b-showcards').classList.toggle('hidden', !e.target.checked));
+  $('input[name=watchOnly]').addEventListener('change', (e) => {
+    const on = e.target.checked, bc = $('input[name=botChat]');
+    $('#b-showcards').classList.toggle('hidden', !on);
+    // The bots' cheering talks to you, so it is off while you only watch.
+    bc.disabled = on; if (on) bc.checked = false;
+    bc.closest('label').title = on ? 'The bots cheer on the player, so this is off while you just watch' : '';
+  });
   $('#bsetup').addEventListener('submit', (e) => {
     e.preventDefault();
     const f = e.target;
@@ -9772,7 +9779,7 @@ function BotSetupScreen() {
       startingStack: Math.floor(+f.startingStack.value), game: segv('game'), limit: segv('limit'), levelHands: +segv('levelHands'), rakePct: +segv('rakePct'), rakeCap: +segv('rakeCap'),
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : +segv('rebuys'),
       timer: 0, recordHole: 'All', botSpeed: segv('botSpeed'),
-      botChat: f.botChat.checked, spectators: f.spectators.checked, viewerChat: f.spectators.checked && f.viewerChat.checked,
+      botChat: f.botChat.checked && !f.watchOnly.checked, spectators: f.spectators.checked, viewerChat: f.spectators.checked && f.viewerChat.checked,
       hostAdjust: f.hostAdjust.checked, hostKick: f.hostKick.checked, startPaused: f.startPaused.checked,
     };
     const nBots = +segv('bots'), errs = [];

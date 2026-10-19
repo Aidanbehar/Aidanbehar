@@ -299,7 +299,8 @@ test suite and lists pass/fail results. The suite covers:
   log, chat, Players and every speed including Instant, but no seat and no auto-play. Tick **Show
   every bot's cards while I watch** to see all hole cards as the hands are played (only your
   screen shows them; viewers on a viewer link still see only what is shown at showdown). With
-  rebuys off, the game ends when one bot has all the chips, naming the winner. The record notes
+  rebuys off, the game ends when one bot has all the chips, naming the winner. The bots' cheering
+  in the chat talks to the player, so it is switched off while you just watch. The record notes
   `HostPlays "Off"`.
 - **Instant bots:** the fastest **Bot speed**. Hands are played with no pauses at all and auto-play
   (below) switches on for your seat. The table does not animate each action; it shows the latest
