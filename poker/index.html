@@ -7,7 +7,7 @@
 <meta name="description" content="Free peer-to-peer Hold'em and Omaha in your browser. No accounts, no servers, just a link.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230f6b58'/%3E%3Cpath d='M32 12c-8 10-18 15-18 24a8 8 0 0 0 14 5l-3 11h14l-3-11a8 8 0 0 0 14-5c0-9-10-14-18-24z' fill='%23f4f1e8'/%3E%3C/svg%3E">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-aVXEY42Jz+1WWU7kW/IobV92LqybzmxOPneDJEyJYgw=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-V3/Ecj0h3QmFqi0XQRmn5JYMHoRy92woMmy505TzqFs=' 'sha256-NSqzvN05/GcA7umrCNDeFYRRIj6vwz37tmVQn2BvvwQ=' https://unpkg.com/peerjs@1.5.4/ https://cdn.jsdelivr.net/npm/peerjs@1.5.4/; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <script>
   // Load PeerJS (free, MIT) with Subresource Integrity: the browser refuses to run it unless its bytes
   // exactly match the reviewed 1.5.4 release, so a compromised CDN cannot inject code. jsDelivr is the fallback.
@@ -5033,6 +5033,14 @@ class HostTable {
         return;
       }
     }
+    // Just watching a bot game: once a single bot has chips left, it has won.
+    if (this.s.vsBots && this.s.hostPlays === false && this._eligible().length < 2) {
+      const w = this._eligible()[0], p = w && this.players.get(w.pid);
+      const msg = p ? `${p.name} wins: every other bot is out of chips after ${this.finished.length.toLocaleString()} hands.` : 'Every bot is out of chips.';
+      this._log(msg);
+      this.end(msg, true);
+      return;
+    }
     Later.clear(this.nextTimer);
     if (this._eligible().length < 2) this.waiting = true;
     this.nextTimer = Later.set(() => { this.nextTimer = null; this._startHand(); }, (HAND_PAUSE_MS + (h.results.showdown ? 1200 : 0)) * this._pace(), this._instant());
@@ -5111,6 +5119,7 @@ class HostTable {
       t.push(['BotPlayers', bots.map((p) => p.botKind === 'cepheus' ? `${p.name} (CFR+ approximation of Cepheus, not Cepheus's own strategy)`
         : `${p.name} (${Bots.LABELS[p.botDifficulty] || p.botDifficulty}, ${(Bots.PERSONALITIES[p.botPersonality] || {}).name || p.botPersonality})`).join('; ')],
         ['BotSpeed', s.botSpeed || 'normal'], ['BotsCheer', yn(s.botChat)]);
+      if (s.hostPlays === false) t.push(['HostPlays', 'Off']); // just watching the bots
       if (s.resetStacks) t.push(['StacksReset', 'Every hand']);
     } else {
       t.push(['Deal', this.sra ? 'Encrypted' : 'Standard'], ['HostPlays', yn(s.hostPlays !== false)], ['BotTakeover', yn(s.botTakeover)], ['WaitingRoom', yn(s.listed)]);
@@ -5157,6 +5166,8 @@ class HostTable {
     const wins = {};
     if (done) h.log.filter((e) => e.t === 'win').forEach((e) => { wins[e.p] = (wins[e.p] || 0) + e.amt; });
     const winCards = new Set();
+    // Just watching a bot game, with "show every bot's cards": the host sees all hole cards (only bots are dealt in).
+    const reveal = pid === this.hostPid && !!this.s.vsBots && this.s.hostPlays === false && !!this.s.showBotCards;
     if (done && h.results.showdown) h.results.pots.forEach((pt) => pt.winners.forEach((w) => { const ev = h.results.evals[w]; if (ev) ev.best.forEach((c) => winCards.add(c)); }));
 
     const seats = this.seats.map((qid, seat) => {
@@ -5167,11 +5178,11 @@ class HostTable {
       const hp = i >= 0 ? h.players[i] : null;
       let cards = null;
       if (hp) {
-        if (qid === pid || hp.shown) cards = hp.hole ? hp.hole.slice() : new Array(this.holeCount).fill(null);
+        if (qid === pid || hp.shown || reveal) cards = hp.hole ? hp.hole.slice() : new Array(this.holeCount).fill(null);
         else if (!hp.folded && !hp.mucked) cards = new Array(this.holeCount).fill(null);
       }
       let handName = null;
-      if (hp && cards && cards[0] && (qid === pid || hp.shown) && !(qid === pid && hp.folded && !done)) {
+      if (hp && cards && cards[0] && (qid === pid || hp.shown || reveal) && !(qid === pid && hp.folded && !done)) {
         const e = Eval.forGame(h.game, hp.hole, h.board);
         handName = Eval.describe(e);
       }
@@ -5212,7 +5223,7 @@ class HostTable {
         botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots, sra: this.sra,
         spectators: !!this.s.spectators, viewerChat: !!this.s.viewerChat, botChat: !!this.s.botChat, listed: !!this.s.listed,
         hostAdjust: !!this.s.hostAdjust, hostKick: !!this.s.hostKick,
-        cepheus: !!this.s.cepheus, resetStacks: !!this.s.resetStacks, handsDone: this.finished.length, cepheusFallbacks: this.cepheusFallbacks || 0,
+        showBotCards: !!this.s.showBotCards, cepheus: !!this.s.cepheus, resetStacks: !!this.s.resetStacks, handsDone: this.finished.length, cepheusFallbacks: this.cepheusFallbacks || 0,
         nextLevelIn: this.s.levelHands ? this.s.levelHands - ((Math.max(1, this.handNo) - 1) % this.s.levelHands) : 0,
       },
       watchId: this.s.spectators ? this.watchId || null : null, shuffling: !!this.shuffling, fair: this._fairView(), sraWait: this.sraDealer ? this.sraDealer.waiting() : [], voided: !!(h && h.voided),
@@ -6124,7 +6135,7 @@ class BotSession {
   /** Viewer link for a bot game: only once the table has opened its connection to the broker. */
   get watchUrl() { return this.watchers ? this.watchers.url : ''; }
   start() {
-    const t = this.table = new HostTable({ ...this.settings, vsBots: true, hostPlays: true }, this.name, U.randHex(16));
+    const t = this.table = new HostTable({ ...this.settings, vsBots: true, hostPlays: !this.settings.watchOnly }, this.name, U.randHex(16));
     this.watchers = new WatchHub(this);
     if (t.s.spectators) this.watchers.open(); // the game stays on this device; the broker is only for viewers
     this.pid = t.hostPid;
@@ -7195,7 +7206,7 @@ class TableView {
       const opp = meIsMe ? n - 1 : n;
       for (let j = 0; j < opp; j++) {
         const seat = meIsMe ? (me + 1 + j) % n : (me + j) % n, st = view.seats[seat];
-        const t = meIsMe ? gapT / 2 + (1 - gapT) * (j + 0.5) / opp : j / opp;
+        const t = meIsMe ? gapT / 2 + (1 - gapT) * (j + 0.5) / opp : (j + 0.5) / opp; // no seat of yours: nobody sits right at the bottom edge
         const [x, y] = at(t);
         if (!st) {
           if (view.canSit && !view.readOnly) parts.push(`<button class="mseat-empty" data-seat="${seat}" style="left:${x}px;top:${y}px" aria-label="Sit in seat ${seat + 1}">Sit</button>`);
@@ -9696,6 +9707,8 @@ function BotSetupScreen() {
       </section>
       <section class="card-ui setup-section"><h3>You</h3>
         <label class="field"><span>Your name</span><input class="input" name="name" maxlength="18" value="${U.esc(d.name)}" placeholder="e.g. Alice" autocomplete="off"></label>
+        <label class="check"><input type="checkbox" name="watchOnly"> Just watch: the bots play each other and I don't take a seat</label>
+        <label class="check hidden" id="b-showcards"><input type="checkbox" name="showBotCards"> Show every bot's cards while I watch</label>
         <div class="field"><span>Game</span>${seg('game', [['holdem', "Hold'em"], ['omaha4', 'Omaha'], ['omaha5', '5-Card Omaha']], d.game)}</div>
         <div class="field"><span>Betting</span>${seg('limit', [['nl', 'No limit'], ['pl', 'Pot limit'], ['fl', 'Limit']], d.limit)}</div>
       </section>
@@ -9749,6 +9762,7 @@ function BotSetupScreen() {
   const hint = () => { $('#diff-hint').textContent = HINTS[segv('difficulty')] || ''; };
   hint();
   bindViewerOptions($('#bsetup'));
+  $('input[name=watchOnly]').addEventListener('change', (e) => $('#b-showcards').classList.toggle('hidden', !e.target.checked));
   $('#bsetup').addEventListener('submit', (e) => {
     e.preventDefault();
     const f = e.target;
@@ -9765,9 +9779,12 @@ function BotSetupScreen() {
     if (!(s.sb >= 1 && s.bb >= s.sb)) errs.push('Big blind must be at least the small blind (and both at least 1).');
     if (!(s.startingStack >= s.bb * 2)) errs.push('Starting stack must be at least two big blinds.');
     if (s.game === 'omaha5' && nBots > 7) errs.push('5-Card Omaha seats at most 8 players.');
+    // Just watch: no seat for you, so at least two bots are needed (both options off by default, never remembered).
+    s.watchOnly = f.watchOnly.checked; s.showBotCards = s.watchOnly && f.showBotCards.checked;
+    if (s.watchOnly && nBots < 2) errs.push('To just watch, pick at least 2 bots.');
     const box = $('#bsetup-err');
     if (errs.length) { box.innerHTML = `${icon('alert')}<div>${errs.join('<br>')}</div>`; box.classList.remove('hidden'); return; }
-    s.maxSeats = nBots + 1;
+    s.maxSeats = s.watchOnly ? nBots : nBots + 1;
     Prefs.set('botSettings', { bots: nBots, difficulty: segv('difficulty'), personality: f.personality.value, game: s.game, limit: s.limit, sb: s.sb, bb: s.bb, ante: s.ante, startingStack: s.startingStack, levelHands: s.levelHands, rebuys: segv('rebuys'), botSpeed: savedSpeed(s.botSpeed, 'botSettings') });
     Prefs.set('name', name);
     const styles = Object.keys(Bots.PERSONALITIES);
@@ -10242,7 +10259,7 @@ function GameScreen(session) {
       <button id="m-copytext" role="menuitem">${icon('copy')}Copy readable record (text)</button>
       <button id="m-dl" role="menuitem">${icon('download')}Download record (.txt)</button>`}
       ${isWatcher || !seated ? '' : `<button id="m-auto" role="menuitem">${icon('bot')}${G.auto ? 'Stop auto-play' : 'Auto-play (call, check, min-bet, rebuy)'}</button>`}
-      ${isWatcher ? '' : `<button id="m-review" role="menuitem">${icon('calc')}Review my play</button>`}
+      ${isWatcher || justWatching() ? '' : `<button id="m-review" role="menuitem">${icon('calc')}Review my play</button>`}
       ${session.offline && session.table ? `<button id="m-speed" role="menuitem">${icon('play')}Bot speed: ${speedName(session.table.s.botSpeed || 'normal')} (tap to change)</button>` : ''}
       ${session.offline ? `<button id="m-again" role="menuitem">${icon('history')}Play again (same settings)</button>` : canRematch() ? `<button id="m-rematch" role="menuitem">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}
       <button id="m-look" role="menuitem">${icon('palette')}Appearance (felt, cards, theme)…</button>
@@ -10277,7 +10294,7 @@ function GameScreen(session) {
       const next = order[(cur + 1) % order.length];
       session.send({ t: 'speed', speed: next });
       toast(`Bot speed: ${speedName(next)}`, 'info');
-      if (next === 'instant' && !G.auto) setAuto(true);
+      if (next === 'instant' && !G.auto && t.s.hostPlays !== false) setAuto(true);
       t.changed();
     });
     on('m-again', playAgain); on('m-rematch', startRematch);
@@ -10342,6 +10359,8 @@ function GameScreen(session) {
       <div class="modal-foot"><button class="btn primary" data-close>Close</button></div>`, { label: 'Fair play' });
   }
 
+  /** A bot game you are only watching: there are no decisions of yours to review. */
+  function justWatching() { return !!(session.offline && session.table && session.table.s.hostPlays === false); }
   function showEnded(reason) {
     if (G.ended) return;
     G.ended = reason;
@@ -10356,12 +10375,12 @@ function GameScreen(session) {
     }
     const m = openModal(`<div class="state-ic err" style="margin-bottom:12px">${icon('flag')}</div><h2 style="text-align:center">${U.esc(reason)}</h2>
       <p class="muted" style="text-align:center">Your game record up to this point is saved in this browser. Copy it, download it, or replay it in the viewer.</p>
-      <div class="modal-foot" style="justify-content:center"><a class="btn" href="#/" data-close>${icon('home')}Home</a>${session.offline ? `<button class="btn primary" id="e-again">${icon('history')}Play again</button>` : canRematch() ? `<button class="btn primary" id="e-rematch">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}<button class="btn" id="e-review">${icon('calc')}Review my play</button><button class="btn" id="e-dl">${icon('download')}Download</button><button class="btn" id="e-view">${icon('history')}Open in viewer</button><button class="btn primary" id="e-copy">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy Game Record'}</button>${twoRecords() ? `<button class="btn" id="e-full">${icon('bot')}Copy full record</button>` : ''}</div>`, { label: 'Game ended' });
+      <div class="modal-foot" style="justify-content:center"><a class="btn" href="#/" data-close>${icon('home')}Home</a>${session.offline ? `<button class="btn primary" id="e-again">${icon('history')}Play again</button>` : canRematch() ? `<button class="btn primary" id="e-rematch">${icon('users')}${U.esc(rematchLabel())}</button>` : ''}${justWatching() ? '' : `<button class="btn" id="e-review">${icon('calc')}Review my play</button>`}<button class="btn" id="e-dl">${icon('download')}Download</button><button class="btn" id="e-view">${icon('history')}Open in viewer</button><button class="btn primary" id="e-copy">${icon('copy')}${twoRecords() ? 'Copy player-only record' : 'Copy Game Record'}</button>${twoRecords() ? `<button class="btn" id="e-full">${icon('bot')}Copy full record</button>` : ''}</div>`, { label: 'Game ended' });
     $('#e-copy', m.el).addEventListener('click', () => copyRecord(false));
     if ($('#e-full', m.el)) $('#e-full', m.el).addEventListener('click', () => copyRecord(true));
     $('#e-view', m.el).addEventListener('click', openInViewer);
     $('#e-dl', m.el).addEventListener('click', downloadRecord);
-    $('#e-review', m.el).addEventListener('click', () => { m.close(); reviewMine(); });
+    const rv = $('#e-review', m.el); if (rv) rv.addEventListener('click', () => { m.close(); reviewMine(); });
     const ea = $('#e-again', m.el); if (ea) ea.addEventListener('click', () => { m.close(); playAgain(); });
     const er = $('#e-rematch', m.el); if (er) er.addEventListener('click', () => { m.close(); startRematch(); });
   }
@@ -10540,11 +10559,15 @@ function GameScreen(session) {
     if (isWatcher && !(G.ended || v.status === 'ended')) {
       html = `<div class="ab-msg">${icon('eye')}You're watching${v.status === 'lobby' ? ': the game hasn\'t started yet' : ''}. Hole cards stay hidden; you'll see hands only when they're shown.</div>`;
     } else if (G.ended || v.status === 'ended') {
-      html = `<div class="ab-msg">Game over.${isWatcher ? '' : rematchBtn() + `<button class="btn" data-do="review">${icon('calc')}Review my play</button>`}<button class="btn ${isWatcher || !rematchBtn() ? 'primary' : ''}" data-do="copy">${icon('copy')}Copy Game Record</button><button class="btn" data-do="viewer">${icon('history')}Open in viewer</button></div>`;
+      html = `<div class="ab-msg">Game over.${isWatcher ? '' : rematchBtn() + (justWatching() ? '' : `<button class="btn" data-do="review">${icon('calc')}Review my play</button>`)}<button class="btn ${isWatcher || !rematchBtn() ? 'primary' : ''}" data-do="copy">${icon('copy')}Copy Game Record</button><button class="btn" data-do="viewer">${icon('history')}Open in viewer</button></div>`;
     } else if (!y || y.seat == null) {
       const free = v.seats.some((s) => !s);
       const dealer = y && y.isHost && !v.table.hostPlays;
-      html = dealer
+      if (dealer && v.table.vsBots) {
+        // Just watching a bot game: what is happening, and how fast in Instant mode.
+        const fast = v.table.botSpeed === 'instant' ? ` · hand <b class="num">#${U.fmt(v.handNo)}</b>${instantRate(v)}` : v.handNo ? ` · hand #${U.fmt(v.handNo)}` : '';
+        html = `<div class="ab-msg">${icon('eye')}<span>You're watching the bots play${v.table.showBotCards ? ', with every bot\'s cards face up' : ''}${fast}.${v.paused ? ' Paused.' : ''}</span></div>`;
+      } else html = dealer
         ? `<div class="ab-msg">${icon('shieldOk')}You are dealing this game and not playing.${v.status === 'lobby' ? `<button class="btn primary lg" data-do="start" ${seatedCount < 2 ? 'disabled' : ''}>${icon('play')}Start Game</button>` : ''}</div>`
         : `<div class="ab-msg">${icon('users')}${free ? 'Click an empty seat on the table to sit down.' : 'The table is full, so you are watching. A seat may open up.'}</div>`;
     } else if (v.status === 'lobby') {
@@ -10824,7 +10847,7 @@ function GameScreen(session) {
   session.on('ended', live((reason) => showEnded(reason)));
   session.on('rematch', live(() => showRematchCard()));
   if (session.rematch) setTimeout(showRematchCard, 0);
-  if (session.offline && session.table && session.table.s.botSpeed === 'instant') setAuto(true);
+  if (session.offline && session.table && session.table.s.botSpeed === 'instant' && session.table.s.hostPlays !== false) setAuto(true);
   session.on('fair', live((f, msg) => {
     if (G.alerted !== f.no) { G.alerted = f.no; toast(`Fair-play check failed on hand #${f.no}: ${msg}`, 'error', 9000); announce('Warning: fair play check failed.'); }
     renderFairBadge();

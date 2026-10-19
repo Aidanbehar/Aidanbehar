@@ -294,6 +294,13 @@ test suite and lists pass/fail results. The suite covers:
   to 40 hands a minute with auto-play). The bots think exactly as hard as before. In a bot game the
   ⋯ menu has **Bot speed** to switch speeds without restarting. Games with people keep their normal
   pace.
+- **Just watch:** Play vs Bots has **Just watch: the bots play each other and I don't take a
+  seat** (off by default, never remembered). Pick at least 2 bots; you get the whole table, the
+  log, chat, Players and every speed including Instant, but no seat and no auto-play. Tick **Show
+  every bot's cards while I watch** to see all hole cards as the hands are played (only your
+  screen shows them; viewers on a viewer link still see only what is shown at showdown). With
+  rebuys off, the game ends when one bot has all the chips, naming the winner. The record notes
+  `HostPlays "Off"`.
 - **Instant bots:** the fastest **Bot speed**. Hands are played with no pauses at all and auto-play
   (below) switches on for your seat. The table does not animate each action; it shows the latest
   hand about five times a second, with a bar giving the hand number, hands per minute and your

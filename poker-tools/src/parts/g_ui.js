@@ -1030,7 +1030,7 @@ class TableView {
       const opp = meIsMe ? n - 1 : n;
       for (let j = 0; j < opp; j++) {
         const seat = meIsMe ? (me + 1 + j) % n : (me + j) % n, st = view.seats[seat];
-        const t = meIsMe ? gapT / 2 + (1 - gapT) * (j + 0.5) / opp : j / opp;
+        const t = meIsMe ? gapT / 2 + (1 - gapT) * (j + 0.5) / opp : (j + 0.5) / opp; // no seat of yours: nobody sits right at the bottom edge
         const [x, y] = at(t);
         if (!st) {
           if (view.canSit && !view.readOnly) parts.push(`<button class="mseat-empty" data-seat="${seat}" style="left:${x}px;top:${y}px" aria-label="Sit in seat ${seat + 1}">Sit</button>`);

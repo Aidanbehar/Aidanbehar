@@ -952,6 +952,14 @@ class HostTable {
         return;
       }
     }
+    // Just watching a bot game: once a single bot has chips left, it has won.
+    if (this.s.vsBots && this.s.hostPlays === false && this._eligible().length < 2) {
+      const w = this._eligible()[0], p = w && this.players.get(w.pid);
+      const msg = p ? `${p.name} wins: every other bot is out of chips after ${this.finished.length.toLocaleString()} hands.` : 'Every bot is out of chips.';
+      this._log(msg);
+      this.end(msg, true);
+      return;
+    }
     Later.clear(this.nextTimer);
     if (this._eligible().length < 2) this.waiting = true;
     this.nextTimer = Later.set(() => { this.nextTimer = null; this._startHand(); }, (HAND_PAUSE_MS + (h.results.showdown ? 1200 : 0)) * this._pace(), this._instant());
@@ -1030,6 +1038,7 @@ class HostTable {
       t.push(['BotPlayers', bots.map((p) => p.botKind === 'cepheus' ? `${p.name} (CFR+ approximation of Cepheus, not Cepheus's own strategy)`
         : `${p.name} (${Bots.LABELS[p.botDifficulty] || p.botDifficulty}, ${(Bots.PERSONALITIES[p.botPersonality] || {}).name || p.botPersonality})`).join('; ')],
         ['BotSpeed', s.botSpeed || 'normal'], ['BotsCheer', yn(s.botChat)]);
+      if (s.hostPlays === false) t.push(['HostPlays', 'Off']); // just watching the bots
       if (s.resetStacks) t.push(['StacksReset', 'Every hand']);
     } else {
       t.push(['Deal', this.sra ? 'Encrypted' : 'Standard'], ['HostPlays', yn(s.hostPlays !== false)], ['BotTakeover', yn(s.botTakeover)], ['WaitingRoom', yn(s.listed)]);
@@ -1076,6 +1085,8 @@ class HostTable {
     const wins = {};
     if (done) h.log.filter((e) => e.t === 'win').forEach((e) => { wins[e.p] = (wins[e.p] || 0) + e.amt; });
     const winCards = new Set();
+    // Just watching a bot game, with "show every bot's cards": the host sees all hole cards (only bots are dealt in).
+    const reveal = pid === this.hostPid && !!this.s.vsBots && this.s.hostPlays === false && !!this.s.showBotCards;
     if (done && h.results.showdown) h.results.pots.forEach((pt) => pt.winners.forEach((w) => { const ev = h.results.evals[w]; if (ev) ev.best.forEach((c) => winCards.add(c)); }));
 
     const seats = this.seats.map((qid, seat) => {
@@ -1086,11 +1097,11 @@ class HostTable {
       const hp = i >= 0 ? h.players[i] : null;
       let cards = null;
       if (hp) {
-        if (qid === pid || hp.shown) cards = hp.hole ? hp.hole.slice() : new Array(this.holeCount).fill(null);
+        if (qid === pid || hp.shown || reveal) cards = hp.hole ? hp.hole.slice() : new Array(this.holeCount).fill(null);
         else if (!hp.folded && !hp.mucked) cards = new Array(this.holeCount).fill(null);
       }
       let handName = null;
-      if (hp && cards && cards[0] && (qid === pid || hp.shown) && !(qid === pid && hp.folded && !done)) {
+      if (hp && cards && cards[0] && (qid === pid || hp.shown || reveal) && !(qid === pid && hp.folded && !done)) {
         const e = Eval.forGame(h.game, hp.hole, h.board);
         handName = Eval.describe(e);
       }
@@ -1131,7 +1142,7 @@ class HostTable {
         botTakeover: !!this.s.botTakeover, vsBots: !!this.s.vsBots, sra: this.sra,
         spectators: !!this.s.spectators, viewerChat: !!this.s.viewerChat, botChat: !!this.s.botChat, listed: !!this.s.listed,
         hostAdjust: !!this.s.hostAdjust, hostKick: !!this.s.hostKick,
-        cepheus: !!this.s.cepheus, resetStacks: !!this.s.resetStacks, handsDone: this.finished.length, cepheusFallbacks: this.cepheusFallbacks || 0,
+        showBotCards: !!this.s.showBotCards, cepheus: !!this.s.cepheus, resetStacks: !!this.s.resetStacks, handsDone: this.finished.length, cepheusFallbacks: this.cepheusFallbacks || 0,
         nextLevelIn: this.s.levelHands ? this.s.levelHands - ((Math.max(1, this.handNo) - 1) % this.s.levelHands) : 0,
       },
       watchId: this.s.spectators ? this.watchId || null : null, shuffling: !!this.shuffling, fair: this._fairView(), sraWait: this.sraDealer ? this.sraDealer.waiting() : [], voided: !!(h && h.voided),

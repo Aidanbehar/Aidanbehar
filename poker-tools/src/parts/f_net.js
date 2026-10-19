@@ -872,7 +872,7 @@ class BotSession {
   /** Viewer link for a bot game: only once the table has opened its connection to the broker. */
   get watchUrl() { return this.watchers ? this.watchers.url : ''; }
   start() {
-    const t = this.table = new HostTable({ ...this.settings, vsBots: true, hostPlays: true }, this.name, U.randHex(16));
+    const t = this.table = new HostTable({ ...this.settings, vsBots: true, hostPlays: !this.settings.watchOnly }, this.name, U.randHex(16));
     this.watchers = new WatchHub(this);
     if (t.s.spectators) this.watchers.open(); // the game stays on this device; the broker is only for viewers
     this.pid = t.hostPid;
