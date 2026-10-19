@@ -6612,9 +6612,9 @@ function placeStart(relax = 0){
       if(Math.hypot(x-hos.x, z-hos.z) < MIN) continue;     // never near the hospital
       const pick = tryOrigin(x, z, relax);
       if(!pick) continue;
-      const d = Math.hypot(x-hos.x, z-hos.z);
+      const dHos = Math.hypot(x-hos.x, z-hos.z);     // `d` above is the ring's radius
       const score = pick.flat
-                  + clamp((d - MIN)/MIN, 0, 1)*25
+                  + clamp((dHos - MIN)/MIN, 0, 1)*25
                   + (waterNear(x, z, 200) ? 6 : 0)
                   - ring*0.6;
       if(score > bestScore){
@@ -21637,6 +21637,7 @@ const LN = ((hostScene, hostCamera)=>{
 
   /* ---------- lifted: CONFIG (98 lines) ---------- */
 
+/* =====================================================================
    ===== CONFIG =====
    ===================================================================== */
 const CFG = {
@@ -21738,6 +21739,7 @@ const GameState = {
 
   /* ---------- lifted: MATH & NOISE (124 lines) ---------- */
 
+/* =====================================================================
    ===== MATH & NOISE =====
    Deterministic hash-based noise. Used twice: on the CPU to draw canvas
    textures, and as a GLSL string (NOISE_GLSL) injected into shaders so
@@ -21865,6 +21867,7 @@ float worley(vec2 p){
 
   /* ---------- lifted: PROCEDURAL TEXTURES (609 lines) ---------- */
 
+/* =====================================================================
    ===== PROCEDURAL TEXTURES =====
    Every surface in the house is drawn here with canvas 2D. Each factory
    returns { map, normalMap, roughnessMap } built from a colour canvas and
@@ -22477,6 +22480,7 @@ const TexLib = (()=>{
 
   /* ---------- lifted: WORLD (3131 lines) ---------- */
 
+/* =====================================================================
    ===== WORLD =====
    The farmhouse. Everything is built from boxes and a handful of lathe /
    cylinder shapes, dressed with the procedural materials above. Wall runs
@@ -25325,6 +25329,7 @@ function buildProps(){
 
   /* ---------- lifted: LIGHTING (919 lines) ---------- */
 
+/* =====================================================================
    ===== LIGHTING =====
    ---------------------------------------------------------------------
    OCCLUSION NOTE. Doors block light through a room graph, not through
@@ -26247,6 +26252,7 @@ function applyRoomLighting(fromRoom, flash){
 
   /* ---------- lifted: PLAYER (1097 lines) ---------- */
 
+/* =====================================================================
    ===== PLAYER =====
    Pointer-lock look, accelerated ground movement, circle-vs-AABB
    collision against the wall boxes the world builder registered, a stair
