@@ -27899,6 +27899,10 @@ function updateDoors(dt){
     solids(){ return World.solids; },
   };
 })(scene, camera);
+/* A handle on the house for the console and the test harness, beside
+   window.DR. The namespace itself is a module-scoped const, so without
+   this there is no way to ask the house anything from outside. */
+window.LN = LN;
 
 
 boot();
