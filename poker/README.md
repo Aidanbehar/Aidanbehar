@@ -16,6 +16,18 @@ change chip stacks** / **I can remove bots**). Only then do the Adjust stacks an
 The table itself refuses those commands otherwise, even from a modified page. Every change is
 written to the log, and the record notes both settings.
 
+**Changing stacks.** Between hands, Adjust stacks sets each player's stack for the next hand. To
+change stacks in the middle of a hand, press **Pause** first: Adjust stacks then works at once.
+For players in the hand you set the chips they have *behind*; whatever they have already bet stays
+in the pot. Players still in the hand keep at least 1 chip, and anyone who is all-in can be changed
+once the hand is over. The hand is recorded as if they had started it with that many more (or
+fewer) chips, so the game record still replays exactly and nobody's result for the hand changes.
+
+**Start the game paused (off by default).** Hosted games, Play vs Bots and Play Against Cepheus all
+have **Start the game paused**. The game opens with nothing dealt; press **Resume** to deal the
+first hand. Use it, for example, to set everyone's stacks before play begins. It is not remembered
+for the next game.
+
 **Waiting Room (off by default).** The home screen has a **Waiting Room** that lists public
 tables. A table shows up only if its host ticked **List this table in the public Waiting Room** when
 setting it up.

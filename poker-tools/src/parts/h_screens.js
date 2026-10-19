@@ -186,7 +186,8 @@ function HostSetupScreen() {
 <section class="card-ui setup-section"><h3>Host controls</h3>
           <label class="check"><input type="checkbox" name="hostAdjust"> Host can change players' chip stacks</label>
           <label class="check"><input type="checkbox" name="hostKick"> Host can remove players from the table</label>
-          <p class="hint" style="margin:0">Both off by default, so nobody's chips can be edited and nobody can be thrown out mid-game. Turn them on only if your group wants the host to have these powers. Either way, the table's log notes every change.</p>
+          <label class="check"><input type="checkbox" name="startPaused"> Start the game paused (deal the first hand when I press Resume)</label>
+          <p class="hint" style="margin:0">All off by default, so nobody's chips can be edited and nobody can be thrown out mid-game. Turn them on only if your group wants the host to have these powers. Either way, the table's log notes every change.</p>
         </section>
         <section class="card-ui setup-section"><h3>Waiting Room</h3>
           <label class="check"><input type="checkbox" name="listed"> List this table in the public Waiting Room</label>
@@ -250,7 +251,7 @@ function HostSetupScreen() {
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : Number(segv('rebuys')), recordHole: segv('recordHole'),
       game: segv('game'), limit: segv('limit'), levelHands: Number(segv('levelHands')), rakePct: Number(segv('rakePct')), rakeCap: Number(segv('rakeCap')), hostPlays: form.hostPlays.checked, botTakeover: form.botTakeover.checked && !form.sra.checked, sra: form.sra.checked,
       spectators: form.spectators.checked, viewerChat: form.spectators.checked && form.viewerChat.checked, listed: form.listed.checked,
-      hostAdjust: form.hostAdjust.checked, hostKick: form.hostKick.checked,
+      hostAdjust: form.hostAdjust.checked, hostKick: form.hostKick.checked, startPaused: form.startPaused.checked,
     };
     const name = U.sanitizeName(form.name.value);
     const errs = [];
@@ -265,7 +266,7 @@ function HostSetupScreen() {
     if (errs.length) { box.innerHTML = `${icon('alert')}<div>${errs.map(U.esc).join('<br>')}</div>`; box.classList.remove('hidden'); return; }
     box.classList.add('hidden');
     // The viewer options are deliberately not remembered: they start switched off for every new table.
-    const { spectators, viewerChat, listed, hostAdjust, hostKick, rakePct, rakeCap, ...remember } = s; void spectators; void viewerChat; void listed; void hostAdjust; void hostKick; void rakePct; void rakeCap;
+    const { spectators, viewerChat, listed, hostAdjust, hostKick, rakePct, rakeCap, startPaused, ...remember } = s; void spectators; void viewerChat; void listed; void hostAdjust; void hostKick; void rakePct; void rakeCap; void startPaused;
     Prefs.set('lastSettings', remember); Prefs.set('name', name);
     await startHosting(s, name);
   });
@@ -319,7 +320,8 @@ function BotSetupScreen() {
             <p class="hint" style="margin:0">Corny, encouraging table talk from the bots ("Believe in the river! 🌊"). Off by default.</p>
             <label class="check"><input type="checkbox" name="hostAdjust"> I can change chip stacks (mine and the bots')</label>
             <label class="check"><input type="checkbox" name="hostKick"> I can remove bots from the table</label>
-            <p class="hint" style="margin:0">Both off by default: the game plays out with the chips and bots it started with.</p>
+            <label class="check"><input type="checkbox" name="startPaused"> Start the game paused (deal the first hand when I press Resume)</label>
+            <p class="hint" style="margin:0">All off by default: the game plays out with the chips and bots it started with. While the game is paused you can change stacks, even in the middle of a hand.</p>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px">
             <label class="check"><input type="checkbox" name="spectators"> Allow viewers with a watch-only link</label>
@@ -362,7 +364,7 @@ function BotSetupScreen() {
       rebuys: segv('rebuys') !== 'no', maxRebuys: ['no', 'any'].includes(segv('rebuys')) ? 0 : +segv('rebuys'),
       timer: 0, recordHole: 'All', botSpeed: segv('botSpeed'),
       botChat: f.botChat.checked, spectators: f.spectators.checked, viewerChat: f.spectators.checked && f.viewerChat.checked,
-      hostAdjust: f.hostAdjust.checked, hostKick: f.hostKick.checked,
+      hostAdjust: f.hostAdjust.checked, hostKick: f.hostKick.checked, startPaused: f.startPaused.checked,
     };
     const nBots = +segv('bots'), errs = [];
     if (!(s.sb >= 1 && s.bb >= s.sb)) errs.push('Big blind must be at least the small blind (and both at least 1).');
@@ -402,6 +404,7 @@ function CepheusScreen() {
       </section>
       <section class="card-ui setup-section"><h3>You</h3>
         <label class="field"><span>Your name</span><input class="input" name="name" maxlength="18" value="${U.esc(d.name)}" placeholder="e.g. Alice" autocomplete="off"></label>
+        <label class="check"><input type="checkbox" name="startPaused"> Start the game paused (deal the first hand when I press Resume)</label>
         <div class="field"><span>Cepheus's speed</span><div class="seg" role="radiogroup" data-seg="botSpeed">${BOT_SPEEDS.map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-pressed="${v === d.botSpeed}" aria-checked="${v === d.botSpeed}">${l}</button>`).join('')}</div></div>
       </section>
       <section class="card-ui setup-section"><h3>The game (Cepheus's rules)</h3>
@@ -450,7 +453,7 @@ function CepheusScreen() {
     const s = {
       tableName: 'Cepheus · CFR+ approximation', sb: C.SB, bb: C.BB, ante: 0, startingStack: segv('stacks') === 'keep' ? +segv('startChips') : C.STACK, game: 'holdem', limit: 'fl', levelHands: 0,
       rebuys: false, maxRebuys: 0, timer: 0, recordHole: 'All', botSpeed: segv('botSpeed'), maxSeats: 2,
-      botChat: false, spectators: false, viewerChat: false, hostAdjust: false, hostKick: false, cepheus: true, resetStacks: segv('stacks') !== 'keep',
+      botChat: false, spectators: false, viewerChat: false, hostAdjust: false, hostKick: false, cepheus: true, resetStacks: segv('stacks') !== 'keep', startPaused: f.startPaused.checked,
     };
     const sess = new BotSession(s, name, [{ name: 'Cepheus', difficulty: 'cepheus', personality: 'cfr', kind: 'cepheus' }]);
     sess.cepheus = true;
@@ -791,14 +794,18 @@ function GameScreen(session) {
   }
   function adjustModal() {
     const v = G.view;
-    const ps = v.players;
-    const m = openModal(`<h2>Adjust stacks</h2><p class="muted" style="margin-top:0">Changes apply before the next hand and are noted in the log.</p>
-      <div class="plist">${ps.map((p) => `<label class="prow">${avatarHtml(p.name)}<span class="p-main"><span class="p-name">${U.esc(p.name)}</span><span class="p-sub">${p.seat != null ? 'Seat ' + (p.seat + 1) : 'Not seated'}</span></span>
-        <input class="input num" type="number" min="0" step="1" style="width:120px" data-pid="${U.esc(p.pid)}" value="${Number(p.stack) || 0}" aria-label="Stack for ${U.esc(p.name)}"></label>`).join('')}</div>
+    const ps = v.players, mid = !!(v.phase && v.phase !== 'done');
+    // Paused mid-hand: players in the hand show (and set) the chips they have behind.
+    const live = (p) => (mid && p.seat != null && v.seats[p.seat] && v.seats[p.seat].inHand ? v.seats[p.seat] : null);
+    const m = openModal(`<h2>Adjust stacks</h2><p class="muted" style="margin-top:0">${mid
+      ? `The game is paused in the middle of hand #${v.handNo}. For players in this hand you are setting the chips they have <b>behind</b>; anything already bet stays in the pot. Players still in the hand keep at least 1 chip, and anyone all-in can be changed once the hand is over. The change takes effect at once and is noted in the log.`
+      : 'Changes apply before the next hand and are noted in the log.'}</p>
+      <div class="plist">${ps.map((p) => { const s = live(p), locked = !!(s && s.allIn); return `<label class="prow">${avatarHtml(p.name)}<span class="p-main"><span class="p-name">${U.esc(p.name)}</span><span class="p-sub">${p.seat != null ? 'Seat ' + (p.seat + 1) : 'Not seated'}${s ? (locked ? ' · all-in this hand' : s.folded ? ' · folded this hand' : ` · in this hand${s.bet ? `, ${U.fmt(s.bet)} bet this round` : ''}`) : ''}</span></span>
+        <input class="input num" type="number" min="${s && !s.folded ? 1 : 0}" step="1" style="width:120px" data-pid="${U.esc(p.pid)}" value="${Number(s ? s.stack : p.stack) || 0}" ${locked ? 'disabled' : ''} aria-label="${s ? 'Chips behind' : 'Stack'} for ${U.esc(p.name)}"></label>`; }).join('')}</div>
       <div class="modal-foot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="m-save">Save stacks</button></div>`, { label: 'Adjust stacks' });
     $('#m-save', m.el).addEventListener('click', () => {
       const stacks = {};
-      $$('input[data-pid]', m.el).forEach((i) => { stacks[i.dataset.pid] = Number(i.value); });
+      $$('input[data-pid]:not([disabled])', m.el).forEach((i) => { stacks[i.dataset.pid] = Number(i.value); });
       session.send({ t: 'adjust', stacks }); m.close();
     });
   }
@@ -864,7 +871,7 @@ function GameScreen(session) {
     on('m-theme', () => { Theme.toggle(); $$('[data-theme-toggle]').forEach((x) => { x.innerHTML = Theme.icon(); }); });
     on('m-start', () => session.send({ t: 'start' }));
     on('m-pause', () => session.send({ t: 'pause', on: !v.paused }));
-    on('m-adjust', () => { if (G.view.phase && G.view.phase !== 'done') return toast('Stacks can be adjusted between hands. Pause the game, then wait for this hand to finish.', 'info', 5000); adjustModal(); });
+    on('m-adjust', () => { if (G.view.phase && G.view.phase !== 'done' && !G.view.paused) return toast('Pause the game first: then you can change stacks, even in the middle of a hand.', 'info', 5000); adjustModal(); });
     on('m-end', () => confirmModal('End the game?', 'Everyone keeps their game record. This cannot be undone.', 'End game', () => session.send({ t: 'end' })));
     on('m-leave', leaveTable);
     on('m-look', appearanceModal);
@@ -1318,11 +1325,11 @@ function GameScreen(session) {
       }
     }
     G.chatSeen = true; // history present on the first view is not "new"
-    const pkey = JSON.stringify([v.players, v.phase, v.you && v.you.pid, v.table.hostAdjust, v.table.hostKick]);
+    const pkey = JSON.stringify([v.players, v.phase, v.paused, v.you && v.you.pid, v.table.hostAdjust, v.table.hostKick]);
     if (pkey !== G.pkey) {
       G.pkey = pkey;
       const host = v.you && v.you.isHost;
-      $('#tp-players').innerHTML = `${host && v.table.hostAdjust && v.status !== 'ended' ? `<button class="btn sm" id="p-adjust" style="width:100%;margin-bottom:10px" ${v.phase && v.phase !== 'done' ? 'disabled title="Available between hands"' : ''}>${icon('users')}Adjust stacks</button>` : ''}
+      $('#tp-players').innerHTML = `${host && v.table.hostAdjust && v.status !== 'ended' ? `<button class="btn sm" id="p-adjust" style="width:100%;margin-bottom:10px" ${v.phase && v.phase !== 'done' && !v.paused ? 'disabled title="Pause the game to change stacks during a hand"' : ''}>${icon('users')}Adjust stacks</button>` : ''}
         <div class="plist">${v.players.map((p) => `<div class="prow">${avatarHtml(p.name)}<div class="p-main">
           <div class="p-name">${p.isBot ? '🤖 ' : ''}${U.esc(p.name)}${p.isHost ? ' ★' : ''}${v.you && v.you.pid === p.pid ? ' <span class="muted">(you)</span>' : ''}</div>
           <div class="p-sub"><span class="status-dot ${p.connected ? '' : 'off'}"></span>${p.connected ? '' : 'Disconnected · '}${p.seat != null ? 'Seat ' + (p.seat + 1) : 'Watching'} · <span class="num">${U.fmt(p.stack)}</span>

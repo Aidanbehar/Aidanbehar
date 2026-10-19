@@ -508,6 +508,8 @@ class HostTable {
         this.status = 'playing';
         this.onEvent('success', 'The game has started', null);
         this._botSay('start');
+        // "Start the game paused": nothing is dealt until the host presses Resume (time to set stacks first).
+        if (this.s.startPaused) { this.paused = true; this._log('The game is paused before the first hand. Press Resume to deal.'); this.changed(); return; }
         this._startHand();
         return;
       case 'pause':
@@ -540,14 +542,31 @@ class HostTable {
       case 'adjust': {
         if (!isHost) return;
         if (!this.s.hostAdjust) return err('Changing stacks is turned off at this table.');
-        if (this.shuffling || (this.hand && this.hand.phase !== 'done')) return err('Stacks can only be changed between hands.');
+        const h = this.hand, mid = !!h && h.phase !== 'done';
+        if (this.shuffling) return err('The cards are being shuffled. Try again in a moment.');
+        if (mid && !this.paused) return err('Pause the game first to change stacks during a hand.');
+        const locked = [];
         for (const [qid, val] of Object.entries(m.stacks || {})) {
           const q = this.players.get(qid), v = Math.max(0, Math.floor(Number(val)));
-          if (!q || !Number.isFinite(v) || v === q.stack) continue;
+          if (!q || !Number.isFinite(v)) continue;
+          const i = mid ? this.handPids.indexOf(qid) : -1;
+          if (i >= 0) {
+            // Paused mid-hand: the new number is the chips they have behind (what is already in the pot
+            // stays there). The hand is recorded as if they had started it with that many more chips,
+            // so the record still replays exactly and their result for the hand is unchanged.
+            const hp = h.players[i], to = hp.folded ? v : Math.max(1, v), d = to - hp.stack;
+            if (!d) continue;
+            if (hp.allIn) { locked.push(q.name); continue; }
+            hp.stack = to; hp.startStack += d; q.stack += d; q.bought += d;
+            this._log(`Host set ${q.name}'s chips behind to ${U.fmt(to)} during hand #${h.no} (was ${U.fmt(to - d)})`);
+            continue;
+          }
+          if (v === q.stack) continue;
           this._log(`Host set ${q.name}'s stack to ${U.fmt(v)} (was ${U.fmt(q.stack)})`);
           q.bought += v - q.stack; q.stack = v;
           if (v > 0) { q.busted = false; if (!this.s.rebuys) q.sittingOut = false; }
         }
+        if (locked.length) err(`${locked.join(', ')} ${locked.length > 1 ? 'are' : 'is'} all-in, so ${locked.length > 1 ? 'their' : 'that'} stack can be changed once this hand is over.`);
         this.onEvent('info', 'The host adjusted stacks', null);
         this._maybeDeal();
         break;
