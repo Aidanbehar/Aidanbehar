@@ -7793,12 +7793,39 @@ function buildTerrainMesh(){
        its own night colour rather than a brightness scale, because snow
        at night is not dim white, it is blue-grey. */
     sh.uniforms.uDayl = { value: 1 };
+    /* ---- THE HOLE THE CELLAR IS DOWN -------------------------------
+       The farmhouse has a storey below ground and Downriver's terrain
+       runs straight through it: the cellar floor is 3.05m down, the
+       stairwell comes up through the deck, and the ground mesh covers
+       the lot. Standing on the stairs you would be looking at the
+       underside of a hillside.
+
+       So the terrain DISCARDS inside one world-space rectangle: the
+       stairwell and nothing else. Not the footprint -- the house's
+       outer wall faces are at 8.08 and 6.08 against a footprint that
+       has to be bigger than that, and The Long Night already learned
+       what a too-big hole does (a 22cm ribbon of nothing all the way
+       round the building, which you can see the world through from the
+       yard). One rectangle, 1.9 x 3.9m, which is the stairwell plus
+       15cm of margin, exactly as its own ground slabs cut it.
+
+       THE HEIGHTFIELD IS NOT CARVED. Cells are four metres apart and
+       the stairwell is 1.6m wide: there is no way to put this hole in
+       the grid without trenching the yard outside the walls. This is a
+       rendering hole over a physics exception -- inside the footprint
+       the floor comes from The Long Night's own floorHeightAt(), not
+       from the terrain at all.
+
+       Zero width means no hole, which is what every seed has until the
+       house is placed. */
+    sh.uniforms.uHole = { value: new THREE.Vector4(0,0,0,0) };
     MAT.terrainU = sh.uniforms;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
-        attribute vec2 aSnow; varying vec2 vSnow;`)
+        attribute vec2 aSnow; varying vec2 vSnow; varying vec2 vWXZ;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vSnow = aSnow;
+        vWXZ = (modelMatrix * vec4(transformed, 1.0)).xz;
         /* DEEP SNOW STANDS PROUD OF THE GROUND. A few centimetres of
            lift where it is deepest, which is enough to round off the
            hollows it has filled and to make a drift read as a drift
@@ -7807,7 +7834,13 @@ function buildTerrainMesh(){
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform sampler2D uDetail; uniform float uDetailAmt, uDayl;
-        varying vec2 vSnow;`)
+        uniform vec4 uHole;
+        varying vec2 vSnow; varying vec2 vWXZ;`)
+      /* As early in the fragment as there is a hook for: there is no
+         point lighting a fragment that is about to be thrown away. */
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+        if(uHole.z > uHole.x && vWXZ.x > uHole.x && vWXZ.x < uHole.z
+                             && vWXZ.y > uHole.y && vWXZ.y < uHole.w) discard;`)
       .replace('#include <map_fragment>', `#include <map_fragment>
         {
           vec3 det = texture2D(uDetail, vMapUv * 220.0).rgb;
@@ -7841,7 +7874,7 @@ function buildTerrainMesh(){
         roughnessFactor = mix(roughnessFactor, mix(0.72, 0.52, smoothstep(0.18,0.72,vSnow.y)),
                                smoothstep(0.10, 0.34, vSnow.x));`);
   };
-  m.customProgramCacheKey = ()=> 'terrain-detail-snow';
+  m.customProgramCacheKey = ()=> 'terrain-detail-snow-hole';
   MAT.terrain = m;
 
   /* And now the ground itself: a ring of chunks around the player and
@@ -13675,6 +13708,27 @@ function registerColliders(){
   for(const st of Wld.structures) add(st);
   add(Wld.hospital);
   for(const t of (Wld.townBuildings || [])) add(t);
+  /* ---- AND THE FARMHOUSE, CONVERTED OUT OF ITS OWN FRAME ----------
+     The farmhouse entry on Wld.structures carries no solids of its own
+     -- its builder is a stub, because the geometry is The Long Night's.
+     Its colliders come out of LN.colliders(), which converts that
+     game's local axis-aligned boxes into these oriented ones.
+
+     The reach is computed over the WHOLE house rather than taken from
+     the entry's pad, because this building is 46m long: a reach
+     measured off the structure's nominal centre would leave the garage
+     outside the broadphase and the player would walk through its
+     walls. */
+  if(typeof LN !== 'undefined' && LN.site){
+    const solids = LN.colliders();
+    if(solids.length){
+      const F = Wld.farmhouse;
+      let reach = 8;
+      for(const b of solids)
+        reach = Math.max(reach, Math.hypot(b.cx - F.x, b.cz - F.z) + Math.max(b.hx, b.hz) + 2);
+      STRUCT_COLLIDERS.push({ x: F.x, z: F.z, reach, solids, ref: F, farmhouse: true });
+    }
+  }
 }
 
 /* THE SUM OVERSHOOTS, AND AN OVERSHOOT THAT BOUNCES IS A TRAP.
@@ -21381,6 +21435,12 @@ async function startRun(seedInput){
   if(Wld.farmhouse){
     LN.build();
     LN.place(Wld.farmhouse.x, Wld.farmhouse.y, Wld.farmhouse.z, Wld.farmhouse.yaw);
+    /* The terrain is told where to stop covering the cellar. Done here
+       rather than inside place(), because the uniform only exists once
+       buildTerrainMesh has compiled the material. */
+    const hole = LN.stairwellRect();
+    if(hole && MAT.terrainU && MAT.terrainU.uHole)
+      MAT.terrainU.uHole.value.set(hole.x0, hole.z0, hole.x1, hole.z1);
   }
   buildClues();
   setProgress(0.76, 'building the sound of this place');
@@ -21634,6 +21694,15 @@ const LN = ((hostScene, hostCamera)=>{
      reads a rung off it to decide whether to draw its volumetrics. */
   const RES = { get rung(){ return (typeof window !== 'undefined' && window.DR && window.DR.RES)
                                     ? window.DR.RES.i : 0; } };
+
+  /* Where the group ended up, kept here rather than read back off the
+     Object3D so the conversions below cannot disagree with the matrix
+     about which quarter turn is in force. Null until place() runs. */
+  let placedAt = null;
+  function farmLocalToWorldXZ(lx, lz, at){
+    if(!at) return { x:lx, z:lz };
+    return { x: at.x + lx*at.c + lz*at.s, z: at.z - lx*at.s + lz*at.c };
+  }
 
   /* ---------- lifted: CONFIG (98 lines) ---------- */
 
@@ -27381,12 +27450,71 @@ function updateDoors(dt){
        x and z swap and one of them negates -- which is the whole reason
        placeStart only ever offers four orientations. */
     place(x, y, z, yaw){
-      const q = Math.round(yaw / (Math.PI/2)) % 4;
+      const q = ((Math.round(yaw / (Math.PI/2)) % 4) + 4) % 4;
       GROUP.position.set(x, y, z);
       GROUP.rotation.y = q * Math.PI/2;
       GROUP.updateMatrixWorld(true);
+      placedAt = { x, y, z, q, c: Math.cos(q*Math.PI/2), s: Math.sin(q*Math.PI/2) };
       return GROUP;
     },
+    /* ---- THE HOUSE'S COLLIDERS, IN DOWNRIVER'S LANGUAGE -------------
+       The Long Night's solids are world axis-aligned {min,max} boxes in
+       house-local space. Downriver's resolver wants oriented boxes:
+       centre, half-extents, a cos/sin pair, and a y band.
+
+       A quarter turn is the whole reason this is a conversion and not a
+       projection. Under 0 or 180 degrees the local x half-extent stays
+       the x half-extent; under 90 or 270 x and z SWAP. Either way the
+       box comes out axis-aligned in world space, so cos is 1 and sin is
+       0 -- obbPush uses them to rotate a point into the box's frame,
+       and there is nothing to rotate. That is what the quarter-turn
+       restriction in placeStart buys, and it is why box() silently
+       dropping the collider whenever rotY is set never bites us.
+
+       EVERYTHING is registered, inside walls included, not just the
+       exterior. Downriver's resolver is what Fauna and People collide
+       against, and the forest creatures have to be stopped by the
+       outside of this building; the player does not double-resolve
+       because the handover runs one resolver or the other, never both. */
+    colliders(){
+      if(!placedAt) return [];
+      const { x, y, z, q } = placedAt;
+      const swap = (q === 1 || q === 3);
+      const out = [];
+      for(const sol of World.solids){
+        if(sol.off) continue;
+        const lcx = (sol.min.x + sol.max.x)/2, lcz = (sol.min.z + sol.max.z)/2;
+        const lhx = (sol.max.x - sol.min.x)/2, lhz = (sol.max.z - sol.min.z)/2;
+        const w = farmLocalToWorldXZ(lcx, lcz, placedAt);
+        out.push({
+          cx: w.x, cz: w.z,
+          hx: swap ? lhz : lhx, hz: swap ? lhx : lhz,
+          cos: 1, sin: 0,
+          y0: y + sol.min.y, y1: y + sol.max.y,
+          kind: (sol.max.y - sol.min.y) > 0.4 ? 'wall' : 'floor',
+          tag: sol.sfx || null, src: null, isDoor: false, ln: sol,
+        });
+      }
+      return out;
+    },
+    /* The stairwell, in world space, for the terrain's discard. The
+       margin matches the one The Long Night's own ground slabs used. */
+    stairwellRect(){
+      if(!placedAt) return null;
+      const S = CFG.STAIR, M = 0.15;
+      const a = farmLocalToWorldXZ(S.x0-M, S.z0-M, placedAt);
+      const b = farmLocalToWorldXZ(S.x1+M, S.z1+M, placedAt);
+      return { x0: Math.min(a.x,b.x), z0: Math.min(a.z,b.z),
+               x1: Math.max(a.x,b.x), z1: Math.max(a.z,b.z) };
+    },
+    toWorld(lx, lz){ return farmLocalToWorldXZ(lx, lz, placedAt); },
+    toLocal(wx, wz){
+      if(!placedAt) return { x:wx, z:wz };
+      const dx = wx - placedAt.x, dz = wz - placedAt.z;
+      const c = placedAt.c, s = placedAt.s;
+      return { x: dx*c - dz*s, z: dx*s + dz*c };
+    },
+    get site(){ return placedAt; },
     /* The exterior is split: the porch, the roof, the gables and the
        woodpile are the house, and the ground slabs, the thousand
        conifers, the scrub, the rain and the fog are Downriver's job.
