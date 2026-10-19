@@ -21598,6 +21598,11 @@ function boot(){
 
 /* One handle on everything, for the console and for the test harness. */
 window.DR = {
+  /* The house's code asks whether the mouse is captured; this is where
+     it reads the answer from. A getter, because pointerLocked is a
+     module-level binding that changes. */
+  get pointerLocked(){ return pointerLocked; },
+  get LN(){ return typeof LN === 'undefined' ? null : LN; },
   THREE, scene, camera, renderer, composer, postPass,
   CFG, G, Wld, World, MAT, Veg, Sky, Weather, Player, Survival, Gear, Mind,
   Director, Phantoms, Audio, Ambience, UI, DEV, Hold, TexLib,
@@ -26328,7 +26333,23 @@ function applyRoomLighting(fromRoom, flash){
    ramp, head bob and stamina. Noise made by the player is reported to the
    Horror Director — sprinting is loud, and being loud has consequences.
    ===================================================================== */
-const controls = new PointerLockControls(camera, renderer.domElement);
+/* ---- DOWNRIVER OWNS THE CAMERA AND THE POINTER LOCK ---------------
+   The Long Night built a PointerLockControls over its own camera here.
+   There is one camera in this game and one pointer lock, and they are
+   Downriver's: it keeps its own yaw and pitch on Player and does not
+   import PointerLockControls at all, which is why this line was the
+   first thing to fail after the lift parsed.
+
+   What the house's own code actually asks of `controls` is whether the
+   mouse is captured -- it uses that to decide whether to read movement
+   keys at all. That question has an answer in Downriver, so this is a
+   view onto it rather than a second input system. Nothing here moves
+   the camera; the handover does that, in one place. */
+const controls = {
+  get isLocked(){ return !!(typeof window !== 'undefined' && window.DR && window.DR.pointerLocked); },
+  lock(){}, unlock(){},
+  addEventListener(){}, removeEventListener(){},
+};
 const Player = {
   pos: new THREE.Vector3(0, 0, 4.6),
   vel: new THREE.Vector3(),
