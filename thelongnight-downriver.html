@@ -21700,6 +21700,30 @@ const LN = ((hostScene, hostCamera)=>{
   const RES = { get rung(){ return (typeof window !== 'undefined' && window.DR && window.DR.RES)
                                     ? window.DR.RES.i : 0; } };
 
+  /* ---- THE HOUSE'S OWN CAMERA, IN THE HOUSE'S OWN COORDINATES ------
+     The lifted player code touches `camera` about twenty times -- the
+     eye height, the head bob, the seat pose, the reach tests, the
+     sight tests -- and every one of them is written in house-local
+     metres. Pointing them at Downriver's camera would have each of
+     those twenty sites needing its own frame conversion.
+
+     So the name is shadowed, exactly as `scene` is above. This camera
+     is never added to a scene and never rendered: it is the house's
+     view of where the eye is, in its own frame, and the handover
+     copies it to and from the real one each frame. One declaration
+     instead of twenty conversions, and the house's code stays
+     verbatim.
+
+     NOT YET SOLVED, and noted rather than hidden: pickTarget()
+     raycasts `scene.children`, whose world matrices include the
+     group's placement, with a ray built from this local camera. That
+     is a frame mismatch and it will need the ray built from the host
+     camera with its hit point converted back. Reaching and sight do
+     not go through the raycast -- they are proximity and the house's
+     own local solids -- so this does not block walking about, which is
+     what this phase is for. It is wired when interaction is. */
+  const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 260);
+
   /* Where the group ended up, kept here rather than read back off the
      Object3D so the conversions below cannot disagree with the matrix
      about which quarter turn is in force. Null until place() runs. */
@@ -21707,6 +21731,22 @@ const LN = ((hostScene, hostCamera)=>{
   function farmLocalToWorldXZ(lx, lz, at){
     if(!at) return { x:lx, z:lz };
     return { x: at.x + lx*at.c + lz*at.s, z: at.z - lx*at.s + lz*at.c };
+  }
+  /* The real camera's aim, turned into the house's frame. The house
+     reads its heading off `camera.quaternion` in two places and off
+     getWorldDirection in two more, so what it needs is a camera whose
+     ORIENTATION is the player's aim measured in local degrees: the
+     world yaw less the quarter turn the house stands at. Pitch and
+     roll are frame-independent and copy straight across. */
+  const _e = new THREE.Euler();
+  function syncLook(hostCam){
+    if(!hostCam || !placedAt) return;
+    _e.setFromQuaternion(hostCam.quaternion, 'YXZ');
+    camera.rotation.set(_e.x, _e.y + placedAt.q * Math.PI/2, _e.z, 'YXZ');
+    camera.fov = hostCam.fov; camera.aspect = hostCam.aspect;
+    camera.near = hostCam.near; camera.far = hostCam.far;
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
   }
 
   /* ---------- lifted: CONFIG (98 lines) ---------- */
@@ -27529,6 +27569,42 @@ function updateDoors(dt){
                x1: Math.max(a.x,b.x), z1: Math.max(a.z,b.z) };
     },
     toWorld(lx, lz){ return farmLocalToWorldXZ(lx, lz, placedAt); },
+    /* ---- THE HANDOVER ------------------------------------------------
+       Inside the house The Long Night's movement runs: its radius of
+       0.24 against doors 0.9 to 1.1m wide and furniture gaps laid out
+       for that size, its stair ramp, its hatch, its attic climbs. Out
+       in the world Downriver's runs, with its radius of 0.34 and the
+       terrain under it. One Player is authoritative at a time and the
+       position crosses frames exactly -- the same point, described in
+       two frames -- so there is nothing to snap.
+
+       What CAN snap is the vertical, because the two games disagree
+       about what the floor is: Downriver stands you on the terrain and
+       the house stands you on its own floorHeightAt(). They are made
+       to agree by the pad: carveFoundations levels the footprint to
+       the house's floor and the generator records how far off the
+       porch cell still is (Wld.stats.porchStep), which is the number
+       to look at if a threshold ever does jolt. */
+    enter(worldX, worldY, worldZ, hostCam){
+      const L = this.toLocal(worldX, worldZ);
+      Player.pos.set(L.x, worldY - placedAt.y, L.z);
+      Player.vel.set(0, 0, 0);
+      syncLook(hostCam);
+      return Player.pos;
+    },
+    /* Called every frame while the player is indoors. The look comes in
+       from the real camera, the step is taken in local metres, and the
+       eye goes back out to the real camera in world metres. */
+    stepPlayer(dt, hostCam){
+      syncLook(hostCam);
+      updatePlayer(dt);
+      const w = farmLocalToWorldXZ(camera.position.x, camera.position.z, placedAt);
+      hostCam.position.set(w.x, placedAt.y + camera.position.y, w.z);
+      hostCam.rotation.z = camera.rotation.z;          // the bob's roll, frame-free
+      const f = farmLocalToWorldXZ(Player.pos.x, Player.pos.z, placedAt);
+      return { x: f.x, y: placedAt.y + Player.pos.y, z: f.z,
+               level: Player.level, room: Player.room };
+    },
     toLocal(wx, wz){
       if(!placedAt) return { x:wx, z:wz };
       const dx = wx - placedAt.x, dz = wz - placedAt.z;
