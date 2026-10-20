@@ -228,10 +228,263 @@ button:active{ transform:translateY(1px); }
 #volnote i b{ display:block; height:100%; width:0; background:#9aa49e; }
 #volnote.muted i b{ background:#6b5e5e; }
 #volnote span{ min-width:3.2em; text-align:right; }
+
+/* ===== the house's HUD, lifted from The Long Night and scoped =====
+   Every rule is prefixed so none of it can reach Downriver's own HUD,
+   and the nine ids both games use are renamed rather than shared. */
+#lnroot.off{display:none}
+#lnroot /* the desktop help list is noise on a phone */
+body.touch #ln-help{display:none}
+#lnroot /* ---------- hud ---------- */
+#ln-hud{position:fixed;inset:0;z-index:20;pointer-events:none;opacity:0;transition:opacity .6s ease}
+#lnroot #ln-hud.on{opacity:1}
+#lnroot #ln-crosshair{
+  position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;
+  border-radius:50%;border:1px solid rgba(220,214,200,.5);
+  transition:width .15s,height .15s,margin .15s,border-color .15s;
+}
+#lnroot #ln-crosshair.hot{width:12px;height:12px;margin:-6px 0 0 -6px;border-color:rgba(240,230,210,.95)}
+#lnroot #ln-prompt{
+  position:absolute;left:50%;top:calc(50% + 26px);transform:translateX(-50%);
+  font-size:12px;letter-spacing:.16em;color:#e6dfd0;text-shadow:0 2px 8px #000;
+  opacity:0;transition:opacity .12s;white-space:nowrap;
+}
+#lnroot #ln-prompt.on{opacity:1}
+#lnroot #ln-prompt b{color:#e9c56a;font-weight:400}
+#lnroot #statusbar{
+  position:absolute;left:22px;bottom:20px;display:flex;flex-direction:column;gap:6px;
+  font-size:11px;letter-spacing:.12em;color:var(--dim);text-shadow:0 1px 6px #000;
+}
+#lnroot #statusbar .row{display:flex;gap:10px;align-items:baseline}
+#lnroot #statusbar .k{color:#5e5a51;min-width:86px}
+#lnroot #statusbar .v{color:var(--ink)}
+#lnroot #clock{
+  position:absolute;right:22px;bottom:20px;text-align:right;
+  font-size:11px;letter-spacing:.18em;color:var(--dim);text-shadow:0 1px 6px #000;
+}
+#lnroot #clock .row{display:flex;align-items:baseline;justify-content:flex-end;gap:11px}
+#lnroot #clock .big{font-size:22px;letter-spacing:.14em;color:#cfc7b6}
+#lnroot #clock .alt{font-size:12px;letter-spacing:.14em;color:#8c8578}
+#lnroot #roomname{
+  position:absolute;left:22px;top:20px;font-size:11px;letter-spacing:.3em;
+  text-transform:uppercase;color:#6f6a5f;text-shadow:0 1px 6px #000;
+}
+#lnroot #ln-subtitle{
+  position:absolute;left:50%;bottom:74px;transform:translateX(-50%);
+  font-size:12px;letter-spacing:.14em;color:#a49c8c;text-shadow:0 2px 10px #000;
+  opacity:0;transition:opacity .5s ease;text-align:center;max-width:70vw;
+}
+#lnroot #ln-subtitle.on{opacity:1}
+#lnroot #ln-stamina{
+  position:absolute;left:50%;bottom:56px;transform:translateX(-50%);
+  width:120px;height:2px;background:rgba(200,190,170,.12);opacity:0;transition:opacity .3s;
+}
+#lnroot #ln-stamina.on{opacity:1}
+#lnroot #ln-stamina i{display:block;height:100%;background:#9a9384;transition:background .25s ease}
+#lnroot /* Run yourself out and the bar tells you why shift has stopped working:
+   it is not a dead key, #lnroot you are winded, #lnroot and it clears on its own. */
+#ln-stamina.spent i{background:#8a5a3a}
+#lnroot /* ---------- damage / panic vignette (CSS layer on top of shader vignette) --- */
+#breath{
+  position:fixed;left:50%;bottom:-6%;width:52vmin;height:34vmin;transform:translateX(-50%);
+  z-index:14;pointer-events:none;opacity:0;transition:opacity .5s ease;
+  background:radial-gradient(ellipse at 50% 100%,rgba(214,228,240,.34),rgba(214,228,240,0) 68%);
+  filter:blur(6px);
+}
+#lnroot #breath.on{opacity:1}
+#lnroot #ln-panic{
+  position:fixed;inset:0;z-index:15;pointer-events:none;opacity:0;
+  background:radial-gradient(ellipse at center,rgba(0,0,0,0) 42%,rgba(24,4,4,.75) 100%);
+  transition:opacity .35s ease;
+}
+#lnroot /* ---------- tablet overlay (built in phase 2, #lnroot styled now) ---------- */
+#tablet{
+  position:fixed;inset:0;z-index:30;display:none;
+  background:rgba(2,3,4,.72);backdrop-filter:blur(2px);
+  align-items:center;justify-content:center;
+}
+#lnroot #tablet.on{display:flex}
+#lnroot /* TAB CLOSES THE TABLET AND A PHONE HAS NO TAB. #tablet sits after
+   #touchui in the document at the same z-index, #lnroot so it covers the button
+   cluster -- including the button that opened it. On touch that was a
+   dead end: tablet open, #lnroot no way back to the house. The footer hint
+   becomes a real control, #lnroot and the dim backdrop closes on a tap. */
+#tabclose{cursor:pointer}
+#lnroot body.touch #tabclose{
+  padding:6px 14px;margin:-6px -6px;border:1px solid rgba(200,190,170,.34);
+  border-radius:3px;color:#cfc6b4;
+}
+#lnroot #tabletframe{
+  /* Width alone sets the size: the grid below carries a fixed 16:9 and
+     the frame's height follows from it, so a feed tile is exactly 16:9 on
+     any screen instead of whatever shape was left over. The 150vh term is
+     what stops a wide short window from pushing it off the bottom. */
+  width:min(1240px,94vw,150vh);
+  background:#0a0c0b;border:1px solid rgba(120,140,120,.22);
+  box-shadow:0 40px 120px rgba(0,0,0,.8),inset 0 0 90px rgba(0,20,0,.35);
+  display:flex;flex-direction:column;position:relative;overflow:hidden;
+}
+#lnroot #tabletframe::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,rgba(255,255,255,.045) 0 1px,rgba(0,0,0,0) 1px 3px);
+  mix-blend-mode:overlay;
+}
+#lnroot #tabhead{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 16px;border-bottom:1px solid rgba(120,140,120,.18);
+  font-size:11px;letter-spacing:.24em;color:#7f9a7f;text-transform:uppercase;
+}
+#lnroot /* The DVR wall is built from ROWS, #lnroot not a fixed grid, #lnroot and the rows are
+   sized from however many channels exist. A 3x3 grid with seven cameras
+   left two dead cells in the corner; laying seven out as 3+2+2 fills the
+   wall exactly. Rows of different lengths mean tiles of different
+   shapes, #lnroot so each camera renders at its OWN tile aspect (see buildCameras)
+   and nothing is stretched to fit. */
+#tabgrid{aspect-ratio:16/9;display:flex;flex-direction:column;gap:1px;background:rgba(120,140,120,.14)}
+#lnroot /* ONE CHANNEL AT A TIME ON A PHONE. Seven tiles on a 390px screen is
+   seven thumbnails of grey: you cannot tell a hallway from a garage, #lnroot which defeats the point of having cameras. In touch mode the wall
+   collapses to a single channel filling the frame, #lnroot and a tap steps to
+   the next live one in order. Same DOM, #lnroot same feeds, #lnroot same grading -- only
+   which tiles are displayed changes. */
+body.touch #tabgrid .feedrow{display:none}
+#lnroot body.touch #tabgrid .feedrow.hasfocus{display:flex}
+#lnroot body.touch #tabgrid .feed{display:none}
+#lnroot body.touch #tabgrid .feed.focused{display:block;flex:1}
+#lnroot body.touch #tabgrid .feed.focused .label{font-size:12px}
+#lnroot .feedrow{display:flex;flex:1;gap:1px;min-height:0}
+#lnroot .feed{flex:1;min-width:0}
+#lnroot /* Focus: one feed spans the whole grid. The grid is already 16:9 and so
+   is the feed buffer, #lnroot so a focused channel is the same picture at twice
+   the size with nothing cropped or stretched. */
+#tabgrid.focus .feedrow{display:none}
+#lnroot #tabgrid.focus .feedrow.hasfocus{display:flex}
+#lnroot #tabgrid.focus .feed{display:none}
+#lnroot #tabgrid.focus .feed.focused{display:block;flex:1}
+#lnroot #tabgrid.focus .feed.focused .label{font-size:12px}
+#lnroot .feed{position:relative;background:#000;overflow:hidden}
+#lnroot .feed canvas{width:100%;height:100%;display:block;object-fit:contain;image-rendering:pixelated;filter:contrast(1.15) brightness(.95)}
+#lnroot .feed .label{position:absolute;left:8px;top:6px;font-size:10px;letter-spacing:.18em;color:#8fae8f;text-shadow:0 0 6px #000}
+#lnroot .feed .stamp{position:absolute;right:8px;bottom:6px;font-size:10px;letter-spacing:.1em;color:#8fae8f;text-shadow:0 0 6px #000}
+#lnroot .feed .rec{position:absolute;right:8px;top:6px;font-size:10px;color:#c8563c;letter-spacing:.14em}
+#lnroot .feed.dead{background:#050505}
+#lnroot /* A room that just told you something. The border is INSIDE the tile via
+   an inset shadow rather than a real border, #lnroot because a border would
+   resize the tile and shove the whole DVR wall about for two seconds. */
+.feed.trip::after, #lnroot .feed.sensor::after{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
+}
+#lnroot .feed.trip::after{box-shadow:inset 0 0 0 2px rgba(214,120,60,.85)}
+#lnroot .feed.sensor::after{box-shadow:inset 0 0 0 2px rgba(90,190,140,.8)}
+#lnroot #tabkit{font-size:11px;letter-spacing:.18em;color:#7d8f7d}
+#lnroot .feed.dead::before{content:"NO SIGNAL";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#3a3a3a;font-size:11px;letter-spacing:.3em}
+#lnroot #tabfoot{padding:9px 16px;border-top:1px solid rgba(120,140,120,.18);display:flex;gap:22px;
+  font-size:10px;letter-spacing:.18em;color:#5f7a5f;flex-wrap:wrap;align-items:center}
+#lnroot /* The footer advertised three keyboard shortcuts and offered no way to
+   reach any of them without a keyboard. They are buttons now -- shown
+   only on touch, #lnroot where they are the only way in. */
+#tabfoot .tbtn{display:none}
+#lnroot body.touch #tabfoot .keys{display:none}
+#lnroot body.touch #tabfoot .tbtn{
+  display:inline-block;padding:7px 12px;border:1px solid rgba(120,140,120,.42);
+  border-radius:3px;background:rgba(120,140,120,.10);color:#a9c2a9;
+  font:inherit;letter-spacing:.16em;text-transform:uppercase;
+}
+#lnroot body.touch #tabfoot .tbtn.on{background:rgba(120,200,140,.22);color:#d6f0d6;border-color:rgba(140,220,160,.6)}
+#lnroot /* and the frame itself has to fit a phone in portrait */
+body.touch #tabletframe{width:min(1240px,97vw,150vh);max-height:96vh}
+#lnroot /* ---------- helper text ---------- */
+#ln-help{
+  position:fixed;right:22px;top:20px;z-index:21;font-size:10px;line-height:1.9;
+  letter-spacing:.14em;color:#5c584e;text-align:right;text-shadow:0 1px 6px #000;
+  opacity:0;transition:opacity .6s;pointer-events:none;
+}
+#lnroot #ln-help.on{opacity:1}
+#lnroot #ln-help b{color:#8d8676;font-weight:400}
+#lnroot /* ---------- hold-to-interact ---------- */
+#ln-holdbar{
+  position:absolute;left:50%;top:calc(50% + 52px);transform:translateX(-50%);
+  width:180px;opacity:0;transition:opacity .12s;text-align:center;
+}
+#lnroot #ln-holdbar.on{opacity:1}
+#lnroot #ln-holdbar i{display:block;height:3px;background:rgba(210,200,180,.16);position:relative}
+#lnroot #ln-holdbar i::after{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--p,0%);background:#d8c79a}
+#lnroot #ln-holdbar span{display:block;margin-top:6px;font-size:10px;letter-spacing:.18em;color:#a49c8c;text-transform:uppercase}
+#lnroot /* ---------- objectives ---------- */
+/* CLEAR OF THE HELP BLOCK, #lnroot WHICH IT WAS NOT. #ln-help starts at top:20 and
+   is seven lines at 10px/1.9 -- 133px, #lnroot so it ends around y=153 -- and
+   this sat at 124, #lnroot printing the objectives straight through the last two
+   lines of the key list in every single frame. When the help is hidden
+   with H there is nothing to clear, #lnroot so the objectives move back up to
+   where the help was. */
+#objectives{
+  position:absolute;right:22px;top:20px;text-align:right;font-size:10px;
+  line-height:1.9;letter-spacing:.14em;color:#6f6a5f;text-shadow:0 1px 6px #000;
+  transition:top .3s;
+}
+#lnroot body.helpshown #objectives{top:162px}
+#lnroot #objectives .o{color:#8d8676}
+#lnroot #objectives .o.done{color:#5d7a52;text-decoration:line-through}
+#lnroot /* ---------- hunt / death ---------- */
+#huntflash{
+  position:fixed;inset:0;z-index:16;pointer-events:none;opacity:0;
+  background:radial-gradient(ellipse at center,rgba(0,0,0,0) 30%,rgba(60,0,0,.55) 100%);
+  transition:opacity .4s ease;
+}
+#lnroot #huntflash.on{opacity:1}
+#lnroot #ln-endscreen{
+  position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;
+  background:#04050699;backdrop-filter:blur(3px);
+}
+#lnroot #ln-endscreen.on{display:flex}
+#lnroot #ln-endscreen .inner{text-align:center}
+#lnroot #ln-endscreen h2{
+  font-size:clamp(26px,5vw,52px);letter-spacing:.34em;font-weight:400;margin:0 0 14px;
+  text-transform:uppercase;color:#c8563c;
+}
+#lnroot #ln-endscreen.win h2{color:#8fae7f}
+#lnroot #ln-endscreen p{color:#8d8676;font-size:12px;letter-spacing:.18em;margin:0 0 26px}
 </style>
 </head>
 <body>
 <div id="app"></div>
+<!-- ===== THE HOUSE'S OWN HUD AND TABLET, lifted whole ===== -->
+<div id="lnroot" class="off">
+<div id="ln-hud">
+  <div id="ln-crosshair"></div>
+  <div id="ln-prompt"></div>
+  <div id="roomname">—</div>
+  <div id="statusbar">
+    <div class="row"><span class="k">FLASHLIGHT</span><span class="v" id="s-torch">—</span></div>
+    <div class="row"><span class="k">POWER</span><span class="v" id="s-power">—</span></div>
+    <div class="row"><span class="k">STRESS</span><span class="v" id="s-stress">—</span></div>
+  </div>
+  <div id="clock">
+    <div class="row"><span class="big" id="c-time">—</span><span class="alt" id="c-time12">—</span></div>
+    <span id="c-night">—</span>
+  </div>
+  <div id="ln-stamina"><i></i></div>
+  <div id="ln-holdbar"><i></i><span></span></div>
+  <div id="objectives"></div>
+  <div id="ln-subtitle"></div>
+</div>
+<div id="huntflash"></div>
+<div id="ln-panic"></div>
+<div id="breath"></div>
+<div id="tablet">
+  <div id="tabletframe">
+    <div id="tabhead"><span>HOMEWATCH 7CH · DVR</span><span id="tabkit"></span><span id="tabbat">BAT ——</span></div>
+    <div id="tabgrid"></div>
+    <div id="tabfoot">
+      <span class="keys">[N] NIGHT VISION</span><span class="keys">[1-7] FOCUS · [0] ALL</span>
+      <button class="tbtn" id="tabnext">Next camera</button>
+      <button class="tbtn" id="tabnv">Night vision</button>
+      <span id="tabclose">[TAB] CLOSE</span>
+    </div>
+  </div>
+</div>
+<div id="ln-help" style="display:none"></div>
+<div id="ln-endscreen" style="display:none"><div class="inner"><h2></h2><p></p><button id="ln-againbtn">Again</button></div></div>
+</div>
 
 <!-- ===== HUD ===== -->
 <div id="sleepveil"></div>
@@ -21341,7 +21594,7 @@ function stepPlayerEitherSide(dt){
   const house = (typeof LN !== 'undefined') && LN.site
              && LN.indoors(Player.pos.x, Player.pos.y, Player.pos.z);
   if(house){
-    if(!wasIndoors) LN.enter(Player.pos.x, Player.pos.y, Player.pos.z, camera);
+    if(!wasIndoors) LN.enter(Player.pos.x, Player.pos.y, Player.pos.z, camera, Player.yaw, Player.pitch);
     /* ---- THE MOUSE HAS TO REACH THE CAMERA INDOORS -----------------
        Downriver's pointer-lock handler writes Player.yaw and
        Player.pitch, and the ONLY place that turns those into a camera
@@ -21359,7 +21612,7 @@ function stepPlayerEitherSide(dt){
        stagger, neither of which happens in a hallway. */
     Player.camYaw = Player.yaw; Player.camPitch = Player.pitch;
     camera.rotation.set(Player.pitch, Player.yaw, 0, 'YXZ');
-    const p = LN.stepPlayer(dt, camera, Keys);
+    const p = LN.stepPlayer(dt, camera, Keys, Player.yaw, Player.pitch);
     Player.pos.set(p.x, p.y, p.z);
   } else {
     updatePlayer(dt);
@@ -21371,7 +21624,8 @@ function stepWorld(dt){
   Hold.update(dt);
   Sleep.update(dt);
   stepPlayerEitherSide(dt);
-  if(typeof LN !== 'undefined') LN.tick(dt, { sky: Sky, weather: Weather, playerPos: Player.pos });
+  if(typeof LN !== 'undefined')
+    LN.tick(dt, { sky: Sky, weather: Weather, playerPos: Player.pos, indoors: indoorsNow() });
   updateRest(dt);
   updateWeather(dt);
   updateSky(dt);
@@ -21784,7 +22038,10 @@ const LN = ((hostScene, hostCamera)=>{
      the Director is the night itself -- both are the next phase. The
      shim still counts what is asked of them, so the list of what is
      missing stays honest rather than becoming a guess. */
-  const UI = SHIM('UI'), Director = SHIM('Director');
+  /* The Director is still a shim; the UI is not. The house's cameras,
+     its tablet and its prompts are lifted whole below -- the camera
+     system is The Long Night's own, not a new one. */
+  const Director = SHIM('Director');
   /* ---- THE GLASS, WITHOUT ITS PASS ------------------------------
      makeWindow() registers every pane with the GlassPass and puts it on
      the GLASS layer, which only that pass renders. Without the pass,
@@ -21819,9 +22076,8 @@ const LN = ((hostScene, hostCamera)=>{
   }
   /* GlassShader and ConeShader are declared further down, straight after
      the noise module they interpolate -- see the note there. */
-  /* captureFeed is the camera module's, which is not lifted yet. The
-     bench and the kit are Resources' and came across with it. */
-  const captureFeed = ()=>{};
+  /* captureFeed was stubbed while the camera module was out; it is
+     lifted now and brings its own. */
   const toggleFullscreen = ()=>{};
   /* The resolution ladder belongs to Downriver; the house only ever
      reads a rung off it to decide whether to draw its volumetrics. */
@@ -21869,6 +22125,8 @@ const LN = ((hostScene, hostCamera)=>{
      about which quarter turn is in force. Null until place() runs. */
   let placedAt = null;
   let lastHouseError = null;
+  let houseIndoors = false;
+  const indoorsNowLocal = ()=> houseIndoors;
   /* The house's interact() by another name. The exported method cannot
      be called `interact` AND call `interact`: inside an object literal
      the method shadows the function and it recurses into itself. */
@@ -21882,13 +22140,27 @@ const LN = ((hostScene, hostCamera)=>{
      ORIENTATION is the player's aim measured in local degrees: the
      world yaw less the quarter turn the house stands at. Pitch and
      roll are frame-independent and copy straight across. */
-  const _e = new THREE.Euler();
-  function syncLook(hostCam){
-    if(!hostCam || !placedAt) return;
-    _e.setFromQuaternion(hostCam.quaternion, 'YXZ');
-    camera.rotation.set(_e.x, _e.y + placedAt.q * Math.PI/2, _e.z, 'YXZ');
-    camera.fov = hostCam.fov; camera.aspect = hostCam.aspect;
-    camera.near = hostCam.near; camera.far = hostCam.far;
+  /* ---- THE AIM COMES ACROSS AS TWO NUMBERS, NOT AS A QUATERNION ----
+     This used to read the host camera's quaternion and pull Euler
+     angles back out of it with setFromQuaternion. That is a lossy
+     round trip: a quaternion has two Euler solutions and the one
+     extraction picks flips as the pitch passes through the poles or
+     when any roll is present -- and the head bob puts roll on the
+     camera every stride. A flipped yaw is a forward vector pointing
+     backwards, which is the W-and-S-swapping-places that gets you
+     wedged in a corner pressing the wrong key to get out.
+
+     Downriver keeps the aim as two scalars and so does the house, so
+     the two scalars are what cross. No extraction, no second solution,
+     nothing to flip. The quarter turn is added to the yaw here because
+     this camera lives in the house's frame. */
+  function syncLook(yaw, pitch, hostCam){
+    if(!placedAt) return;
+    camera.rotation.set(pitch || 0, (yaw || 0) + placedAt.q * Math.PI/2, 0, 'YXZ');
+    if(hostCam){
+      camera.fov = hostCam.fov; camera.aspect = hostCam.aspect;
+      camera.near = hostCam.near; camera.far = hostCam.far;
+    }
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld(true);
   }
@@ -29912,6 +30184,769 @@ function inFloodlight(){
   return false;
 }
 
+
+  /* ---------- lifted: CAMERAS, TABLET AND UI (760 lines) ---------- */
+/* =====================================================================
+   ===== CAMERAS & TABLET UI =====
+   Each feed is a real render-to-texture from a camera in the house,
+   pulled back to the CPU and graded in a 2D canvas so it can live in the
+   HTML overlay. The readback is deliberately slow — one feed per frame,
+   throttled — which gives the choppy, behind-the-beat quality that makes
+   CCTV unnerving, and leaves room for the Director to paint exactly one
+   frame with something that is not there on the next capture.
+   ===================================================================== */
+/* 16:9, not 4:3. The tile these land in has always been a widescreen
+   rectangle, and a 320x240 buffer stretched to fill it was doing two bad
+   things at once: squashing everything horizontally, and wasting the
+   extra width instead of using it to SEE more. At the same vertical
+   field of view a 16:9 frame is 100 degrees across where 4:3 was 84, so
+   this alone is most of "I can finally see the room". The pixel budget
+   and the deliberately lo-fi upscale are unchanged. */
+const FEED_H = 216;                      // every buffer is this tall
+/* How to lay N channels out with no dead cells. Square-ish, then the
+   remainder is spread over the first rows rather than left as a hole in
+   the corner: seven becomes 3+2+2, nine becomes 3+3+3, four becomes 2+2.
+   Rows of different lengths give tiles of different shapes, which is fine
+   BECAUSE each camera then renders at its own tile's aspect — a wide tile
+   gets a wide buffer and a wider view, not a stretched one. */
+function feedLayout(n){
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const base = Math.floor(n / rows), extra = n % rows;
+  const out = [];
+  for(let r=0;r<rows;r++) out.push(base + (r < extra ? 1 : 0));
+  return out.filter(k=>k>0);
+}
+function buildCameras(){
+  const grid = document.getElementById('tabgrid');
+  const rowSizes = feedLayout(Equipment.spots.length);
+  const rowCount = rowSizes.length;
+  const rowEls = rowSizes.map(()=>{
+    const r = document.createElement('div'); r.className='feedrow';
+    grid.appendChild(r); return r;
+  });
+  // which row each channel belongs to, and how wide its tile is
+  const rowOf = [], tileAspect = [];
+  rowSizes.forEach((k, r)=>{
+    for(let j=0;j<k;j++){ rowOf.push(r); tileAspect.push((16*rowCount)/(9*k)); }
+  });
+  Equipment.spots.forEach((s,i)=>{
+    const ASPECT = tileAspect[i] || 16/9;
+    const FEED_W = Math.round(FEED_H * ASPECT / 2) * 2;   // even width
+    /* The render origin has to sit in FRONT of the housing. Parked at
+       s.pos it was inside its own bracket, with the lens glass 15cm ahead
+       of it — that dark disc filling half of every feed was the camera
+       filming the back of its own lens. */
+    const cam = new THREE.PerspectiveCamera(72, FEED_W/FEED_H, 0.05, 55);
+    cam.layers.enable(LAYER_BASEMENT);
+    const fwd = new THREE.Vector3().subVectors(s.look, s.pos).normalize();
+    cam.position.copy(s.pos).addScaledVector(fwd, 0.22);
+    cam.lookAt(s.look);
+    const rt = new THREE.WebGLRenderTarget(FEED_W, FEED_H, {
+      type: THREE.UnsignedByteType, minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter,
+      depthBuffer:true, colorSpace:THREE.LinearSRGBColorSpace
+    });
+    // DOM tile
+    const el = document.createElement('div'); el.className='feed';
+    const cv = document.createElement('canvas'); cv.width=FEED_W; cv.height=FEED_H;
+    const label = document.createElement('div'); label.className='label'; label.textContent = `CAM ${i+1} · ${s.name}`;
+    const stamp = document.createElement('div'); stamp.className='stamp'; stamp.textContent='--:--:--';
+    const rec = document.createElement('div'); rec.className='rec'; rec.textContent='● REC';
+    el.append(cv,label,stamp,rec);
+    rowEls[rowOf[i]].appendChild(el);
+
+    /* Bracket: a plate screwed to the wall, a short arm, then the body.
+       Object3D.lookAt() points +Z at the target for non-camera objects, so
+       the arm group's +Z runs from the wall out to the housing. */
+    const arm = new THREE.Group();
+    arm.position.copy(s.mount);
+    arm.lookAt(s.pos);
+    scene.add(arm);
+    const reach = s.mount.distanceTo(s.pos);
+    const plate = new THREE.Mesh(boxGeo(0.105,0.105,0.022,0.3), MAT.metalDark);
+    plate.position.set(0,0,0.011); plate.castShadow = true; arm.add(plate);
+    for(const [sx,sy] of [[-1,-1],[1,-1],[-1,1],[1,1]]){        // bolt heads
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.006,6,5), MAT.metal);
+      b.position.set(sx*0.036, sy*0.036, 0.024); arm.add(b);
+    }
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,reach,8), MAT.metalDark);
+    stem.rotation.x = Math.PI/2; stem.position.set(0,0,reach/2);
+    stem.castShadow = true; arm.add(stem);
+
+    const housing = new THREE.Group(); housing.position.copy(s.pos); scene.add(housing);
+    housing.lookAt(s.look);
+    const bodyM = new THREE.Mesh(boxGeo(0.15,0.10,0.21,0.25), MAT.metalDark);
+    bodyM.castShadow = true; housing.add(bodyM);
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.032,0.036,0.05,14), MAT.metalDark);
+    lens.rotation.x = Math.PI/2; lens.position.set(0,0,0.12); housing.add(lens);
+    const glassEye = new THREE.Mesh(new THREE.CircleGeometry(0.028,14),
+      new THREE.MeshStandardMaterial({color:0x05070a, roughness:0.12, metalness:0.6}));
+    glassEye.position.set(0,0,0.146); housing.add(glassEye);
+    const led = new THREE.Mesh(new THREE.SphereGeometry(0.010,8,6), new THREE.MeshBasicMaterial({color:0x8a1010}));
+    led.position.set(0.055,0.03,0.108); housing.add(led);
+
+    Equipment.cameras.push({
+      index:i, name:s.name, room:s.room||'hall', cam, rt, el, cv, ctx:cv.getContext('2d'), stamp,
+      w:FEED_W, h:FEED_H,
+      pixels:new Uint8Array(FEED_W*FEED_H*4),
+      img:cv.getContext('2d').createImageData(FEED_W, FEED_H),
+      ghostFrames:0, dead:false, deadUntil:0, lastCapture:0, noiseSeed:rand()*1000,
+      /* When this channel last actually produced a frame, in game
+         seconds. The watchdog in updateFeeds reads it; a capture that
+         throws deliberately does not move it. */
+      lastSuccessfulCapture:0, blanked:false
+    });
+  });
+}
+
+/* The two gamma-and-gain tables the CCTV grade indexes with a raw byte.
+   One entry per possible source byte per mode, so this is exact rather
+   than an approximation: pow(min(1, i/255*gain), 1/2.2), precomputed. */
+const FEED_GAMMA = (()=>{
+  const build = (gain)=>{
+    // Float64, not Float32: at f32 the stored value differs from the old
+    // inline pow() by about 3e-8, which is nothing, but "nothing" and
+    // "identical" are different claims and this one costs 2KB.
+    const t = new Float64Array(256);
+    for(let i=0;i<256;i++) t[i] = Math.pow(Math.min(1, i/255*gain), 1/2.2);
+    return t;
+  };
+  return { normal: build(2.3), nv: build(4.2) };
+})();
+
+let feedCursor = 0, feedTimer = 0;
+/* ---------- THE WALL DROPS OUT WHILE THE HOUSE IS DARK -------------
+   Seven channels on a domestic DVR running off the same supply as
+   everything else, in a house whose lights are out: they do not sit
+   there clean all night. A channel goes at random, and it comes back on
+   its own a few seconds later, and there is nothing you can do about it
+   except be looking at a different one.
+
+   Deliberately its OWN clock rather than another Director event. The
+   scheduler is a budget shared by thirty things and gated on the hour,
+   the tier and a cooldown; this has to happen on the cameras' own terms
+   and often enough to be a texture rather than a surprise. It also runs
+   whether or not the tablet is open — so a channel can already be down
+   when you bring the wall up, which is the version that unsettles.
+
+   It only happens in the dark, for the same reason nothing else does:
+   with the house lit the supply is healthy and the wall is clean.  */
+let camOutageIn = randf(25, 60);
+function updateCameraOutages(dt){
+  if(!Equipment.cameras.length) return;
+  /* EXPIRY FIRST, AND UNCONDITIONALLY. A dropout was only ever cleared
+     by feedLive(), which runs from updateFeeds — so a channel that went
+     down while the tablet was shut stayed down until you opened it, and
+     one that went down just before the lights came back stayed down for
+     as long as they stayed on. This runs every frame whatever else is
+     true, so "temporary" is structural rather than a thing that happens
+     to work out. */
+  for(const c of Equipment.cameras)
+    if(c.dead && GameState.t >= (c.deadUntil || 0)){ c.dead = false; c.deadUntil = 0; }
+  if(!Director.houseIsDark()){ camOutageIn = Math.max(camOutageIn, 12); return; }
+  camOutageIn -= dt;
+  if(camOutageIn > 0) return;
+  camOutageIn = randf(20, 55);
+  const live = Equipment.cameras.filter(c => !c.dead);
+  if(!live.length) return;
+  // one channel, and now and then a second one with it
+  const n = rand() < 0.18 && live.length > 1 ? 2 : 1;
+  for(let i=0;i<n;i++){
+    const c = live.splice((rand()*live.length)|0, 1)[0];
+    if(!c) break;
+    /* Five seconds is the ceiling and it is a real one: long enough that
+       you stop waiting and go and look, short enough that it is never
+       the reason something reached you. */
+    c.dead = true;
+    c.deadUntil = GameState.t + randf(1.4, 5.0);
+  }
+  if(UI.tabletOpen) Audio.click();
+}
+/* Is this channel supposed to be showing a picture right now? One
+   answer, so the watchdog and the capture loop can never disagree about
+   which feeds are live. */
+function feedLive(c){
+  if(!c) return false;
+  if(c.dead && GameState.t < (c.deadUntil || 0)) return false;
+  c.dead = false;                       // its dropout has expired
+  return Resources.battery > 0;
+}
+function updateFeeds(dt){
+  if(!UI.tabletOpen || Equipment.cameras.length===0) return;
+  /* NO SIGNAL means an empty tile, not the last picture with a caption
+     over it. A channel that stops capturing used to keep whatever was in
+     its canvas, so a dead feed was a frozen feed — which is exactly what
+     a broken feed looks like, and the player has no way to tell them
+     apart. */
+  for(const c of Equipment.cameras){
+    if(feedLive(c)) continue;
+    c.el.classList.add('dead');
+    if(!c.blanked){
+      c.blanked = true;
+      c.ctx.fillStyle = '#050505';
+      c.ctx.fillRect(0, 0, c.w, c.h);
+      c.stamp.textContent = '--:--:--';
+    }
+  }
+  feedTimer -= dt;
+  if(feedTimer > 0) return;
+  feedTimer = 1/14;                       // ~14 captures/sec spread over 4 feeds
+  /* When one channel is focused it is the only one on screen, so give it
+     every capture instead of spending three quarters of them on tiles
+     nobody can see. That turns 3.5fps of quad into 14fps of one feed. */
+  let c = UI.focusedFeed >= 0
+    ? Equipment.cameras[UI.focusedFeed]
+    : Equipment.cameras[feedCursor % Equipment.cameras.length];
+  feedCursor++;
+  /* THE WATCHDOG. Whatever the round robin was about to do, a live
+     channel that has not produced a frame in a second and a half is
+     starved and gets this slot instead. Two things could starve one: the
+     cursor walking past it while it was dead and coming round again only
+     every seven slots, and a capture that threw partway through and left
+     the channel behind for good. Either way, the symptom the player sees
+     is a tile stuck on an old frame while the others move, and the fix
+     is to notice and go back for it. */
+  const now = GameState.t;
+  if(!c || !feedLive(c) || now - (c.lastSuccessfulCapture || 0) < 1.5){
+    let worst = null, age = 1.5;
+    for(const k of Equipment.cameras){
+      if(!feedLive(k)) continue;
+      if(UI.focusedFeed >= 0 && k.index !== UI.focusedFeed) continue;
+      const a = now - (k.lastSuccessfulCapture || 0);
+      if(a > age){ age = a; worst = k; }
+    }
+    if(worst) c = worst;
+  }
+  if(!c || !feedLive(c)) return;
+  c.el.classList.remove('dead');
+  c.blanked = false;
+  captureFeed(c);
+}
+function captureFeed(c){
+  // each camera answers the door graph from where IT stands
+  applyRoomLighting(c.room);
+  /* THE CAMERAS HAVE INFRARED. They have to: the entities are 0x0a0b0d
+     matte in an unlit house, and after the feed's own gain and the
+     monochrome grade they were indistinguishable from the sensor noise —
+     you could stand a creature in the middle of a frame and never see
+     it. Every one of these housings has an IR ring around the lens, so
+     on a feed a body is lit and in the room it is not. Which is the
+     whole reason to have cameras at all. */
+  /* EVERY ONE OF THESE IS A GLOBAL THE MAIN RENDER ALSO READS, AND THEY
+     ARE ALL PUT BACK IN A finally.
+
+     Without it, one throw anywhere between here and the readback — a
+     shader that fails to compile, a body being rebuilt mid-frame, a lost
+     context — left the renderer pointing at a 320-pixel offscreen target
+     for the rest of the session. Every subsequent frame of the GAME then
+     drew into that camera's texture instead of the canvas, so the whole
+     screen froze, not just the feeds, and nothing recovered it. The
+     entity emissive and the foliage flag would have stuck too: creatures
+     glowing in the main view, the treeline drawn from inside the house.
+
+     A capture that fails is now just a capture that did not happen. The
+     channel keeps its old frame, lastSuccessfulCapture does not move,
+     and the watchdog above comes back for it a second and a half later. */
+  const foliageWas = foliageShown;
+  const prevTarget = renderer.getRenderTarget();
+  const FEED_W = c.w, FEED_H = c.h;      // this channel's own buffer
+  let captured = false;
+  try {
+    Director.setCameraPass(true);
+    // the yard belongs in a feed even when the player cannot see it
+    if(!foliageWas) setFoliageVisible(true);
+    renderer.setRenderTarget(c.rt);
+    renderer.clear();
+    renderer.render(scene, c.cam);
+    renderer.readRenderTargetPixels(c.rt, 0, 0, FEED_W, FEED_H, c.pixels);
+    captured = true;
+  } catch(err){
+    if(console && console.debug) console.debug('[feed] capture failed', c.name, err);
+  } finally {
+    Director.setCameraPass(false);
+    renderer.setRenderTarget(prevTarget);
+    if(!foliageWas) setFoliageVisible(false);
+    applyRoomLighting(Player.room);            // hand the budget back to the player
+  }
+  if(!captured) return;
+  c.lastSuccessfulCapture = GameState.t;
+  gradeFeed(c);
+}
+
+/* The software CCTV grade, split out of the capture so it can be re-run
+   over the pixels a channel already has. Night vision is a property of
+   the GRADE, not of the render — so switching it has to be able to
+   repaint what is already on screen rather than waiting for the round
+   robin to come back round to each tile, which at four tiles and one
+   capture per slot is most of a second per feed and reads as "N does
+   nothing". */
+function gradeFeed(c){
+  const FEED_W = c.w, FEED_H = c.h;
+
+  /* ---- CCTV grade, in software: gamma, gain, monochrome/green, noise ----
+
+     This loop runs 82,944 times per capture and fourteen captures a
+     second, so what is in it matters more than anywhere else in the
+     file. Two things were in it that had no business being there.
+
+     The first was three Math.pow() per pixel — a quarter of a million
+     transcendental calls a frame. The spec I was working to suggested a
+     1024-entry LUT indexed by the post-gain float, but there is a
+     better answer here: the input to pow() is Math.min(1, byte/255 *
+     gain), and `byte` is an integer 0..255 while `gain` is one of two
+     compile-time constants. There are therefore only 256 possible
+     inputs per mode. A 256-entry table per mode is not an approximation
+     of the old maths, it IS the old maths — no quantisation, no
+     one-LSB drift, and a plain byte index instead of a float multiply
+     and a truncate. Built once at module load; see FEED_GAMMA.
+
+     The second was the scanline roll, a Math.sin() evaluated inside the
+     x loop despite depending only on y and t. Hoisted, along with the
+     odd/even scanline dim it was multiplied by and the two output
+     tints, none of which vary across a row either.                   */
+  const src = c.pixels, dst = c.img.data;
+  const nv = UI.nightVision;
+  const LUT = nv ? FEED_GAMMA.nv : FEED_GAMMA.normal;
+  const nAmp = nv ? 0.16 : 0.10;
+  const oR = nv ? 90 : 216, oG = nv ? 255 : 224, oB = nv ? 105 : 230;
+  const t = GameState.t;
+  for(let y=0;y<FEED_H;y++){
+    const sy = (FEED_H-1-y)*FEED_W;      // readback is bottom-up
+    const dy = y*FEED_W;
+    // scanline + slow vertical roll: per ROW, not per pixel
+    const rowScale = (0.94 + 0.06*Math.sin((y + t*38)*0.42)) * (y%2 ? 0.92 : 1.0);
+    for(let x=0;x<FEED_W;x++){
+      const si=(sy+x)*4, di=(dy+x)*4;
+      // linear -> gamma, with a lot of gain because these rooms are dark
+      let lum = LUT[src[si]]*0.30 + LUT[src[si+1]]*0.59 + LUT[src[si+2]]*0.11;
+      // sensor noise, heavier in the shadows
+      const n = (Math.random()-0.5)*nAmp*(1.25-lum);
+      lum = clamp(lum + n, 0, 1) * rowScale;
+      dst[di]=lum*oR; dst[di+1]=lum*oG; dst[di+2]=lum*oB;
+      dst[di+3]=255;
+    }
+  }
+  c.ctx.putImageData(c.img,0,0);
+
+  // ---- the Director's single frame -----------------------------------
+  // A shape at the edge of the frame, on a feed the player is not focused
+  // on, for exactly one capture. The next capture will not have it, and
+  // there is no way to prove it was ever there.
+  if(c.ghostFrames > 0){
+    c.ghostFrames--;
+    const g = c.ctx;
+    const fx = rand()<0.5 ? randf(12, 60) : randf(FEED_W-70, FEED_W-22);
+    const fy = randf(FEED_H*0.30, FEED_H*0.52);
+    g.save();
+    g.globalAlpha = 0.55;
+    g.filter = 'blur(2px)';
+    g.fillStyle = UI.nightVision ? 'rgba(6,20,8,0.95)' : 'rgba(8,9,11,0.95)';
+    g.beginPath();
+    g.ellipse(fx, fy, 9, 13, 0, 0, TAU);                       // head
+    g.fill();
+    g.beginPath();
+    g.moveTo(fx-14, fy+70); g.lineTo(fx-9, fy+10);
+    g.lineTo(fx+9, fy+10);  g.lineTo(fx+15, fy+70);
+    g.closePath(); g.fill();
+    g.restore();
+  }
+  // timestamp
+  const T = clockParts();
+  c.stamp.textContent = `N${GameState.night} ${T.hhmmss}`;
+}
+
+/* =====================================================================
+   ===== UI =====
+   ===================================================================== */
+const UI = (()=>{
+  const el = id => document.getElementById(id);
+  const prompt = el('ln-prompt'), hud = el('ln-hud'), sub = el('ln-subtitle');
+  let sayTimer = 0, mapOpen = false, mapCanvas = null;
+
+  const api = {
+    tabletOpen:false, nightVision:false, focusedFeed:-1,
+
+    /* Blow one channel up to fill the DVR, or press the same number again
+       to go back to the quad. Note that the Director already refuses to
+       put its ghost frames on the channel you are focused on — whatever
+       it does, it does on a feed you are not watching. */
+    setFocus(i){
+      const grid = el('tabgrid');
+      if(!grid) return;
+      this.focusedFeed = (this.focusedFeed === i) ? -1 : i;
+      grid.classList.toggle('focus', this.focusedFeed >= 0);
+      Equipment.cameras.forEach(c =>
+        c.el.classList.toggle('focused', c.index === this.focusedFeed));
+      // the wall is rows now, so the row holding the focused tile has to
+      // stay visible while the others collapse
+      for(const r of grid.querySelectorAll('.feedrow'))
+        r.classList.toggle('hasfocus', !!r.querySelector('.feed.focused'));
+      Audio.click();
+    },
+
+    /* STEPPING, NOT PICKING. On touch there is no channel keypad, so the
+       only way round the house is forward: channel 1, then 2, and round
+       again, skipping anything dead so a failed camera cannot strand you
+       on a black tile. Opening the tablet always lands on the first live
+       channel, so "which one am I looking at" has a fixed answer. */
+    stepFeed(dir = 1){
+      const cams = Equipment.cameras;
+      if(!cams.length) return;
+      const live = cams.map((c,i)=>i).filter(i => !cams[i].dead);
+      if(!live.length) return;
+      const here = live.indexOf(this.focusedFeed);
+      const next = here < 0 ? live[0]
+                            : live[(here + dir + live.length) % live.length];
+      if(next === this.focusedFeed){ Audio.click(); return; }
+      this.focusedFeed = -1;             // setFocus toggles, so clear first
+      this.setFocus(next);
+      this.syncFeedChrome();
+    },
+    syncFeedChrome(){
+      const n = el('tabnext');
+      if(n){
+        const c = Equipment.cameras[this.focusedFeed];
+        const live = Equipment.cameras.filter(x=>!x.dead).length;
+        n.textContent = c ? `CH ${this.focusedFeed+1}/${Equipment.cameras.length}`
+                            + (live > 1 ? ' · next' : '')
+                          : 'Next camera';
+      }
+      const v = el('tabnv');
+      if(v) v.classList.toggle('on', !!this.nightVision);
+    },
+
+    setPrompt(target){
+      const ch = el('ln-crosshair');
+      /* Carrying a piece of kit is itself a prompt-worthy state — you
+         need to be told what E will do even when you are looking at a
+         blank wall, otherwise picking something up feels like it did
+         nothing. */
+      if(!target && !carryingKit){ prompt.classList.remove('on'); ch.classList.remove('hot'); return; }
+      let text = '';
+      if(target && target.type==='door'){
+        const d = target.door, nb = d.boarded || 0;
+        text = Player.aiming && nb < 3
+             ? `<b>hold E</b> board the door · ${nb}/3 · ${Resources.boards} boards left`
+             : nb > 0 ? `<b>hold E</b> pry the boards off · ${nb}/3`
+             : `<b>E</b> ${d.target>0.5?'close':'open'} ${d.name.toLowerCase()}`;
+      }
+      else if(target && target.type==='woodpile')
+        text = `<b>hold E</b> pull timber off the pile · ${World.woodpile.stock} pull` +
+               `${World.woodpile.stock===1?'':'s'} left in it`;
+      else if(target && target.type==='can') text = `<b>E</b> pick up the fuel can · ${target.can.litres.toFixed(1)}L`;
+      else if(target && target.type==='generator' && Resources.carrying && Resources.fuel < 13.95)
+        text = `<b>hold E</b> pour the can in · tank ${Resources.fuel.toFixed(1)}/14L`;
+      else if(target && target.type==='generator') text = Resources.generatorOn
+        ? `<b>E</b> shut the generator down`
+        : `<b>hold E</b> pull it over · fuel ${Resources.fuel.toFixed(1)}L`;
+      else if(target && target.type==='washer'){
+        const W = World.washer;
+        text = W.done ? 'cycle finished'
+             : W.running ? `<b>E</b> stop the machine · ${(W.progress*100)|0}%`
+             : `<b>hold E</b> start the machine · 800W`;
+      }
+      else if(target && target.type==='pc'){
+        const PC = World.workstation;
+        text = PC.done ? 'transfer complete'
+             : PC.running ? `<b>E</b> pause transfer · ${(PC.progress*100)|0}%`
+             : `<b>hold E</b> start transfer · 420W`;
+      }
+      else if(target && target.type==='charger')
+        text = Resources.onCharger ? `<b>E</b> take the flashlight · ${Resources.torchFuel.toFixed(0)}%`
+                                    : `<b>hold E</b> put the flashlight on charge`;
+      else if(target && target.type==='climb'){
+        const c = target.climb;
+        text = (c.id==='bed' && !c.cleared) ? `<b>hold E</b> shove the wardrobe clear`
+             : c.blocked                    ? 'blocked from above'
+             : c.open ? `<b>hold E</b> close the ${c.name.toLowerCase()}`
+                      : `<b>hold E</b> pull down the ${c.name.toLowerCase()}`;
+      }
+      else if(target && target.type==='locker')
+        text = World.footlocker.taken ? 'empty' : `<b>hold E</b> force the footlocker`;
+      else if(target && target.type==='isolator')
+        text = World.isolator.on ? 'the second feed is live'
+                                 : `<b>hold E</b> throw the roof-space isolator · +250W`;
+      else if(target && target.type==='bench'){
+        const n = Resources.kitTrips + Resources.kitSensors + Resources.kitFloods;
+        text = n ? `<b>hold E</b> take from the kit box · ${Resources.kitTrips}W ${Resources.kitSensors}S ${Resources.kitFloods}F`
+                 : 'the kit box is empty';
+      }
+      else if(target && target.type==='seat')  text = `<b>E</b> sit`;
+      else if(target && target.type==='stand') text = `<b>E</b> stand up`;
+      else if(target && target.type==='hatch') text = `<b>E</b> ${World.hatch.open?'close':'open'} cellar hatch`;
+      else if(target && target.type==='breaker') text = Resources.tripped
+        ? `<b>hold E</b> reset the breakers`
+        : `<b>E</b> breaker panel · ${Resources.load}/${Resources.capacity()}W`;
+      else if(target && target.type==='window'){
+        const w = target.win;
+        text = w.boarded >= 3 ? 'boarded shut'
+             : Player.aiming && Resources.boards > 0 ? `<b>hold E</b> nail a board on · ${w.boarded}/3`
+             : w.forced ? `<b>hold E</b> pull the sash down`
+             : `<b>hold E</b> force the sash · swollen shut`;
+      }
+      /* Carrying a piece of kit overrides every other prompt, because E
+         is going to put it down whatever you happen to be looking at. */
+      if(carryingKit){
+        /* `target` is legitimately null here — the block above lets a
+           carried piece of kit prompt while you are looking at a blank
+           wall, which is the whole point of it. Reading target.type
+           without the guard threw a TypeError out of the HUD update
+           every frame you carried a tripwire and looked at nothing, and
+           took the rest of the frame's UI with it until a reload. */
+        text = carryingKit === 'trip'
+          ? (target && target.type === 'door'
+               ? `<b>hold E</b> string the wire across this door`
+               : 'carrying a tripwire · look at a doorway')
+          : carryingKit === 'sensor'
+            ? (Player.room === 'outside' ? 'carrying a sensor · not out here'
+                                         : `<b>hold E</b> set the sensor down here`)
+            : (Player.room === 'outside' ? `<b>hold E</b> set the floodlight up here`
+                                         : 'carrying a floodlight · it is for the yard');
+      }
+      prompt.innerHTML = text;
+      prompt.classList.add('on');
+      ch.classList.add('hot');
+    },
+
+    say(text, dur=4.5){
+      sub.textContent = text;
+      sub.classList.add('on');
+      sayTimer = dur;
+    },
+
+    toggleTablet(){
+      if(!GameState.started) return;
+      this.tabletOpen = !this.tabletOpen;
+      el('tablet').classList.toggle('on', this.tabletOpen);
+      Audio.click();
+      // always come back to the quad, so Tab never reopens onto one tile
+      if(!this.tabletOpen && this.focusedFeed >= 0) this.setFocus(-1);
+      /* ...except on touch, where the quad IS the problem. Open onto the
+         first live channel instead, and keep the footer honest. */
+      if(this.tabletOpen && Input.touch){
+        this.focusedFeed = -1;
+        this.stepFeed(1);
+      }
+      if(this.tabletOpen) this.syncFeedChrome();
+      // no pointer to lock on a phone, and asking eats the tap
+      if(Input.touch){ /* nothing to do */ }
+      else if(this.tabletOpen){ controls.unlock(); } else { controls.lock(); }
+    },
+    toggleNightVision(){
+      this.nightVision = !this.nightVision;
+      Audio.click();
+      /* AND THE WALL CHANGES NOW. The grade is a CPU pass over pixels
+         each channel already holds, so every live tile can be repainted
+         in the same keypress instead of waiting for the round robin to
+         reach it — which took the better part of a second per feed and
+         made N look like it had done nothing at all. */
+      for(const c of Equipment.cameras){
+        if(!feedLive(c) || c.blanked) continue;
+        try { gradeFeed(c); } catch(err){ /* a channel with no frame yet */ }
+      }
+      feedTimer = 0;                 // and the next real capture is immediate
+      this.syncFeedChrome();
+    },
+    toggleMap(){
+      mapOpen = !mapOpen;
+      if(!mapCanvas){
+        mapCanvas = document.createElement('canvas');
+        mapCanvas.width = 460; mapCanvas.height = 380;
+        /* The BACKING STORE stays 460x380 -- every coordinate the map
+           draws is figured against that, so it must not move. What was
+           wrong was the DISPLAY size: 460 CSS pixels pinned 24px from the
+           right edge is wider than a phone in portrait, so the map hung
+           off the side of the screen with the west half of the house
+           past the bezel. Capping the displayed width against the
+           viewport and letting the height follow keeps the whole plan on
+           screen at any size, and costs nothing on a desktop where the
+           cap never binds. */
+        Object.assign(mapCanvas.style, {
+          position:'fixed', right:'24px', bottom:'70px', zIndex:22,
+          width:'min(460px, calc(100vw - 48px))', height:'auto',
+          maxHeight:'calc(100vh - 96px)', objectFit:'contain',
+          border:'1px solid rgba(190,180,160,.18)', background:'rgba(6,7,8,.86)'
+        });
+        document.body.appendChild(mapCanvas);
+      }
+      mapCanvas.style.display = mapOpen ? 'block' : 'none';
+      Audio.click();
+    },
+    drawMap(){
+      if(!mapOpen || !mapCanvas) return;
+      const g = mapCanvas.getContext('2d');
+      const W = mapCanvas.width, H = mapCanvas.height;
+      g.clearRect(0,0,W,H);
+      g.fillStyle='rgba(6,7,8,0.9)'; g.fillRect(0,0,W,H);
+      /* The world runs x -8..35.6 and z -6..6.8 now, so the map is no
+         longer centred on the origin — it is fitted to the whole
+         footprint with the old house at the left. */
+      const MX0=-10, MX1=38, MZ0=-8, MZ1=9;
+      const sx = W/(MX1-MX0), sy = H/(MZ1-MZ0);
+      const X = x => (x-MX0)*sx, Z = z => (z-MZ0)*sy;
+      g.font='9px monospace'; g.textAlign='center';
+      for(const [k,r] of Object.entries(CFG.ROOMS)){
+        if(k==='basement') continue;
+        const inHere = Player.room===k;
+        g.strokeStyle = inHere ? 'rgba(230,220,200,.85)' : 'rgba(150,142,126,.35)';
+        g.fillStyle = `rgba(120,110,95,${0.06 + (Director.heat[k]||0)*0.16})`;
+        g.lineWidth = inHere ? 1.6 : 1;
+        g.beginPath();
+        g.rect(X(r.x0), Z(r.z0), (r.x1-r.x0)*sx, (r.z1-r.z0)*sy);
+        g.fill(); g.stroke();
+        g.fillStyle = inHere ? '#e6dfd0' : '#6f6a5f';
+        g.fillText(r.name, X((r.x0+r.x1)/2), Z((r.z0+r.z1)/2));
+      }
+      // windows
+      g.fillStyle='#7f9ab5';
+      for(const w of World.windows) g.fillRect(X(w.position.x)-2, Z(w.position.z)-2, 4, 4);
+      // player + facing
+      const look = camera.getWorldDirection(new THREE.Vector3());
+      g.strokeStyle='#e9c56a'; g.lineWidth=1.4;
+      g.beginPath(); g.moveTo(X(Player.pos.x), Z(Player.pos.z));
+      g.lineTo(X(Player.pos.x+look.x*2.2), Z(Player.pos.z+look.z*2.2)); g.stroke();
+      g.fillStyle='#e9c56a';
+      g.beginPath(); g.arc(X(Player.pos.x), Z(Player.pos.z), 3.4, 0, TAU); g.fill();
+      g.textAlign='left'; g.fillStyle='#5c584e';
+      g.fillText(Player.level==='basement' ? 'BASEMENT (below)' : 'GROUND FLOOR', 10, H-10);
+    },
+
+    update(dt){
+      if(sayTimer > 0){ sayTimer -= dt; if(sayTimer<=0) sub.classList.remove('on'); }
+      /* One light, so the readout is one number. The SPARES segment that
+         used to sit here counted an inventory that no longer exists. */
+      el('s-torch').textContent = (Resources.onCharger ? 'CHARGING ' : Lights.torchOn ? 'ON  ' : 'OFF ') +
+        `${Resources.torchFuel.toFixed(0)}%` +
+        (Resources.torchFuel <= 0 && !Resources.onCharger ? ' · FLAT' : '');
+      el('s-power').textContent = Resources.tripped ? 'BREAKER TRIPPED'
+        : Resources.grid ? `GRID  ${Resources.load}/${Resources.capacity()}W`
+        : Resources.generatorOn ? `GEN ${Resources.load}/${Resources.capacity()}W · ${Resources.fuel.toFixed(1)}L`
+        /* There is no such state as NONE. This used to fall through to it
+           for the whole of a mains FLICKER — grid off, gridDead not yet
+           set — so twenty to ninety seconds of a temporary dropout read
+           on the HUD as though the house had no power source at all. */
+        : Resources.gridDead ? `MAINS DOWN · GEN OFF · ${Resources.fuel.toFixed(1)}L`
+        : `MAINS OUT · GEN OFF · ${Resources.fuel.toFixed(1)}L`;
+      el('s-stress').textContent = '█'.repeat(Math.round(GameState.stress*10)).padEnd(10,'·');
+      this.updateFeedFlags(dt);
+      const T = clockParts();
+      el('c-time').textContent = T.hhmm;
+      // and how much night is left, which is the number that actually matters
+      const rem = T.toDawn;
+      el('c-time12').textContent = rem > 0
+        ? `${Math.floor(rem/60)}h ${String(Math.floor(rem%60)).padStart(2,'0')}m to dawn`
+        : `${T.h12}:${String(T.mm).padStart(2,'0')} ${T.ampm}`;
+      /* THE SAME NAME IN BOTH PLACES. The corner clock printed the raw
+         room KEY -- so the label top-left said BACK BEDROOM while the
+         clock underneath it said BEDROOM2, and the hall, the utility
+         room and the side hallway disagreed with themselves too. The
+         key is an identifier; CFG.ROOMS carries the name the house
+         calls it. */
+      const roomName = CFG.ROOMS[Player.room]?.name
+                    || (Player.room === 'basement' ? 'BASEMENT' : 'OUTSIDE');
+      el('c-night').textContent = `NIGHT ${GameState.night} · ${roomName}`;
+      el('roomname').textContent = roomName;
+      el('tabbat').textContent = `BAT ${Resources.battery.toFixed(0)}%`;
+      // hold-to-interact progress
+      const hb = el('ln-holdbar');
+      hb.classList.toggle('on', Hold.active);
+      if(Hold.active){
+        hb.firstElementChild.style.setProperty('--p', (Hold.progress*100).toFixed(1)+'%');
+        hb.querySelector('span').textContent = Hold.label;
+      }
+      this.drawObjectives();
+      const st = el('ln-stamina');
+      st.classList.toggle('on', Player.stamina < CFG.PLAYER.staminaMax-0.5);
+      // winded is a state you have to wait out, so it looks like one
+      st.classList.toggle('spent', !!Player.winded);
+      st.firstElementChild.style.width = `${Player.stamina}%`;
+      el('ln-panic').style.opacity = String(clamp((GameState.stress-0.45)*1.4, 0, 0.85));
+      el('breath').classList.toggle('on', GameState.breathT > 0);
+      this.drawMap();
+    },
+    hunt(on){ el('huntflash').classList.toggle('on', !!on); },
+    /* A room said something. Mark every feed that watches it for two
+       seconds. Kept as a map of room -> {kind, t} rather than a CSS
+       timeout so that a second ping refreshes the same mark instead of
+       stacking two timers that then fight over removing the class. */
+    roomFlags: new Map(),
+    flagRoom(room, kind){ this.roomFlags.set(room, { kind, t:2.0 }); },
+    updateFeedFlags(dt){
+      if(this.roomFlags.size){
+        for(const [room, f] of this.roomFlags){
+          f.t -= dt;
+          if(f.t <= 0) this.roomFlags.delete(room);
+        }
+      }
+      for(const c of Equipment.cameras){
+        const f = this.roomFlags.get(c.room);
+        c.el.classList.toggle('trip',   !!f && f.kind === 'trip');
+        c.el.classList.toggle('sensor', !!f && f.kind === 'sensor');
+      }
+      /* Placed-and-live first, then what is still in the box, because
+         the number you act on is "how many wires are still armed", not
+         "how many did I ever put out". */
+      const live  = Equipment.tripwires.filter(w=>!w.spent).length;
+      const floodsOn = Equipment.floodlights.filter(f => f.light.intensity > 1).length;
+      el('tabkit').textContent =
+        `TRIPS ${live}${Resources.kitTrips?`+${Resources.kitTrips}`:''} · ` +
+        `SENSORS ${Equipment.sensors.length}${Resources.kitSensors?`+${Resources.kitSensors}`:''} · ` +
+        `FLOODS ${floodsOn}/${Equipment.floodlights.length} ON`;
+    },
+    deathZoom(){
+      // FOV snap onto the face
+      let t = 0;
+      const step = ()=>{
+        t += 1/60;
+        camera.fov = lerp(camera.fov, 34, 0.25);
+        camera.updateProjectionMatrix();
+        if(t < 0.9) requestAnimationFrame(step);
+      };
+      step();
+    },
+    /* The morning card. showEnd() stops the game; this does not — you
+       have three minutes of daylight and then night two. */
+    showSurvived(){
+      const e = el('ln-endscreen');
+      e.classList.add('win');
+      e.querySelector('h2').textContent = 'You made it to six';
+      e.querySelector('p').textContent =
+        `Night ${GameState.night} survived · ${GameState.survived} of ` +
+        `${GameState.night} · ${Director.state.log.length} events`;
+      const btn = e.querySelector('#ln-againbtn');
+      if(btn) btn.textContent = 'Go on';
+      e.classList.add('on');
+      controls.unlock();
+    },
+    showEnd(won){
+      GameState.over = true;
+      const e = el('ln-endscreen');
+      e.classList.toggle('win', !!won);
+      e.querySelector('h2').textContent = won ? 'You made it to six' : 'It found you';
+      e.querySelector('p').textContent = won
+        ? `Night ${GameState.night} survived · ${Director.state.log.length} events`
+        : `${clockParts().hhmm} · night ${GameState.night}`;
+      e.classList.add('on');
+      controls.unlock();
+    },
+    drawObjectives(){
+      const box = el('objectives');
+      box.innerHTML = Objectives.list.map(o=>{
+        const done = o.done();
+        let extra = '';
+        if(o.id==='wash' && World.washer && World.washer.running) extra = ` ${(World.washer.progress*100)|0}%`;
+        if(o.id==='files' && World.workstation) extra = World.workstation.done ? '' : ` ${(World.workstation.progress*100)|0}%`;
+        return `<div class="o${done?' done':''}">${o.text}${extra}</div>`;
+      }).join('');
+    },
+    show(){ hud.classList.add('on'); el('ln-help').classList.add('on');
+            document.body.classList.add('helpshown'); }
+  };
+  return api;
+})();
+
+
+
   /* The house's interact(), captured at the closure's top level where
      no banner comment can swallow it. The first attempt at this line
      was inserted directly after a banner's `/*` and spent the whole
@@ -29935,6 +30970,10 @@ function inFloodlight(){
        garage; the attic brings the three climbs. */
     build(){
       buildMaterials();
+      /* The house's own HUD and its tablet. init() binds the elements
+         that were inserted into the document with it. */
+      try { UI.init(); } catch(err){ lastHouseError = 'UI.init: ' + err; }
+      buildCameras();
       buildHouse();
       buildWing();
       buildAttic();
@@ -30059,6 +31098,18 @@ function inFloodlight(){
       const near = !px ? true
         : Math.hypot(px.x - placedAt.x, px.z - placedAt.z) < 120;
       GROUP.visible = near;
+      /* ---- ONE HUD ON SCREEN AT A TIME -----------------------------
+         Both games have a HUD and they measure different things: the
+         house shows the room, the night, the power and the flashlight;
+         the forest shows thirst, hunger, cold and a compass. Showing
+         both would be two games talking over each other, so each is on
+         while the player is in it. */
+        const inside = !!(host && host.indoors);
+      const root = document.getElementById('lnroot');
+      if(root) root.classList.toggle('off', !inside);
+      const drHud = document.getElementById('hud');
+      if(drHud) drHud.style.display = inside ? 'none' : '';
+      houseIndoors = inside;
       /* ---- THE SKY AND THE STORM ARE DOWNRIVER'S --------------------
          The house's lighting reads Sky.day and Sky.phase to decide how
          much daylight reaches each room, and its own Sky is driven by
@@ -30101,6 +31152,17 @@ function inFloodlight(){
       updateHatch(dt);
       updateClimbSides();
       if(!near) return;
+      /* ---- WHAT YOU ARE LOOKING AT, AND WHAT E WOULD DO TO IT ------
+         pickTarget() is what decides the hovered thing, and UI.update
+         is what writes the prompt -- neither was being called, so the
+         house had no prompts and E fired into whatever pickTarget had
+         last seen, which was nothing. Both run here now, and only
+         while the player is actually in the house: the prompt belongs
+         to the game you are standing in. */
+      if(indoorsNowLocal()){
+        pickTarget();
+        UI.update(dt);
+      }
       updatePracticals(dt);
       Resources.update(dt);
       /* The room the lighting is computed FROM is the player's, and the
@@ -30143,18 +31205,18 @@ function inFloodlight(){
        the house's floor and the generator records how far off the
        porch cell still is (Wld.stats.porchStep), which is the number
        to look at if a threshold ever does jolt. */
-    enter(worldX, worldY, worldZ, hostCam){
+    enter(worldX, worldY, worldZ, hostCam, yaw, pitch){
       const L = this.toLocal(worldX, worldZ);
       Player.pos.set(L.x, worldY - placedAt.y, L.z);
       Player.vel.set(0, 0, 0);
-      syncLook(hostCam);
+      syncLook(yaw, pitch, hostCam);
       return Player.pos;
     },
     /* Called every frame while the player is indoors. The look comes in
        from the real camera, the step is taken in local metres, and the
        eye goes back out to the real camera in world metres. */
-    stepPlayer(dt, hostCam, hostKeys){
-      syncLook(hostCam);
+    stepPlayer(dt, hostCam, hostKeys, yaw, pitch){
+      syncLook(yaw, pitch, hostCam);
       syncKeys(hostKeys);
       updatePlayer(dt);
       const w = farmLocalToWorldXZ(camera.position.x, camera.position.z, placedAt);
