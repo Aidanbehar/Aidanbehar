@@ -21837,7 +21837,8 @@ function stepWorld(dt){
   stepPlayerEitherSide(dt);
   if(typeof LN !== 'undefined')
     LN.tick(dt, { sky: Sky, weather: Weather, playerPos: Player.pos,
-                  indoors: indoorsNow(), hours: G.hours });
+                  indoors: indoorsNow(), hours: G.hours,
+                  torch: Gear.torchOn && Gear.battery > 0 });
   updateRest(dt);
   updateWeather(dt);
   updateSky(dt);
@@ -22664,6 +22665,14 @@ const CFG = {
     get god(){ return !!CFG.DEBUG.invuln; },
     invisible: false,
     forceFlank: false,
+    /* THE CELL IS DOWNRIVER'S. Resources.update() drains torchFuel
+       whenever Lights.torchOn is true and says "that was the only
+       cell" when it runs out -- which is right in a game with one
+       flashlight in it, and wrong here, where the beam the player is
+       holding has its own batteries and its own charging. The house's
+       own switch for exactly this is DEV.infTorch, so the house keeps
+       its cradle, its cell and its UI and simply never spends it. */
+    infTorch: true,
   };
   const Director = (()=>{
     const THREAT = { DORMANT:'DORMANT', STALKING:'STALKING', HUNTING:'HUNTING', ATTACKING:'ATTACKING' };
@@ -38162,7 +38171,16 @@ class GlassPass extends Pass {
          it. Both are taken out of the scene here rather than dimmed: a
          light at zero intensity is still evaluated per fragment, and
          the cone is still a transparent mesh being drawn. */
-      if(Lights.torch){ Lights.torch.visible = false; Lights.torch.intensity = 0; }
+      /* `Lights.torch` IS NOT A PROPERTY OF Lights. The first attempt
+         at taking the house's beam out of the scene guarded on that
+         name, so it never once ran -- and the readout written to check
+         it asked the same undefined name and answered false, which is
+         a test that cannot fail. The spotlight is Lights.flashlight,
+         it is parented to the house camera, its intensity is a
+         constant 7.2 and nothing ever hid it: the house's beam has
+         been burning on top of Downriver's this whole time, which is
+         the second flashlight the player reported. */
+      if(Lights.flashlight) Lights.flashlight.visible = false;
       if(Lights.cone){ Lights.cone.visible = false; }
       collectLights();
       thinShadowCasters();
@@ -38286,7 +38304,9 @@ class GlassPass extends Pass {
     get audioReady(){ return Audio.ready; },
     get audioCtx(){ return Audio.ready ? Audio.contextRef : null; },
     get audioBusConnected(){ return Audio.ready; },
-    get torchVisible(){ return !!(Lights.torch && Lights.torch.visible)
+    /* Asked of the objects that actually exist. The version of this
+       that asked about `Lights.torch` could only ever answer false. */
+    get torchVisible(){ return !!(Lights.flashlight && Lights.flashlight.visible)
                             || !!(Lights.cone && Lights.cone.visible); },
     get lightStats(){ return { lights: houseLights.length,
                                on: houseLights.filter(l=>l.visible).length,
@@ -38383,7 +38403,18 @@ class GlassPass extends Pass {
          the cradle in the utility room still exists and still has
          somewhere to put a light, which is what makes it the charger
          for the real one once interaction is wired. */
-      Lights.torchOn = false;
+      /* The house READS Lights.torchOn in the places that decide
+         behaviour: litByTorch, which is the crawler's ONLY counter and
+         the thing that holds the tall one in its stare; the scare
+         placement that refuses to put something where the beam already
+         is; the rain highlight on the glass. Holding it false told
+         every one of them that the player was standing in the dark
+         with a lit torch in their hand. It mirrors the host's beam
+         now -- the state is Downriver's, and so is the only light that
+         actually renders. */
+      Lights.torchOn = !!(host && host.torch);
+      if(Lights.flashlight) Lights.flashlight.visible = false;
+      if(Lights.cone) Lights.cone.visible = false;
       /* ---- NIGHTFALL AND DAWN, ON DOWNRIVER'S CLOCK ----------------
          The house has both of these written -- startNextNight() puts
          back the fuel, the boards, the objectives and the grid and
@@ -38552,6 +38583,10 @@ class GlassPass extends Pass {
     floorHeightAt, levelAt, updateStairState, updateAtticState, updateClimbSides,
     rampAt, atticRampAt, atticRoofY, atticHeadroom, hatchPassable, inRect,
     collide, updatePlayer, Player, Keys, Hold,
+    /* The player's aim in the house's own frame, for the harness. The
+       whole point of the frame fix is that this and a local position
+       can be compared, so a test has to be able to see it. */
+    aimLocal(){ return localForward(new THREE.Vector3()); },
     ATTIC_CLIMBS, setAtticClimbOpen, atticClimbAction, toggleHatch, updateHatch,
     updateDoors, updateWindows, applyDoorAngle, roomAt, roomBrightness,
     computeRoomVisibility, applyRoomLighting, RoomGraph, Lights,
