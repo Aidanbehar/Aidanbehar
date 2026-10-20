@@ -22191,7 +22191,7 @@ const LN = ((hostScene, hostCamera)=>{
       if(!o.geometry.boundingBox) o.geometry.computeBoundingBox();
       box.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
       box.getSize(size);
-      if(Math.max(size.x, size.y, size.z) < 0.40){ o.castShadow = false; off++; }
+      if(Math.max(size.x, size.y, size.z) < 0.80){ o.castShadow = false; off++; }
       else kept++;
     });
     shadowStats = { stoppedCasting: off, stillCasting: kept };
