@@ -38864,6 +38864,8 @@ class GlassPass extends Pass {
       return { x: f.x, y: placedAt.y + Player.pos.y, z: f.z,
                level: Player.level, room: Player.room };
     },
+    /* For the harness: give the house boards and nails to work with. */
+    setStock(boards, nails){ Resources.boards = boards; Resources.nails = nails; },
     /* For the harness: swing every door in the house through the same
        code the player's E goes through, and report how many moved. */
     swingAllDoors(){
