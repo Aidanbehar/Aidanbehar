@@ -22140,6 +22140,55 @@ const LN = ((hostScene, hostCamera)=>{
   let lastHouseError = null;
   let houseIndoors = false;
   const indoorsNowLocal = ()=> houseIndoors;
+  /* ---- TWENTY LAMPS WERE LIGHTING A FOUR-KILOMETRE FOREST ----------
+     Measured: 32 lights in the scene, 22 of them point lights, 20 of
+     those the house's. Three.js's forward renderer evaluates EVERY
+     light for EVERY fragment, so each lamp in this building was being
+     shaded across all of Downriver's terrain and every tree in view,
+     all the time. That is the twenty frames a second.
+
+     Intensity 0 does not help: a light at zero is still in the shader's
+     loop. Only `visible = false` takes it out, because the renderer
+     skips invisible objects when it collects the lights.
+
+     So the house's lamps are visible only when the player is inside it
+     AND the room lighting has actually decided they are on -- which is
+     most of them off most of the time, since applyRoomLighting only
+     lights rooms the player can see into. */
+  let houseLights = [];
+  function collectLights(){
+    houseLights = [];
+    GROUP.traverse(o=>{ if(o.isLight) houseLights.push(o); });
+  }
+  function gateLights(inside){
+    for(const L of houseLights){
+      const want = inside && (L.intensity || 0) > 0.002;
+      if(L.visible !== want) L.visible = want;
+    }
+  }
+  /* ---- AND FIFTEEN HUNDRED SHADOW CASTERS -------------------------
+     2,223 meshes in the house, 1,572 of them asking to be drawn again
+     into the shadow map every frame. A bottle, a doorknob and a book
+     spine do not cast a shadow anybody can see at the resolution a
+     point light's cube map has; the walls, the floors, the doors and
+     the furniture do. Anything whose longest side is under 40cm stops
+     casting, which is the small stuff and almost none of the shape of
+     the room. */
+  function thinShadowCasters(){
+    const box = new THREE.Box3(), size = new THREE.Vector3();
+    let off = 0, kept = 0;
+    GROUP.traverse(o=>{
+      if(!o.isMesh || !o.castShadow) return;
+      if(!o.geometry) return;
+      if(!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      box.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
+      box.getSize(size);
+      if(Math.max(size.x, size.y, size.z) < 0.40){ o.castShadow = false; off++; }
+      else kept++;
+    });
+    shadowStats = { stoppedCasting: off, stillCasting: kept };
+  }
+  let shadowStats = null;
   /* The house's interact() by another name. The exported method cannot
      be called `interact` AND call `interact`: inside an object literal
      the method shadows the function and it recurses into itself. */
@@ -30987,6 +31036,8 @@ const UI = (()=>{
          that were inserted into the document with it. */
       try { UI.init(); } catch(err){ lastHouseError = 'UI.init: ' + err; }
       buildCameras();
+      collectLights();
+      thinShadowCasters();
       buildHouse();
       buildWing();
       buildAttic();
@@ -31078,6 +31129,9 @@ const UI = (()=>{
     toggleTablet(){ try { UI.toggleTablet(); } catch(err){} },
     toggleHouseMap(){ try { UI.toggleMap(); } catch(err){} },
     get lastError(){ return lastHouseError; },
+    get lightStats(){ return { lights: houseLights.length,
+                               on: houseLights.filter(l=>l.visible).length,
+                               shadows: shadowStats }; },
     /* ---- THE HOUSE'S OWN CLOCK ---------------------------------------
        The house has moving parts that are nothing to do with where the
        player is standing: doors swing, sashes slide, the trapdoor
@@ -31123,6 +31177,7 @@ const UI = (()=>{
       const drHud = document.getElementById('hud');
       if(drHud) drHud.style.display = inside ? 'none' : '';
       houseIndoors = inside;
+      gateLights(inside && near);
       /* ---- THE SKY AND THE STORM ARE DOWNRIVER'S --------------------
          The house's lighting reads Sky.day and Sky.phase to decide how
          much daylight reaches each room, and its own Sky is driven by
