@@ -21690,280 +21690,9 @@ const LN = ((hostScene, hostCamera)=>{
   });
   const Audio = SHIM('Audio'), UI = SHIM('UI'), Director = SHIM('Director');
   const Resources = SHIM('Resources'), Equipment = SHIM('Equipment');
-  /* ---- TWO SHADERS ARE LOAD-BEARING AND ARE LIFTED -----------------
-     Stubbing these to null got as far as the house build and then threw:
-     the window material clones GlassShader.uniforms and the torch cone
-     clones ConeShader.uniforms, so they are not decoration. Both are
-     self-contained GLSL with no dependency on The Long Night's renderer,
-     so they come across whole.
-
-     What does NOT come across is the GlassPass that goes with the first
-     of them -- the rain-on-glass POST pass, which is a second render of
-     the scene. The material alone gives the panes their depth, their
-     dirt and their four interior lights; the pass is what puts moving
-     rain on them, and Downriver already has weather of its own to pay
-     for. setGlass(false) is the fallback The Long Night wrote for
-     exactly this, and it is what the house runs on.
-
-     FogPlaneShader and PostShader are deliberately absent: the ground
-     fog and the whole post stack are Downriver's. */
-const GLASS_LIGHTS = 4;
-const GlassShader = {
-  uniforms: {
-    tScene:      { value: null },
-    uTime:       { value: 0 },
-    uRes:        { value: new THREE.Vector2(1,1) },
-    uIntensity:  { value: 1.0 },     // storm strength -> droplet density
-    uFlash:      { value: 0.0 },     // lightning: glass lights up, spec pops
-    uRefract:    { value: 1.0 },
-    uGrime:      { value: 0.55 },
-    uTint:       { value: new THREE.Color(0x8b97a4) },
-    // --- what is actually reflecting in this pane, fed per frame ---
-    uCamPos:     { value: new THREE.Vector3() },
-    uLightPos:   { value: Array.from({length:GLASS_LIGHTS}, ()=>new THREE.Vector4()) },
-    uLightCol:   { value: Array.from({length:GLASS_LIGHTS}, ()=>new THREE.Color(0,0,0)) },
-    uRoom:       { value: new THREE.Color(0,0,0) },   // room light for the grazing sheen
-    uFlashDir:   { value: new THREE.Vector3(0.3, 0.8, 0.5) },
-  },
-  vertexShader: /* glsl */`
-    varying vec2 vUv;
-    varying vec4 vScreen;
-    varying vec3 vWorld;
-    varying vec3 vNrm;
-    varying vec3 vTan;
-    varying vec3 vBit;
-    void main(){
-      vUv = uv;
-      vec4 wp = modelMatrix * vec4(position,1.0);
-      vWorld = wp.xyz;
-      /* The pane's basis in world space. Taken from the model matrix
-         rather than from the normal/tangent attributes because the mesh
-         is a unit plane scaled non-uniformly to the opening — the
-         columns come out scaled, and normalizing is both the fix and
-         cheaper than a normal matrix. */
-      vNrm = normalize(mat3(modelMatrix) * vec3(0.0, 0.0, 1.0));
-      vTan = normalize(mat3(modelMatrix) * vec3(1.0, 0.0, 0.0));
-      vBit = cross(vNrm, vTan);
-      vec4 p = projectionMatrix * viewMatrix * wp;
-      vScreen = p;
-      gl_Position = p;
-    }
-  `,
-  fragmentShader: `#define GLASS_LIGHT_COUNT ${GLASS_LIGHTS}\n` + NOISE_GLSL + /* glsl */`
-    uniform sampler2D tScene;
-    uniform float uTime, uIntensity, uFlash, uRefract, uGrime;
-    uniform vec2  uRes;
-    uniform vec3  uTint;
-    uniform vec3  uCamPos;
-    uniform vec4  uLightPos[GLASS_LIGHT_COUNT];
-    uniform vec3  uLightCol[GLASS_LIGHT_COUNT];
-    uniform vec3  uRoom;
-    uniform vec3  uFlashDir;
-    varying vec2 vUv;
-    varying vec4 vScreen;
-    varying vec3 vWorld;
-    varying vec3 vNrm;
-    varying vec3 vTan;
-    varying vec3 vBit;
-
-    /* Rain on a pane is mostly a fine stipple of small, still droplets.
-       Occasionally one gets heavy enough to break loose and run, and it
-       runs essentially STRAIGHT DOWN — surface tension gives it at most a
-       slight lean, it does not swim from side to side. The old version
-       drove lateral position with a sine plus noise, which is why the
-       drops looked alive and gelatinous. */
-
-    // the dense field of stationary droplets that covers most of the glass
-    float stipple(vec2 uv, float t, vec2 cells, float seed, float sz){
-      vec2 g = uv * cells;
-      vec2 id = floor(g);
-      vec2 f  = fract(g) - 0.5;
-      float r = hash21(id * 1.37 + seed);
-      if(r < 0.30) return 0.0;
-      // droplets grow slowly, then merge away and start again
-      float life = fract(t * (0.020 + r * 0.045) + r * 7.0);
-      float rad  = sz * (0.42 + 0.52 * life) * (0.65 + 0.5 * uIntensity);
-      rad *= 1.0 - smoothstep(0.90, 1.0, life);
-      vec2 o = (hash22(id + seed) - 0.5) * 0.62;
-      return smoothstep(rad, rad * 0.30, length(f - o));
-    }
-
-    // a heavy drop breaking loose and running down its own track
-    float runner(vec2 uv, float t, vec2 cells, float speed, float seed){
-      vec2 g = uv * cells;
-      vec2 id = floor(g);
-      vec2 f  = fract(g);
-      float r = hash21(id + seed);
-      if(r < 0.66) return 0.0;                       // runners are the exception
-      float sp = speed * (0.65 + r * 0.7);
-      float ph = fract(t * sp + r * 13.7);
-      // fixed track with a small constant lean — no wander, no hunting
-      float lean = (hash21(id + seed + 2.2) - 0.5) * 0.13;
-      float cx = 0.20 + 0.60 * hash21(id + seed + 5.1) + lean * ph;
-      float cy = 1.0 - ph;
-      float rad = (0.030 + 0.034 * hash21(id + seed + 9.3)) * (0.7 + 0.45 * uIntensity);
-      vec2 d = (f - vec2(cx, cy)) * vec2(1.0, 0.88);
-      float head = smoothstep(rad, rad * 0.22, length(d));
-      // the wet track it leaves, a chain of small beads rather than a line
-      float tx = abs(f.x - (cx - lean * (f.y - cy)));
-      float ty = f.y - cy;
-      float trail = smoothstep(rad * 0.55, 0.0, tx)
-                  * smoothstep(0.0, 0.015, ty)
-                  * (1.0 - smoothstep(0.015, 0.42, ty));
-      trail *= 0.20 + 0.80 * step(0.50, hash21(vec2(id.x, floor(ty * 44.0 + id.y * 3.0))));
-      return max(head, trail * 0.42);
-    }
-
-    float waterHeight(vec2 uv, float t){
-      float h = 0.0;
-      // the stipple carries the look; three scales of it, finest first
-      h += stipple(uv, t, vec2(64.0, 48.0),  3.1, 0.30) * 0.42;
-      h += stipple(uv, t, vec2(38.0, 29.0), 17.7, 0.34) * 0.55;
-      h += stipple(uv, t, vec2(21.0, 16.0), 41.3, 0.36) * 0.62;
-      // and a few runners on top
-      h += runner(uv, t, vec2(10.0, 4.6), 0.26,  1.7) * 0.95;
-      h += runner(uv, t, vec2(16.0, 7.4), 0.40, 11.3) * 0.70;
-      // barely-there film so the pane is never perfectly flat
-      h += fbm(uv * vec2(11.0, 6.0) + vec2(0.0, -t * 0.22)) * 0.045;
-      return h;
-    }
-
-    void main(){
-      vec2 uv = vUv;
-      float t = uTime;
-
-      // --- finite-difference normal of the water height field ---
-      float e = 1.0 / 420.0;
-      float h  = waterHeight(uv, t);
-      float hx = waterHeight(uv + vec2(e, 0.0), t);
-      float hy = waterHeight(uv + vec2(0.0, e), t);
-      vec3  n  = normalize(vec3((h - hx) * 2.6, (h - hy) * 2.6, 0.30));
-
-      // --- refract the already-rendered frame ---
-      vec2 suv = (vScreen.xy / vScreen.w) * 0.5 + 0.5;
-      vec2 off = n.xy * 0.026 * uRefract * (0.40 + h);
-      vec3 col = texture2D(tScene, clamp(suv + off, vec2(0.001), vec2(0.999))).rgb;
-
-      // Dry glass is not clean glass: grime, dust and old smears eat light.
-      float grime = fbm(uv * 6.0 + 3.1) * 0.6 + worley(uv * 11.0) * 0.4;
-      float dirt  = mix(1.0, 0.62 + 0.38 * grime, uGrime);
-      col *= dirt;
-
-      // Water darkens what is behind it slightly and tints it cold.
-      col = mix(col, col * uTint * 1.10, clamp(h * 0.55, 0.0, 0.55));
-
-      /* ---------------- REFLECTIONS ----------------------------------
-         n above is the droplet normal in TANGENT space (x along u, y
-         along v, z out of the pane). Rotate it into the world with the
-         pane's own basis and everything below is real geometry. */
-      vec3 Nw = normalize(vTan * n.x + vBit * n.y + vNrm * n.z);
-      // the pane is double-sided; face the viewer or the maths inverts
-      if(!gl_FrontFacing) Nw = -Nw;
-      vec3 V = normalize(uCamPos - vWorld);
-      if(dot(Nw, V) < 0.0) Nw = -Nw;
-
-      /* Schlick. F0 = 0.04 is window glass; the ^5 is what makes a pane
-         you look straight through turn into a mirror when you step to
-         one side of it. This one term is most of "that looks like
-         glass". */
-      float ndv = clamp(dot(Nw, V), 0.0, 1.0);
-      float F = 0.04 + 0.96 * pow(1.0 - ndv, 5.0);
-
-      /* Water raises the reflectance and roughens it: a droplet is a
-         little lens sitting proud of the surface, so it both catches
-         more and smears what it catches. */
-      float wet = clamp(h * 1.6, 0.0, 1.0);
-
-      vec3 refl = vec3(0.0);
-      for(int i = 0; i < GLASS_LIGHT_COUNT; i++){
-        float li = uLightPos[i].w;
-        if(li <= 0.0) continue;
-        vec3 Ld = uLightPos[i].xyz - vWorld;
-        float d2 = max(dot(Ld, Ld), 0.04);
-        vec3 L = Ld * inversesqrt(d2);
-        if(dot(L, vNrm) * dot(V, vNrm) < 0.0) continue;   // light behind the pane
-        vec3 H = normalize(L + V);
-        float ndh = max(dot(Nw, H), 0.0);
-        float fall = li / (1.0 + d2 * 0.34);
-        // tight: the bulb's own image in the flat glass
-        float sharp = pow(ndh, mix(320.0, 90.0, wet));
-        /* broad: the same image scattered by the droplets around it.
-           Tightened from an exponent of 22 — a lobe that wide is most of
-           a pane, so it read as "this window is lit" rather than "the
-           reflection of that bulb is there", which is the opposite of
-           what the geometry now says. */
-        float broad = pow(ndh, 46.0) * wet;
-        refl += uLightCol[i] * fall * (sharp * 0.55 + broad * 0.30);
-      }
-
-      /* The lightning, which is a source at infinity and by far the
-         brightest thing that ever hits this pane. Directional, from
-         wherever the strike actually is. */
-      if(uFlash > 0.001){
-        vec3 H = normalize(uFlashDir + V);
-        float ndh = max(dot(Nw, H), 0.0);
-        refl += vec3(0.86, 0.91, 1.0) * uFlash *
-                (pow(ndh, mix(220.0, 60.0, wet)) * 1.6 + pow(ndh, 14.0) * wet * 0.7 + 0.05);
-      }
-
-      // every reflection obeys Fresnel, which is the whole point
-      col += refl * F;
-
-      /* And the sheen. At a grazing angle the pane stops being a window
-         and starts being a mirror of the room it is in — this is the
-         reason you cannot see out of a lit room at night. uRoom carries
-         that room's own light colour and how much of it there is. */
-      float sheen = F * (0.55 + 0.45 * wet);
-      col = mix(col, col + uRoom, clamp(sheen, 0.0, 0.85));
-
-      // sheet of water at the bottom of the pane
-      float pool = smoothstep(0.10, 0.0, uv.y) * 0.35;
-      col = mix(col, col * vec3(0.72, 0.79, 0.88), pool);
-
-      gl_FragColor = vec4(col, 1.0);
-    }
-  `
-};
-
-/* ---------- VOLUMETRIC FLASHLIGHT CONE ----------------------------- */
-const ConeShader = {
-  uniforms: {
-    uTime:{value:0}, uIntensity:{value:1}, uColor:{value:new THREE.Color(0xffe6bd)},
-    uLen:{value:9.0}, uDust:{value:1.0},
-  },
-  vertexShader: /* glsl */`
-    varying vec3 vPos;      // local space: cone runs along -z
-    varying vec3 vWorld;
-    void main(){
-      vPos = position;
-      vec4 wp = modelMatrix * vec4(position,1.0);
-      vWorld = wp.xyz;
-      gl_Position = projectionMatrix * viewMatrix * wp;
-    }
-  `,
-  fragmentShader: NOISE_GLSL + /* glsl */`
-    uniform float uTime, uIntensity, uLen, uDust;
-    uniform vec3 uColor;
-    varying vec3 vPos;
-    varying vec3 vWorld;
-    void main(){
-      float d = clamp(-vPos.z / uLen, 0.0, 1.0);       // 0 at lens, 1 at far end
-      float r = length(vPos.xy) / max(0.001, (0.06 + d * 0.55 * uLen));
-      float edge = 1.0 - smoothstep(0.35, 1.0, r);     // soft cone edge
-      float fall = (1.0 - d) * (1.0 - d);              // inverse-square-ish
-      float near = smoothstep(0.0, 0.06, d);           // hide the lens end
-      // dust motes drifting through the beam
-      float dust = fbm(vWorld.xz * 2.1 + vec2(uTime * 0.05, -uTime * 0.03))
-                 * fbm(vWorld.xy * 3.3 + vec2(-uTime * 0.07, uTime * 0.04));
-      dust = 0.42 + 1.35 * dust * uDust;
-      float a = edge * fall * near * dust * 0.52 * uIntensity;
-      gl_FragColor = vec4(uColor * a, a);
-    }
-  `
-};
-
-/* ---------- LOW GROUND FOG (outside) ------------------------------- */
   const glassPass = null, FogPlaneShader = null;
+  /* GlassShader and ConeShader are declared further down, straight after
+     the noise module they interpolate -- see the note there. */
   let carryingKit = null;
   const captureFeed = ()=>{}, placeCarriedKit = ()=>{}, takeFromBench = ()=>{};
   const toggleFullscreen = ()=>{};
@@ -22863,6 +22592,295 @@ const TexLib = (()=>{
 })();
 
 /* =====================================================================
+
+  /* ---- AND THEY GO *HERE*, NOT IN THE PREAMBLE --------------------
+     These were first put at the top of the closure with the other
+     bridges, and the boot came back with "Cannot access 'NOISE_GLSL'
+     before initialization". Both shaders interpolate that constant into
+     their source at construction time, and the closure has its own copy
+     of it -- lifted with the noise module below -- which shadows
+     Downriver's for the whole closure. So a reference from the preamble
+     is a reference to a binding that exists but has not been reached
+     yet, which is a temporal dead zone rather than a missing name, and
+     the error says so precisely.
+
+     They live after the noise module instead. Nothing before this point
+     needs them: the window material and the torch cone are both built
+     from inside functions that run at build time, long after the whole
+     closure has been evaluated. */
+  /* ---- TWO SHADERS ARE LOAD-BEARING AND ARE LIFTED -----------------
+     Stubbing these to null got as far as the house build and then threw:
+     the window material clones GlassShader.uniforms and the torch cone
+     clones ConeShader.uniforms, so they are not decoration. Both are
+     self-contained GLSL with no dependency on The Long Night's renderer,
+     so they come across whole.
+
+     What does NOT come across is the GlassPass that goes with the first
+     of them -- the rain-on-glass POST pass, which is a second render of
+     the scene. The material alone gives the panes their depth, their
+     dirt and their four interior lights; the pass is what puts moving
+     rain on them, and Downriver already has weather of its own to pay
+     for. setGlass(false) is the fallback The Long Night wrote for
+     exactly this, and it is what the house runs on.
+
+     FogPlaneShader and PostShader are deliberately absent: the ground
+     fog and the whole post stack are Downriver's. */
+const GLASS_LIGHTS = 4;
+const GlassShader = {
+  uniforms: {
+    tScene:      { value: null },
+    uTime:       { value: 0 },
+    uRes:        { value: new THREE.Vector2(1,1) },
+    uIntensity:  { value: 1.0 },     // storm strength -> droplet density
+    uFlash:      { value: 0.0 },     // lightning: glass lights up, spec pops
+    uRefract:    { value: 1.0 },
+    uGrime:      { value: 0.55 },
+    uTint:       { value: new THREE.Color(0x8b97a4) },
+    // --- what is actually reflecting in this pane, fed per frame ---
+    uCamPos:     { value: new THREE.Vector3() },
+    uLightPos:   { value: Array.from({length:GLASS_LIGHTS}, ()=>new THREE.Vector4()) },
+    uLightCol:   { value: Array.from({length:GLASS_LIGHTS}, ()=>new THREE.Color(0,0,0)) },
+    uRoom:       { value: new THREE.Color(0,0,0) },   // room light for the grazing sheen
+    uFlashDir:   { value: new THREE.Vector3(0.3, 0.8, 0.5) },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    varying vec4 vScreen;
+    varying vec3 vWorld;
+    varying vec3 vNrm;
+    varying vec3 vTan;
+    varying vec3 vBit;
+    void main(){
+      vUv = uv;
+      vec4 wp = modelMatrix * vec4(position,1.0);
+      vWorld = wp.xyz;
+      /* The pane's basis in world space. Taken from the model matrix
+         rather than from the normal/tangent attributes because the mesh
+         is a unit plane scaled non-uniformly to the opening — the
+         columns come out scaled, and normalizing is both the fix and
+         cheaper than a normal matrix. */
+      vNrm = normalize(mat3(modelMatrix) * vec3(0.0, 0.0, 1.0));
+      vTan = normalize(mat3(modelMatrix) * vec3(1.0, 0.0, 0.0));
+      vBit = cross(vNrm, vTan);
+      vec4 p = projectionMatrix * viewMatrix * wp;
+      vScreen = p;
+      gl_Position = p;
+    }
+  `,
+  fragmentShader: `#define GLASS_LIGHT_COUNT ${GLASS_LIGHTS}\n` + NOISE_GLSL + /* glsl */`
+    uniform sampler2D tScene;
+    uniform float uTime, uIntensity, uFlash, uRefract, uGrime;
+    uniform vec2  uRes;
+    uniform vec3  uTint;
+    uniform vec3  uCamPos;
+    uniform vec4  uLightPos[GLASS_LIGHT_COUNT];
+    uniform vec3  uLightCol[GLASS_LIGHT_COUNT];
+    uniform vec3  uRoom;
+    uniform vec3  uFlashDir;
+    varying vec2 vUv;
+    varying vec4 vScreen;
+    varying vec3 vWorld;
+    varying vec3 vNrm;
+    varying vec3 vTan;
+    varying vec3 vBit;
+
+    /* Rain on a pane is mostly a fine stipple of small, still droplets.
+       Occasionally one gets heavy enough to break loose and run, and it
+       runs essentially STRAIGHT DOWN — surface tension gives it at most a
+       slight lean, it does not swim from side to side. The old version
+       drove lateral position with a sine plus noise, which is why the
+       drops looked alive and gelatinous. */
+
+    // the dense field of stationary droplets that covers most of the glass
+    float stipple(vec2 uv, float t, vec2 cells, float seed, float sz){
+      vec2 g = uv * cells;
+      vec2 id = floor(g);
+      vec2 f  = fract(g) - 0.5;
+      float r = hash21(id * 1.37 + seed);
+      if(r < 0.30) return 0.0;
+      // droplets grow slowly, then merge away and start again
+      float life = fract(t * (0.020 + r * 0.045) + r * 7.0);
+      float rad  = sz * (0.42 + 0.52 * life) * (0.65 + 0.5 * uIntensity);
+      rad *= 1.0 - smoothstep(0.90, 1.0, life);
+      vec2 o = (hash22(id + seed) - 0.5) * 0.62;
+      return smoothstep(rad, rad * 0.30, length(f - o));
+    }
+
+    // a heavy drop breaking loose and running down its own track
+    float runner(vec2 uv, float t, vec2 cells, float speed, float seed){
+      vec2 g = uv * cells;
+      vec2 id = floor(g);
+      vec2 f  = fract(g);
+      float r = hash21(id + seed);
+      if(r < 0.66) return 0.0;                       // runners are the exception
+      float sp = speed * (0.65 + r * 0.7);
+      float ph = fract(t * sp + r * 13.7);
+      // fixed track with a small constant lean — no wander, no hunting
+      float lean = (hash21(id + seed + 2.2) - 0.5) * 0.13;
+      float cx = 0.20 + 0.60 * hash21(id + seed + 5.1) + lean * ph;
+      float cy = 1.0 - ph;
+      float rad = (0.030 + 0.034 * hash21(id + seed + 9.3)) * (0.7 + 0.45 * uIntensity);
+      vec2 d = (f - vec2(cx, cy)) * vec2(1.0, 0.88);
+      float head = smoothstep(rad, rad * 0.22, length(d));
+      // the wet track it leaves, a chain of small beads rather than a line
+      float tx = abs(f.x - (cx - lean * (f.y - cy)));
+      float ty = f.y - cy;
+      float trail = smoothstep(rad * 0.55, 0.0, tx)
+                  * smoothstep(0.0, 0.015, ty)
+                  * (1.0 - smoothstep(0.015, 0.42, ty));
+      trail *= 0.20 + 0.80 * step(0.50, hash21(vec2(id.x, floor(ty * 44.0 + id.y * 3.0))));
+      return max(head, trail * 0.42);
+    }
+
+    float waterHeight(vec2 uv, float t){
+      float h = 0.0;
+      // the stipple carries the look; three scales of it, finest first
+      h += stipple(uv, t, vec2(64.0, 48.0),  3.1, 0.30) * 0.42;
+      h += stipple(uv, t, vec2(38.0, 29.0), 17.7, 0.34) * 0.55;
+      h += stipple(uv, t, vec2(21.0, 16.0), 41.3, 0.36) * 0.62;
+      // and a few runners on top
+      h += runner(uv, t, vec2(10.0, 4.6), 0.26,  1.7) * 0.95;
+      h += runner(uv, t, vec2(16.0, 7.4), 0.40, 11.3) * 0.70;
+      // barely-there film so the pane is never perfectly flat
+      h += fbm(uv * vec2(11.0, 6.0) + vec2(0.0, -t * 0.22)) * 0.045;
+      return h;
+    }
+
+    void main(){
+      vec2 uv = vUv;
+      float t = uTime;
+
+      // --- finite-difference normal of the water height field ---
+      float e = 1.0 / 420.0;
+      float h  = waterHeight(uv, t);
+      float hx = waterHeight(uv + vec2(e, 0.0), t);
+      float hy = waterHeight(uv + vec2(0.0, e), t);
+      vec3  n  = normalize(vec3((h - hx) * 2.6, (h - hy) * 2.6, 0.30));
+
+      // --- refract the already-rendered frame ---
+      vec2 suv = (vScreen.xy / vScreen.w) * 0.5 + 0.5;
+      vec2 off = n.xy * 0.026 * uRefract * (0.40 + h);
+      vec3 col = texture2D(tScene, clamp(suv + off, vec2(0.001), vec2(0.999))).rgb;
+
+      // Dry glass is not clean glass: grime, dust and old smears eat light.
+      float grime = fbm(uv * 6.0 + 3.1) * 0.6 + worley(uv * 11.0) * 0.4;
+      float dirt  = mix(1.0, 0.62 + 0.38 * grime, uGrime);
+      col *= dirt;
+
+      // Water darkens what is behind it slightly and tints it cold.
+      col = mix(col, col * uTint * 1.10, clamp(h * 0.55, 0.0, 0.55));
+
+      /* ---------------- REFLECTIONS ----------------------------------
+         n above is the droplet normal in TANGENT space (x along u, y
+         along v, z out of the pane). Rotate it into the world with the
+         pane's own basis and everything below is real geometry. */
+      vec3 Nw = normalize(vTan * n.x + vBit * n.y + vNrm * n.z);
+      // the pane is double-sided; face the viewer or the maths inverts
+      if(!gl_FrontFacing) Nw = -Nw;
+      vec3 V = normalize(uCamPos - vWorld);
+      if(dot(Nw, V) < 0.0) Nw = -Nw;
+
+      /* Schlick. F0 = 0.04 is window glass; the ^5 is what makes a pane
+         you look straight through turn into a mirror when you step to
+         one side of it. This one term is most of "that looks like
+         glass". */
+      float ndv = clamp(dot(Nw, V), 0.0, 1.0);
+      float F = 0.04 + 0.96 * pow(1.0 - ndv, 5.0);
+
+      /* Water raises the reflectance and roughens it: a droplet is a
+         little lens sitting proud of the surface, so it both catches
+         more and smears what it catches. */
+      float wet = clamp(h * 1.6, 0.0, 1.0);
+
+      vec3 refl = vec3(0.0);
+      for(int i = 0; i < GLASS_LIGHT_COUNT; i++){
+        float li = uLightPos[i].w;
+        if(li <= 0.0) continue;
+        vec3 Ld = uLightPos[i].xyz - vWorld;
+        float d2 = max(dot(Ld, Ld), 0.04);
+        vec3 L = Ld * inversesqrt(d2);
+        if(dot(L, vNrm) * dot(V, vNrm) < 0.0) continue;   // light behind the pane
+        vec3 H = normalize(L + V);
+        float ndh = max(dot(Nw, H), 0.0);
+        float fall = li / (1.0 + d2 * 0.34);
+        // tight: the bulb's own image in the flat glass
+        float sharp = pow(ndh, mix(320.0, 90.0, wet));
+        /* broad: the same image scattered by the droplets around it.
+           Tightened from an exponent of 22 — a lobe that wide is most of
+           a pane, so it read as "this window is lit" rather than "the
+           reflection of that bulb is there", which is the opposite of
+           what the geometry now says. */
+        float broad = pow(ndh, 46.0) * wet;
+        refl += uLightCol[i] * fall * (sharp * 0.55 + broad * 0.30);
+      }
+
+      /* The lightning, which is a source at infinity and by far the
+         brightest thing that ever hits this pane. Directional, from
+         wherever the strike actually is. */
+      if(uFlash > 0.001){
+        vec3 H = normalize(uFlashDir + V);
+        float ndh = max(dot(Nw, H), 0.0);
+        refl += vec3(0.86, 0.91, 1.0) * uFlash *
+                (pow(ndh, mix(220.0, 60.0, wet)) * 1.6 + pow(ndh, 14.0) * wet * 0.7 + 0.05);
+      }
+
+      // every reflection obeys Fresnel, which is the whole point
+      col += refl * F;
+
+      /* And the sheen. At a grazing angle the pane stops being a window
+         and starts being a mirror of the room it is in — this is the
+         reason you cannot see out of a lit room at night. uRoom carries
+         that room's own light colour and how much of it there is. */
+      float sheen = F * (0.55 + 0.45 * wet);
+      col = mix(col, col + uRoom, clamp(sheen, 0.0, 0.85));
+
+      // sheet of water at the bottom of the pane
+      float pool = smoothstep(0.10, 0.0, uv.y) * 0.35;
+      col = mix(col, col * vec3(0.72, 0.79, 0.88), pool);
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `
+};
+
+/* ---------- VOLUMETRIC FLASHLIGHT CONE ----------------------------- */
+const ConeShader = {
+  uniforms: {
+    uTime:{value:0}, uIntensity:{value:1}, uColor:{value:new THREE.Color(0xffe6bd)},
+    uLen:{value:9.0}, uDust:{value:1.0},
+  },
+  vertexShader: /* glsl */`
+    varying vec3 vPos;      // local space: cone runs along -z
+    varying vec3 vWorld;
+    void main(){
+      vPos = position;
+      vec4 wp = modelMatrix * vec4(position,1.0);
+      vWorld = wp.xyz;
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }
+  `,
+  fragmentShader: NOISE_GLSL + /* glsl */`
+    uniform float uTime, uIntensity, uLen, uDust;
+    uniform vec3 uColor;
+    varying vec3 vPos;
+    varying vec3 vWorld;
+    void main(){
+      float d = clamp(-vPos.z / uLen, 0.0, 1.0);       // 0 at lens, 1 at far end
+      float r = length(vPos.xy) / max(0.001, (0.06 + d * 0.55 * uLen));
+      float edge = 1.0 - smoothstep(0.35, 1.0, r);     // soft cone edge
+      float fall = (1.0 - d) * (1.0 - d);              // inverse-square-ish
+      float near = smoothstep(0.0, 0.06, d);           // hide the lens end
+      // dust motes drifting through the beam
+      float dust = fbm(vWorld.xz * 2.1 + vec2(uTime * 0.05, -uTime * 0.03))
+                 * fbm(vWorld.xy * 3.3 + vec2(-uTime * 0.07, uTime * 0.04));
+      dust = 0.42 + 1.35 * dust * uDust;
+      float a = edge * fall * near * dust * 0.52 * uIntensity;
+      gl_FragColor = vec4(uColor * a, a);
+    }
+  `
+};
+
+/* ---------- LOW GROUND FOG (outside) ------------------------------- */
 
   /* ---------- lifted: WORLD (3131 lines) ---------- */
 
