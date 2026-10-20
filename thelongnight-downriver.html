@@ -27734,7 +27734,25 @@ function pickTarget(){
     if(!hits.length || hits[0].distance >= bestD) continue;
     /* intersectObject tests ONLY that door, so a leaf on the far side of
        a wall answers as readily as the one in front of you. */
-    if(sightBlocked(camera.position, hits[0].point)) continue;
+    /* ---- THE HIT COMES BACK IN WORLD SPACE -----------------------
+       The camera is a child of the house group, so the ray it casts is
+       a WORLD ray and hits the real geometry -- which is what makes the
+       pick work at all. But an intersection's `point` is world space
+       too, and everything else in this function is in the house's own
+       metres: camera.position, the door pivots, and the colliders
+       sightBlocked() walks.
+
+       Handing a world point to sightBlocked() traced a line from
+       (29.1, 1.63, 1.73) to (-1385.88, 36.14, -814.87): a ray a
+       kilometre and a half long, leaving the building through every
+       wall it had. It came back blocked every time, so EVERY door
+       failed this test and pickTarget always returned nothing -- no
+       prompt, and E with nothing to act on.
+
+       This is the frame mismatch written down when the local camera was
+       introduced. Parenting the camera fixed the ray; this is the other
+       half of it. */
+    if(sightBlocked(camera.position, GROUP.worldToLocal(hits[0].point.clone()))) continue;
     bestD = hits[0].distance; best = {type:'door', door:d};
   }
   if(!best && !Player.seated){
