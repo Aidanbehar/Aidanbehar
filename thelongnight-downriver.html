@@ -38618,6 +38618,24 @@ class GlassPass extends Pass {
          night and every system that asks the house what time it is got
          the same answer forever. Downriver's G.hours is the only clock
          now; this is the house reading it. */
+      /* ---- THE NIGHT'S OWN ELAPSED CLOCK ---------------------------
+         GameState.t is how long this night has been running, and the
+         Director's whole escalation is a function of it: elapsedMin()
+         feeds the threat ramp, the roll chance and every event's
+         cooldown. Nothing in this game advanced it. It is set to 0 by
+         startNextNight() and was never added to again, so elapsedMin()
+         answered zero forever, the threat sat in DORMANT for the whole
+         night, and not one event, scare or hunt could fire.
+
+         Measured before this: two and a half minutes of night with the
+         opening quiet zeroed, and the log was still empty -- 0 events,
+         threat DORMANT. The creatures still ARRIVED, because their
+         arrival timers are their own, which is what made it look like
+         a working night rather than a stopped one.
+
+         Outside the range gate, with the clock bridge, because a night
+         passes whether or not the player is standing in the building.*/
+      GameState.t += dt;
       if(host && typeof host.hours === 'number'){
         GameState.clock = host.hours * 60;
       }
@@ -38762,6 +38780,29 @@ class GlassPass extends Pass {
          back to it. */
       Director.tick(dt);
       Director.updateDecals(dt);
+      /* ---- AND THE REST OF THE HOUSE'S OWN FRAME -------------------
+         Everything below was lifted and then never called, because the
+         function that called it -- The Long Night's own frame loop --
+         is not what drives this game. Each was found by reading that
+         loop line by line against this one rather than by noticing a
+         symptom, which is the only way this kind of omission shows up:
+         nothing throws, the feature is simply inert.
+
+         Hold.update is the one that matters most. Hold.begin() starts
+         the bar and THIS is what fills it, so without it every hold in
+         the house -- boarding a door or a window, prying boards off,
+         pulling the generator over, forcing the footlocker -- began
+         and then never finished. Boarding by right mouse button could
+         not have worked whatever the zoom did. */
+      Hold.update(dt);
+      updateLightning(dt);
+      Objectives.check();
+      if(GameState.breathT > 0) GameState.breathT -= dt;
+      updateCameraOutages(dt);          // whether or not the wall is up
+      updateFeeds(dt);
+      // stress decays when nothing is happening; the vignette follows it
+      GameState.stress = clamp(GameState.stress - dt*0.012
+                               + (Player.sprinting ? dt*0.02 : 0), 0, 1);
       /* The room the lighting is computed FROM is the player's, and the
          house only has an opinion about that while they are inside it.
          Out in the world the rooms are lit for the doorway they can be
