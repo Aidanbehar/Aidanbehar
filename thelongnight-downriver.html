@@ -22034,7 +22034,50 @@ function animate(){
   Terra.update(Player.pos.x, Player.pos.z);
   Smoke.update(dt, Player.pos.x, Player.pos.z);
   updateShadowBudget(dt);
+  updateAimZoom(dt);
   composer.render();
+}
+
+/* ---- AIMING, WHICH IS HOW THE HOUSE BOARDS THINGS UP --------------
+   The Long Night puts boarding behind the right mouse button: you hold
+   RMB to bring the hammer up, the view pulls in a little, and E then
+   means "nail a board on" instead of "open". Everything that READS
+   that is already lifted -- interact() checks Player.aiming for both
+   doors and windows, and setPrompt swaps its wording on it -- and so
+   are the two mouse handlers that set it.
+
+   What did not come across is the half that makes it legible:
+
+       if(Player.aiming) camera.fov = lerp(camera.fov, 58, ...)
+
+   That line lived in the house's own render loop, and `camera` there
+   is the house's LOCAL camera -- the one that decides what the house
+   is looking at and never draws a pixel. So the zoom was being
+   applied, every frame, to a camera nobody sees through, and holding
+   right-click did nothing visible at all. syncLook would have undone
+   it anyway: it copies the host's fov onto the local one each frame.
+
+   So it is applied here, to the camera that draws. The target keeps
+   the original's PROPORTION rather than its absolute value -- The
+   Long Night pulled 72 to 58, and this game's default is 74 -- so the
+   zoom is the same gesture and not a slightly different one.
+
+   Gated to the house, because aiming is for boarding. Right-clicking
+   in the forest should not hand the player a free telescope, and the
+   flag is cleared out there so it cannot be carried in from outside
+   and left stuck on. */
+const FOV_BASE = CFG.QUALITY.fovDefault;
+const FOV_AIM  = CFG.QUALITY.fovDefault * (58/72);
+function updateAimZoom(dt){
+  /* The death zoom drives this same fov and wants to win. */
+  if(G.over) return;
+  const house = typeof LN !== 'undefined' && !!LN.site;
+  const canAim = house && (indoorsNow() || houseDoorInReach());
+  if(house && !canAim) LN.Player.aiming = false;
+  const want = (canAim && LN.Player.aiming) ? FOV_AIM : FOV_BASE;
+  if(Math.abs(camera.fov - want) < 0.02) return;
+  camera.fov = lerp(camera.fov, want, 1 - Math.exp(-dt*9));
+  camera.updateProjectionMatrix();
 }
 
 /* =====================================================================
@@ -38090,12 +38133,18 @@ const UI = (()=>{
         `FLOODS ${floodsOn}/${Equipment.floodlights.length} ON`;
     },
     deathZoom(){
-      // FOV snap onto the face
+      /* ---- ON THE CAMERA THAT DRAWS ----------------------------
+         Same mistake as the aim zoom, same reason: `camera` in this
+         closure is the house's local one, which decides what the
+         house is looking at and renders nothing. The snap onto the
+         face of the thing that has just caught you was being applied
+         where nobody could see it. */
+      const cam = hostCamera || camera;
       let t = 0;
       const step = ()=>{
         t += 1/60;
-        camera.fov = lerp(camera.fov, 34, 0.25);
-        camera.updateProjectionMatrix();
+        cam.fov = lerp(cam.fov, 34, 0.25);
+        cam.updateProjectionMatrix();
         if(t < 0.9) requestAnimationFrame(step);
       };
       step();
@@ -38773,6 +38822,19 @@ class GlassPass extends Pass {
       const f = farmLocalToWorldXZ(Player.pos.x, Player.pos.z, placedAt);
       return { x: f.x, y: placedAt.y + Player.pos.y, z: f.z,
                level: Player.level, room: Player.room };
+    },
+    /* For the harness: swing every door in the house through the same
+       code the player's E goes through, and report how many moved. */
+    swingAllDoors(){
+      let n = 0;
+      for(const d of World.doors){
+        if(d.boardedShut) continue;
+        d.target = d.target > 0.5 ? 0 : 1;
+        Audio.doorHandle(d.pivot.position);
+        Audio.doorCreak(d.pivot.position, d.target > 0.5);
+        n++;
+      }
+      return n;
     },
     toLocal(wx, wz){
       if(!placedAt) return { x:wx, z:wz };
