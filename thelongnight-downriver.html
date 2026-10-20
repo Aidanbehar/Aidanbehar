@@ -31096,9 +31096,30 @@ function updateLeafSolids(d){
   const seg = d.leafW / d.leafSolids.length;
   const T = 0.06;
   const hx = d.pivot.position.x, hz = d.pivot.position.z;
+  /* ---- A DOOR IN MOTION DOES NOT SHOVE YOU -----------------------
+     The leaf is solid when it is STANDING open, which is what stops
+     you walking through it. While it is actually swinging it is not,
+     and that is deliberate.
+
+     A door sweeps through the place you stand to open it. With the
+     leaf solid for every frame of that sweep, the resolver pushes you
+     out of its way -- and it pushes you along the arc, which means
+     towards the hinge: the one part of the opening the leaf is about
+     to occupy. Measured at the garage door, standing square in the
+     middle of a 0.95m opening at z 1.70: opening it moved the player
+     to z 2.10, inside the leaf's resting place at 2.04-2.20, and from
+     there they could not advance at all. The front door does the same
+     thing, 0.86m of it.
+
+     So the door is allowed to pass through the player for the half
+     second it is moving. The alternative is being shunted into the
+     corner you cannot get out of, which is worse than a door clipping
+     your shoulder -- and the moment it settles the leaf is solid
+     again, so it still cannot be walked through. */
+  const swinging = Math.abs((d.target ?? d.open) - d.open) > 0.02;
   for(let k=0;k<d.leafSolids.length;k++){
     const sol = d.leafSolids[k];
-    sol.off = !on;
+    sol.off = !on || swinging;
     if(!on) continue;
     const along = d.leafOff + seg*(k+0.5);
     const cx = hx + ux*along, cz = hz + uz*along;
