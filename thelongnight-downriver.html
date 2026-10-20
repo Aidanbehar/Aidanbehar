@@ -1317,6 +1317,27 @@ const CFG = {
     pause: [2.5, 11],    // seconds standing still between walks
     indoors: [12, 40],   // ... and out of sight inside a house
     radius: 0.32,        // how wide they are, for walking round things
+    /* ---- AND HOW WIDE THEY ARE IN THE FARMHOUSE'S DOORWAYS --------
+       Two games, two bodies, one building. The forest's player is
+       0.32 across; The Long Night's is 0.24, and its doorways were
+       laid out for 0.24. Measured at the front door with the leaf
+       standing open:
+
+         opening            x -0.55 .. 0.55     1.10m
+         the open leaf      x -0.58 .. -0.42
+         clear span                             0.97m
+         walkable at 0.32   x -0.10 .. 0.21     0.31m
+         walkable at 0.24   x -0.18 .. 0.31     0.49m
+
+       Thirty-one centimetres to walk through a metre-wide front door
+       is not a door, and it is why walking at it stopped you dead:
+       miss that lane and the leaf's end pushes you straight back out.
+       The handover comment says neither radius can be widened without
+       breaking what it was measured for, and the converse is this --
+       in the house's own geometry, use the house's own number. It
+       applies only within reach of one of its doors, which is the
+       only place the forest's body is too wide to fit. */
+    doorRadius: 0.24,
     /* And how much clearance they keep on top of that. Without it they
        walk with a shoulder in the wall: the resolver only says "not
        inside", and not-inside by a millimetre looks exactly like
@@ -5869,7 +5890,14 @@ const FARM = {
   get oz(){ return (this.z0 + this.z1)/2; },         //   0.75
   get hx(){ return (this.x1 - this.x0)/2 + PAD.margin; },
   get hz(){ return (this.z1 - this.z0)/2 + PAD.margin; },
-  DOOR: { x: -0.4, z: 9.8 },      // on the ground at the foot of the porch
+  /* ---- THE LATCH SIDE, NOT THE HINGE SIDE -----------------------
+     This was x -0.4, which is where the front door's leaf swings to
+     when it is open: x -0.58 .. -0.42. So the house's own idea of
+     "the way in" pointed at the one part of its doorway that is
+     blocked the moment the door is opened -- you stood there, pressed
+     E, and the leaf swung out through you. Moved to the latch side,
+     which is clear whether the door is open or shut. */
+  DOOR: { x: 0.1, z: 9.8 },       // on the ground at the foot of the porch
   SPAWN: { x: 0, z: 4.6 },        // the hallway, The Long Night's own spawn
   clearR: 30,                     // trees keep out of the house AND the yard
 };
@@ -14172,6 +14200,13 @@ function houseDoorInReach(){
   return typeof LN !== 'undefined' && !!LN.site
       && LN.atOwnDoor(Player.pos.x, Player.pos.y, Player.pos.z);
 }
+/* The body, which is not the same width everywhere. See
+   CFG.PLAYER.doorRadius: the farmhouse's doorways were measured for a
+   narrower player than the forest's, and this is the one place the
+   difference stops you getting through a door that is plainly open. */
+function playerRadiusNow(){
+  return houseDoorInReach() ? CFG.PLAYER.doorRadius : CFG.PLAYER.radius;
+}
 
 /* ---- VOLUME, ON THE KEYBOARD -------------------------------------
    Outside the dev panel and outside the pause overlay, because a player
@@ -14870,8 +14905,9 @@ function updatePlayer(dt){
      invariant has to hold after the LAST thing that moves you, not
      after the first. Every mover in this function is now followed by
      the collision pass. */
-  resolveCollisions(p.pos, C.radius);
-  const fNow = surfaceAt(p.pos.x, p.pos.z, p.pos.y, C.radius);
+  const rNow = playerRadiusNow();
+  resolveCollisions(p.pos, rNow);
+  const fNow = surfaceAt(p.pos.x, p.pos.z, p.pos.y, rNow);
   const groundNow = Math.max(heightAt(p.pos.x, p.pos.z), fNow > -1e8 ? fNow : -Infinity);
   if(p.pos.y < groundNow) p.pos.y = groundNow;
   p.groundY = p.pos.y;
@@ -14952,7 +14988,7 @@ function updatePlayer(dt){
     if(el > 1e-4){
       ex /= el; ez /= el;
       const npx = { x: p.pos.x + ex*0.40, y: p.pos.y, z: p.pos.z + ez*0.40 };
-      resolveCollisions(npx, C.radius);
+      resolveCollisions(npx, playerRadiusNow());
       p.pos.x = npx.x; p.pos.z = npx.z;
       p.pos.y = Math.max(p.pos.y, heightAt(p.pos.x, p.pos.z));
       p.vel.x += ex*1.6; p.vel.z += ez*1.6;
