@@ -3409,6 +3409,20 @@ camera.rotation.order = 'YXZ';
 camera.layers.enable(LAYER_WORLD);
 camera.layers.enable(LAYER_FX);
 camera.layers.enable(LAYER_PHANTOM);
+/* ---- AND THE HOUSE'S THREE LAYERS -------------------------------
+   The Long Night numbered its layers WORLD 0, GLASS 1, FX 2, BASEMENT
+   3, and Downriver numbers its own WORLD 0, FX 1, PHANTOM 2 -- so the
+   house's were remapped to 4, 5 and 6 to keep them apart. Nothing then
+   enabled them on the one camera that does the drawing.
+
+   Layer 6 is the entire cellar: its walls, its ceiling, its racks and
+   its floor. None of it was being rendered, which is why the basement
+   was a place you could stand in and see nothing but the world through
+   where its surfaces should be. 4 is the window glass and 5 is the
+   first-person effects layer. */
+camera.layers.enable(4);
+camera.layers.enable(5);
+camera.layers.enable(6);
 
 const rtOpts = { type: THREE.HalfFloatType, colorSpace: THREE.LinearSRGBColorSpace, samples: 4 };
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth, innerHeight, rtOpts));
@@ -14885,6 +14899,20 @@ function segHitsOBB(x, z, ux, uz, far, b){
 function shelterAt(x, z, feetY){
   let roof = 0, walls = 0;
   const head = feetY + 1.55;
+  /* ---- THE FARMHOUSE IS A ROOF ------------------------------------
+     This walks the collider registry looking for a box above your head,
+     and most of The Long Night's ceilings are drawn as planes rather
+     than as solids -- so standing in its hallway scored no roof at all.
+     What the player saw was snow falling through the ceiling and rain
+     indoors, because the precipitation is scaled by exactly this
+     number; the warmth model was reading the same zero, so the house
+     was not sheltering them from the cold either.
+
+     Asked of the house's own room map rather than of a box test, for
+     the same reason the handover is: it knows where its rooms are. */
+  if(typeof LN !== 'undefined' && LN.site && LN.underRoof(x, z)){
+    roof = 1; walls = Math.max(walls, 0.85);
+  }
   for(let si=0; si<STRUCT_COLLIDERS.length; si++){
     const st = STRUCT_COLLIDERS[si];
     if(Math.abs(x - st.x) > st.reach || Math.abs(z - st.z) > st.reach) continue;
@@ -21638,7 +21666,8 @@ function stepWorld(dt){
   Sleep.update(dt);
   stepPlayerEitherSide(dt);
   if(typeof LN !== 'undefined')
-    LN.tick(dt, { sky: Sky, weather: Weather, playerPos: Player.pos, indoors: indoorsNow() });
+    LN.tick(dt, { sky: Sky, weather: Weather, playerPos: Player.pos,
+                  indoors: indoorsNow(), hours: G.hours });
   updateRest(dt);
   updateWeather(dt);
   updateSky(dt);
@@ -21791,6 +21820,17 @@ async function startRun(seedInput){
     /* The terrain is told where to stop covering the cellar. Done here
        rather than inside place(), because the uniform only exists once
        buildTerrainMesh has compiled the material. */
+    /* ---- AND NOW THE WORLD KNOWS THE HOUSE IS SOLID ---------------
+       registerColliders() runs at the end of buildAllStructures(),
+       which is BEFORE this -- so when it ran, LN.site was still null
+       and the farmhouse branch in it registered nothing at all. That
+       registry is what Downriver's resolver uses for the player AND
+       for Fauna and People, so the result was a 46-metre building that
+       nothing outside the house collided with: creatures walked in
+       through the walls and so could the player.
+
+       Called again here, with the house standing. */
+    registerColliders();
     const hole = LN.stairwellRect();
     if(hole && MAT.terrainU && MAT.terrainU.uHole)
       MAT.terrainU.uHole.value.set(hole.x0, hole.z0, hole.x1, hole.z1);
@@ -31086,6 +31126,16 @@ const UI = (()=>{
          were the camera housings, and the lamps went on lighting the
          forest exactly as before. A fix that runs before the thing it
          fixes exists is not a fix. */
+      /* ---- THE SECOND FLASHLIGHT ------------------------------------
+         Holding Lights.torchOn false each frame stopped the house's
+         torch being switched ON, but the light and its volumetric cone
+         were still in the scene -- so the player had Downriver's
+         flashlight and a second beam of the house's sitting on top of
+         it. Both are taken out of the scene here rather than dimmed: a
+         light at zero intensity is still evaluated per fragment, and
+         the cone is still a transparent mesh being drawn. */
+      if(Lights.torch){ Lights.torch.visible = false; Lights.torch.intensity = 0; }
+      if(Lights.cone){ Lights.cone.visible = false; }
       collectLights();
       thinShadowCasters();
       /* Every pane exists by now, which is why the swap is here rather
@@ -31171,6 +31221,19 @@ const UI = (()=>{
     /* What pickTarget settled on, so a test can tell "E did nothing"
        from "E acted on something else". */
     get hover(){ return hover; },
+    /* Is this world point under the house's roof? Any interior room on
+       any of the three decks counts; the porch does not, because a
+       porch is a place you stand to get out of the rain and still hear
+       it, which is the whole point of one. */
+    underRoof(wx, wz){
+      if(!placedAt) return false;
+      const L = this.toLocal(wx, wz);
+      for(const k in CFG.ROOMS){
+        const r = CFG.ROOMS[k];
+        if(L.x > r.x0 && L.x < r.x1 && L.z > r.z0 && L.z < r.z1) return true;
+      }
+      return false;
+    },
     get cameraLocal(){ return camera; },
     get started(){ return GameState.started; },
     get lightStats(){ return { lights: houseLights.length,
@@ -31241,6 +31304,15 @@ const UI = (()=>{
          that used to read it is the Director's, which is not lifted;
          when it is, the rule is that it only flashes when Downriver's
          weather is actually stormy. */
+      /* ---- THE HOUSE'S CLOCK IS A VIEW OF DOWNRIVER'S --------------
+         GameState.clock is minutes since midnight and nothing in this
+         game was advancing it, so the corner clock sat at 21:00 all
+         night and every system that asks the house what time it is got
+         the same answer forever. Downriver's G.hours is the only clock
+         now; this is the house reading it. */
+      if(host && typeof host.hours === 'number'){
+        GameState.clock = host.hours * 60;
+      }
       if(host && host.sky){
         Sky.day = host.sky.day;
         Sky.phase = host.sky.phase === 'night' ? 'night'
