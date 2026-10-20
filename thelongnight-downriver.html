@@ -12168,7 +12168,34 @@ const Fauna = {
       /* Once it has had you, it has you: relentless means it does not
          lose the scent, not that it starts with it. */
       if(d < noticeAt) b.everSaw = true;
-      const knows = (K.relentless && b.everSaw) || d < noticeAt;
+      let knows = (K.relentless && b.everSaw) || d < noticeAt;
+      /* ---- INSIDE THE HOUSE YOU ARE NOT THEIR BUSINESS -------------
+         Barring them from the rooms stopped them WALKING in; it did
+         not stop them wanting to. A beast that had seen the player go
+         inside went on tracking them through the wall, pressed up
+         against the outside of it for as long as they stayed, and
+         since a body is wider than the point the movement test checks,
+         the half of it that overhangs the wall line showed through
+         into the room. A thing standing in the living room from the
+         waist up is the worst possible version of "it cannot get in".
+
+         So the house breaks the engagement outright. It is not a
+         memory wipe for its own sake -- it is the territory rule
+         finished: what is inside belongs to the other game, and the
+         forest's animals have no opinion about it. They forget, they
+         stop, and they go back to wandering their own ground.
+
+         The night inside is The Long Night's, and that is unaffected:
+         the Director's creatures live in the room graph and never
+         consult this. */
+      const sheltered = indoorsOfTheHouse(px, pz);
+      if(sheltered){
+        knows = false;
+        b.everSaw = false; b.provoked = false; b.lostFor = 1e9;
+        if(b.state === 'stalk' || b.state === 'charge' || b.state === 'attack'){
+          b.state = 'wander'; b.stateT = 0; b.target = null;
+        }
+      }
       if(knows) b.lostFor = 0; else b.lostFor += dt;
 
       /* ---- the state machine ---- */
@@ -12339,7 +12366,13 @@ const Fauna = {
                    && iceAt(nx, nz) !== 1
                    && Math.abs(nx) < Wld.size*0.47 && Math.abs(nz) < Wld.size*0.47
                    && Math.abs(rise) < step*3.2 + 0.5
-                   && !indoorsOfTheHouse(nx, nz);
+                   && !indoorsOfTheHouse(nx, nz)
+                   /* A BODY IS WIDER THAN THE POINT WE TEST. The centre
+                      can sit a hand's breadth outside a wall with a
+                      metre of animal overhanging it, which is what put
+                      shoulders and heads through the living-room wall.
+                      The step ahead is checked at arm's length too. */
+                   && !indoorsOfTheHouse(nx + wantX*0.75, nz + wantZ*0.75);
         if(ok){ b.x = nx; b.z = nz; }
         else {
           /* Round whatever it is, the same way the player slides -- but
@@ -15862,6 +15895,24 @@ function pickTarget(){
   }
   // --- structures: search once, then rest ---
   for(const st of Wld.structures){
+    /* ---- EXCEPT THE FARMHOUSE, WHICH IS NOT A CAMPSITE ------------
+       These three offers -- light the fire, look around, sit down for
+       a while -- are written for a ruin or a tent you walk up to in
+       the woods. They are keyed on distance from the structure's
+       CENTRE POINT with no facing test and no sight test, which is
+       fine for something two metres across and absurd for a building
+       forty-six metres long: the farmhouse's centre lands somewhere
+       inside the house, so anywhere within 4.5m of it -- through
+       walls, round corners, in another room -- the forest offered to
+       sit you down on it. That is the stray "Hold E - sit down for a
+       while" that appears against a blank wall.
+
+       It also meant the house could be "searched" like a campsite,
+       which is what armed the rest offer in the first place.
+
+       The building has its own seats, its own beds and its own verbs.
+       None of this applies to it. */
+    if(st.kind === 'farmhouse') continue;
     const d = Math.hypot(st.x-Player.pos.x, st.z-Player.pos.z);
     if(d > 6.5) continue;
     if(st.kind === 'campsite' && Survival.matches > 0 && !st.burning){
@@ -16312,12 +16363,43 @@ const Sleep = {
    does not cancel it — a third of a second of genuinely looking away
    does. Head bob alone will break a strict aim test, which is how a hold
    bar ends up filling and resetting forever. */
+/* ---- WHAT IS ACTUALLY WORTH HOLDING E FOR -------------------------
+   Everything out here was a hold: ringing a bell, picking a berry,
+   taking an item off the ground, opening a door, getting into a car,
+   changing a battery. Each of them put a filling bar between the
+   player and a one-beat action, and together they made the key feel
+   like it was not responding -- which is exactly how it was reported.
+
+   The house next door already had the right rule and it is worth
+   copying rather than inventing: `<b>E</b> open the door` against
+   `<b>hold E</b> board the door`. A hold is for WORK -- something
+   with a tool in your hands that takes real seconds and makes noise.
+   A press is for everything else.
+
+   Two kinds keep theirs. Forcing boards off a building is the job
+   that was named as the example of one, and lying down ends the
+   night: a mis-tap beside a bed would cost the player the whole of
+   it, which is not a cost a tap should be able to pay by accident.
+
+   This set is the single source of truth -- the prompt wording below
+   reads it too, so the label can never promise a hold the code does
+   not take, or vice versa. */
+const HOLD_KINDS = { boards:1, sleep:1 };
+/* The written prompt, matched to what the key will actually do. */
+function promptLabel(t){
+  if(!t) return '';
+  return HOLD_KINDS[t.kind] ? t.label
+       : t.label.replace(/^Hold E\s*(?:\u2014|-|\u2013)\s*/, 'E \u2014 ');
+}
 const Hold = {
   active:false, t:0, need:1, target:null, lost:0,
   begin(){
     if(this.active) return;
     const tgt = pickTarget();
     if(!tgt) return;
+    /* A press is the whole interaction for most things; only the two
+       kinds above open a bar. */
+    if(!HOLD_KINDS[tgt.kind]){ tgt.act(); return; }
     this.active = true; this.t = 0; this.need = tgt.hold; this.target = tgt; this.lost = 0;
   },
   cancel(){ this.active = false; this.target = null; this.t = 0; UI.hold(0, ''); },
@@ -16332,7 +16414,8 @@ const Hold = {
     } else this.lost = 0;
     this.t += dt;
     Player.stamina = Math.max(0, Player.stamina - 6*dt);
-    UI.hold(clamp(this.t/this.need,0,1), this.target.label.replace(/^Hold E — /, ''));
+    UI.hold(clamp(this.t/this.need,0,1),
+            this.target.label.replace(/^Hold E\s*(?:\u2014|-|\u2013)\s*/, ''));
     if(this.t >= this.need){
       const act = this.target.act;
       this.cancel();
@@ -19154,7 +19237,7 @@ const UI = {
     // the prompt for whatever is in reach
     const t = hoverTarget;
     if(t && !Hold.active){
-      this.el.prompt.textContent = t.label;
+      this.el.prompt.textContent = promptLabel(t);
       this.el.prompt.classList.add('on');
     } else this.el.prompt.classList.remove('on');
 
@@ -22250,6 +22333,7 @@ window.DR = {
   buildHouse, structSolids, Hold, pickTarget, Sleep, Smoke, forceBoards, skipWeather,
   CollisionView, CreatureView, People, Fauna, BEASTS, resolveCollisions, pushOutOfTerrain,
   indoorsOfTheHouse, indoorsNow, houseDoorInReach,
+  HOLD_KINDS, promptLabel, pickTarget,
   get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
 };
 
@@ -38583,6 +38667,28 @@ class GlassPass extends Pass {
          last seen, which was nothing. Both run here now, and only
          while the player is actually in the house: the prompt belongs
          to the game you are standing in. */
+      /* ---- AND THE HOUSE'S CAMERA HAS TO BE WHERE YOU ARE ----------
+         stepPlayer() is the only thing that writes this camera, and it
+         does not run while the player is outdoors -- out there
+         Downriver's movement has the player and the house is idle. So
+         pickTarget, which reads camera.position, was reading wherever
+         the player last stood INSIDE the building. At the front door
+         from the yard that is metres away through a wall, every door
+         failed the 2.2m test, and the prompt stayed empty even with
+         the HUD showing and E routed correctly.
+
+         Mirrored here for exactly the frames a door is in reach: the
+         position and the aim, and nothing else. This is not the
+         handover -- the house is not moving the player, it is only
+         being told where they are so it can answer what they are
+         looking at. */
+      if(atDoorNow && !inside && placedAt){
+        const L = this.toLocal(hostCamera.position.x, hostCamera.position.z);
+        const ly = hostCamera.position.y - placedAt.y;
+        camera.position.set(L.x, ly, L.z);
+        Player.pos.set(L.x, ly - CFG.PLAYER.eye, L.z);
+        syncLook(hostCamera.rotation.y, hostCamera.rotation.x, hostCamera);
+      }
       /* ...or standing at one of its doors from the yard, which is how
          the front door is reached nearly every time. */
       if(indoorsNowLocal() || atDoorNow){
