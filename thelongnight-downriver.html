@@ -21690,7 +21690,38 @@ const LN = ((hostScene, hostCamera)=>{
   });
   const Audio = SHIM('Audio'), UI = SHIM('UI'), Director = SHIM('Director');
   const Resources = SHIM('Resources'), Equipment = SHIM('Equipment');
-  const glassPass = null, FogPlaneShader = null;
+  /* ---- THE GLASS, WITHOUT ITS PASS ------------------------------
+     makeWindow() registers every pane with the GlassPass and puts it on
+     the GLASS layer, which only that pass renders. Without the pass,
+     the panes went on a layer nothing draws and the registration threw
+     on a null -- so this is a collector with the same three fields,
+     and makeWindow stays verbatim.
+
+     And then the material is swapped. The GlassShader samples `tScene`:
+     it refracts the scene BEHIND the pane, and only the pass can hand
+     it that texture. Rendered in the ordinary pass it would sample a
+     null and the windows would come out black, which is worse than
+     flat glass and much worse than no glass. So the panes get The Long
+     Night's own fallback material -- the one setGlass(false) swaps in,
+     copied here rather than reinvented -- and go on the WORLD layer
+     where Downriver's single pass will actually draw them.
+
+     The real glass is kept on each pane in userData.glassMat, exactly
+     as setGlass does, so a future phase that brings the pass across can
+     switch it back on without rebuilding a window. */
+  const glassPass = { materials: [], rooms: new Set(), unroomed: false };
+  const FogPlaneShader = null;
+  const flatGlassMat = new THREE.MeshPhysicalMaterial({
+    color:0x0b1016, roughness:0.16, metalness:0.0,
+    transparent:true, opacity:0.30, side:THREE.DoubleSide
+  });
+  function flattenGlass(){
+    for(const pane of (World.glassPanes || [])){
+      pane.userData.glassMat = pane.userData.glassMat || pane.material;
+      pane.material = flatGlassMat;
+      pane.layers.set(LAYER_WORLD);
+    }
+  }
   /* GlassShader and ConeShader are declared further down, straight after
      the noise module they interpolate -- see the note there. */
   let carryingKit = null;
@@ -27791,6 +27822,9 @@ function updateDoors(dt){
          interact() a door still flagged locked here would be one that
          could never be opened at all. */
       for(const d of World.doors) d.locked = false;
+      /* Every pane exists by now, which is why the swap is here rather
+         than inside makeWindow. */
+      flattenGlass();
       return GROUP;
     },
     /* Where the house stands in Downriver's world. Quarter turns only:
