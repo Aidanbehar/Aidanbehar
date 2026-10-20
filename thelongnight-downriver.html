@@ -258,13 +258,13 @@ body.touch #ln-help{display:none}
 #lnroot #statusbar .row{display:flex;gap:10px;align-items:baseline}
 #lnroot #statusbar .k{color:#5e5a51;min-width:86px}
 #lnroot #statusbar .v{color:var(--ink)}
-#lnroot #clock{
+#lnroot #ln-clock{
   position:absolute;right:22px;bottom:20px;text-align:right;
   font-size:11px;letter-spacing:.18em;color:var(--dim);text-shadow:0 1px 6px #000;
 }
-#lnroot #clock .row{display:flex;align-items:baseline;justify-content:flex-end;gap:11px}
-#lnroot #clock .big{font-size:22px;letter-spacing:.14em;color:#cfc7b6}
-#lnroot #clock .alt{font-size:12px;letter-spacing:.14em;color:#8c8578}
+#lnroot #ln-clock .row{display:flex;align-items:baseline;justify-content:flex-end;gap:11px}
+#lnroot #ln-clock .big{font-size:22px;letter-spacing:.14em;color:#cfc7b6}
+#lnroot #ln-clock .alt{font-size:12px;letter-spacing:.14em;color:#8c8578}
 #lnroot #roomname{
   position:absolute;left:22px;top:20px;font-size:11px;letter-spacing:.3em;
   text-transform:uppercase;color:#6f6a5f;text-shadow:0 1px 6px #000;
@@ -458,7 +458,7 @@ body.touch #tabletframe{width:min(1240px,97vw,150vh);max-height:96vh}
     <div class="row"><span class="k">POWER</span><span class="v" id="s-power">—</span></div>
     <div class="row"><span class="k">STRESS</span><span class="v" id="s-stress">—</span></div>
   </div>
-  <div id="clock">
+  <div id="ln-clock">
     <div class="row"><span class="big" id="c-time">—</span><span class="alt" id="c-time12">—</span></div>
     <span id="c-night">—</span>
   </div>
