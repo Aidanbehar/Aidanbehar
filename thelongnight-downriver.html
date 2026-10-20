@@ -1317,27 +1317,6 @@ const CFG = {
     pause: [2.5, 11],    // seconds standing still between walks
     indoors: [12, 40],   // ... and out of sight inside a house
     radius: 0.32,        // how wide they are, for walking round things
-    /* ---- AND HOW WIDE THEY ARE IN THE FARMHOUSE'S DOORWAYS --------
-       Two games, two bodies, one building. The forest's player is
-       0.32 across; The Long Night's is 0.24, and its doorways were
-       laid out for 0.24. Measured at the front door with the leaf
-       standing open:
-
-         opening            x -0.55 .. 0.55     1.10m
-         the open leaf      x -0.58 .. -0.42
-         clear span                             0.97m
-         walkable at 0.32   x -0.10 .. 0.21     0.31m
-         walkable at 0.24   x -0.18 .. 0.31     0.49m
-
-       Thirty-one centimetres to walk through a metre-wide front door
-       is not a door, and it is why walking at it stopped you dead:
-       miss that lane and the leaf's end pushes you straight back out.
-       The handover comment says neither radius can be widened without
-       breaking what it was measured for, and the converse is this --
-       in the house's own geometry, use the house's own number. It
-       applies only within reach of one of its doors, which is the
-       only place the forest's body is too wide to fit. */
-    doorRadius: 0.24,
     /* And how much clearance they keep on top of that. Without it they
        walk with a shoulder in the wall: the resolver only says "not
        inside", and not-inside by a millimetre looks exactly like
@@ -1451,6 +1430,31 @@ const CFG = {
   /* ---- the player --------------------------------------------------- */
   PLAYER: {
     eye: 1.66, radius: 0.34,
+    /* ---- AND HOW WIDE THEY ARE IN THE FARMHOUSE'S DOORWAYS -------
+       Two games, two bodies, one building. The forest's player is 0.34
+       across; The Long Night's is 0.24, and its doorways were laid out
+       for 0.24. Measured at the front door with the leaf open:
+
+         opening             x -0.55 .. 0.55    1.10m
+         the open leaf       x -0.58 .. -0.42
+         clear span                             0.97m
+         walkable at 0.34    x -0.08 .. 0.21    0.29m
+         walkable at 0.24    x -0.18 .. 0.31    0.49m
+
+       Twenty-nine centimetres to walk through a metre-wide front door
+       is not a door, and it is why walking at it stopped you dead:
+       miss that lane and the end of the leaf pushes you straight back
+       out. The handover comment says neither radius can be widened
+       without breaking what it was measured for, and the converse is
+       this -- in the house's own geometry, use the house's own number.
+       Only within reach of one of its doors, which is the only place
+       the forest's body cannot fit.
+
+       IT WENT INTO CFG.PEOPLE THE FIRST TIME, matched on a `radius:
+       0.32` that belongs to the villagers. CFG.PLAYER.doorRadius was
+       then undefined, resolveCollisions ran with an undefined radius,
+       and the NaN came out the far side in Audio.setBed. */
+    doorRadius: 0.24,
     walk: 2.55, sprint: 5.05, crouchless: true,
     accel: 13, damp: 10.5,
     /* A SPRINT YOU CAN ACTUALLY USE. At a drain of 17 a full bar bought
