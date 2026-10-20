@@ -22177,6 +22177,14 @@ const LN = ((hostScene, hostCamera)=>{
   function thinShadowCasters(){
     const box = new THREE.Box3(), size = new THREE.Vector3();
     let off = 0, kept = 0;
+    /* THE WORLD MATRIX HAS TO BE CURRENT FIRST, and the first attempt
+       at this stopped only 21 meshes of 1,572 because it was not.
+       Most of the furniture is built by lump(): a 0.5-radius sphere
+       with its real size in the MESH's scale, so the geometry's own
+       bounding box is 1x1x1 for a thing 8cm across. Without the
+       matrices updated, applyMatrix4 applies an identity and every
+       lump measures a metre. */
+    GROUP.updateMatrixWorld(true);
     GROUP.traverse(o=>{
       if(!o.isMesh || !o.castShadow) return;
       if(!o.geometry) return;
