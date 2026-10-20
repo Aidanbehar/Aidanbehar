@@ -22224,6 +22224,9 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
   let placedAt = null;
   let lastHouseError = null;
   let houseIndoors = false;
+  /* Within sight of the building, which is what the glass pass means by
+     "outside" and what the lighting means by "worth updating". */
+  let nearHouse = false;
   let audioReady = false;
   const indoorsNowLocal = ()=> houseIndoors;
   /* ---- TWENTY LAMPS WERE LIGHTING A FOUR-KILOMETRE FOREST ----------
@@ -31197,7 +31200,23 @@ class GlassPass extends Pass {
          vanish. */
   visible(){
     if(this.unroomed) return true;
-    if(Player.room === 'outside' || Player.level === 'outside') return true;
+    /* ---- "OUTSIDE" USED TO MEAN THE YARD ---------------------------
+       The exemption above this line is right and the note explaining it
+       still holds: the room graph models doorways rather than
+       sightlines, so from the grass it will say the bedroom is
+       invisible while the player looks straight at its window.
+
+       But in The Long Night "outside" was a yard with a fence round it.
+       Here it is a 4,608-metre forest, and this returned true two
+       kilometres away -- a second full scene render every frame, for
+       eighteen panes that were not within a mile of the frustum.
+       Measured at 800m: visible() said yes.
+
+       So the exemption keeps its reason and gains a range. Beyond it
+       the room graph's answer is used, which outdoors is no, which is
+       correct: a window you cannot resolve does not need refracting. */
+    if(Player.room === 'outside' || Player.level === 'outside')
+      return nearHouse;
     const vis = computeRoomVisibility(Player.room);
     for(const r of this.rooms) if((vis[r] || 0) > 0) return true;
     return false;
@@ -31445,6 +31464,7 @@ class GlassPass extends Pass {
       const near = !px ? true
         : Math.hypot(px.x - placedAt.x, px.z - placedAt.z) < 120;
       GROUP.visible = near;
+      nearHouse = near;
       /* ---- ONE HUD ON SCREEN AT A TIME -----------------------------
          Both games have a HUD and they measure different things: the
          house shows the room, the night, the power and the flashlight;
