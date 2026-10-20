@@ -31236,6 +31236,9 @@ const UI = (()=>{
     },
     get cameraLocal(){ return camera; },
     get started(){ return GameState.started; },
+    get clockNow(){ return +GameState.clock.toFixed(1); },
+    get torchVisible(){ return !!(Lights.torch && Lights.torch.visible)
+                            || !!(Lights.cone && Lights.cone.visible); },
     get lightStats(){ return { lights: houseLights.length,
                                on: houseLights.filter(l=>l.visible).length,
                                shadows: shadowStats }; },
