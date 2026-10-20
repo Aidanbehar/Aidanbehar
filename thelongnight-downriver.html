@@ -233,6 +233,18 @@ button:active{ transform:translateY(1px); }
    Every rule is prefixed so none of it can reach Downriver's own HUD,
    and the nine ids both games use are renamed rather than shared. */
 #lnroot.off{display:none}
+/* ---- AT ONE OF THE HOUSE'S OWN DOORS, FROM OUTSIDE ----------------
+   The building's HUD belongs to the game you are standing in, and out
+   here that is the forest's. A door is the exception: it is the one
+   thing in the yard that belongs to the house, and its prompt has to
+   be readable or there is no way to know the door can be opened. So
+   the root comes back but everything in it stays hidden except the
+   prompt itself. */
+#lnroot.atdoor{display:block}
+#lnroot.atdoor > *{display:none}
+#lnroot.atdoor #ln-hud{display:block;opacity:1}
+#lnroot.atdoor #ln-hud > *{display:none}
+#lnroot.atdoor #ln-prompt{display:block}
 #lnroot /* the desktop help list is noise on a phone */
 body.touch #ln-help{display:none}
 #lnroot /* ---------- hud ---------- */
@@ -14078,7 +14090,15 @@ function onKeyDown(e){
        house's map are its own keys and clash with nothing Downriver
        binds; F, M, H, P and C stay Downriver's, because a second
        binding on those is the same verb twice. */
-    case 'KeyE': indoorsNow() ? LN.interact() : Hold.begin(); break;
+    /* ---- E BELONGS TO WHICHEVER GAME THE TARGET IS IN -------------
+       This asked only whether the player was indoors, so walking up to
+       the farmhouse's front door across the yard sent E to Downriver's
+       Hold -- which has never heard of this building -- and the door
+       could not be opened from the outside at all. A door is the one
+       thing out there that is the house's. */
+    case 'KeyE':
+      (indoorsNow() || houseDoorInReach()) ? LN.interact() : Hold.begin();
+      break;
     case 'Tab':  if(indoorsNow()){ e.preventDefault(); LN.toggleTablet(); } break;
     case 'KeyQ': if(indoorsNow()) LN.toggleHouseMap(); break;
   }
@@ -14088,6 +14108,15 @@ function onKeyDown(e){
 function indoorsNow(){
   return typeof LN !== 'undefined' && LN.site
       && LN.indoors(Player.pos.x, Player.pos.y, Player.pos.z);
+}
+/* Standing in the open, but at one of the farmhouse's own doors. Kept
+   apart from indoorsNow() deliberately: that one decides which game
+   MOVES the player, and widening it would hand the house's movement
+   code a player standing in the yard. This only decides who owns the
+   interaction. */
+function houseDoorInReach(){
+  return typeof LN !== 'undefined' && !!LN.site
+      && LN.atOwnDoor(Player.pos.x, Player.pos.y, Player.pos.z);
 }
 
 /* ---- VOLUME, ON THE KEYBOARD -------------------------------------
@@ -22220,7 +22249,7 @@ window.DR = {
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders, shelterAt,
   buildHouse, structSolids, Hold, pickTarget, Sleep, Smoke, forceBoards, skipWeather,
   CollisionView, CreatureView, People, Fauna, BEASTS, resolveCollisions, pushOutOfTerrain,
-  indoorsOfTheHouse,
+  indoorsOfTheHouse, indoorsNow, houseDoorInReach,
   get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
 };
 
@@ -22413,6 +22442,9 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
      make the first frame of a run look like nightfall and roll the
      house straight on to night two. */
   let wasNight = true;
+  /* Set once a frame by tick(), and read by the key handler so that E
+     at a door goes to the house rather than to the forest. */
+  let atDoorNow = false;
   let audioReady = false;
   const indoorsNowLocal = ()=> houseIndoors;
   /* ---- TWENTY LAMPS WERE LIGHTING A FOUR-KILOMETRE FOREST ----------
@@ -38318,6 +38350,34 @@ class GlassPass extends Pass {
     /* What pickTarget settled on, so a test can tell "E did nothing"
        from "E acted on something else". */
     get hover(){ return hover; },
+    /* ---- ARE YOU STANDING AT ONE OF THIS HOUSE'S DOORS? -----------
+       "Indoors" decides which game owns the player, and it is a clean
+       binary everywhere except the one place it has to be asked about
+       most: a doorway. A door is the boundary itself, reachable from
+       both sides, and the front door is reachable almost entirely from
+       the OUTSIDE -- you walk up to it across the yard.
+
+       Everything that makes a door work was gated on indoors: the pick
+       that finds it, the HUD that shows its prompt, and the E key.
+       Standing on the porch you were outdoors, so the house never ran
+       pickTarget, its HUD was display:none, and E went to Downriver's
+       Hold, which has never heard of this building. Three separate
+       failures, one assumption.
+
+       The reach matches pickTarget's own 2.2m, with a little margin so
+       the prompt appears a step before the door becomes actionable
+       rather than at the same instant. */
+    atOwnDoor(wx, wy, wz){
+      if(!placedAt || !World.doors) return false;
+      const L = this.toLocal(wx, wz);
+      const ly = wy - placedAt.y;
+      for(const d of World.doors){
+        const p = d.pivot.position;
+        if(Math.abs(p.y - ly) > 2.6) continue;        // not a deck above or below
+        if(Math.hypot(p.x - L.x, p.z - L.z) < 2.4) return true;
+      }
+      return false;
+    },
     /* Is this world point under the house's roof? Any interior room on
        any of the three decks counts; the porch does not, because a
        porch is a place you stand to get out of the rain and still hear
@@ -38385,8 +38445,17 @@ class GlassPass extends Pass {
          both would be two games talking over each other, so each is on
          while the player is in it. */
         const inside = !!(host && host.indoors);
+      /* Outside, but close enough to one of this house's doors that it
+         is the thing you are reaching for. Only worth asking while the
+         house is in range at all. */
+      const atDoor = !inside && near && !!px
+                   && this.atOwnDoor(px.x, px.y, px.z);
+      atDoorNow = atDoor;
       const root = document.getElementById('lnroot');
-      if(root) root.classList.toggle('off', !inside);
+      if(root){
+        root.classList.toggle('off', !inside && !atDoor);
+        root.classList.toggle('atdoor', atDoor);
+      }
       const drHud = document.getElementById('hud');
       if(drHud) drHud.style.display = inside ? 'none' : '';
       houseIndoors = inside;
@@ -38514,7 +38583,9 @@ class GlassPass extends Pass {
          last seen, which was nothing. Both run here now, and only
          while the player is actually in the house: the prompt belongs
          to the game you are standing in. */
-      if(indoorsNowLocal()){
+      /* ...or standing at one of its doors from the yard, which is how
+         the front door is reached nearly every time. */
+      if(indoorsNowLocal() || atDoorNow){
         pickTarget();
         UI.update(dt);
       }
