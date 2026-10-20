@@ -31044,8 +31044,6 @@ const UI = (()=>{
          that were inserted into the document with it. */
       try { UI.init(); } catch(err){ lastHouseError = 'UI.init: ' + err; }
       buildCameras();
-      collectLights();
-      thinShadowCasters();
       buildHouse();
       buildWing();
       buildAttic();
@@ -31057,6 +31055,16 @@ const UI = (()=>{
          interact() a door still flagged locked here would be one that
          could never be opened at all. */
       for(const d of World.doors) d.locked = false;
+      /* ---- AND THESE RUN LAST, ON A HOUSE THAT EXISTS ---------------
+         Both of these measure the built group, and the first attempt
+         called them straight after buildCameras() -- before buildHouse,
+         buildWing, buildAttic and buildLighting had put anything in it.
+         They reported zero lights and twenty-one shadow casters, which
+         were the camera housings, and the lamps went on lighting the
+         forest exactly as before. A fix that runs before the thing it
+         fixes exists is not a fix. */
+      collectLights();
+      thinShadowCasters();
       /* Every pane exists by now, which is why the swap is here rather
          than inside makeWindow. */
       flattenGlass();
