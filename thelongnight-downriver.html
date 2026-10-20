@@ -17465,6 +17465,17 @@ const Audio = (()=>{
 
   return {
     init, resume, play, thunder, updateListener, setBed, setMindAudio,
+    /* ---- ONE AUDIO CONTEXT, AND IT IS THIS ONE --------------------
+       The house brings a full synthesiser of its own -- footsteps per
+       surface, door handles, latches, knocks, the generator, the
+       breakers, the storm bed -- and it built its own AudioContext to
+       run them in. Two contexts on one page is two mixes, two master
+       volumes and two things to unlock on the first click. The house
+       hangs its own master off this one instead, as a sub-bus, so the
+       player's volume keys and the mind's filter still govern all of
+       it. */
+    get ctx(){ return ctx; },
+    get masterBus(){ return master; },
     /* ---- the volume, which is the player's and not the mix's -------- */
     get volume(){ return volume; },
     get muted(){ return muted; },
@@ -22179,6 +22190,7 @@ const LN = ((hostScene, hostCamera)=>{
   let placedAt = null;
   let lastHouseError = null;
   let houseIndoors = false;
+  let audioReady = false;
   const indoorsNowLocal = ()=> houseIndoors;
   /* ---- TWENTY LAMPS WERE LIGHTING A FOUR-KILOMETRE FOREST ----------
      Measured: 32 lights in the scene, 22 of them point lights, 20 of
@@ -28535,8 +28547,22 @@ const Audio = (()=>{
 
   function init(){
     if(ctx) return;
-    ctx = new (window.AudioContext||window.webkitAudioContext)();
-    master = ctx.createGain(); master.gain.value = 1.15; master.connect(ctx.destination);
+    /* ---- THE HOUSE DOES NOT OWN THE CONTEXT ------------------------
+       It used to make its own here and connect its master straight to
+       the destination, which on one page means two mixes side by side,
+       two master volumes, and a second context that nothing unlocks.
+       It takes Downriver's and hangs its master off that one as a
+       sub-bus: the volume keys, the mute and the mind's filter all
+       still apply to everything the house makes.
+
+       If the host context is not up yet there is nothing to attach to,
+       so this backs out and is tried again on a later frame rather
+       than quietly building a second one. */
+    const host = (typeof window !== 'undefined' && window.DR) ? window.DR.Audio : null;
+    const hostCtx = host && host.ctx, hostBus = host && host.masterBus;
+    if(!hostCtx || !hostBus) return;
+    ctx = hostCtx;
+    master = ctx.createGain(); master.gain.value = 1.15; master.connect(hostBus);
     // the two grains everything else borrows from, made once, here
     NOISE.white = noiseBuffer(NOISE_SECONDS, 'white');
     NOISE.brown = noiseBuffer(NOISE_SECONDS, 'brown');
@@ -29534,7 +29560,12 @@ const Audio = (()=>{
     return ready ? { gain: gen.gain.gain.value, cutoff: gen.occl.frequency.value }
                  : { gain: 0, cutoff: 0 };
   }
-  return { init, resume, updateListener, setRainMix, thunder, distantThunder, genState,
+  return { /* Whether init() found a host context to hang off: the house's
+              audio cannot come up before the player's first click,
+              because a browser will not hand out a context until then. */
+           get ready(){ return !!ctx; },
+           get contextRef(){ return ctx; },
+           init, resume, updateListener, setRainMix, thunder, distantThunder, genState,
            footstep, creak, doorCreak, doorHandle, doorLatch, scuff, knock, click,
            hatchSwing, hatchDrop, setGenerator,
            breakerStrain, breakerTrip, breakerReset, applianceStart, hammer, windowForce,
@@ -31237,6 +31268,9 @@ const UI = (()=>{
     get cameraLocal(){ return camera; },
     get started(){ return GameState.started; },
     get clockNow(){ return +GameState.clock.toFixed(1); },
+    get audioReady(){ return Audio.ready; },
+    get audioCtx(){ return Audio.ready ? Audio.contextRef : null; },
+    get audioBusConnected(){ return Audio.ready; },
     get torchVisible(){ return !!(Lights.torch && Lights.torch.visible)
                             || !!(Lights.cone && Lights.cone.visible); },
     get lightStats(){ return { lights: houseLights.length,
@@ -31338,6 +31372,40 @@ const UI = (()=>{
       updateWindows(dt);
       updateHatch(dt);
       updateClimbSides();
+      /* ---- THE HOUSE'S OWN SOUND --------------------------------
+         Everything the house makes -- the footstep per surface, the
+         door handle and latch, the knock, the scuff, the generator,
+         the breakers, the storm against the walls -- is already called
+         from the lifted code. None of it was audible because its audio
+         was never initialised, so every one of those calls ran into a
+         module with no context.
+
+         init() is tried until it takes: Downriver's context does not
+         exist until the player's first click, and a browser will not
+         give you one before a gesture. After that these are the same
+         five per-frame calls The Long Night's own loop makes. */
+      if(!audioReady){
+        Audio.init();
+        audioReady = Audio.ready;
+      }
+      if(audioReady && near){
+        /* The storm bed follows the real weather rather than the
+           house's own clock: rain and thunder outside are what you
+           hear through these walls. */
+        const wet = host && host.weather
+          ? clamp((host.weather.rain || 0) + (host.weather.thunder || 0)*0.5, 0, 1) : 0;
+        Audio.setStorm(wet);
+        Audio.setBirds(host && host.sky ? smoothstep(0.05, 0.6, host.sky.day) : 0);
+        Audio.updateBirds(dt);
+        /* The ear is in the house's frame, like everything else here:
+           the listener pose, the room it is in, and how much of the
+           house it can hear through. */
+        Audio.setEarshot(Player.room || 'outside', RoomGraph.vis,
+                         !indoorsNowLocal());
+        Audio.updateListener(camera);
+        Audio.setRainMix(typeof windowOpenness === 'function' ? windowOpenness() : 0,
+                         Player.level);
+      }
       if(!near) return;
       /* ---- WHAT YOU ARE LOOKING AT, AND WHAT E WOULD DO TO IT ------
          pickTarget() is what decides the hovered thing, and UI.update
