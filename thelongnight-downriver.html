@@ -3433,7 +3433,10 @@ camera.layers.enable(LAYER_PHANTOM);
    was a place you could stand in and see nothing but the world through
    where its surfaces should be. 4 is the window glass and 5 is the
    first-person effects layer. */
-camera.layers.enable(4);
+/* 4 is the window glass and is deliberately NOT enabled: the glass pass
+   draws those panes itself, and a camera that also drew them would draw
+   each one twice -- once flat in the render pass and once properly on
+   top. 5 is the house's first-person effects layer, 6 is the cellar. */
 camera.layers.enable(5);
 camera.layers.enable(6);
 
@@ -22078,7 +22081,7 @@ window.DR = {
    The Long Night used 0/1/2/3 for WORLD/GLASS/FX/BASEMENT. Its three
    non-world layers move to 4/5/6, which are free.
    ===================================================================== */
-const LN = ((hostScene, hostCamera)=>{
+const LN = ((hostScene, hostCamera, hostPass)=>{
   const GROUP = new THREE.Group();
   GROUP.name = 'farmhouse';
   const scene = GROUP;                       // the deliberate shadow
@@ -22145,16 +22148,28 @@ const LN = ((hostScene, hostCamera)=>{
      as setGlass does, so a future phase that brings the pass across can
      switch it back on without rebuilding a window. */
   const glassPass = { materials: [], rooms: new Set(), unroomed: false };
+  const glassRooms = glassPass.rooms;
+  let glassUnroomed = false, glassPassLive = null;
   const FogPlaneShader = null;
   const flatGlassMat = new THREE.MeshPhysicalMaterial({
     color:0x0b1016, roughness:0.16, metalness:0.0,
     transparent:true, opacity:0.30, side:THREE.DoubleSide
   });
+  /* With the pass running the panes keep the material they were built
+     with and stay on the glass layer, which only the pass draws. The
+     flat fallback is still here and still correct -- setGlass(false)
+     swaps to it -- for the day the pass has to come back out. */
   function flattenGlass(){
     for(const pane of (World.glassPanes || [])){
       pane.userData.glassMat = pane.userData.glassMat || pane.material;
       pane.material = flatGlassMat;
       pane.layers.set(LAYER_WORLD);
+    }
+  }
+  function restoreGlass(){
+    for(const pane of (World.glassPanes || [])){
+      if(pane.userData.glassMat) pane.material = pane.userData.glassMat;
+      pane.layers.set(LAYER_GLASS);
     }
   }
   /* GlassShader and ConeShader are declared further down, straight after
@@ -31125,6 +31140,95 @@ const UI = (()=>{
 
 
 
+  /* ---------- lifted: THE RAIN ON THE GLASS ----------------------
+     The pass The Long Night wrote for its windows: it snapshots the
+     frame, then draws every pane back on top sampling that snapshot,
+     so each one refracts what is behind it and carries its own moving
+     rain, its own grime and the four interior lights it can see.
+
+     It was left out of the first lift on purpose -- it is a SECOND
+     full scene render, the most expensive thing in a frame, and the
+     frame rate was already bad. It is affordable now the house's
+     twenty lamps no longer light the forest and its shadow casters
+     are down from 1,572 to 645. It also arrives with its own
+     early-out, written for exactly this problem: if no room
+     containing a window is visible from where the player stands, the
+     whole pass is skipped, which means it costs nothing in the cellar,
+     nothing down the wing with the doors shut, and nothing at all when
+     the player is out in the forest. */
+class GlassPass extends Pass {
+  constructor(scene, camera){
+    super();
+    this.scene = scene;
+    this.camera = camera;
+    this.needsSwap = false;               // we write back into readBuffer
+    this.copyMat = new THREE.ShaderMaterial({
+      uniforms: THREE.UniformsUtils.clone(CopyShader.uniforms),
+      vertexShader: CopyShader.vertexShader,
+      fragmentShader: CopyShader.fragmentShader,
+      depthTest:false, depthWrite:false
+    });
+    this.quad = new FullScreenQuad(this.copyMat);
+    this.tmp = new THREE.WebGLRenderTarget(1,1,{ type:THREE.HalfFloatType, depthBuffer:false, colorSpace:THREE.LinearSRGBColorSpace });
+    this.materials = [];                  // every glass material, for uniform updates
+    this.rooms = new Set();               // which rooms actually contain glass
+    this.unroomed = false;                // a pane whose room we do not know
+  }
+  setSize(w,h){ this.tmp.setSize(w,h); }
+  /* Is there any point running at all? This pass is a SECOND full scene
+     render — the single most expensive thing in a frame — and for a
+     large part of a night there is not one pane of glass on screen. In
+     the cellar there is no glass at all; twenty metres down the wing
+     with the doors shut behind you there is none in reach either.
+
+     The test is the room graph, the same one the lighting budget uses:
+     if every room that contains a window has zero visibility from where
+     the player is standing, no pane can be in frame and the whole pass
+     is skipped.
+
+     Two deliberate exemptions, because getting this wrong does not dim a
+     window, it DELETES one — the main pass skips LAYER_GLASS entirely,
+     so a pane this pass declines to draw is a hole in the wall:
+       - outside. The graph models doorways, not sightlines across a
+         yard, so from the grass it will happily tell you the bedroom is
+         invisible while you are looking straight at its window.
+       - any pane built without a room. Nothing does that today, but a
+         future opening spec that forgets `room:` should render, not
+         vanish. */
+  visible(){
+    if(this.unroomed) return true;
+    if(Player.room === 'outside' || Player.level === 'outside') return true;
+    const vis = computeRoomVisibility(Player.room);
+    for(const r of this.rooms) if((vis[r] || 0) > 0) return true;
+    return false;
+  }
+  render(renderer, writeBuffer, readBuffer){
+    if(!CFG.QUALITY.glass || this.materials.length===0) return;
+    if(!this.visible()) return;
+    // 1. snapshot the frame
+    this.copyMat.uniforms.tDiffuse.value = readBuffer.texture;
+    renderer.setRenderTarget(this.tmp);
+    this.quad.render(renderer);
+    // 2. draw the panes back on top, into the same depth buffer
+    for(const m of this.materials) m.uniforms.tScene.value = this.tmp.texture;
+    const ac = renderer.autoClear, su = renderer.shadowMap.autoUpdate;
+    const bg = this.scene.background;
+    renderer.autoClear = false;
+    renderer.shadowMap.autoUpdate = false;      // shadows were done in RenderPass
+    // A Color background force-clears the colour buffer even when autoClear
+    // is off, which would erase the frame we are trying to draw on top of.
+    this.scene.background = null;
+    renderer.setRenderTarget(readBuffer);
+    const mask = this.camera.layers.mask;      // restore exactly, not just layer 0
+    this.camera.layers.set(LAYER_GLASS);
+    renderer.render(this.scene, this.camera);
+    this.camera.layers.mask = mask;
+    this.scene.background = bg;
+    renderer.autoClear = ac;
+    renderer.shadowMap.autoUpdate = su;
+  }
+}
+
   /* The house's interact(), captured at the closure's top level where
      no banner comment can swallow it. The first attempt at this line
      was inserted directly after a banner's `/*` and spent the whole
@@ -31188,9 +31292,22 @@ const UI = (()=>{
       if(Lights.cone){ Lights.cone.visible = false; }
       collectLights();
       thinShadowCasters();
-      /* Every pane exists by now, which is why the swap is here rather
-         than inside makeWindow. */
-      flattenGlass();
+      /* Every pane exists by now, which is why this is here rather than
+         inside makeWindow. The pass renders the HOST scene -- the panes
+         live in this group, which is a child of it -- from the HOST
+         camera, because the frame it draws onto was drawn with that
+         camera and from any other viewpoint the panes would not line up
+         with the window holes they sit in. */
+      if(hostPass){
+        restoreGlass();
+        glassPassLive = new GlassPass(hostScene, hostCamera);
+        glassPassLive.materials = World.glassMats || [];
+        glassPassLive.rooms = glassRooms;
+        glassPassLive.unroomed = glassUnroomed;
+        hostPass(glassPassLive);
+      } else {
+        flattenGlass();
+      }
       return GROUP;
     },
     /* Where the house stands in Downriver's world. Quarter turns only:
@@ -31521,7 +31638,16 @@ const UI = (()=>{
     computeRoomVisibility, applyRoomLighting, RoomGraph, Lights,
     solids(){ return World.solids; },
   };
-})(scene, camera);
+})(scene, camera, (pass)=>{
+  /* The glass has to be drawn BEFORE the post stack, or the rain on the
+     windows would not be graded, blurred or vignetted with the rest of
+     the picture and would sit on top of the frame like a decal. The
+     post pass is always last, so the glass goes in front of it. */
+  const i = composer.passes.indexOf(postPass);
+  if(i < 0) composer.addPass(pass); else composer.insertPass(pass, i);
+  const pr = renderer.getPixelRatio();
+  for(const m of pass.materials) m.uniforms.uRes.value.set(innerWidth*pr, innerHeight*pr);
+});
 /* A handle on the house for the console and the test harness, beside
    window.DR. The namespace itself is a module-scoped const, so without
    this there is no way to ask the house anything from outside. */
