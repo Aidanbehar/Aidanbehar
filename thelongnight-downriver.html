@@ -27937,7 +27937,6 @@ function updateDoors(dt){
 
 /* =====================================================================
 
-  const houseInteract = interact;
 
   /* ---------- lifted: AUDIO (1207 lines) ---------- */
 
@@ -29912,6 +29911,19 @@ function inFloodlight(){
   }
   return false;
 }
+
+  /* The house's interact(), captured at the closure's top level where
+     no banner comment can swallow it. The first attempt at this line
+     was inserted directly after a banner's `/*` and spent the whole
+     time commented out, which is why pressing E reported
+     "houseInteract is not defined" from inside a try/catch that was
+     working perfectly.
+
+     (And the recursion it was avoiding was imaginary: method shorthand
+     in an object literal does not bind its own name, so `interact(){
+     interact(); }` would have called the function declared out here.
+     The alias stays because it says which one is meant.) */
+  const houseInteract = interact;
 
   /* ---- WHAT THE REST OF THE GAME IS ALLOWED TO TOUCH --------------- */
   return {
