@@ -14516,7 +14516,7 @@ const MOVE_SUBSTEP = 0.18;
    player cannot step onto? One rule: the ground a body-radius ahead
    stands more than stepUp above your feet. */
 function terrainBlocks(feetY, x, z, ux, uz){
-  const probe = CFG.PLAYER.radius + 0.20;
+  const probe = playerRadiusNow() + 0.20;
   return heightAt(x + ux*probe, z + uz*probe) - feetY > CFG.PLAYER.stepUp;
 }
 
@@ -14569,7 +14569,14 @@ function moveAgainstTerrain(p, dx, dz){
       if(terrainBlocks(p.pos.y, p.pos.x, p.pos.z, ux, uz)) break;
     }
     const np = { x: p.pos.x + ex, y: p.pos.y, z: p.pos.z + ez };
-    resolveCollisions(np, CFG.PLAYER.radius);
+    /* ---- THE SAME BODY AS THE ONE THAT SETTLES ------------------
+       The first attempt at the doorway narrowed only the resolve at
+       the END of updatePlayer and left this one at the full width.
+       This is the call that decides whether a substep is TAKEN, so
+       the player was still being refused at 0.34 and then settled at
+       0.24 -- which is why the stop positions kept coming out at the
+       wide radius while playerRadiusNow() reported the narrow one. */
+    resolveCollisions(np, playerRadiusNow());
     p.pos.x = np.x; p.pos.z = np.z;
   }
   return blockedAny;
@@ -14583,7 +14590,7 @@ function moveAgainstTerrain(p, dx, dz){
    pushes the player directly away from it. Two passes, because being
    pushed out of one sample can push you into another. */
 function pushOutOfTerrain(p){
-  const R = CFG.PLAYER.radius, lift = CFG.PLAYER.stepUp;
+  const R = playerRadiusNow(), lift = CFG.PLAYER.stepUp;
   for(let pass=0; pass<2; pass++){
     let px = 0, pz = 0, hits = 0;
     for(let k=0;k<8;k++){
@@ -14824,7 +14831,7 @@ function updatePlayer(dt){
      player, whichever is higher. One line, and it is the difference
      between a cabin you can enter and a cabin with a kerb round it. */
   const terrainY = heightAt(p.pos.x, p.pos.z);
-  const floorY = surfaceAt(p.pos.x, p.pos.z, p.pos.y, C.radius);
+  const floorY = surfaceAt(p.pos.x, p.pos.z, p.pos.y, playerRadiusNow());
   const ground = Math.max(terrainY, floorY > -1e8 ? floorY : -Infinity);
   p.groundY = ground;
 
