@@ -21317,7 +21317,7 @@ function stepPlayerEitherSide(dt){
              && LN.indoors(Player.pos.x, Player.pos.y, Player.pos.z);
   if(house){
     if(!wasIndoors) LN.enter(Player.pos.x, Player.pos.y, Player.pos.z, camera);
-    const p = LN.stepPlayer(dt, camera);
+    const p = LN.stepPlayer(dt, camera, Keys);
     Player.pos.set(p.x, p.y, p.z);
   } else {
     updatePlayer(dt);
@@ -26755,7 +26755,30 @@ const Player = {
   aiming: false,
 };
 const Keys = Object.create(null);
-addEventListener('keydown', e=>{
+/* ---- THE HOUSE DOES NOT LISTEN TO THE KEYBOARD ---------------------
+   This used to attach its own keydown and keyup, and attaching them
+   here would mean two listeners on one document fighting over one
+   player: Downriver binds its own movement, its map, its torch and its
+   interact, and the house binds Tab, F, E, Q, H, P, N and the digits
+   on top. Some of those are the same verb bound twice (interact, the
+   torch) and some are different verbs on the same key (the map is Q
+   here and M there). Both firing is not a merge, it is a race.
+
+   So Downriver owns the keyboard. The movement state is mirrored into
+   this object by the handover each frame -- which is why the first walk
+   test moved not at all indoors: the house's movement ran faithfully
+   against a Keys object nobody was filling in.
+
+   The one-shot bindings are kept as a named function rather than
+   deleted, because they are the list of verbs the house HAS, and
+   routing Downriver's input into them is the interaction half of the
+   next phase. Nothing calls it yet. */
+function syncKeys(hostKeys){
+  if(!hostKeys) return;
+  for(const k of ['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','Space'])
+    Keys[k] = !!hostKeys[k];
+}
+const houseKeyBindings = (e=>{
   // the developer overlay owns the keyboard while it is open -- and the
   // password prompt counts, or typing the password walks the player
   if(typeof DEV !== 'undefined' && (DEV.open || DEV.gating)) return;
@@ -26797,7 +26820,7 @@ addEventListener('keydown', e=>{
   }
   if(e.code==='Escape' && UI.tabletOpen && UI.focusedFeed >= 0) UI.setFocus(-1);
 });
-addEventListener('keyup', e=>{ Keys[e.code] = false; });
+/* The keyup listener went with it: nothing fills Keys but syncKeys. */
 /* And the mouse: no aiming, no shooting the torch about, while it is up. */
 addEventListener('mousedown', e=>{ if(typeof DEV !== 'undefined' && (DEV.open || DEV.gating)) e.stopPropagation(); }, true);
 addEventListener('mousedown', e=>{ if(e.button===2) Player.aiming = true; });
@@ -27967,8 +27990,9 @@ function updateDoors(dt){
     /* Called every frame while the player is indoors. The look comes in
        from the real camera, the step is taken in local metres, and the
        eye goes back out to the real camera in world metres. */
-    stepPlayer(dt, hostCam){
+    stepPlayer(dt, hostCam, hostKeys){
       syncLook(hostCam);
+      syncKeys(hostKeys);
       updatePlayer(dt);
       const w = farmLocalToWorldXZ(camera.position.x, camera.position.z, placedAt);
       hostCam.position.set(w.x, placedAt.y + camera.position.y, w.z);
