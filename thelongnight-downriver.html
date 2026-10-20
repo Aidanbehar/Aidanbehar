@@ -265,10 +265,22 @@ body.touch #ln-help{display:none}
 #lnroot #ln-clock .row{display:flex;align-items:baseline;justify-content:flex-end;gap:11px}
 #lnroot #ln-clock .big{font-size:22px;letter-spacing:.14em;color:#cfc7b6}
 #lnroot #ln-clock .alt{font-size:12px;letter-spacing:.14em;color:#8c8578}
+/* ---- THE ROOM NAME AND THE KEY LIST WERE IN THE SAME CORNER ----
+   #help is Downriver's, at left:26 top:22; the house's room name came
+   across at left:22 top:20. Both are on screen at once indoors, so the
+   name of the room was printed through the list of keys.
+
+   The room name moves below the help, and comes back up when the help
+   is hidden with H -- the same thing The Long Night does with its own
+   objectives, for the same reason: a HUD that leaves a hole where a
+   panel used to be reads as a bug. */
 #lnroot #roomname{
-  position:absolute;left:22px;top:20px;font-size:11px;letter-spacing:.3em;
+  position:absolute;left:22px;top:128px;font-size:11px;letter-spacing:.3em;
   text-transform:uppercase;color:#6f6a5f;text-shadow:0 1px 6px #000;
+  transition:top .25s;
 }
+body.helphidden #lnroot #roomname{ top:20px; }
+#help .inhouse{ opacity:.55; }
 #lnroot #ln-subtitle{
   position:absolute;left:50%;bottom:74px;transform:translateX(-50%);
   font-size:12px;letter-spacing:.14em;color:#a49c8c;text-shadow:0 2px 10px #000;
@@ -508,6 +520,7 @@ body.touch #tabletframe{width:min(1240px,97vw,150vh);max-height:96vh}
 <div id="help">
   <div><b>W A S D</b> move &nbsp; <b>SHIFT</b> run &nbsp; <b>E</b> interact (hold)</div>
   <div><b>F</b> flashlight &nbsp; <b>C</b> compass &nbsp; <b>M</b> map</div>
+  <div><b>TAB</b> cameras &nbsp; <b>Q</b> house map &nbsp; <span class="inhouse">(in the house)</span></div>
   <div><b>H</b> hide this &nbsp; <b>P</b> fps &nbsp; <b>`</b> dev panel &nbsp; <b>ESC</b> release mouse</div>
   <div><b>-</b> / <b>=</b> volume &nbsp; <b>0</b> mute</div>
 </div>
@@ -13923,7 +13936,13 @@ function onKeyDown(e){
     case 'KeyF': Gear.toggleTorch(); break;
     case 'KeyC': Gear.toggleCompass(); break;
     case 'KeyM': UI.toggleMap(); break;
-    case 'KeyH': document.getElementById('help').classList.toggle('off'); break;
+    case 'KeyH': {
+      /* The body carries the state too, so the house's room name knows
+         to move back up into the corner the key list just left. */
+      const off = document.getElementById('help').classList.toggle('off');
+      document.body.classList.toggle('helphidden', off);
+      break;
+    }
     case 'KeyP': { const f = document.getElementById('fps');
                    f.style.display = f.style.display === 'block' ? 'none' : 'block'; break; }
     /* ---- ONE KEY, TWO GAMES, AND WHICHEVER YOU ARE STANDING IN ----
