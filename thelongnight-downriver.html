@@ -31199,6 +31199,20 @@ class GlassPass extends Pass {
          future opening spec that forgets `room:` should render, not
          vanish. */
   visible(){
+    /* ---- THE DISTANCE TEST COMES FIRST -----------------------------
+       Ahead of every other question here, because the others are all
+       asked of the HOUSE's idea of where the player is -- and that
+       idea is stale the moment they walk out of the building. The
+       house's Player.room is only written while its own movement is
+       running, so 800 metres away it still said 'living', the outside
+       branch below was never reached, and the room graph was asked
+       whether the living room is visible from the living room. It said
+       yes, every frame, and the pass ran.
+
+       Adding the range to the outside branch did not fix it for that
+       reason, which is worth the line of explanation: the branch was
+       not the one being taken. */
+    if(!nearHouse) return false;
     if(this.unroomed) return true;
     /* ---- "OUTSIDE" USED TO MEAN THE YARD ---------------------------
        The exemption above this line is right and the note explaining it
@@ -31215,8 +31229,7 @@ class GlassPass extends Pass {
        So the exemption keeps its reason and gains a range. Beyond it
        the room graph's answer is used, which outdoors is no, which is
        correct: a window you cannot resolve does not need refracting. */
-    if(Player.room === 'outside' || Player.level === 'outside')
-      return nearHouse;
+    if(Player.room === 'outside' || Player.level === 'outside') return true;
     const vis = computeRoomVisibility(Player.room);
     for(const r of this.rooms) if((vis[r] || 0) > 0) return true;
     return false;
