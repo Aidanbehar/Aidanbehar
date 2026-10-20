@@ -21294,11 +21294,41 @@ function admit(h){
    game-minutes in a moment without a renderer in the way. Having exactly
    one definition of "a step of this game" is also what stops the tested
    thing from drifting away from the played thing. */
+/* ---- ONE PLAYER, TWO MOVEMENT SYSTEMS, AND THE DOOR BETWEEN THEM ---
+   Downriver's player is 0.34 across and walks on terrain; the house's
+   is 0.24 across, and its doors are 0.9 to 1.1m wide with furniture
+   gaps laid out for that size. Neither can be widened without breaking
+   the thing it was measured for, so both run, and which one runs is
+   decided here.
+
+   The position is the same point either way, described in two frames,
+   so crossing costs nothing horizontally. Vertically the two disagree
+   about what the floor is -- terrain outside, floorHeightAt() inside --
+   and they are made to agree by the pad being levelled to the house's
+   floor. Wld.stats.porchStep is how far off the porch cell still is,
+   and it is the first number to look at if a threshold ever jolts.
+
+   `wasIndoors` is a latch rather than a per-frame question so that the
+   frame the player crosses on is handed over exactly once, and so the
+   house gets an enter() to seed its own Player from the world one. */
+let wasIndoors = false;
+function stepPlayerEitherSide(dt){
+  const house = (typeof LN !== 'undefined') && LN.site
+             && LN.indoors(Player.pos.x, Player.pos.y, Player.pos.z);
+  if(house){
+    if(!wasIndoors) LN.enter(Player.pos.x, Player.pos.y, Player.pos.z, camera);
+    const p = LN.stepPlayer(dt, camera);
+    Player.pos.set(p.x, p.y, p.z);
+  } else {
+    updatePlayer(dt);
+  }
+  wasIndoors = house;
+}
 function stepWorld(dt){
   G.t += dt;
   Hold.update(dt);
   Sleep.update(dt);
-  updatePlayer(dt);
+  stepPlayerEitherSide(dt);
   updateRest(dt);
   updateWeather(dt);
   updateSky(dt);
@@ -27893,6 +27923,24 @@ function updateDoors(dt){
                x1: Math.max(a.x,b.x), z1: Math.max(a.z,b.z) };
     },
     toWorld(lx, lz){ return farmLocalToWorldXZ(lx, lz, placedAt); },
+    /* ---- IS THE PLAYER IN THE HOUSE? --------------------------------
+       Asked of the house's own room map rather than of the footprint,
+       which matters at both ends of the building. The footprint is a
+       rectangle 46m long with the porch and a slice of yard inside it;
+       roomAt() knows the actual rooms, so the answer flips at the
+       threshold of a door and not a metre out in the grass.
+
+       The two lower and upper decks are unconditional: if the player is
+       in the cellar or the attic they are indoors whatever the plan
+       view says, because the cellar sticks out past the walls above it
+       and the attic's eaves close inside them. */
+    indoors(worldX, worldY, worldZ){
+      if(!placedAt) return false;
+      if(Player.level === 'basement' || Player.level === 'attic') return true;
+      const L = this.toLocal(worldX, worldZ);
+      const r = roomAt(L.x, L.z, Player.level, Player.onStairs);
+      return !!r && r !== 'outside';
+    },
     /* ---- THE HANDOVER ------------------------------------------------
        Inside the house The Long Night's movement runs: its radius of
        0.24 against doors 0.9 to 1.1m wide and furniture gaps laid out
