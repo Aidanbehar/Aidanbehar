@@ -1964,6 +1964,26 @@ const CFG = {
   },
 
   QUALITY: {
+    /* ---- SHADOWS, AND WHY THEY ARE OFF ----------------------------
+       Reported: opening a door with the flashlight on throws a mess of
+       black across the room. That is the shadow map, and the torch is
+       the worst possible caster for one -- a spotlight held at eye
+       height, swinging with every mouse movement, inside a building
+       made of thin boxes. A door leaf is two centimetres thick, so the
+       depth difference between its two faces is smaller than one texel
+       of the map can resolve at that range, and the leaf shadows
+       ITSELF: the classic acne, and it sweeps across the room as the
+       door turns because the caster is turning.
+
+       It could be chased with bias and normalBias tuning, per light and
+       per distance, and it would still be a thin box lit by a moving
+       point. Turned off instead, which also buys back a depth pass for
+       every shadow-casting light in the scene.
+
+       ONE FLAG, read in both places that touch shadowMap.enabled -- the
+       initial setup and the adaptive-quality step -- so turning them
+       back on is this line and nothing else. */
+    shadows: false,
     texSize: 512,
     macroSize: 2048,     // the baked whole-world ground map, texels per side
     /* ---- HOW THE GROUND IS DRAWN AT FIVE KILOMETRES ----------------
@@ -3419,7 +3439,7 @@ const app = document.getElementById('app');
 const renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance', stencil:false });
 renderer.setPixelRatio(Math.min(devicePixelRatio, CFG.QUALITY.maxPixelRatio));
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = CFG.QUALITY.shadows;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.NoToneMapping;        // done in PostShader
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -3500,7 +3520,8 @@ function applyRungs(){
   // 1: shorter tree streaming radius. 2: no volumetric cone. 3: no shadows.
   Veg.radius = CFG.QUALITY.treeRadius * (RES.rung >= 1 ? 0.66 : 1.0);
   if(World.cone) World.cone.visible = CFG.QUALITY.volumetrics && RES.rung < 2;
-  renderer.shadowMap.enabled = RES.rung < 3;
+  /* Rung 3 drops shadows; the flag drops them at every rung. */
+  renderer.shadowMap.enabled = CFG.QUALITY.shadows && RES.rung < 3;
   Veg.dirty = true;
 }
 function adaptResolution(dt, fps){
@@ -14232,9 +14253,25 @@ function registerColliders(){
       let reach = 8;
       for(const b of solids)
         reach = Math.max(reach, Math.hypot(b.cx - F.x, b.cz - F.z) + Math.max(b.hx, b.hz) + 2);
-      STRUCT_COLLIDERS.push({ x: F.x, z: F.z, reach, solids, ref: F, farmhouse: true });
+      FARM_COLLIDERS = { x: F.x, z: F.z, reach, solids, ref: F, farmhouse: true };
+      STRUCT_COLLIDERS.push(FARM_COLLIDERS);
     }
   }
+}
+/* The farmhouse's entry, kept so its solids can be brought up to date
+   rather than re-registered. The reach is NOT recomputed: it is a
+   broadphase radius over a forty-six metre building and a door leaf
+   swinging through ninety degrees cannot meaningfully change it. */
+let FARM_COLLIDERS = null;
+function refreshFarmColliders(){
+  if(!FARM_COLLIDERS || typeof LN === 'undefined' || !LN.site) return;
+  const F = FARM_COLLIDERS;
+  /* Only while something could be touching it. Everything that reads
+     this -- the player, the creatures, the villagers -- is broadphased
+     against the same reach, so outside it nothing can be asking. */
+  if(Math.abs(Player.pos.x - F.x) > F.reach + 40
+  || Math.abs(Player.pos.z - F.z) > F.reach + 40) return;
+  LN.colliders(F.solids);
 }
 
 /* THE SUM OVERSHOOTS, AND AN OVERSHOOT THAT BOUNCES IS A TRAP.
@@ -21944,6 +21981,10 @@ function stepPlayerEitherSide(dt){
 }
 function stepWorld(dt){
   G.t += dt;
+  /* Before anything moves: the farmhouse's doors may have swung since
+     the last frame, and out here that building is whatever this says
+     it is. */
+  refreshFarmColliders();
   Hold.update(dt);
   Sleep.update(dt);
   stepPlayerEitherSide(dt);
@@ -38461,26 +38502,54 @@ class GlassPass extends Pass {
        against, and the forest creatures have to be stopped by the
        outside of this building; the player does not double-resolve
        because the handover runs one resolver or the other, never both. */
-    colliders(){
-      if(!placedAt) return [];
+    /* ---- AND THIS IS A LIVE VIEW, NOT A PHOTOGRAPH ------------------
+       The house's solids MOVE and SWITCH OFF while it is being played:
+       a door's doorway box goes off as the leaf swings and the leaf
+       itself becomes solid in its place, a window's leaf does the same,
+       the hatch cap and the attic climbs toggle, a boarded window seals.
+
+       This ran exactly once, at registerColliders(), and copied numbers
+       out. So Downriver's picture of the farmhouse was frozen at the
+       state every door happened to be in when the house was built --
+       and Downriver's picture is what governs the player OUTSIDE, and
+       every creature, always. Two symptoms, one cause:
+
+         you cannot walk in through an open front door, because out
+         there the doorway box is still the shut one and nothing ever
+         turned it off;
+
+         and you pass straight through the open leaf, because the leaf's
+         own box was never registered as having swung anywhere.
+
+       At the threshold the two disagree in the worst possible way --
+       the house says the opening is clear and the forest says it is a
+       wall -- which is the phasing back and forth.
+
+       Passing an array refills it in place and reuses the entries, so
+       refreshing every frame allocates nothing. */
+    colliders(out){
+      if(!placedAt) return out ? (out.length = 0, out) : [];
       const { x, y, z, q } = placedAt;
       const swap = (q === 1 || q === 3);
-      const out = [];
+      const arr = out || [];
+      let n = 0;
       for(const sol of World.solids){
         if(sol.off) continue;
         const lcx = (sol.min.x + sol.max.x)/2, lcz = (sol.min.z + sol.max.z)/2;
         const lhx = (sol.max.x - sol.min.x)/2, lhz = (sol.max.z - sol.min.z)/2;
         const w = farmLocalToWorldXZ(lcx, lcz, placedAt);
-        out.push({
-          cx: w.x, cz: w.z,
-          hx: swap ? lhz : lhx, hz: swap ? lhx : lhz,
-          cos: 1, sin: 0,
-          y0: y + sol.min.y, y1: y + sol.max.y,
-          kind: (sol.max.y - sol.min.y) > 0.4 ? 'wall' : 'floor',
-          tag: sol.sfx || null, src: null, isDoor: false, ln: sol,
-        });
+        let e = arr[n];
+        if(!e) e = arr[n] = { cos: 1, sin: 0, tag: null, src: null, isDoor: false };
+        e.cx = w.x; e.cz = w.z;
+        e.hx = swap ? lhz : lhx; e.hz = swap ? lhx : lhz;
+        e.cos = 1; e.sin = 0;
+        e.y0 = y + sol.min.y; e.y1 = y + sol.max.y;
+        e.kind = (sol.max.y - sol.min.y) > 0.4 ? 'wall' : 'floor';
+        e.tag = sol.sfx || null; e.src = null; e.isDoor = false; e.ln = sol;
+        n++;
       }
-      return out;
+      arr.length = n;
+      return arr;
     },
     /* The stairwell, in world space, for the terrain's discard. The
        margin matches the one The Long Night's own ground slabs used. */
@@ -38886,6 +38955,8 @@ class GlassPass extends Pass {
       return { x: f.x, y: placedAt.y + Player.pos.y, z: f.z,
                level: Player.level, room: Player.room };
     },
+    /* For the harness: one of the house's doors, by its name. */
+    doorByName(n){ return World.doors.find(d=>d.name === n) || null; },
     /* For the harness: give the house boards and nails to work with. */
     setStock(boards, nails){ Resources.boards = boards; Resources.nails = nails; },
     /* For the harness: swing every door in the house through the same
