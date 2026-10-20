@@ -12923,6 +12923,33 @@ function buildHouse(spec){
   const apexY = H + 0.14 + Math.sin(pitch)*slab - underDrop;
   const roofUnderAt = (z)=> apexY - Math.abs(z)*Math.tan(pitch);
   const eaveY = roofUnderAt(D/2);          // the wall's real full height
+  /* ---- THE CEILING, AND THE THING THAT GOES THROUGH IT ------------
+     A house had no ceiling. The interior walls stopped at st.height
+     and nothing closed the top of the rooms, so from the middle of
+     somebody's kitchen you looked straight up into the roof void --
+     the full run of the rafters, both gable ends, the underside of
+     every shake -- and over the top of the bedroom partition into the
+     bedroom. A room open to the ridge is a barn. That is most of why
+     the insides of these read as sheds with furniture in them.
+
+     ceilY is the underside of the boards, just below where the walls
+     meet the eave, and everything that has to reach the ceiling is
+     measured from it rather than from st.height.
+
+     THE STOVE AND THE CHIMNEY ARE THE SAME OBJECT. The chimney was
+     built at a fixed back corner (W/2-0.9, -D/2+0.9) and the stove
+     was rolled independently in the front room, so in every house in
+     the town the flue rose two metres out of the stove and stopped in
+     mid-air, while the stack stood on the roof above the BEDROOM --
+     seven metres away, and on the wrong side in half of them. The
+     side is drawn here, once, from the house's own id, so the stove,
+     the flue and the chimney are three parts of one flue line. It is
+     hashed rather than rolled off `hr` so none of the exterior rolls
+     below it shift. */
+  const ceilY = eaveY - 0.07;
+  const stoveSide = (hashString((spec.id || 'house') + ':stove') & 1) ? 1 : -1;
+  const stoveX = stoveSide*(W/2 - 0.75);
+  const stoveZ = (D/2 - 0.7) - 1.1;
 
   const doorW = 1.80;
   const segW = (W - doorW)/2;
@@ -13049,11 +13076,17 @@ function buildHouse(spec){
       [-zb, roofUnderAt(zb) - y0 + 0.015],
     ], skin, sx*(W/2 - wall*0.5 + 0.02), y0, 0);
   }
-  /* The chimney has to come out of the roof, not stop inside it. */
-  const chimX = W/2-0.9, chimZ = -D/2 + 0.9;
+  /* The chimney has to come out of the roof, not stop inside it -- and
+     it has to come out of it ABOVE THE STOVE. In a house with an
+     interior it starts at the ceiling, because the part of the flue
+     below that is the stove's own pipe and two masonry stacks in one
+     room would be one too many. In a boarded-up one there is no
+     ceiling to start from, so it runs from head height as before. */
   {
+    const chimX = stoveX, chimZ = stoveZ;
+    const base = inside ? ceilY : 1.2;
     const top = roofUnderAt(chimZ) + 0.18/Math.cos(pitch) + 0.75;
-    addBox(g, 0.62, top - 1.2, 0.62, MAT.concrete, chimX, 1.2 + (top-1.2)/2, chimZ);
+    addBox(g, 0.62, top - base, 0.62, MAT.concrete, chimX, base + (top-base)/2, chimZ);
     g.userData.chimney = new THREE.Vector3(chimX, top, chimZ);
   }
 
@@ -13285,6 +13318,11 @@ function buildHouse(spec){
   if(inside){
     const r = makeRNG(hashString(spec.id || 'house') ^ G.seed ^ 0x51ee);
     const put = (w,h,d, mat, x,y,z)=> addBox(g, w,h,d, mat, x,y,z);
+    /* The boards overhead. Solid rather than noclip, because shelterAt
+       asks the collision data whether anything is above your head and
+       this is the honest answer to that question; it is a metre over a
+       standing player either way, so nothing walks into it. */
+    put(W, 0.10, D, MAT.timber, 0, ceilY + 0.05, 0);
     /* The cross wall, its doorway offset from the front door so you
        cannot see the bed from the street. */
     const crossZ = -D*0.06;
@@ -13293,9 +13331,9 @@ function buildHouse(spec){
     {
       const leftEnd = doorAt - dw, rightStart = doorAt + dw;
       const lw = leftEnd + W/2, rw = W/2 - rightStart;
-      if(lw > 0.05) put(lw, H, wall, MAT.timber, -W/2 + lw/2, H/2, crossZ);
-      if(rw > 0.05) put(rw, H, wall, MAT.timber,  W/2 - rw/2, H/2, crossZ);
-      put(dw*2, H-2.1, wall, MAT.timber, doorAt, 2.1 + (H-2.1)/2, crossZ);
+      if(lw > 0.05) put(lw, ceilY, wall, MAT.timber, -W/2 + lw/2, ceilY/2, crossZ);
+      if(rw > 0.05) put(rw, ceilY, wall, MAT.timber,  W/2 - rw/2, ceilY/2, crossZ);
+      put(dw*2, ceilY-2.1, wall, MAT.timber, doorAt, 2.1 + (ceilY-2.1)/2, crossZ);
       /* Where that doorway actually is, for anything that needs to
          stand in it. Guessing the middle of the cross wall puts a body
          inside the timber on every house whose doorway rolled to the
@@ -13329,17 +13367,19 @@ function buildHouse(spec){
       const nearLen = z0 - (gapZ + gw);
       const farLen  = (gapZ - gw) - z1;
       if(nearLen > 0.02)
-        put(wall, H, nearLen, MAT.timber, splitX, H/2, z0 - nearLen/2);
+        put(wall, ceilY, nearLen, MAT.timber, splitX, ceilY/2, z0 - nearLen/2);
       if(farLen > 0.02)
-        put(wall, H, farLen, MAT.timber, splitX, H/2, z1 + farLen/2);
-      put(wall, H-2.05, gw*2, MAT.timber, splitX, 2.05 + (H-2.05)/2, gapZ);
+        put(wall, ceilY, farLen, MAT.timber, splitX, ceilY/2, z1 + farLen/2);
+      put(wall, ceilY-2.05, gw*2, MAT.timber, splitX, 2.05 + (ceilY-2.05)/2, gapZ);
     }
 
     // ---- the front room: what a household uses every day ----
     const fx = W/2 - 0.55, fz = D/2 - 0.7;
-    const stoveX = (r()<0.5 ? -1 : 1) * (W/2 - 0.75);
-    put(0.78, 0.95, 0.68, MAT.metal,  stoveX, 0.47, fz - 1.1);        // stove
-    put(0.28, 2.0,  0.28, MAT.metal,  stoveX, 1.95, fz - 1.1);        // flue
+    /* stoveX and stoveZ come from the flue line fixed above, which is
+       what the chimney on the roof was built from. */
+    put(0.78, 0.95, 0.68, MAT.metal,  stoveX, 0.47, stoveZ);          // stove
+    put(0.28, ceilY - 0.95, 0.28, MAT.metal,                          // flue, to the ceiling
+        stoveX, 0.95 + (ceilY - 0.95)/2, stoveZ);
     put(0.85, 0.42, 0.55, MAT.timber, stoveX, 0.21, fz - 2.2);        // wood box
     for(let i=0;i<4;i++)                                              // split logs in it
       put(0.60, 0.11, 0.11, MAT.timber, stoveX, 0.46 + i*0.03,
@@ -13540,8 +13580,8 @@ function buildHouse(spec){
         pane.userData.keepMesh = true;                 // swapped lit/unlit
         lamps.push({ x, y, z, pane });
       };
-      lampAt(tx, H - 0.40, tz);
-      if(beds.length) lampAt(beds[0].x, H - 0.40, beds[0].z + 0.6);
+      lampAt(tx, ceilY - 0.34, tz);
+      if(beds.length) lampAt(beds[0].x, ceilY - 0.34, beds[0].z + 0.6);
       for(const pn of panes) lamps.push({ x:pn.position.x, y:pn.position.y,
                                           z:pn.position.z, pane:pn, window:true });
       g.userData.lamps = lamps;
