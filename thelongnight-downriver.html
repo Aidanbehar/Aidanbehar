@@ -22377,6 +22377,7 @@ window.DR = {
   CollisionView, CreatureView, People, Fauna, BEASTS, resolveCollisions, pushOutOfTerrain,
   indoorsOfTheHouse, indoorsNow, houseDoorInReach,
   HOLD_KINDS, promptLabel, pickTarget,
+  updateAimZoom,
   get STRUCT_COLLIDERS(){ return STRUCT_COLLIDERS; },
 };
 
@@ -34331,7 +34332,28 @@ const Keys = Object.create(null);
    next phase. Nothing calls it yet. */
 function syncKeys(hostKeys){
   if(!hostKeys) return;
-  for(const k of ['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','Space'])
+  /* ---- AND E, WHICH IS NOT A MOVEMENT KEY BUT IS POLLED LIKE ONE ---
+     This list was "the movement keys", and that was one key short.
+     The house polls Keys.KeyE in exactly one place -- the cancel test
+     at the top of Hold.update:
+
+         if(!Keys.KeyE){ this.cancel(); return; }
+
+     -- which asks, every frame, "are they still holding it?". The
+     answer was always no, because nothing ever wrote KeyE into this
+     object. So every hold in the house began on the press and was
+     cancelled on the very next frame: boarding a door or a window,
+     prying boards off, pulling the generator over, forcing the
+     footlocker, pulling down the folding stair. The bar appeared for
+     one frame and vanished.
+
+     That is the second half of why right-click boarding did nothing.
+     The first was that Hold.update was never called at all; with it
+     called but E unreadable, the hold still could not survive a
+     frame. Both had to be wrong for the symptom to look like "the
+     button does nothing", and fixing either alone would not have
+     shown it. */
+  for(const k of ['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','Space','KeyE'])
     Keys[k] = !!hostKeys[k];
 }
 const houseKeyBindings = (e=>{
