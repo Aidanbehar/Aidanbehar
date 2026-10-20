@@ -22531,11 +22531,44 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
 
      Downriver keeps the aim as two scalars and so does the house, so
      the two scalars are what cross. No extraction, no second solution,
-     nothing to flip. The quarter turn is added to the yaw here because
-     this camera lives in the house's frame. */
+     nothing to flip.
+
+     ---- AND THE QUARTER TURN IS SUBTRACTED, NOT ADDED ----------------
+     This camera is a CHILD of GROUP, and place() sets GROUP.rotation.y
+     to the house's quarter turn. So the camera's own rotation.y is a
+     heading in the house's frame, and three.js composes it with the
+     parent's: a local yaw L renders at world yaw houseYaw + L. For the
+     house's camera to face the way the player faces, L has to be the
+     world yaw LESS the house's turn.
+
+     Adding it instead gave a world yaw of `yaw + 2*houseYaw`, and the
+     error is 2*houseYaw: zero at a 0-degree house, 2*PI at a
+     180-degree one -- both correct by accident -- and PI at 90 and
+     270, where the house's camera pointed exactly backwards. Half of
+     all generated worlds.
+
+     What the player SEES was never wrong: the view is rendered from
+     Downriver's camera, which is set from the world yaw directly. This
+     camera is what the HOUSE uses to decide things -- which way
+     forward is when you hold W, what E is pointing at, which room you
+     are looking into. In half the seeds all of that was reversed
+     against a view that was right, which is the worst version of it:
+     the picture agrees with you and the house does not.
+
+     Measured before the fix, standing at local (0, 2) and aimed at
+     local (0, -2) by a bearing computed in world space, so no
+     convention is assumed. The local aim must come back (0, 0, -1):
+
+       house yaw 0      z = +1     wrong by PI
+       house yaw PI     z = +1     wrong by PI
+       house yaw PI/2   z = -1
+
+     -- three different answers to one question, which is the proof
+     that it was a function of the house's turn rather than of the
+     aim. */
   function syncLook(yaw, pitch, hostCam){
     if(!placedAt) return;
-    camera.rotation.set(pitch || 0, (yaw || 0) + placedAt.q * Math.PI/2, 0, 'YXZ');
+    camera.rotation.set(pitch || 0, (yaw || 0) - placedAt.q * Math.PI/2, 0, 'YXZ');
     if(hostCam){
       camera.fov = hostCam.fov; camera.aspect = hostCam.aspect;
       camera.near = hostCam.near; camera.far = hostCam.far;
