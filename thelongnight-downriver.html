@@ -21329,6 +21329,7 @@ function stepWorld(dt){
   Hold.update(dt);
   Sleep.update(dt);
   stepPlayerEitherSide(dt);
+  if(typeof LN !== 'undefined') LN.tick(dt);
   updateRest(dt);
   updateWeather(dt);
   updateSky(dt);
@@ -27946,6 +27947,26 @@ function updateDoors(dt){
                x1: Math.max(a.x,b.x), z1: Math.max(a.z,b.z) };
     },
     toWorld(lx, lz){ return farmLocalToWorldXZ(lx, lz, placedAt); },
+    /* ---- THE HOUSE'S OWN CLOCK ---------------------------------------
+       The house has moving parts that are nothing to do with where the
+       player is standing: doors swing, sashes slide, the trapdoor
+       lifts, the attic leaves come down. Downriver's step ticks its OWN
+       Doors.update and never knew about these, so every one of them was
+       frozen -- which is how two doors came to report open:true with a
+       leaf angle of 0. Flagged open, never swung, collider still
+       across the opening, and from the player's side an invisible wall
+       in a doorway they had just opened.
+
+       Ticked whether or not the player is indoors, because a door the
+       player left swinging does not stop swinging when they walk out,
+       and because something else in this house opens doors too. */
+    tick(dt){
+      if(!placedAt) return;
+      updateDoors(dt);
+      updateWindows(dt);
+      updateHatch(dt);
+      updateClimbSides();
+    },
     /* ---- IS THE PLAYER IN THE HOUSE? --------------------------------
        Asked of the house's own room map rather than of the footprint,
        which matters at both ends of the building. The footprint is a
