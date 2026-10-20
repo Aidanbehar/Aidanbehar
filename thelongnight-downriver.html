@@ -1549,7 +1549,20 @@ const CFG = {
        short enough that a night is survivable. */
     dayRealMinutes: 42,
     dawn: 6.1, sunrise: 6.8, sunset: 19.4, dusk: 20.3,   // in-fiction hours
-    startHours: [6.4, 12.1, 18.6, 22.5],                 // the four openings
+    /* ---- THE RUN STARTS AT NIGHT, ALWAYS ------------------------
+       Downriver opened at one of four hours because its subject was a
+       walk that could begin at any of them. This game is a house and
+       the nights in it: waking at noon is waking eight hours before
+       the half of the game it is named after. 21:00 is the hour The
+       Long Night itself opened on -- "twenty-one hundred, the storm
+       has another six hours in it" -- and dusk here is 20.3, so the
+       player wakes with the light already gone.
+
+       The list is kept rather than replaced by a constant, because
+       rollPersonality picks from it and two of the difficulty terms
+       below read startHour to decide whether the seed opened in the
+       dark. One entry means those still work and always agree. */
+    startHours: [21.0],
   },
   /* ---- SLEEP ------------------------------------------------------
      Skipping a night costs about a real minute and buys the hours to
