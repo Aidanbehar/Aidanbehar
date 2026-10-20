@@ -22295,6 +22295,340 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
      LN.shimHits after a build is how "what does the house still need
      from its own systems" stayed a list instead of a guess, and an
      empty object is the result that says the lift is finished. */
+  /* THE DIRECTOR IS LIFTED, AND IT IS FURTHER DOWN. It used to sit
+     here, where the shim was, and that cost a boot: its ROOM_CENTRES
+     table reads CFG.BASE.floor at DEFINITION time, and the CFG that
+     resolves to is this closure's own lifted one, declared six
+     thousand lines below. Reading it from here is reading a const in
+     its temporal dead zone, and the whole module threw before the
+     world finished generating.
+
+     The reasoning that put it here was "the IIFE only defines things,
+     so nothing it touches can be in a dead zone" -- true of calls and
+     false of that one table. It lives after the config now. */
+
+  /* ---- THE GLASS, WITHOUT ITS PASS ------------------------------
+     makeWindow() registers every pane with the GlassPass and puts it on
+     the GLASS layer, which only that pass renders. Without the pass,
+     the panes went on a layer nothing draws and the registration threw
+     on a null -- so this is a collector with the same three fields,
+     and makeWindow stays verbatim.
+
+     And then the material is swapped. The GlassShader samples `tScene`:
+     it refracts the scene BEHIND the pane, and only the pass can hand
+     it that texture. Rendered in the ordinary pass it would sample a
+     null and the windows would come out black, which is worse than
+     flat glass and much worse than no glass. So the panes get The Long
+     Night's own fallback material -- the one setGlass(false) swaps in,
+     copied here rather than reinvented -- and go on the WORLD layer
+     where Downriver's single pass will actually draw them.
+
+     The real glass is kept on each pane in userData.glassMat, exactly
+     as setGlass does, so a future phase that brings the pass across can
+     switch it back on without rebuilding a window. */
+  const glassPass = { materials: [], rooms: new Set(), unroomed: false };
+  const glassRooms = glassPass.rooms;
+  let glassUnroomed = false, glassPassLive = null;
+  const FogPlaneShader = null;
+  const flatGlassMat = new THREE.MeshPhysicalMaterial({
+    color:0x0b1016, roughness:0.16, metalness:0.0,
+    transparent:true, opacity:0.30, side:THREE.DoubleSide
+  });
+  /* With the pass running the panes keep the material they were built
+     with and stay on the glass layer, which only the pass draws. The
+     flat fallback is still here and still correct -- setGlass(false)
+     swaps to it -- for the day the pass has to come back out. */
+  function flattenGlass(){
+    for(const pane of (World.glassPanes || [])){
+      pane.userData.glassMat = pane.userData.glassMat || pane.material;
+      pane.material = flatGlassMat;
+      pane.layers.set(LAYER_WORLD);
+    }
+  }
+  function restoreGlass(){
+    for(const pane of (World.glassPanes || [])){
+      if(pane.userData.glassMat) pane.material = pane.userData.glassMat;
+      pane.layers.set(LAYER_GLASS);
+    }
+  }
+  /* GlassShader and ConeShader are declared further down, straight after
+     the noise module they interpolate -- see the note there. */
+  /* captureFeed was stubbed while the camera module was out; it is
+     lifted now and brings its own. */
+  const toggleFullscreen = ()=>{};
+  /* The resolution ladder belongs to Downriver; the house only ever
+     reads a rung off it to decide whether to draw its volumetrics. */
+  const RES = { get rung(){ return (typeof window !== 'undefined' && window.DR && window.DR.RES)
+                                    ? window.DR.RES.i : 0; } };
+
+  /* ---- THE HOUSE'S OWN CAMERA, IN THE HOUSE'S OWN COORDINATES ------
+     The lifted player code touches `camera` about twenty times -- the
+     eye height, the head bob, the seat pose, the reach tests, the
+     sight tests -- and every one of them is written in house-local
+     metres. Pointing them at Downriver's camera would have each of
+     those twenty sites needing its own frame conversion.
+
+     So the name is shadowed, exactly as `scene` is above. This camera
+     is never added to a scene and never rendered: it is the house's
+     view of where the eye is, in its own frame, and the handover
+     copies it to and from the real one each frame. One declaration
+     instead of twenty conversions, and the house's code stays
+     verbatim.
+
+     NOT YET SOLVED, and noted rather than hidden: pickTarget()
+     raycasts `scene.children`, whose world matrices include the
+     group's placement, with a ray built from this local camera. That
+     is a frame mismatch and it will need the ray built from the host
+     camera with its hit point converted back. Reaching and sight do
+     not go through the raycast -- they are proximity and the house's
+     own local solids -- so this does not block walking about, which is
+     what this phase is for. It is wired when interaction is. */
+  const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 260);
+  /* AND IT IS A CHILD OF THE HOUSE. This is what makes both halves
+     right at once: `camera.position` stays in house-local metres, which
+     is what canReach() and sightBlocked() measure against the house's
+     own local colliders -- while `camera.matrixWorld` comes out in
+     WORLD space, because the group's transform is applied to it. So
+     ray.setFromCamera() builds a world ray that correctly hits the
+     group's children, which are also in world space.
+
+     Parented, the frame mismatch noted when this camera was introduced
+     simply stops existing, rather than needing a conversion at the one
+     site that raycasts. */
+  GROUP.add(camera);
+
+  /* Where the group ended up, kept here rather than read back off the
+     Object3D so the conversions below cannot disagree with the matrix
+     about which quarter turn is in force. Null until place() runs. */
+  let placedAt = null;
+  let lastHouseError = null;
+  let houseIndoors = false;
+  /* Within sight of the building, which is what the glass pass means by
+     "outside" and what the lighting means by "worth updating". */
+  let nearHouse = false;
+  /* Night one is already set up by Director.init(), which arms the
+     arrivals when the house is built, so the first edge this latch
+     should ever see is the one INTO dawn. Starting it false would
+     make the first frame of a run look like nightfall and roll the
+     house straight on to night two. */
+  let wasNight = true;
+  let audioReady = false;
+  const indoorsNowLocal = ()=> houseIndoors;
+  /* ---- TWENTY LAMPS WERE LIGHTING A FOUR-KILOMETRE FOREST ----------
+     Measured: 32 lights in the scene, 22 of them point lights, 20 of
+     those the house's. Three.js's forward renderer evaluates EVERY
+     light for EVERY fragment, so each lamp in this building was being
+     shaded across all of Downriver's terrain and every tree in view,
+     all the time. That is the twenty frames a second.
+
+     Intensity 0 does not help: a light at zero is still in the shader's
+     loop. Only `visible = false` takes it out, because the renderer
+     skips invisible objects when it collects the lights.
+
+     So the house's lamps are visible only when the player is inside it
+     AND the room lighting has actually decided they are on -- which is
+     most of them off most of the time, since applyRoomLighting only
+     lights rooms the player can see into. */
+  let houseLights = [];
+  function collectLights(){
+    houseLights = [];
+    GROUP.traverse(o=>{ if(o.isLight) houseLights.push(o); });
+  }
+  function gateLights(inside){
+    for(const L of houseLights){
+      const want = inside && (L.intensity || 0) > 0.002;
+      if(L.visible !== want) L.visible = want;
+    }
+  }
+  /* ---- AND FIFTEEN HUNDRED SHADOW CASTERS -------------------------
+     2,223 meshes in the house, 1,572 of them asking to be drawn again
+     into the shadow map every frame. A bottle, a doorknob and a book
+     spine do not cast a shadow anybody can see at the resolution a
+     point light's cube map has; the walls, the floors, the doors and
+     the furniture do. Anything whose longest side is under 40cm stops
+     casting, which is the small stuff and almost none of the shape of
+     the room. */
+  function thinShadowCasters(){
+    const box = new THREE.Box3(), size = new THREE.Vector3();
+    let off = 0, kept = 0;
+    /* THE WORLD MATRIX HAS TO BE CURRENT FIRST, and the first attempt
+       at this stopped only 21 meshes of 1,572 because it was not.
+       Most of the furniture is built by lump(): a 0.5-radius sphere
+       with its real size in the MESH's scale, so the geometry's own
+       bounding box is 1x1x1 for a thing 8cm across. Without the
+       matrices updated, applyMatrix4 applies an identity and every
+       lump measures a metre. */
+    GROUP.updateMatrixWorld(true);
+    GROUP.traverse(o=>{
+      if(!o.isMesh || !o.castShadow) return;
+      if(!o.geometry) return;
+      if(!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      box.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
+      box.getSize(size);
+      if(Math.max(size.x, size.y, size.z) < 0.80){ o.castShadow = false; off++; }
+      else kept++;
+    });
+    shadowStats = { stoppedCasting: off, stillCasting: kept };
+  }
+  let shadowStats = null;
+  /* The house's interact() by another name. The exported method cannot
+     be called `interact` AND call `interact`: inside an object literal
+     the method shadows the function and it recurses into itself. */
+  function farmLocalToWorldXZ(lx, lz, at){
+    if(!at) return { x:lx, z:lz };
+    return { x: at.x + lx*at.c + lz*at.s, z: at.z - lx*at.s + lz*at.c };
+  }
+  /* ---- WHICH WAY IS FORWARD, IN THE FRAME EVERYTHING ELSE IS IN ----
+     getWorldDirection() returns a WORLD direction, and every position
+     in this closure is in the house's own metres. In The Long Night
+     those were the same thing, because the house stood at the origin
+     with no rotation. Here it stands at a quarter turn chosen by the
+     generator, so a world forward and a local position are out by
+     that turn -- and every test built on them is wrong by it:
+
+       the thing behind you          Player.pos - fwd*3.2, against
+                                     CFG.ROOMS, so the crawler placed
+                                     itself through a wall
+       what you are looking at       camera.position + look*4.0, into
+                                     roomAt(), so attention heated the
+                                     wrong room
+       is the beam on it             look.dot(to), so the flashlight
+                                     counter fired on the wrong bearing
+       the listener                  the ear faced a different way from
+                                     the eye, by the house's yaw
+       the house map                 the arrow pointed somewhere else
+
+     The camera is a child of the house group and syncLook writes the
+     player's aim into its LOCAL rotation, so its own quaternion is
+     already the heading in this frame -- which makes the fix one line
+     rather than an un-rotation. Nothing here is a behaviour change;
+     it is the same question asked in the frame it was written for.
+
+     IT IS INVISIBLE AT YAW 0, which is the only yaw the harness had
+     been placing the house at. */
+  function localForward(out){
+    return out.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  }
+  function camLocalForward(cam, out){
+    return out.set(0, 0, -1).applyQuaternion(cam.quaternion).normalize();
+  }
+  /* The real camera's aim, turned into the house's frame. The house
+     reads its heading off `camera.quaternion` in two places and off
+     getWorldDirection in two more, so what it needs is a camera whose
+     ORIENTATION is the player's aim measured in local degrees: the
+     world yaw less the quarter turn the house stands at. Pitch and
+     roll are frame-independent and copy straight across. */
+  /* ---- THE AIM COMES ACROSS AS TWO NUMBERS, NOT AS A QUATERNION ----
+     This used to read the host camera's quaternion and pull Euler
+     angles back out of it with setFromQuaternion. That is a lossy
+     round trip: a quaternion has two Euler solutions and the one
+     extraction picks flips as the pitch passes through the poles or
+     when any roll is present -- and the head bob puts roll on the
+     camera every stride. A flipped yaw is a forward vector pointing
+     backwards, which is the W-and-S-swapping-places that gets you
+     wedged in a corner pressing the wrong key to get out.
+
+     Downriver keeps the aim as two scalars and so does the house, so
+     the two scalars are what cross. No extraction, no second solution,
+     nothing to flip. The quarter turn is added to the yaw here because
+     this camera lives in the house's frame. */
+  function syncLook(yaw, pitch, hostCam){
+    if(!placedAt) return;
+    camera.rotation.set(pitch || 0, (yaw || 0) + placedAt.q * Math.PI/2, 0, 'YXZ');
+    if(hostCam){
+      camera.fov = hostCam.fov; camera.aspect = hostCam.aspect;
+      camera.near = hostCam.near; camera.far = hostCam.far;
+    }
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+  }
+
+  /* ---------- lifted: CONFIG (98 lines) ---------- */
+
+/* =====================================================================
+   ===== CONFIG =====
+   ===================================================================== */
+const CFG = {
+  // --- house footprint (metres). The whole layout derives from these. ---
+  H: { x0:-8, x1:8, z0:-6, z1:6, floor:0, ceil:2.62, wall:0.16 },
+  BASE: { x0:-6, x1:6, z0:-4, z1:5, floor:-3.05, ceil:-0.34 },
+  /* The attic deck, and the roof plane over it. RIDGE_Y is the underside
+     of the roof slabs at z=0 and SLOPE is how fast it comes down; both
+     are read straight off the gable built in buildExterior(), so if the
+     roof pitch ever changes the attic changes with it. */
+  ATTIC: { floor:3.07, RIDGE_Y:6.02, SLOPE:0.497, eave:5.90 },
+  // --- room rectangles (ground floor) -------------------------------
+  ROOMS: {
+    living:  { x0:-8,   x1:-1.6, z0: 0.4, z1: 6,   name:'LIVING ROOM' },
+    kitchen: { x0:-8,   x1:-1.6, z0:-6,   z1: 0.4, name:'KITCHEN'     },
+    hall:    { x0:-1.6, x1: 1.6, z0:-6,   z1: 6,   name:'HALLWAY'     },
+    bedroom: { x0: 1.6, x1: 8,   z0:-6,   z1: 0.6, name:'BEDROOM'     },
+    utility: { x0: 1.6, x1: 8,   z0: 0.6, z1: 6,   name:'UTILITY ROOM'},
+    basement:{ x0:-6,   x1: 6,   z0:-4,   z1: 4,   name:'BASEMENT', y:-3.05 },
+    /* ---- THE EAST WING (added on) ------------------------------------
+       A later addition running off the north end of the utility room's
+       east wall, out to a detached-feeling garage. The corridor is 20m,
+       which is 3.1x the utility room's 6.4m length — the point being
+       real distance between the old house and the garage you have to
+       reach when the mains die. The new bedroom is on the LEFT heading
+       east (north side), the bathroom on the RIGHT (south side), and
+       both sit well east of the original bedroom's east window so that
+       window still looks out over open yard.                          */
+    /* ---- THE ATTIC ---------------------------------------------------
+       Not a new box on top of the house: the volume was already there.
+       The gable roof runs its ridge along X at z=0, its underside is at
+       about 6.10 there and drops 0.497 per metre of |z|, and the ceiling
+       deck closes the walls at 3.07. So the attic's shape comes free
+       from the roof that has always been on this house, and it is the
+       shape a farmhouse attic actually has:
+
+         z = 0      3.0m of headroom    stand up, walk about
+         z = +-3    1.5m                stooped
+         z = +-4.5  0.8m                hands and knees
+         z = +-6.1  none                the eaves close on the deck
+
+       Nothing about that had to be invented, and it means the cramped
+       sections are real geometry rather than a decorative low box. */
+    attic:   { x0:-7.9, x1: 7.9, z0:-5.9, z1: 5.9, name:'ATTIC', y:3.07 },
+    sidehall:{ x0: 8.0,  x1:28.0, z0: 0.85, z1: 2.45, name:'SIDE HALLWAY' },
+    bedroom2:{ x0:12.6,  x1:18.6, z0:-2.60, z1: 0.85, name:'BACK BEDROOM' },
+    bathroom:{ x0:13.4,  x1:16.8, z0: 2.45, z1: 5.25, name:'BATHROOM'     },
+    garage:  { x0:28.0,  x1:35.6, z0:-0.60, z1: 6.40, name:'GARAGE', ceil:3.05 },
+  },
+  // the wing's own bounding box, for the rain and fog masks
+  WING: { x0:7.8, x1:35.8, z0:-2.8, z1:6.6, ceil:3.05 },
+  // --- cellar stair: a hatch in the utility room floor, a ramp below.
+  // HATCH is the hole you can actually fall through; STAIR is the ramp,
+  // which continues underneath the floor past the end of the hole. -----
+  STAIR: { x0:4.30, x1:5.90, z0:0.80, z1:4.40, top:0, bottom:-3.05 },
+  HATCH: { x0:4.30, x1:5.90, z0:2.00, z1:4.40 },
+  PLAYER: {
+    // 0.24 rather than 0.30: at 0.30 the capsule is 60cm wide and could
+    // not fit the gap between the living-room door and the armchair, which
+    // is a gap the room is laid out to have.
+    // there is no crouch: Space stands you up from a seat and nothing
+    // else, so the speed that went with it is gone rather than dormant
+    eye:1.63, radius:0.24, walk:2.35, sprint:4.15,
+    accel:14, damp:11, staminaMax:100, staminaDrain:22, staminaRegen:13,
+  },
+  QUALITY: {
+    shadowMap: 2048,     // flashlight shadow resolution
+    glass: true,         // rain-on-glass refraction pass
+    volumetrics: true,   // flashlight cone
+    reflections: true,   // wet-floor reflector
+    // The cellar is sealed from the storm. With this false NOTHING the
+    // lightning does reaches below deck: no spill through an open hatch,
+    // no fog tint, no afterimage. Flip it true to let an open hatch throw
+    // the flash down the stairwell again.
+    stormReachesCellar: false,
+    texSize: 512,        // procedural texture resolution
+  },
+  // noclock freezes the clock where it stands. It is read by the clock
+  // itself (see the tick below), so it is a flag rather than a comment.
+  DEBUG: { noclock:false },
+  DAWN: 30*60,          // 06:00 next morning, in minutes-since-midnight
+};
+
   /* ---- AND THE DIRECTOR, WHICH IS THE NIGHT ITSELF ----------------
      The last shim. Every one of its call sites was already in this
      closure -- the footsteps and the doors and the hammering all
@@ -24784,7 +25118,7 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
           const e = entities.find(x => x.present && x.spec.lethal && !x.lethal);
           if(!e) return false;
           const fwd = new THREE.Vector3();
-          c.cam.getWorldDirection(fwd); fwd.y = 0;
+          camLocalForward(c.cam, fwd); fwd.y = 0;
           if(fwd.lengthSq() < 1e-6) return false;
           fwd.normalize();
           e.pos.copy(c.cam.position).addScaledVector(fwd, 1.5);
@@ -24906,7 +25240,7 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
           const e = bodies.crawler;
           if(!e || !e.present || e.lethal) return false;
           const fwd = new THREE.Vector3();
-          camera.getWorldDirection(fwd); fwd.y = 0;
+          localForward(fwd); fwd.y = 0;
           if(fwd.lengthSq() < 1e-6) return false;
           fwd.normalize();
           const R = CFG.ROOMS[Player.room];
@@ -25168,7 +25502,7 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
       const dist = to.length();
       if(dist > 24) return false;
       to.normalize();
-      const look = camera.getWorldDirection(_sb); look.y = 0; look.normalize();
+      const look = localForward(_sb); look.y = 0;
       if(look.dot(to) < 0.42) return false;                  // outside the frustum-ish
       return !segmentBlocked(camera.position.x, camera.position.z, e.pos.x, e.pos.z, camera.position.y);
     }
@@ -25179,7 +25513,7 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
       const d = to.length();
       if(d > 16) return false;
       to.normalize();
-      const look = camera.getWorldDirection(_sb); look.y = 0; look.normalize();
+      const look = localForward(_sb); look.y = 0;
       return look.dot(to) > 0.80 && !segmentBlocked(camera.position.x, camera.position.z, e.pos.x, e.pos.z, camera.position.y);
     }
     /* HOW MUCH THE BEAM SLOWS A THING. This is the whole of what the
@@ -25572,7 +25906,7 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
       for(const k in heat) heat[k] = Math.max(0, heat[k] - dt*0.025);
       const r = Player.room;
       if(heat[r] !== undefined) heat[r] = Math.min(1, heat[r] + dt*0.55);
-      const look = camera.getWorldDirection(_sc);
+      const look = localForward(_sc);
       const ahead = _sa.copy(camera.position).addScaledVector(look, 4.0);
       const lr = roomAt(ahead.x, ahead.z, Player.level);
       if(heat[lr] !== undefined && lr !== r) heat[lr] = Math.min(1, heat[lr] + dt*0.30);
@@ -25591,7 +25925,7 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
       const dist = toIt.length();
       if(dist < 1.5) return false;
       toIt.normalize();
-      const look = camera.getWorldDirection(_sb);
+      const look = localForward(_sb);
       if(look.dot(toIt) > 0.55 && Lights.torchOn && dist < 12) return false;
       return true;
     }
@@ -26928,7 +27262,7 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
     const _fwd = new THREE.Vector3();
     function playerFacing(){
       camera.updateMatrixWorld();     // the spawn can be rolled between renders
-      camera.getWorldDirection(_fwd);
+      localForward(_fwd);
       _fwd.y = 0;
       if(_fwd.lengthSq() < 1e-6) _fwd.set(0,0,-1);
       return _fwd.normalize();
@@ -28917,293 +29251,6 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
              get frozen(){ return !!state.frozen; },
              get log(){ return state.log; } };
   })();
-  /* ---- THE GLASS, WITHOUT ITS PASS ------------------------------
-     makeWindow() registers every pane with the GlassPass and puts it on
-     the GLASS layer, which only that pass renders. Without the pass,
-     the panes went on a layer nothing draws and the registration threw
-     on a null -- so this is a collector with the same three fields,
-     and makeWindow stays verbatim.
-
-     And then the material is swapped. The GlassShader samples `tScene`:
-     it refracts the scene BEHIND the pane, and only the pass can hand
-     it that texture. Rendered in the ordinary pass it would sample a
-     null and the windows would come out black, which is worse than
-     flat glass and much worse than no glass. So the panes get The Long
-     Night's own fallback material -- the one setGlass(false) swaps in,
-     copied here rather than reinvented -- and go on the WORLD layer
-     where Downriver's single pass will actually draw them.
-
-     The real glass is kept on each pane in userData.glassMat, exactly
-     as setGlass does, so a future phase that brings the pass across can
-     switch it back on without rebuilding a window. */
-  const glassPass = { materials: [], rooms: new Set(), unroomed: false };
-  const glassRooms = glassPass.rooms;
-  let glassUnroomed = false, glassPassLive = null;
-  const FogPlaneShader = null;
-  const flatGlassMat = new THREE.MeshPhysicalMaterial({
-    color:0x0b1016, roughness:0.16, metalness:0.0,
-    transparent:true, opacity:0.30, side:THREE.DoubleSide
-  });
-  /* With the pass running the panes keep the material they were built
-     with and stay on the glass layer, which only the pass draws. The
-     flat fallback is still here and still correct -- setGlass(false)
-     swaps to it -- for the day the pass has to come back out. */
-  function flattenGlass(){
-    for(const pane of (World.glassPanes || [])){
-      pane.userData.glassMat = pane.userData.glassMat || pane.material;
-      pane.material = flatGlassMat;
-      pane.layers.set(LAYER_WORLD);
-    }
-  }
-  function restoreGlass(){
-    for(const pane of (World.glassPanes || [])){
-      if(pane.userData.glassMat) pane.material = pane.userData.glassMat;
-      pane.layers.set(LAYER_GLASS);
-    }
-  }
-  /* GlassShader and ConeShader are declared further down, straight after
-     the noise module they interpolate -- see the note there. */
-  /* captureFeed was stubbed while the camera module was out; it is
-     lifted now and brings its own. */
-  const toggleFullscreen = ()=>{};
-  /* The resolution ladder belongs to Downriver; the house only ever
-     reads a rung off it to decide whether to draw its volumetrics. */
-  const RES = { get rung(){ return (typeof window !== 'undefined' && window.DR && window.DR.RES)
-                                    ? window.DR.RES.i : 0; } };
-
-  /* ---- THE HOUSE'S OWN CAMERA, IN THE HOUSE'S OWN COORDINATES ------
-     The lifted player code touches `camera` about twenty times -- the
-     eye height, the head bob, the seat pose, the reach tests, the
-     sight tests -- and every one of them is written in house-local
-     metres. Pointing them at Downriver's camera would have each of
-     those twenty sites needing its own frame conversion.
-
-     So the name is shadowed, exactly as `scene` is above. This camera
-     is never added to a scene and never rendered: it is the house's
-     view of where the eye is, in its own frame, and the handover
-     copies it to and from the real one each frame. One declaration
-     instead of twenty conversions, and the house's code stays
-     verbatim.
-
-     NOT YET SOLVED, and noted rather than hidden: pickTarget()
-     raycasts `scene.children`, whose world matrices include the
-     group's placement, with a ray built from this local camera. That
-     is a frame mismatch and it will need the ray built from the host
-     camera with its hit point converted back. Reaching and sight do
-     not go through the raycast -- they are proximity and the house's
-     own local solids -- so this does not block walking about, which is
-     what this phase is for. It is wired when interaction is. */
-  const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 260);
-  /* AND IT IS A CHILD OF THE HOUSE. This is what makes both halves
-     right at once: `camera.position` stays in house-local metres, which
-     is what canReach() and sightBlocked() measure against the house's
-     own local colliders -- while `camera.matrixWorld` comes out in
-     WORLD space, because the group's transform is applied to it. So
-     ray.setFromCamera() builds a world ray that correctly hits the
-     group's children, which are also in world space.
-
-     Parented, the frame mismatch noted when this camera was introduced
-     simply stops existing, rather than needing a conversion at the one
-     site that raycasts. */
-  GROUP.add(camera);
-
-  /* Where the group ended up, kept here rather than read back off the
-     Object3D so the conversions below cannot disagree with the matrix
-     about which quarter turn is in force. Null until place() runs. */
-  let placedAt = null;
-  let lastHouseError = null;
-  let houseIndoors = false;
-  /* Within sight of the building, which is what the glass pass means by
-     "outside" and what the lighting means by "worth updating". */
-  let nearHouse = false;
-  /* Night one is already set up by Director.init(), which arms the
-     arrivals when the house is built, so the first edge this latch
-     should ever see is the one INTO dawn. Starting it false would
-     make the first frame of a run look like nightfall and roll the
-     house straight on to night two. */
-  let wasNight = true;
-  let audioReady = false;
-  const indoorsNowLocal = ()=> houseIndoors;
-  /* ---- TWENTY LAMPS WERE LIGHTING A FOUR-KILOMETRE FOREST ----------
-     Measured: 32 lights in the scene, 22 of them point lights, 20 of
-     those the house's. Three.js's forward renderer evaluates EVERY
-     light for EVERY fragment, so each lamp in this building was being
-     shaded across all of Downriver's terrain and every tree in view,
-     all the time. That is the twenty frames a second.
-
-     Intensity 0 does not help: a light at zero is still in the shader's
-     loop. Only `visible = false` takes it out, because the renderer
-     skips invisible objects when it collects the lights.
-
-     So the house's lamps are visible only when the player is inside it
-     AND the room lighting has actually decided they are on -- which is
-     most of them off most of the time, since applyRoomLighting only
-     lights rooms the player can see into. */
-  let houseLights = [];
-  function collectLights(){
-    houseLights = [];
-    GROUP.traverse(o=>{ if(o.isLight) houseLights.push(o); });
-  }
-  function gateLights(inside){
-    for(const L of houseLights){
-      const want = inside && (L.intensity || 0) > 0.002;
-      if(L.visible !== want) L.visible = want;
-    }
-  }
-  /* ---- AND FIFTEEN HUNDRED SHADOW CASTERS -------------------------
-     2,223 meshes in the house, 1,572 of them asking to be drawn again
-     into the shadow map every frame. A bottle, a doorknob and a book
-     spine do not cast a shadow anybody can see at the resolution a
-     point light's cube map has; the walls, the floors, the doors and
-     the furniture do. Anything whose longest side is under 40cm stops
-     casting, which is the small stuff and almost none of the shape of
-     the room. */
-  function thinShadowCasters(){
-    const box = new THREE.Box3(), size = new THREE.Vector3();
-    let off = 0, kept = 0;
-    /* THE WORLD MATRIX HAS TO BE CURRENT FIRST, and the first attempt
-       at this stopped only 21 meshes of 1,572 because it was not.
-       Most of the furniture is built by lump(): a 0.5-radius sphere
-       with its real size in the MESH's scale, so the geometry's own
-       bounding box is 1x1x1 for a thing 8cm across. Without the
-       matrices updated, applyMatrix4 applies an identity and every
-       lump measures a metre. */
-    GROUP.updateMatrixWorld(true);
-    GROUP.traverse(o=>{
-      if(!o.isMesh || !o.castShadow) return;
-      if(!o.geometry) return;
-      if(!o.geometry.boundingBox) o.geometry.computeBoundingBox();
-      box.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
-      box.getSize(size);
-      if(Math.max(size.x, size.y, size.z) < 0.80){ o.castShadow = false; off++; }
-      else kept++;
-    });
-    shadowStats = { stoppedCasting: off, stillCasting: kept };
-  }
-  let shadowStats = null;
-  /* The house's interact() by another name. The exported method cannot
-     be called `interact` AND call `interact`: inside an object literal
-     the method shadows the function and it recurses into itself. */
-  function farmLocalToWorldXZ(lx, lz, at){
-    if(!at) return { x:lx, z:lz };
-    return { x: at.x + lx*at.c + lz*at.s, z: at.z - lx*at.s + lz*at.c };
-  }
-  /* The real camera's aim, turned into the house's frame. The house
-     reads its heading off `camera.quaternion` in two places and off
-     getWorldDirection in two more, so what it needs is a camera whose
-     ORIENTATION is the player's aim measured in local degrees: the
-     world yaw less the quarter turn the house stands at. Pitch and
-     roll are frame-independent and copy straight across. */
-  /* ---- THE AIM COMES ACROSS AS TWO NUMBERS, NOT AS A QUATERNION ----
-     This used to read the host camera's quaternion and pull Euler
-     angles back out of it with setFromQuaternion. That is a lossy
-     round trip: a quaternion has two Euler solutions and the one
-     extraction picks flips as the pitch passes through the poles or
-     when any roll is present -- and the head bob puts roll on the
-     camera every stride. A flipped yaw is a forward vector pointing
-     backwards, which is the W-and-S-swapping-places that gets you
-     wedged in a corner pressing the wrong key to get out.
-
-     Downriver keeps the aim as two scalars and so does the house, so
-     the two scalars are what cross. No extraction, no second solution,
-     nothing to flip. The quarter turn is added to the yaw here because
-     this camera lives in the house's frame. */
-  function syncLook(yaw, pitch, hostCam){
-    if(!placedAt) return;
-    camera.rotation.set(pitch || 0, (yaw || 0) + placedAt.q * Math.PI/2, 0, 'YXZ');
-    if(hostCam){
-      camera.fov = hostCam.fov; camera.aspect = hostCam.aspect;
-      camera.near = hostCam.near; camera.far = hostCam.far;
-    }
-    camera.updateProjectionMatrix();
-    camera.updateMatrixWorld(true);
-  }
-
-  /* ---------- lifted: CONFIG (98 lines) ---------- */
-
-/* =====================================================================
-   ===== CONFIG =====
-   ===================================================================== */
-const CFG = {
-  // --- house footprint (metres). The whole layout derives from these. ---
-  H: { x0:-8, x1:8, z0:-6, z1:6, floor:0, ceil:2.62, wall:0.16 },
-  BASE: { x0:-6, x1:6, z0:-4, z1:5, floor:-3.05, ceil:-0.34 },
-  /* The attic deck, and the roof plane over it. RIDGE_Y is the underside
-     of the roof slabs at z=0 and SLOPE is how fast it comes down; both
-     are read straight off the gable built in buildExterior(), so if the
-     roof pitch ever changes the attic changes with it. */
-  ATTIC: { floor:3.07, RIDGE_Y:6.02, SLOPE:0.497, eave:5.90 },
-  // --- room rectangles (ground floor) -------------------------------
-  ROOMS: {
-    living:  { x0:-8,   x1:-1.6, z0: 0.4, z1: 6,   name:'LIVING ROOM' },
-    kitchen: { x0:-8,   x1:-1.6, z0:-6,   z1: 0.4, name:'KITCHEN'     },
-    hall:    { x0:-1.6, x1: 1.6, z0:-6,   z1: 6,   name:'HALLWAY'     },
-    bedroom: { x0: 1.6, x1: 8,   z0:-6,   z1: 0.6, name:'BEDROOM'     },
-    utility: { x0: 1.6, x1: 8,   z0: 0.6, z1: 6,   name:'UTILITY ROOM'},
-    basement:{ x0:-6,   x1: 6,   z0:-4,   z1: 4,   name:'BASEMENT', y:-3.05 },
-    /* ---- THE EAST WING (added on) ------------------------------------
-       A later addition running off the north end of the utility room's
-       east wall, out to a detached-feeling garage. The corridor is 20m,
-       which is 3.1x the utility room's 6.4m length — the point being
-       real distance between the old house and the garage you have to
-       reach when the mains die. The new bedroom is on the LEFT heading
-       east (north side), the bathroom on the RIGHT (south side), and
-       both sit well east of the original bedroom's east window so that
-       window still looks out over open yard.                          */
-    /* ---- THE ATTIC ---------------------------------------------------
-       Not a new box on top of the house: the volume was already there.
-       The gable roof runs its ridge along X at z=0, its underside is at
-       about 6.10 there and drops 0.497 per metre of |z|, and the ceiling
-       deck closes the walls at 3.07. So the attic's shape comes free
-       from the roof that has always been on this house, and it is the
-       shape a farmhouse attic actually has:
-
-         z = 0      3.0m of headroom    stand up, walk about
-         z = +-3    1.5m                stooped
-         z = +-4.5  0.8m                hands and knees
-         z = +-6.1  none                the eaves close on the deck
-
-       Nothing about that had to be invented, and it means the cramped
-       sections are real geometry rather than a decorative low box. */
-    attic:   { x0:-7.9, x1: 7.9, z0:-5.9, z1: 5.9, name:'ATTIC', y:3.07 },
-    sidehall:{ x0: 8.0,  x1:28.0, z0: 0.85, z1: 2.45, name:'SIDE HALLWAY' },
-    bedroom2:{ x0:12.6,  x1:18.6, z0:-2.60, z1: 0.85, name:'BACK BEDROOM' },
-    bathroom:{ x0:13.4,  x1:16.8, z0: 2.45, z1: 5.25, name:'BATHROOM'     },
-    garage:  { x0:28.0,  x1:35.6, z0:-0.60, z1: 6.40, name:'GARAGE', ceil:3.05 },
-  },
-  // the wing's own bounding box, for the rain and fog masks
-  WING: { x0:7.8, x1:35.8, z0:-2.8, z1:6.6, ceil:3.05 },
-  // --- cellar stair: a hatch in the utility room floor, a ramp below.
-  // HATCH is the hole you can actually fall through; STAIR is the ramp,
-  // which continues underneath the floor past the end of the hole. -----
-  STAIR: { x0:4.30, x1:5.90, z0:0.80, z1:4.40, top:0, bottom:-3.05 },
-  HATCH: { x0:4.30, x1:5.90, z0:2.00, z1:4.40 },
-  PLAYER: {
-    // 0.24 rather than 0.30: at 0.30 the capsule is 60cm wide and could
-    // not fit the gap between the living-room door and the armchair, which
-    // is a gap the room is laid out to have.
-    // there is no crouch: Space stands you up from a seat and nothing
-    // else, so the speed that went with it is gone rather than dormant
-    eye:1.63, radius:0.24, walk:2.35, sprint:4.15,
-    accel:14, damp:11, staminaMax:100, staminaDrain:22, staminaRegen:13,
-  },
-  QUALITY: {
-    shadowMap: 2048,     // flashlight shadow resolution
-    glass: true,         // rain-on-glass refraction pass
-    volumetrics: true,   // flashlight cone
-    reflections: true,   // wet-floor reflector
-    // The cellar is sealed from the storm. With this false NOTHING the
-    // lightning does reaches below deck: no spill through an open hatch,
-    // no fog tint, no afterimage. Flip it true to let an open hatch throw
-    // the flash down the stairwell again.
-    stormReachesCellar: false,
-    texSize: 512,        // procedural texture resolution
-  },
-  // noclock freezes the clock where it stands. It is read by the clock
-  // itself (see the tick below), so it is a flag rather than a comment.
-  DEBUG: { noclock:false },
-  DAWN: 30*60,          // 06:00 next morning, in minutes-since-midnight
-};
 
 // Global clock-ish state the whole file reads from.
 const GameState = {
@@ -34225,7 +34272,7 @@ function standUp(){
   if(!seat) return;
   Player.seated = null;
   // step clear of the furniture rather than standing inside it
-  const fwd = camera.getWorldDirection(new THREE.Vector3());
+  const fwd = localForward(new THREE.Vector3());
   Player.pos.set(seat.pos.x + fwd.x*0.62, seat.floor, seat.pos.z + fwd.z*0.62);
   Player.vel.set(0,0,0);
   Audio.scuff('fabric', 0.4, seat.pos);
@@ -34609,7 +34656,7 @@ function pickTarget(){
   ray.layers.enable(LAYER_BASEMENT);
   // doors first: they are the main verb in this house
   let best = null, bestD = 1e9;
-  const look = camera.getWorldDirection(new THREE.Vector3());
+  const look = localForward(new THREE.Vector3());
   for(const d of World.doors){
     const p = d.pivot.position;
     const dist = camera.position.distanceTo(p);
@@ -35516,7 +35563,7 @@ const Audio = (()=>{
   function updateListener(cam){
     if(!ready) return;
     const L = ctx.listener;
-    cam.getWorldDirection(_f);
+    camLocalForward(cam, _f);
     _u.set(0,1,0).applyQuaternion(cam.quaternion);
     if(L.positionX){
       const t = ctx.currentTime;
@@ -37792,7 +37839,7 @@ const UI = (()=>{
       g.fillStyle='#7f9ab5';
       for(const w of World.windows) g.fillRect(X(w.position.x)-2, Z(w.position.z)-2, 4, 4);
       // player + facing
-      const look = camera.getWorldDirection(new THREE.Vector3());
+      const look = localForward(new THREE.Vector3());
       g.strokeStyle='#e9c56a'; g.lineWidth=1.4;
       g.beginPath(); g.moveTo(X(Player.pos.x), Z(Player.pos.z));
       g.lineTo(X(Player.pos.x+look.x*2.2), Z(Player.pos.z+look.z*2.2)); g.stroke();
