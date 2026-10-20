@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Downriver</title>
+<title>The Long Night</title>
 <!--
   DOWNRIVER — a single-file seeded forest survival / psychological horror game.
   Everything (markup, styles, shaders, textures, audio, world, game code) lives
@@ -307,11 +307,11 @@ button:active{ transform:translateY(1px); }
 
 <!-- ===== BOOT / START SCREEN ===== -->
 <div id="boot">
-  <h1>Downriver</h1>
-  <div class="sub">a forest, a seed, and whatever you decide is real</div>
+  <h1>The Long Night</h1>
+  <div class="sub">a house, a seed, and the country it stands in</div>
   <div class="hint">
-    You wake in the trees. Find the hospital before your mind does.<br>
-    Nothing in this game will ever tell you what was real.
+    You wake in the farmhouse. The days are yours &mdash; the forest, the<br>
+    river, the road to town. The nights are not.
   </div>
   <div id="seedrow">
     <label for="seedin">seed</label>
@@ -320,8 +320,8 @@ button:active{ transform:translateY(1px); }
   </div>
   <div id="bar"><i></i></div>
   <div id="bootmsg">enter a seed</div>
-  <button id="startbtn" disabled>walk</button>
-  <div class="legal">headphones recommended &middot; every texture, sound and tree is generated at runtime</div>
+  <button id="startbtn" disabled>wake</button>
+  <div class="legal">headphones recommended &middot; every texture, sound, tree and board is generated at runtime</div>
 </div>
 
 <script type="importmap">
@@ -13646,8 +13646,29 @@ function onKeyDown(e){
     case 'KeyH': document.getElementById('help').classList.toggle('off'); break;
     case 'KeyP': { const f = document.getElementById('fps');
                    f.style.display = f.style.display === 'block' ? 'none' : 'block'; break; }
-    case 'KeyE': Hold.begin(); break;
+    /* ---- ONE KEY, TWO GAMES, AND WHICHEVER YOU ARE STANDING IN ----
+       E is "use the thing in front of you" in both games, and each has
+       its own idea of what that is: Downriver begins a timed hold on a
+       world object, the house looks at its own doors, hatches, boards
+       and machines. Binding both would run two interaction systems
+       against one keypress. It goes to whichever game the player is
+       actually inside, which is the same rule the movement uses.
+
+       The house's own one-shots come across here too, so the merged
+       game has the verbs of both: Tab for the tablet and Q for the
+       house's map are its own keys and clash with nothing Downriver
+       binds; F, M, H, P and C stay Downriver's, because a second
+       binding on those is the same verb twice. */
+    case 'KeyE': indoorsNow() ? LN.interact() : Hold.begin(); break;
+    case 'Tab':  if(indoorsNow()){ e.preventDefault(); LN.toggleTablet(); } break;
+    case 'KeyQ': if(indoorsNow()) LN.toggleHouseMap(); break;
   }
+}
+/* Asked in one place so the key handler and the step loop cannot
+   disagree about which game the player is in. */
+function indoorsNow(){
+  return typeof LN !== 'undefined' && LN.site
+      && LN.indoors(Player.pos.x, Player.pos.y, Player.pos.z);
 }
 
 /* ---- VOLUME, ON THE KEYBOARD -------------------------------------
@@ -13670,7 +13691,11 @@ function onVolumeKey(e){
   if(hit){ e.preventDefault(); UI.volNote(); }
   return hit;
 }
-function onKeyUp(e){ if(e.code === 'KeyE') Hold.cancel(); }
+function onKeyUp(e){
+  /* Cancelling a hold that was never begun is harmless, and the player
+     can cross the threshold between press and release. */
+  if(e.code === 'KeyE'){ Hold.cancel(); if(typeof LN !== 'undefined' && LN.site) LN.cancelHold(); }
+}
 
 /* ---------------------------------------------------------------------
    COLLISION
@@ -21317,6 +21342,23 @@ function stepPlayerEitherSide(dt){
              && LN.indoors(Player.pos.x, Player.pos.y, Player.pos.z);
   if(house){
     if(!wasIndoors) LN.enter(Player.pos.x, Player.pos.y, Player.pos.z, camera);
+    /* ---- THE MOUSE HAS TO REACH THE CAMERA INDOORS -----------------
+       Downriver's pointer-lock handler writes Player.yaw and
+       Player.pitch, and the ONLY place that turns those into a camera
+       orientation is inside its own updatePlayer -- which is exactly
+       the function the handover skips while the player is in the
+       house. So indoors the mouse moved the player's aim and nothing
+       moved the view: you could walk north, south, east and west on
+       the keys and never turn. That is the whole of it.
+
+       The orientation is applied here instead, from the same fields,
+       before the house is asked to step -- the house reads the camera
+       to know which way forward is, so it has to be current first.
+       The smoothed camYaw/camPitch follow the real ones directly
+       indoors: the smoothing exists for Downriver's own flight and
+       stagger, neither of which happens in a hallway. */
+    Player.camYaw = Player.yaw; Player.camPitch = Player.pitch;
+    camera.rotation.set(Player.pitch, Player.yaw, 0, 'YXZ');
     const p = LN.stepPlayer(dt, camera, Keys);
     Player.pos.set(p.x, p.y, p.z);
   } else {
@@ -21329,7 +21371,7 @@ function stepWorld(dt){
   Hold.update(dt);
   Sleep.update(dt);
   stepPlayerEitherSide(dt);
-  if(typeof LN !== 'undefined') LN.tick(dt, { sky: Sky, weather: Weather });
+  if(typeof LN !== 'undefined') LN.tick(dt, { sky: Sky, weather: Weather, playerPos: Player.pos });
   updateRest(dt);
   updateWeather(dt);
   updateSky(dt);
@@ -21465,7 +21507,20 @@ async function startRun(seedInput){
      chosen by placeStart. */
   if(Wld.farmhouse){
     LN.build();
-    LN.place(Wld.farmhouse.x, Wld.farmhouse.y, Wld.farmhouse.z, Wld.farmhouse.yaw);
+    /* ---- SIX CENTIMETRES, AND WHY THE FLOOR WAS STROBING ----------
+       carvePad levels the pad to `floorY - PAD.sink`: the ground is cut
+       deliberately low so the floorboards win. But carveFoundations
+       then re-reads the CARVED ground to settle the building's height,
+       so the number that came back was already six centimetres down --
+       and placing the house at it put the boards exactly on the soil.
+       Two coplanar surfaces, and the z-buffer picks a different winner
+       per pixel per frame: the floor flickering in and out of being the
+       ground, which is what the video shows.
+
+       The sink is added back here, which is the one place that knows
+       the difference between "where the ground was cut to" and "where
+       the floor goes". */
+    LN.place(Wld.farmhouse.x, Wld.farmhouse.y + PAD.sink, Wld.farmhouse.z, Wld.farmhouse.yaw);
     /* The terrain is told where to stop covering the cellar. Done here
        rather than inside place(), because the uniform only exists once
        buildTerrainMesh has compiled the material. */
@@ -21796,11 +21851,27 @@ const LN = ((hostScene, hostCamera)=>{
      own local solids -- so this does not block walking about, which is
      what this phase is for. It is wired when interaction is. */
   const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 260);
+  /* AND IT IS A CHILD OF THE HOUSE. This is what makes both halves
+     right at once: `camera.position` stays in house-local metres, which
+     is what canReach() and sightBlocked() measure against the house's
+     own local colliders -- while `camera.matrixWorld` comes out in
+     WORLD space, because the group's transform is applied to it. So
+     ray.setFromCamera() builds a world ray that correctly hits the
+     group's children, which are also in world space.
+
+     Parented, the frame mismatch noted when this camera was introduced
+     simply stops existing, rather than needing a conversion at the one
+     site that raycasts. */
+  GROUP.add(camera);
 
   /* Where the group ended up, kept here rather than read back off the
      Object3D so the conversions below cannot disagree with the matrix
      about which quarter turn is in force. Null until place() runs. */
   let placedAt = null;
+  let lastHouseError = null;
+  /* The house's interact() by another name. The exported method cannot
+     be called `interact` AND call `interact`: inside an object literal
+     the method shadows the function and it recurses into itself. */
   function farmLocalToWorldXZ(lx, lz, at){
     if(!at) return { x:lx, z:lz };
     return { x: at.x + lx*at.c + lz*at.s, z: at.z - lx*at.s + lz*at.c };
@@ -27866,6 +27937,8 @@ function updateDoors(dt){
 
 /* =====================================================================
 
+  const houseInteract = interact;
+
   /* ---------- lifted: AUDIO (1207 lines) ---------- */
 
 /* =====================================================================
@@ -29932,6 +30005,15 @@ function inFloodlight(){
                x1: Math.max(a.x,b.x), z1: Math.max(a.z,b.z) };
     },
     toWorld(lx, lz){ return farmLocalToWorldXZ(lx, lz, placedAt); },
+    /* The verbs the merged key handler routes into the house. Guarded,
+       because the tablet and the map belong to the UI module, which is
+       still a shim: pressing Tab in the house should do nothing yet
+       rather than throw. */
+    interact(){ try { houseInteract(); } catch(err){ lastHouseError = String(err); } },
+    cancelHold(){ try { Hold.cancel(); } catch(err){} },
+    toggleTablet(){ try { UI.toggleTablet(); } catch(err){} },
+    toggleHouseMap(){ try { UI.toggleMap(); } catch(err){} },
+    get lastError(){ return lastHouseError; },
     /* ---- THE HOUSE'S OWN CLOCK ---------------------------------------
        The house has moving parts that are nothing to do with where the
        player is standing: doors swing, sashes slide, the trapdoor
@@ -29947,6 +30029,24 @@ function inFloodlight(){
        and because something else in this house opens doors too. */
     tick(dt, host){
       if(!placedAt) return;
+      /* ---- A HOUSE 2KM AWAY COSTS NOTHING ---------------------------
+         computeRoomVisibility walks the room graph, applyRoomLighting
+         re-aims every practical in the building, and updatePracticals
+         flickers them -- every frame, from anywhere in a 4.6km world.
+         None of it changes a pixel the player can see from the far side
+         of a mountain, and all of it was running while they walked to
+         the town. Measured by the player: "insanely laggy".
+
+         The doors still swing whatever the distance, because a door is
+         state rather than presentation and something else in this house
+         opens them. The expensive half -- the lighting -- runs only
+         when the house is near enough to be looked at, and the whole
+         group is hidden past that, which also takes its 814 objects out
+         of the shadow passes. */
+      const px = (host && host.playerPos) ? host.playerPos : null;
+      const near = !px ? true
+        : Math.hypot(px.x - placedAt.x, px.z - placedAt.z) < 120;
+      GROUP.visible = near;
       /* ---- THE SKY AND THE STORM ARE DOWNRIVER'S --------------------
          The house's lighting reads Sky.day and Sky.phase to decide how
          much daylight reaches each room, and its own Sky is driven by
@@ -29988,6 +30088,7 @@ function inFloodlight(){
       updateWindows(dt);
       updateHatch(dt);
       updateClimbSides();
+      if(!near) return;
       updatePracticals(dt);
       Resources.update(dt);
       /* The room the lighting is computed FROM is the player's, and the
