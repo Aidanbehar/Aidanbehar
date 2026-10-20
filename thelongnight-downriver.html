@@ -21329,7 +21329,7 @@ function stepWorld(dt){
   Hold.update(dt);
   Sleep.update(dt);
   stepPlayerEitherSide(dt);
-  if(typeof LN !== 'undefined') LN.tick(dt);
+  if(typeof LN !== 'undefined') LN.tick(dt, { sky: Sky, weather: Weather });
   updateRest(dt);
   updateWeather(dt);
   updateSky(dt);
@@ -21719,8 +21719,17 @@ const LN = ((hostScene, hostCamera)=>{
     set(t, k, v){ t[k] = v; return true; },
     has(){ return true; },
   });
-  const Audio = SHIM('Audio'), UI = SHIM('UI'), Director = SHIM('Director');
-  const Resources = SHIM('Resources'), Equipment = SHIM('Equipment');
+  /* THREE OF THE FIVE STUBS ARE REAL MODULES NOW -- the house's own
+     Audio, Resources and Equipment are lifted below, which is what
+     brings the power chain, the boarding, the nails, the woodpile and
+     the tripwires across with them.
+
+     UI and Director stay shimmed. The UI is a HUD built against The
+     Long Night's own DOM ids, none of which exist in this document, and
+     the Director is the night itself -- both are the next phase. The
+     shim still counts what is asked of them, so the list of what is
+     missing stays honest rather than becoming a guess. */
+  const UI = SHIM('UI'), Director = SHIM('Director');
   /* ---- THE GLASS, WITHOUT ITS PASS ------------------------------
      makeWindow() registers every pane with the GlassPass and puts it on
      the GLASS layer, which only that pass renders. Without the pass,
@@ -21755,8 +21764,9 @@ const LN = ((hostScene, hostCamera)=>{
   }
   /* GlassShader and ConeShader are declared further down, straight after
      the noise module they interpolate -- see the note there. */
-  let carryingKit = null;
-  const captureFeed = ()=>{}, placeCarriedKit = ()=>{}, takeFromBench = ()=>{};
+  /* captureFeed is the camera module's, which is not lifted yet. The
+     bench and the kit are Resources' and came across with it. */
+  const captureFeed = ()=>{};
   const toggleFullscreen = ()=>{};
   /* The resolution ladder belongs to Downriver; the house only ever
      reads a rung off it to decide whether to draw its volumetrics. */
@@ -27855,6 +27865,1981 @@ function updateDoors(dt){
 }
 
 /* =====================================================================
+
+  /* ---------- lifted: AUDIO (1207 lines) ---------- */
+
+/* =====================================================================
+   ===== AUDIO =====
+   Everything is synthesized. There are no files and no decodeAudioData.
+   The bed is filtered noise; thunder is a shaped noise burst pushed
+   through a generated impulse response; creaks and footsteps are short
+   resonant transients placed in 3D with PannerNodes.
+   ===================================================================== */
+const Audio = (()=>{
+  let ctx=null, master=null, verb=null, verbSend=null, verbTone=null, stormBus=null;
+  let rain={}, gen={}, ready=false;
+
+  // ---- helpers ----
+  /* TWO NOISE BUFFERS FOR THE WHOLE GAME.
+
+     This used to allocate and fill a fresh buffer on every thunder
+     crack, footstep, creak, scuff and drip — a Float32Array of up to a
+     quarter of a million samples, written one Math.random() at a time,
+     on the main thread, in the same frame as the event that triggered
+     it. A busy second could ask for a dozen of them. Noise is noise:
+     there is nothing in one white-noise buffer that distinguishes it
+     from another, so there is no reason at all to keep making them.
+
+     One of each is built at init and every caller enters it at a random
+     offset instead (see applyNoise). Six seconds because the longest
+     thing that asks for a grain is a distant thunder roll at 5.0s plus
+     half a second of tail. */
+  const NOISE_SECONDS = 6;
+  const NOISE = { white:null, brown:null };
+  function noiseBuffer(seconds=2, kind='white'){
+    const n = Math.floor(ctx.sampleRate*seconds);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    if(kind==='white'){
+      for(let i=0;i<n;i++) d[i] = Math.random()*2-1;
+    } else { // brown-ish: integrated white, much better for rain/thunder
+      let last=0;
+      for(let i=0;i<n;i++){
+        const w = Math.random()*2-1;
+        last = (last + 0.02*w)/1.02;
+        d[i] = last*3.5;
+      }
+    }
+    return buf;
+  }
+  /* Point a source at the shared grain, entered somewhere random.
+
+     The offset is what keeps the reuse inaudible: without it every
+     footstep in the game would be bit-identical to every other one,
+     which is a very particular kind of wrong that you notice without
+     being able to say why. It is clamped so the caller still gets the
+     `seconds` of continuous noise it asked for before the buffer ends —
+     the argument is kept for exactly that reason, even though nothing
+     is allocated from it any more.
+
+     start() is wrapped rather than every call site being changed to
+     pass an offset: there are thirty of them and they all look like
+     `src.start(t)`, and a helper that quietly does the right thing is
+     less likely to rot than thirty hand-written offsets. */
+  function applyNoise(src, seconds, kind='white'){
+    src.buffer = (kind === 'brown') ? NOISE.brown : NOISE.white;
+    const off = Math.random() * Math.max(0, NOISE_SECONDS - seconds);
+    const start0 = src.start.bind(src);
+    src.start = (when = 0) => start0(when, off);
+    return src;
+  }
+  // A synthetic impulse response: exponentially decaying noise with a
+  // little early-reflection comb. Cheap, and it makes thunder feel big.
+  function impulse(seconds=3.4, decay=2.6){
+    const n = Math.floor(ctx.sampleRate*seconds);
+    const buf = ctx.createBuffer(2, n, ctx.sampleRate);
+    for(let c=0;c<2;c++){
+      const d = buf.getChannelData(c);
+      for(let i=0;i<n;i++){
+        const t = i/n;
+        let v = (Math.random()*2-1) * Math.pow(1-t, decay);
+        if(i > ctx.sampleRate*0.031) v += d[i - Math.floor(ctx.sampleRate*0.031)] * 0.28;
+        d[i] = v;
+      }
+    }
+    return buf;
+  }
+  function env(node, t0, peak, attack, decay, hold=0){
+    const g = node.gain;
+    g.cancelScheduledValues(t0);
+    g.setValueAtTime(0.0001, t0);
+    g.exponentialRampToValueAtTime(Math.max(peak,0.0002), t0+attack);
+    if(hold) g.setValueAtTime(Math.max(peak,0.0002), t0+attack+hold);
+    g.exponentialRampToValueAtTime(0.0001, t0+attack+hold+decay);
+  }
+  /* Positional voice. The old curve (ref 1.4, rolloff 1.6, inverse) put
+     a sound 10m away at 9% of its gain, which in a house 16m across meant
+     everything the Director did in another room was inaudible — the whole
+     point of the Director being that you hear it happen somewhere else.
+     ref 4.0 / rolloff 0.75 keeps the far side of the house at ~55% and
+     the far side of the yard at ~25%, which is what "you can hear it
+     coming" actually requires. */
+/* ---------- POSITIONAL VOICES ------------------------------------
+   THE AUDIO LEAK. This used to build a fresh HRTF PannerNode for every
+   positional sound in the game and wire it into the master bus and the
+   convolver — and nothing ever took one out again. A panner with no
+   source left playing is still a live node being convolved every
+   128-sample quantum, so the graph grew all night: every footstep, every
+   creak, every scuff, every knock left one behind.
+
+   The crawler is what made it audible, and that is why "the audio
+   glitches when the crawler spawns" was a true report. It skitters on
+   every step, its step interval is a fifth of a second, and it barely
+   stops moving — three to five new permanently-connected HRTF panners a
+   second, on top of everything else in the house. A minute of it and the
+   audio thread is spending its whole budget on the corpses.
+
+   So there is a fixed ring of them, made once, wired once. A voice is
+   repositioned and reused. Twenty-four is comfortably more than the
+   number of one-shots that are ever audible at the same time, and the
+   worst case if it does wrap is that the tail of something already
+   fading moves with the new sound.
+   ------------------------------------------------------------------ */
+  const PAN_VOICES = 24;
+  const panRing = [];
+  let panNext = 0;
+
+  /* ---------- WHAT THE HOUSE DOES TO A SOUND ------------------------
+     Every positional one-shot used to arrive at full strength through
+     any amount of building. Standing forty metres out in the field you
+     heard the cellar bulb being pulled and a door being worked in the
+     back bedroom as clearly as if you were in the room, which is the
+     single loudest wrong note in the game's audio.
+
+     `earshot` is a snapshot of the door graph flooded from wherever the
+     listener is — the same numbers applyRoomLighting uses for light, and
+     the same ones the creatures' hearing uses. A room you can see into
+     is a room you can hear into; two shut doors away and almost nothing
+     reaches you but the low end coming through the structure.
+
+     Refreshed once a frame from the game loop rather than read live,
+     because one-shots fire from all over the frame (the Director ticks
+     long before the lighting pass) and a per-sound flood would be four
+     graph iterations per footstep. */
+  const earshot = Object.create(null);
+  let earFrom = 'hall', earOutside = false;
+  function setEarshot(room, vis, isOutside){
+    earFrom = room; earOutside = !!isOutside;
+    for(const k in vis) earshot[k] = vis[k];
+  }
+  // which room a sound at this position is in, for occlusion purposes
+  function soundRoom(pos){
+    const lvl = pos.y < -0.55 ? 'basement' : pos.y > 2.80 ? 'attic' : 'ground';
+    try { return roomAt(pos.x, pos.z, lvl, false); } catch(e){ return earFrom; }
+  }
+  /* STRUCTURE PASSES A LITTLE OF EVERYTHING AND NOT MUCH OF ANYTHING.
+     0.09 straight through walls at close range, tapering out with
+     distance — a thump in the next room is muffled, the same thump from
+     the far end of the wing is gone. Anything in the listener's own room
+     is untouched. */
+  function occlusionAt(pos){
+    const r = soundRoom(pos);
+    if(r === earFrom) return 1;
+    const open = clamp(earshot[r] ?? 1, 0, 1);
+    const d = Math.hypot(pos.x - camera.position.x, pos.z - camera.position.z);
+    const thru = 0.09 * clamp(1 - d/16, 0, 1);
+    return clamp(thru + (1 - thru) * open, 0, 1);
+  }
+
+  function panner(pos){
+    if(!panRing.length){
+      for(let i=0;i<PAN_VOICES;i++){
+        const p = ctx.createPanner();
+        p.panningModel='HRTF'; p.distanceModel='inverse';
+        p.refDistance=4.0; p.maxDistance=60; p.rolloffFactor=0.75;
+        p.connect(master); p.connect(verbSend);
+        const g = ctx.createGain(); g.connect(p);
+        p.occl = g;                       // the stage callers connect into
+        panRing.push(p);
+      }
+    }
+    const p = panRing[panNext++ % PAN_VOICES];
+    if(p.positionX){ p.positionX.value=pos.x; p.positionY.value=pos.y; p.positionZ.value=pos.z; }
+    else p.setPosition(pos.x,pos.y,pos.z);
+    /* INVERSE SQUARE IN THE OPEN, AND ONLY IN THE OPEN.
+
+       Indoors a gentle rolloff is right: the room is reverberant, every
+       surface returns energy, and level barely drops across a house.
+       Out in a field under rain there is nothing to reflect off and a
+       point source falls away as 1/distance in pressure — which is the
+       inverse square law in intensity, and is exactly rolloffFactor 1
+       with a small reference distance. Standing in the yard, things now
+       get quiet as you walk away from them. */
+    if(earOutside){ p.rolloffFactor = 1.0; p.refDistance = 1.6; p.maxDistance = 90; }
+    else          { p.rolloffFactor = 0.75; p.refDistance = 4.0; p.maxDistance = 60; }
+    p.occl.gain.value = occlusionAt(pos);
+    return p.occl;
+  }
+
+  function init(){
+    if(ctx) return;
+    ctx = new (window.AudioContext||window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = 1.15; master.connect(ctx.destination);
+    // the two grains everything else borrows from, made once, here
+    NOISE.white = noiseBuffer(NOISE_SECONDS, 'white');
+    NOISE.brown = noiseBuffer(NOISE_SECONDS, 'brown');
+
+    verb = ctx.createConvolver(); verb.buffer = impulse(3.6, 2.4);
+    verbSend = ctx.createGain(); verbSend.gain.value = 0.5;
+    /* The one convolver has to be three rooms. It cannot be, but the
+       send level and the tone of the return can carry most of it: the
+       cellar is brick and long and dull, the attic is bare boards and
+       rafters and is bright and slappy, the house is plaster and soft
+       furnishings and is neither. */
+    verbTone = ctx.createBiquadFilter();
+    verbTone.type = 'lowpass'; verbTone.frequency.value = 4200; verbTone.Q.value = 0.6;
+    verbSend.connect(verb); verb.connect(verbTone); verbTone.connect(master);
+    /* Everything the storm makes goes through one bus, so how much of it
+       reaches you can be a property of the room you are standing in
+       rather than a number repeated in six places. */
+    stormBus = ctx.createGain(); stormBus.gain.value = 1;
+    stormBus.connect(master);
+
+    /* ---- rain bed: three layers ----
+       hiss   = the sheet of rain, always there, quiet indoors
+       body   = mid rumble, opens up when you stand near a window
+       roof   = drumming on the roof above, slow amplitude wander        */
+    const mk=(kind, type, freq, q, gain)=>{
+      const src = ctx.createBufferSource();
+      applyNoise(src, 3, kind); src.loop = true;
+      const f = ctx.createBiquadFilter(); f.type=type; f.frequency.value=freq; if(q) f.Q.value=q;
+      const g = ctx.createGain(); g.gain.value=gain;
+      src.connect(f); f.connect(g); g.connect(master);
+      src.start();
+      return { src, f, g };
+    };
+    rain.hiss = mk('white','highpass', 2400, 0.6, 0.030);
+    rain.body = mk('white','lowpass',   900, 0.9, 0.055);
+    rain.roof = mk('brown','lowpass',   380, 0.8, 0.045);
+    rain.body.g.connect(verbSend);
+    // slow wander so the storm breathes instead of sitting flat
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.06;
+    const lfoG = ctx.createGain(); lfoG.gain.value = 0.020;
+    lfo.connect(lfoG); lfoG.connect(rain.roof.g.gain); lfo.start();
+
+    /* ---- generator hum (silent until it is switched on) ---- */
+    const o1 = ctx.createOscillator(); o1.type='sawtooth'; o1.frequency.value=47;
+    const o2 = ctx.createOscillator(); o2.type='square';   o2.frequency.value=94.6;
+    const gnoise = ctx.createBufferSource(); applyNoise(gnoise, 2, 'white'); gnoise.loop=true;
+    const gf = ctx.createBiquadFilter(); gf.type='lowpass'; gf.frequency.value=1500; gf.Q.value=1.2;
+    // occlusion filter: what the floor above does to the sound
+    const gocc = ctx.createBiquadFilter(); gocc.type='lowpass'; gocc.frequency.value=2600; gocc.Q.value=0.9;
+    const gg = ctx.createGain(); gg.gain.value = 0.0;
+    // a panner so distance and direction are handled by the audio graph
+    // instead of a hand-rolled gain curve that barely moved
+    const gpan = ctx.createPanner();
+    gpan.panningModel='HRTF'; gpan.distanceModel='inverse';
+    gpan.refDistance=4.0; gpan.maxDistance=60; gpan.rolloffFactor=0.9;
+    o1.connect(gf); o2.connect(gf); gnoise.connect(gf);
+    gf.connect(gocc); gocc.connect(gg);
+    gg.connect(gpan); gpan.connect(master);
+    gg.connect(verbSend);
+    // pitch wobble: a single-cylinder engine never holds a steady note
+    const wob = ctx.createOscillator(); wob.frequency.value = 2.3;
+    const wobG = ctx.createGain(); wobG.gain.value = 1.6;
+    wob.connect(wobG); wobG.connect(o1.frequency); wobG.connect(o2.frequency);
+    o1.start(); o2.start(); gnoise.start(); wob.start();
+    gen = { gain:gg, filter:gf, occl:gocc, pan:gpan, osc:o1, placed:false };
+
+    ready = true;
+  }
+
+  /* DAWN CHORUS. Two things happen at six: the storm bed is pulled down
+     to nothing, and this comes up in its place. A bird is a short glide
+     between two frequencies through a narrow band — nothing like speech,
+     nothing like the creature, which is the point. */
+  let birdLevel = 0, birdTimer = 0;
+  function setBirds(v){ birdLevel = clamp(v, 0, 1); }
+  function chirp(){
+    if(!ready || birdLevel <= 0.02) return;
+    const t0 = ctx.currentTime + Math.random()*0.25;
+    const sp = panNode((Math.random()*2-1)*0.85);
+    const notes = 2 + (Math.random()*3|0);
+    for(let i=0;i<notes;i++){
+      const t = t0 + i*(0.07 + Math.random()*0.06);
+      const o = ctx.createOscillator(); o.type='sine';
+      const f = 2200 + Math.random()*2400;
+      o.frequency.setValueAtTime(f, t);
+      o.frequency.exponentialRampToValueAtTime(f*(0.62+Math.random()*0.7), t+0.055);
+      const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=f; bp.Q.value=2.2;
+      const g = ctx.createGain();
+      o.connect(bp); bp.connect(g);
+      if(sp){ g.connect(sp); sp.connect(master); } else g.connect(master);
+      g.connect(verbSend);
+      env(g, t, 0.045*birdLevel*(0.6+Math.random()*0.6), 0.004, 0.075);
+      o.start(t); o.stop(t+0.18);
+    }
+  }
+  function updateBirds(dt){
+    if(!ready || birdLevel <= 0.02) return;
+    birdTimer -= dt;
+    if(birdTimer <= 0){ chirp(); birdTimer = (0.5 + Math.random()*2.4) / (0.35 + birdLevel); }
+  }
+  /* The whole storm bed, pulled down to silence over the dawn hour. This
+     multiplies whatever setRainMix() last asked for, so the two do not
+     fight each other. */
+  let stormLevel = 1;
+  let space = 'ground';                 // which of the three rooms you are in
+  function setStorm(v){
+    stormLevel = clamp(v, 0, 1);
+    if(!ready) return;
+    const t = ctx.currentTime;
+    rain.hiss.g.gain.setTargetAtTime(rainTarget.hiss * stormLevel, t, 0.6);
+    rain.body.g.gain.setTargetAtTime(rainTarget.body * stormLevel, t, 0.6);
+    rain.roof.g.gain.setTargetAtTime(rainTarget.roof * stormLevel, t, 0.6);
+  }
+
+  function resume(){ if(ctx && ctx.state==='suspended') ctx.resume(); }
+
+  /* ---- listener follows the camera ---- */
+  const _f = new THREE.Vector3(), _u = new THREE.Vector3();
+  function updateListener(cam){
+    if(!ready) return;
+    const L = ctx.listener;
+    cam.getWorldDirection(_f);
+    _u.set(0,1,0).applyQuaternion(cam.quaternion);
+    if(L.positionX){
+      const t = ctx.currentTime;
+      L.positionX.setTargetAtTime(cam.position.x,t,0.02);
+      L.positionY.setTargetAtTime(cam.position.y,t,0.02);
+      L.positionZ.setTargetAtTime(cam.position.z,t,0.02);
+      L.forwardX.setTargetAtTime(_f.x,t,0.02); L.forwardY.setTargetAtTime(_f.y,t,0.02); L.forwardZ.setTargetAtTime(_f.z,t,0.02);
+      L.upX.setTargetAtTime(_u.x,t,0.02); L.upY.setTargetAtTime(_u.y,t,0.02); L.upZ.setTargetAtTime(_u.z,t,0.02);
+    } else {
+      L.setPosition(cam.position.x,cam.position.y,cam.position.z);
+      L.setOrientation(_f.x,_f.y,_f.z,_u.x,_u.y,_u.z);
+    }
+  }
+
+  /* ---- rain mix: how much of the storm can you hear from here? ----
+     The three targets are remembered so setStorm() can scale all of them
+     at dawn without the two systems overwriting each other every frame. */
+  const rainTarget = { hiss:0.03, body:0.05, roof:0.04 };
+  /* WHERE YOU ARE STANDING, acoustically.
+
+     THE ATTIC WAS BROKEN. The rain level is driven by how close the
+     nearest window is, and the only glass up there is one small gable
+     light at the far end of a sixteen-metre room; stand anywhere but
+     right at it and the distance term collapsed to zero, so you were
+     inside the roof of a house in a thunderstorm and it was quieter
+     than the hallway. Under the deck there is a whole floor, a ceiling
+     and a room between you and the sky. Under the RAFTERS there is
+     nothing but the boards, which is the entire point of being up
+     there — so up there the roof layer is the loudest thing in the mix,
+     it is opened up so you hear individual drops rather than a muffled
+     thud through a ceiling, and the thunder arrives at full strength.
+
+     The reverb moves with it: brick and long in the cellar, bright and
+     close under the rafters, soft in the house. */
+  function setRainMix(openness, place){
+    if(!ready) return;
+    const t = ctx.currentTime;
+    space = place || 'ground';
+    const attic = space === 'attic', cellar = space === 'basement';
+    // under the rafters the storm is not "outside" any more
+    const o = attic ? Math.max(openness, 0.60) : openness;
+    rainTarget.hiss = attic ? 0.026 + o*0.042 : 0.008 + o*0.055;
+    rainTarget.body = (0.020 + o*0.075) * (cellar ? 0.35 : attic ? 1.30 : 1);
+    rainTarget.roof = cellar ? 0.012 : attic ? 0.110 + o*0.050 : 0.030 + o*0.030;
+    rain.hiss.g.gain.setTargetAtTime(rainTarget.hiss * stormLevel, t, 0.35);
+    rain.body.g.gain.setTargetAtTime(rainTarget.body * stormLevel, t, 0.35);
+    rain.body.f.frequency.setTargetAtTime(420 + o*2400, t, 0.4);
+    rain.roof.g.gain.setTargetAtTime(rainTarget.roof * stormLevel, t, 0.5);
+    // the slates are three inches away, so you hear the drops, not a thud
+    rain.roof.f.frequency.setTargetAtTime(attic ? 1650 : cellar ? 190 : 380, t, 0.6);
+    if(stormBus) stormBus.gain.setTargetAtTime(
+      cellar ? 0.45 : attic ? 1.40 : 1.0, t, 0.7);
+    if(verbSend) verbSend.gain.setTargetAtTime(
+      cellar ? 0.84 : attic ? 0.66 : 0.50, t, 0.8);
+    if(verbTone) verbTone.frequency.setTargetAtTime(
+      cellar ? 1150 : attic ? 7400 : 4200, t, 0.8);
+  }
+
+  /* ---- thunder -------------------------------------------------------
+     One burst of filtered noise is a firework, not thunder. Real thunder
+     is a sequence: the tearing crack of the channel nearest you, the body
+     of the discharge, then rolls arriving off everything the sound has
+     bounced from, each one duller and further away than the last. So each
+     strike here is assembled from layers, and which layers it gets
+     depends on how far off it is.
+  ------------------------------------------------------------------- */
+  function panNode(pan){
+    if(!ctx.createStereoPanner) return null;
+    const sp = ctx.createStereoPanner();
+    sp.pan.value = clamp(pan, -1, 1);
+    return sp;
+  }
+  // one roll: brown noise under a lowpass sliding downward
+  function rumble(t, dur, peak, f0, f1, pan=0){
+    const src = ctx.createBufferSource();
+    applyNoise(src, Math.max(1.6, dur+0.5), 'brown');
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.Q.value = 0.6;
+    lp.frequency.setValueAtTime(Math.max(40,f0), t);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(30,f1), t+dur);
+    const g = ctx.createGain();
+    src.connect(lp); lp.connect(g);
+    const sp = panNode(pan);
+    if(sp){ g.connect(sp); sp.connect(stormBus); sp.connect(verbSend); }
+    else  { g.connect(stormBus); g.connect(verbSend); }
+    env(g, t, peak, Math.min(0.6, dur*0.22), dur*0.92);
+    src.start(t); src.stop(t + dur + 0.6);
+  }
+  // the part you feel rather than hear
+  function subBoom(t, dur, peak, f0, f1){
+    const o = ctx.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(16,f1), t + dur*0.85);
+    const g = ctx.createGain(); o.connect(g); g.connect(stormBus);
+    env(g, t, peak, 0.05, dur*0.9);
+    o.start(t); o.stop(t + dur + 0.4);
+  }
+  // the initial tear, only for strikes close enough to still be sharp
+  function crack(t, peak, bright){
+    const c = ctx.createBufferSource(); applyNoise(c, 0.9, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 0.75;
+    bp.frequency.setValueAtTime(bright, t);
+    bp.frequency.exponentialRampToValueAtTime(bright*0.22, t + 0.4);
+    const g = ctx.createGain();
+    c.connect(bp); bp.connect(g); g.connect(stormBus); g.connect(verbSend);
+    env(g, t, peak, 0.002, 0.55);
+    c.start(t); c.stop(t + 1.1);
+  }
+
+  function thunder(delaySec, near, style){
+    if(!ready) return;
+    const t0 = ctx.currentTime + Math.max(0, delaySec);
+    const R = Math.random;
+    if(!style){
+      style = near > 0.74 ? 'crack'
+            : near > 0.42 ? 'clap'
+            : (R() < 0.45 ? 'boom' : 'roll');
+    }
+    if(style === 'crack'){
+      // overhead: a rip, then the body, then two or three quick returns
+      crack(t0, 0.60*near, 3200);
+      if(R() < 0.6) crack(t0 + randf(0.05,0.14), 0.30*near, 2100);
+      rumble(t0 + 0.02, 2.6, 0.85*near, 1100, 80, randf(-0.35,0.35));
+      subBoom(t0, 2.8, 0.36*near, 66, 24);
+      const rolls = 2 + (R() < 0.65 ? 1 : 0);
+      for(let i=0;i<rolls;i++)
+        rumble(t0 + 0.75 + i*randf(0.7,1.6), randf(1.5,2.8),
+               0.30*near/(1+i*0.75), randf(240,460), 60, randf(-0.8,0.8));
+    } else if(style === 'clap'){
+      // a few kilometres off: softened crack, long body, three rolls
+      crack(t0, 0.26*near, 1500);
+      rumble(t0, 3.4, 0.62*near, 520, 70, randf(-0.4,0.4));
+      subBoom(t0 + 0.06, 3.2, 0.24*near, 52, 22);
+      for(let i=0;i<3;i++)
+        rumble(t0 + 1.0 + i*randf(0.9,1.9), randf(2.0,3.4),
+               0.24*near/(1+i*0.6), randf(160,300), 52, randf(-0.9,0.9));
+    } else if(style === 'boom'){
+      // distant but heavy: a slow swell with a long tail
+      rumble(t0, 5.0, 0.34 + near*0.20, 190, 45, randf(-0.3,0.3));
+      subBoom(t0 + 0.25, 4.6, 0.16 + near*0.10, 40, 19);
+      for(let i=0;i<3;i++)
+        rumble(t0 + 1.6 + i*randf(1.1,2.2), randf(2.6,4.2),
+               0.16/(1+i*0.5), randf(110,210), 42, randf(-0.9,0.9));
+    } else {
+      // the long roll off the far side of the valley: no crack at all
+      const n = 4 + Math.floor(R()*3);
+      for(let i=0;i<n;i++)
+        rumble(t0 + i*randf(0.8,1.8), randf(2.4,4.6),
+               (0.22 + near*0.12) / (1 + i*0.35), randf(90,220), 38, randf(-1,1));
+      subBoom(t0 + 0.4, 5.5, 0.11, 34, 17);
+    }
+  }
+  // Weather beyond the horizon: rumble with nothing to see.
+  function distantThunder(){
+    thunder(randf(0, 1.2), randf(0.04, 0.16), Math.random() < 0.65 ? 'roll' : 'boom');
+  }
+
+  /* ---- footsteps: wood vs concrete ---- */
+  /* `pos` is optional: your own footsteps are centred (they happen at the
+     listener), anything else's are placed. The creature's steps used to
+     call this with no position at all, so the one cue that is meant to
+     tell you which room it is in played dead centre at a fifth of the
+     volume of your own boots. */
+  function footstep(vol=0.5, concrete=false, pos=null){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const dest = pos ? panner(pos) : master;
+    const src = ctx.createBufferSource(); applyNoise(src, 0.3, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+    bp.frequency.value = concrete ? 520+Math.random()*260 : 180+Math.random()*140;
+    bp.Q.value = concrete ? 1.1 : 2.4;
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = concrete?3200:1400;
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(lp); lp.connect(g); g.connect(dest);
+    if(!pos) g.connect(verbSend);
+    env(g, t0, vol*0.55, 0.002, concrete?0.10:0.16);
+    src.start(t0); src.stop(t0+0.35);
+    // wooden floors answer back
+    if(!concrete && Math.random()<0.5){
+      const o = ctx.createOscillator(); o.type='triangle';
+      o.frequency.value = 90+Math.random()*70;
+      const og = ctx.createGain(); o.connect(og); og.connect(dest);
+      env(og, t0+0.01, vol*0.14, 0.005, 0.14);
+      o.start(t0); o.stop(t0+0.2);
+    }
+  }
+
+  /* ---- house creak at a world position ---- */
+  function creak(pos, strength=0.5){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = panner(pos);
+    const src = ctx.createBufferSource(); applyNoise(src, 1.2, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+    const f0 = 140 + Math.random()*260;
+    bp.frequency.setValueAtTime(f0, t0);
+    bp.frequency.linearRampToValueAtTime(f0*(0.6+Math.random()*0.5), t0+0.5+Math.random()*0.5);
+    bp.Q.value = 9 + Math.random()*14;
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g); g.connect(p);
+    env(g, t0, strength*1.15, 0.03+Math.random()*0.12, 0.4+Math.random()*0.9);
+    src.start(t0); src.stop(t0+1.8);
+  }
+  function doorCreak(pos, opening){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = panner(pos);
+    const src = ctx.createBufferSource(); applyNoise(src, 1.4, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 18;
+    const a = opening ? 220 : 420, b = opening ? 520 : 160;
+    bp.frequency.setValueAtTime(a, t0);
+    bp.frequency.linearRampToValueAtTime(b, t0+0.7);
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g); g.connect(p);
+    env(g, t0, 0.30, 0.06, 0.8);
+    src.start(t0); src.stop(t0+1.6);
+  }
+  function knock(pos, strength=0.5, count=3){
+    if(!ready) return;
+    const p = panner(pos);
+    for(let i=0;i<count;i++){
+      const t0 = ctx.currentTime + i*(0.17+Math.random()*0.07);
+      const src = ctx.createBufferSource(); applyNoise(src, 0.3, 'white');
+      const bp = ctx.createBiquadFilter(); bp.type='lowpass'; bp.frequency.value=340; bp.Q.value=6;
+      const g = ctx.createGain();
+      src.connect(bp); bp.connect(g); g.connect(p);
+      env(g, t0, strength, 0.003, 0.22);
+      src.start(t0); src.stop(t0+0.4);
+    }
+  }
+  /* ---- contact sounds ------------------------------------------------
+     One short filtered noise transient per material, plus a decaying
+     partial for things that ring (metal, glass). Positioned in 3D so a
+     scrape behind you sounds like it is behind you. */
+  const SCUFF = {
+    wood:     { type:'bandpass', f:230,  q:2.4, dec:0.17, ring:118,  rg:0.05, gain:0.34 },
+    drywall:  { type:'lowpass',  f:640,  q:0.8, dec:0.10, ring:0,    rg:0,    gain:0.26 },
+    brick:    { type:'bandpass', f:860,  q:1.6, dec:0.075,ring:0,    rg:0,    gain:0.32 },
+    concrete: { type:'bandpass', f:700,  q:1.1, dec:0.085,ring:0,    rg:0,    gain:0.30 },
+    metal:    { type:'bandpass', f:2600, q:4.5, dec:0.24, ring:1180, rg:0.10, gain:0.28 },
+    fabric:   { type:'highpass', f:3200, q:0.7, dec:0.14, ring:0,    rg:0,    gain:0.16 },
+    glass:    { type:'bandpass', f:4200, q:6.0, dec:0.20, ring:2400, rg:0.06, gain:0.20 },
+  };
+  function scuff(kind, strength=0.5, pos){
+    if(!ready) return;
+    const P = SCUFF[kind] || SCUFF.wood;
+    const t0 = ctx.currentTime;
+    const p = pos ? panner(pos) : master;
+    const src = ctx.createBufferSource();
+    applyNoise(src, 0.5, kind==='fabric' ? 'white' : 'brown');
+    const f = ctx.createBiquadFilter();
+    f.type = P.type;
+    f.frequency.value = P.f * (0.85 + Math.random()*0.3);
+    f.Q.value = P.q;
+    const g = ctx.createGain();
+    src.connect(f); f.connect(g); g.connect(p);
+    env(g, t0, P.gain*strength, 0.004, P.dec);
+    src.start(t0); src.stop(t0 + P.dec + 0.3);
+    if(P.ring > 0){
+      const o = ctx.createOscillator(); o.type='triangle';
+      o.frequency.value = P.ring * (0.9 + Math.random()*0.25);
+      const og = ctx.createGain(); o.connect(og); og.connect(p);
+      env(og, t0, P.rg*strength, 0.003, P.dec*2.4);
+      o.start(t0); o.stop(t0 + P.dec*3 + 0.2);
+    }
+  }
+
+  /* ---- door hardware: handle, hinge, latch ---- */
+  function doorHandle(pos){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = panner(pos);
+    for(let i=0;i<2;i++){
+      const src = ctx.createBufferSource(); applyNoise(src, 0.2, 'white');
+      const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+      bp.frequency.value = 1900 + Math.random()*900; bp.Q.value = 7;
+      const g = ctx.createGain();
+      src.connect(bp); bp.connect(g); g.connect(p);
+      env(g, t0 + i*0.055, 0.10, 0.002, 0.05);
+      src.start(t0 + i*0.055); src.stop(t0 + i*0.055 + 0.12);
+    }
+  }
+  /* The hatch is a much heavier object than a door: a long groan on the
+     hinges, and a real slam with the frame ringing when it drops. */
+  function hatchSwing(pos, opening){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = panner(pos);
+    const src = ctx.createBufferSource(); applyNoise(src, 2.0, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 13;
+    const a = opening ? 120 : 300, b = opening ? 330 : 96;
+    bp.frequency.setValueAtTime(a, t0);
+    bp.frequency.linearRampToValueAtTime(b, t0 + 1.1);
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g); g.connect(p);
+    env(g, t0, 0.34, 0.10, 1.2);
+    src.start(t0); src.stop(t0 + 2.2);
+    // timber flexing under its own weight
+    const o = ctx.createOscillator(); o.type='triangle';
+    o.frequency.setValueAtTime(opening ? 74 : 96, t0);
+    o.frequency.linearRampToValueAtTime(opening ? 58 : 68, t0 + 1.0);
+    const og = ctx.createGain(); o.connect(og); og.connect(p);
+    env(og, t0, 0.09, 0.15, 1.0);
+    o.start(t0); o.stop(t0 + 1.4);
+  }
+  function hatchDrop(pos){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = panner(pos);
+    const thud = ctx.createBufferSource(); applyNoise(thud, 0.8, 'brown');
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 170; lp.Q.value = 4;
+    const tg = ctx.createGain();
+    thud.connect(lp); lp.connect(tg); tg.connect(p);
+    env(tg, t0, 0.70, 0.003, 0.36);
+    thud.start(t0); thud.stop(t0 + 0.9);
+    const o = ctx.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(58, t0);
+    o.frequency.exponentialRampToValueAtTime(28, t0 + 0.4);
+    const og = ctx.createGain(); o.connect(og); og.connect(master);
+    env(og, t0, 0.26, 0.004, 0.42);
+    o.start(t0); o.stop(t0 + 0.8);
+    // boards rattling in the frame afterwards
+    for(let i=0;i<3;i++){
+      const t = t0 + 0.09 + i*randf(0.05,0.11);
+      const r = ctx.createBufferSource(); applyNoise(r, 0.25, 'white');
+      const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+      bp.frequency.value = 380 + Math.random()*520; bp.Q.value = 6;
+      const rg = ctx.createGain();
+      r.connect(bp); bp.connect(rg); rg.connect(p);
+      env(rg, t, 0.10/(1+i), 0.002, 0.10);
+      r.start(t); r.stop(t + 0.3);
+    }
+  }
+
+  function doorLatch(pos){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = panner(pos);
+    // the thud of the leaf meeting the stop
+    const thud = ctx.createBufferSource(); applyNoise(thud, 0.4, 'brown');
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=260; lp.Q.value=3;
+    const tg = ctx.createGain();
+    thud.connect(lp); lp.connect(tg); tg.connect(p);
+    env(tg, t0, 0.42, 0.003, 0.19);
+    thud.start(t0); thud.stop(t0+0.45);
+    // then the tongue dropping into the strike plate
+    const cl = ctx.createBufferSource(); applyNoise(cl, 0.2, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=3100; bp.Q.value=9;
+    const cg = ctx.createGain();
+    cl.connect(bp); bp.connect(cg); cg.connect(p);
+    env(cg, t0+0.035, 0.16, 0.001, 0.06);
+    cl.start(t0+0.03); cl.stop(t0+0.2);
+  }
+
+  /* ---- house hardware ---- */
+  function breakerStrain(pos){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = panner(pos);
+    const o = ctx.createOscillator(); o.type='square'; o.frequency.value = 118 + Math.random()*30;
+    const f = ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=900; f.Q.value=6;
+    const g = ctx.createGain();
+    o.connect(f); f.connect(g); g.connect(p);
+    env(g, t0, 0.07, 0.004, 0.10);
+    o.start(t0); o.stop(t0+0.2);
+  }
+  function breakerTrip(pos){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = panner(pos);
+    const src = ctx.createBufferSource(); applyNoise(src, 0.4, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1500; bp.Q.value=2.2;
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g); g.connect(p);
+    env(g, t0, 0.55, 0.001, 0.14);
+    src.start(t0); src.stop(t0+0.4);
+    // the whole house winding down at once
+    const o = ctx.createOscillator(); o.type='sawtooth';
+    o.frequency.setValueAtTime(120, t0);
+    o.frequency.exponentialRampToValueAtTime(26, t0+0.75);
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=520;
+    const og = ctx.createGain(); o.connect(lp); lp.connect(og); og.connect(master);
+    env(og, t0, 0.20, 0.01, 0.85);
+    o.start(t0); o.stop(t0+1.1);
+  }
+  function breakerReset(pos){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = panner(pos);
+    const src = ctx.createBufferSource(); applyNoise(src, 0.3, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='lowpass'; bp.frequency.value=700; bp.Q.value=5;
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g); g.connect(p);
+    env(g, t0, 0.40, 0.002, 0.16);
+    src.start(t0); src.stop(t0+0.35);
+    const o = ctx.createOscillator(); o.type='sawtooth';
+    o.frequency.setValueAtTime(30, t0+0.05);
+    o.frequency.exponentialRampToValueAtTime(118, t0+0.5);
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=460;
+    const og = ctx.createGain(); o.connect(lp); lp.connect(og); og.connect(master);
+    env(og, t0+0.05, 0.16, 0.02, 0.6);
+    o.start(t0); o.stop(t0+0.8);
+  }
+  function applianceStart(pos){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = panner(pos);
+    const o = ctx.createOscillator(); o.type='sawtooth';
+    o.frequency.setValueAtTime(38, t0);
+    o.frequency.linearRampToValueAtTime(96, t0+1.4);
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=340; lp.Q.value=3;
+    const g = ctx.createGain(); o.connect(lp); lp.connect(g); g.connect(p);
+    env(g, t0, 0.20, 0.35, 1.4);
+    o.start(t0); o.stop(t0+2.0);
+  }
+  function hammer(pos){
+    if(!ready) return;
+    for(let i=0;i<3;i++){
+      const t0 = ctx.currentTime + i*(0.16+Math.random()*0.06);
+      const p = panner(pos);
+      const src = ctx.createBufferSource(); applyNoise(src, 0.3, 'white');
+      const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+      bp.frequency.value = 300 + Math.random()*260; bp.Q.value = 1.6;
+      const g = ctx.createGain();
+      src.connect(bp); bp.connect(g); g.connect(p);
+      env(g, t0, 0.55, 0.001, 0.13);
+      src.start(t0); src.stop(t0+0.3);
+    }
+  }
+  function windowForce(pos){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = panner(pos);
+    const src = ctx.createBufferSource(); applyNoise(src, 1.2, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 16;
+    bp.frequency.setValueAtTime(340, t0);
+    bp.frequency.linearRampToValueAtTime(760, t0+0.5);
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g); g.connect(p);
+    env(g, t0, 0.40, 0.02, 0.55);
+    src.start(t0); src.stop(t0+1.0);
+    setTimeout(()=>knock(pos, 0.55, 1), 520);
+  }
+
+  /* ---- the creature ---- */
+  let droneNode = null, heartNode = null;
+  function setDrone(level){
+    if(!ready) return;
+    if(!droneNode){
+      const o1 = ctx.createOscillator(); o1.type='sine'; o1.frequency.value = 41;
+      const o2 = ctx.createOscillator(); o2.type='sine'; o2.frequency.value = 27.5;
+      const n = ctx.createBufferSource(); applyNoise(n, 3, 'brown'); n.loop = true;
+      const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 90; lp.Q.value = 2;
+      const g = ctx.createGain(); g.gain.value = 0;
+      o1.connect(g); o2.connect(g); n.connect(lp); lp.connect(g);
+      g.connect(master);
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.09;
+      const lg = ctx.createGain(); lg.gain.value = 1.7;
+      lfo.connect(lg); lg.connect(o1.frequency);
+      o1.start(); o2.start(); n.start(); lfo.start();
+      droneNode = g;
+    }
+    droneNode.gain.setTargetAtTime(clamp(level,0,1)*0.20, ctx.currentTime, 0.7);
+  }
+  function heartbeat(bpm, level){
+    if(!ready) return;
+    if(!heartNode) heartNode = { next:0 };
+    heartNode.bpm = bpm; heartNode.level = level;
+  }
+  function pumpHeart(dt){
+    if(!ready || !heartNode || !heartNode.level || heartNode.level <= 0.01) return;
+    heartNode.next -= dt;
+    if(heartNode.next > 0) return;
+    heartNode.next = 60/heartNode.bpm;
+    for(let i=0;i<2;i++){
+      const t0 = ctx.currentTime + i*0.155;
+      const o = ctx.createOscillator(); o.type='sine';
+      o.frequency.setValueAtTime(64, t0);
+      o.frequency.exponentialRampToValueAtTime(30, t0+0.16);
+      const g = ctx.createGain(); o.connect(g); g.connect(master);
+      env(g, t0, heartNode.level*(i?0.16:0.26), 0.006, 0.18);
+      o.start(t0); o.stop(t0+0.3);
+    }
+  }
+  function sting(strength=1){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    // a cluster of detuned partials, which is what makes a sting hurt
+    for(const f of [780, 1170, 1560, 2350]){
+      const o = ctx.createOscillator(); o.type='sawtooth';
+      o.frequency.setValueAtTime(f*(0.98+Math.random()*0.04), t0);
+      o.frequency.exponentialRampToValueAtTime(f*0.55, t0+0.5);
+      const g = ctx.createGain(); o.connect(g); g.connect(master); g.connect(verbSend);
+      env(g, t0, 0.10*strength, 0.002, 0.55);
+      o.start(t0); o.stop(t0+0.7);
+    }
+    const src = ctx.createBufferSource(); applyNoise(src, 0.6, 'white');
+    const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 900;
+    const g2 = ctx.createGain(); src.connect(hp); hp.connect(g2); g2.connect(master);
+    env(g2, t0, 0.24*strength, 0.001, 0.35);
+    src.start(t0); src.stop(t0+0.7);
+  }
+  function creatureRoar(pos, strength=1){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = pos ? panner(pos) : master;
+    const src = ctx.createBufferSource(); applyNoise(src, 2.2, 'brown');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 1.1;
+    bp.frequency.setValueAtTime(190, t0);
+    bp.frequency.exponentialRampToValueAtTime(70, t0+1.1);
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g); g.connect(p);
+    env(g, t0, 0.55*strength, 0.03, 1.2);
+    src.start(t0); src.stop(t0+1.8);
+    const o = ctx.createOscillator(); o.type='sawtooth';
+    o.frequency.setValueAtTime(58, t0); o.frequency.exponentialRampToValueAtTime(23, t0+1.0);
+    const og = ctx.createGain(); o.connect(og); og.connect(master);
+    env(og, t0, 0.30*strength, 0.02, 1.1);
+    o.start(t0); o.stop(t0+1.4);
+  }
+
+  /* ---------- the creature's own voice ------------------------------
+     Four sounds that are only ever made by something that is not you.
+     All positional, all synthesised, all deliberately organic — filtered
+     noise with a wobbling formant rather than a tone, because a tone
+     reads as a machine and a machine is not frightening.
+  ------------------------------------------------------------------ */
+  // slow wet breathing, placed in the world. The closer it is the more
+  // of the low end survives the lowpass.
+  function breath(pos, strength=0.5, exhale=true){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = pos ? panner(pos) : master;
+    const src = ctx.createBufferSource(); applyNoise(src, 2.0, 'brown');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 0.9;
+    const f0 = exhale ? 520 : 320, f1 = exhale ? 190 : 640;
+    bp.frequency.setValueAtTime(f0, t0);
+    bp.frequency.exponentialRampToValueAtTime(f1, t0+0.75);
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g); g.connect(p);
+    env(g, t0, 0.62*strength, 0.16, 0.72);
+    src.start(t0); src.stop(t0+1.3);
+    // the rattle at the bottom of it
+    const o = ctx.createOscillator(); o.type='triangle';
+    o.frequency.setValueAtTime(41+Math.random()*9, t0);
+    const og = ctx.createGain(); o.connect(og); og.connect(p);
+    env(og, t0, 0.11*strength, 0.10, 0.60);
+    o.start(t0); o.stop(t0+0.9);
+  }
+  // nails dragged down a door: a burst train through a resonant band
+  function scratch(pos, strength=0.6, dur=1.5){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = pos ? panner(pos) : master;
+    const src = ctx.createBufferSource(); applyNoise(src, 2.4, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 6.5;
+    bp.frequency.setValueAtTime(2900, t0);
+    bp.frequency.exponentialRampToValueAtTime(700, t0+dur);
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g); g.connect(p);
+    // amplitude stutters so it reads as separate nails, not a hiss
+    g.gain.setValueAtTime(0.0001, t0);
+    const steps = Math.max(6, dur*14|0);
+    for(let i=0;i<steps;i++){
+      const t = t0 + (i/steps)*dur;
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, 0.27*strength*(0.4+Math.random())), t+0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur/steps*0.75);
+    }
+    src.start(t0); src.stop(t0+dur+0.2);
+  }
+  /* =====================================================================
+     THE DARK BANK
+     ---------------------------------------------------------------------
+     Six sounds that only ever play with the house lights out, wired to
+     the scare scheduler (see SCARES, cat:'dark'). Everything here obeys
+     the same two rules as the rest of the audio module: it is synthesised
+     from noise and oscillators at call time, and if it is given a
+     position it goes through the panner so the house occludes it.
+
+     They are deliberately AMBIGUOUS. Not one of them is the creature
+     announcing itself -- they are a building at three in the morning
+     with something in it: a joist taking weight, a tap that will not
+     stop, a chair moved in a room you are not in. The player cannot
+     tell which of these is nothing and which is something walking
+     toward them, and that is the entire point of the layer.
+     ===================================================================== */
+
+  /* Something heavy pulled across bare boards. The long one -- it runs
+     for a second and a half and rises in pitch as it goes, the way a
+     weight does when the friction under it changes. */
+  function drag(pos, strength=0.7, dur=1.4){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = pos ? panner(pos) : master;
+    const src = ctx.createBufferSource(); applyNoise(src, 2.6, 'brown');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 1.6;
+    bp.frequency.setValueAtTime(180, t0);
+    bp.frequency.linearRampToValueAtTime(420, t0 + dur);
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g); g.connect(p);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.22*strength, t0 + 0.09);
+    // it catches and slips rather than sliding smoothly
+    for(let i=0;i<5;i++){
+      const t = t0 + 0.12 + (i/5)*dur*0.8;
+      g.gain.exponentialRampToValueAtTime(0.08*strength, t + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.20*strength, t + 0.09);
+    }
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur + 0.2);
+    src.start(t0); src.stop(t0 + dur + 0.3);
+  }
+
+  /* A chair or a table leg shoved a few inches. Short, sharp, and it
+     stops dead -- the thing that makes you certain there is somebody in
+     the next room. */
+  function furnitureScrape(pos, strength=0.8){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = pos ? panner(pos) : master;
+    const dur = 0.26 + Math.random()*0.18;
+    const src = ctx.createBufferSource(); applyNoise(src, 1.0, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 3.0;
+    bp.frequency.setValueAtTime(900, t0);
+    bp.frequency.exponentialRampToValueAtTime(300, t0 + dur);
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g); g.connect(p);
+    env(g, t0, 0.26*strength, 0.006, dur);
+    // the thump of it settling back onto four feet
+    const thud = ctx.createOscillator(); thud.type = 'sine';
+    thud.frequency.setValueAtTime(78, t0 + dur*0.8);
+    const tg = ctx.createGain(); thud.connect(tg); tg.connect(p);
+    env(tg, t0 + dur*0.8, 0.20*strength, 0.004, 0.16);
+    src.start(t0); src.stop(t0 + dur + 0.1);
+    thud.start(t0 + dur*0.8); thud.stop(t0 + dur + 0.3);
+  }
+
+  /* The plumbing. A knock that travels the pipework and arrives
+     everywhere at once, then a long metallic sigh as the pressure goes
+     out of it. Never positional -- pipes are the whole house. */
+  function pipes(strength=0.7){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const knocks = 2 + (Math.random()*3|0);
+    for(let i=0;i<knocks;i++){
+      const t = t0 + i*(0.10 + Math.random()*0.09);
+      const o = ctx.createOscillator(); o.type = 'square';
+      o.frequency.setValueAtTime(160 + Math.random()*90, t);
+      const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 9;
+      bp.frequency.value = 420 + Math.random()*260;
+      const g = ctx.createGain();
+      o.connect(bp); bp.connect(g); g.connect(master);
+      env(g, t, 0.10*strength, 0.002, 0.09);
+      o.start(t); o.stop(t + 0.2);
+    }
+    const sigh = ctx.createBufferSource(); applyNoise(sigh, 2.0, 'white');
+    const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 1800;
+    const sg = ctx.createGain();
+    sigh.connect(hp); hp.connect(sg); sg.connect(master);
+    const st = t0 + knocks*0.14;
+    env(sg, st, 0.035*strength, 0.10, 1.2);
+    sigh.start(st); sigh.stop(st + 1.6);
+  }
+
+  /* A tap somewhere, one drop at a time, for as long as it takes you to
+     decide whether you can hear it. The interval is uneven on purpose:
+     a metronome is furniture, an uneven drip is a room. */
+  function drip(pos, count=5, strength=0.6){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = pos ? panner(pos) : master;
+    let t = t0;
+    for(let i=0;i<count;i++){
+      const o = ctx.createOscillator(); o.type = 'sine';
+      const f = 900 + Math.random()*500;
+      o.frequency.setValueAtTime(f, t);
+      o.frequency.exponentialRampToValueAtTime(f*0.45, t + 0.055);
+      const g = ctx.createGain();
+      o.connect(g); g.connect(p);
+      env(g, t, 0.075*strength, 0.001, 0.07);
+      o.start(t); o.stop(t + 0.18);
+      t += 0.55 + Math.random()*0.75;
+    }
+  }
+
+  /* The building itself, taking weight it was not expecting. A very low
+     groan with the timber creak riding on top of it. This is the one
+     that is genuinely nothing -- most of the time. */
+  function houseGroan(strength=0.6){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const dur = 2.2 + Math.random()*1.6;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(38 + Math.random()*10, t0);
+    o.frequency.linearRampToValueAtTime(29, t0 + dur);
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 190; lp.Q.value = 2;
+    const g = ctx.createGain();
+    o.connect(lp); lp.connect(g); g.connect(master);
+    env(g, t0, 0.11*strength, 0.7, dur);
+    o.start(t0); o.stop(t0 + dur + 0.4);
+    // timber, riding on it
+    const src = ctx.createBufferSource(); applyNoise(src, 3.0, 'brown');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 4;
+    bp.frequency.setValueAtTime(310, t0);
+    bp.frequency.linearRampToValueAtTime(190, t0 + dur);
+    const sg = ctx.createGain();
+    src.connect(bp); bp.connect(sg); sg.connect(master);
+    env(sg, t0 + 0.2, 0.05*strength, 0.5, dur*0.8);
+    src.start(t0); src.stop(t0 + dur + 0.4);
+  }
+
+  /* Breath that is not yours, close enough that there is no distance in
+     it at all -- no panner, no room, just one side of your head. The
+     nastiest thing in the bank and the rarest. */
+  function breathAtEar(pan, strength=0.7){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    // panNode returns null where the browser has no stereo panner, so the
+    // fallback is the same as whisper's: straight to master, centred
+    const sp = panNode(pan);
+    const cycles = 2 + (Math.random()*2|0);
+    let t = t0;
+    for(let i=0;i<cycles;i++){
+      const inh = 0.42 + Math.random()*0.20;
+      const src = ctx.createBufferSource(); applyNoise(src, 2.0, 'white');
+      const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 1.1;
+      bp.frequency.setValueAtTime(520, t);
+      bp.frequency.linearRampToValueAtTime(900, t + inh);
+      const g = ctx.createGain();
+      src.connect(bp); bp.connect(g);
+      if(sp){ g.connect(sp); sp.connect(master); } else g.connect(master);
+      env(g, t, 0.075*strength, inh*0.55, inh*0.75);
+      src.start(t); src.stop(t + inh + 0.3);
+      t += inh + 0.14 + Math.random()*0.22;
+    }
+  }
+
+  // a word you cannot quite make out, right beside your ear
+  function whisper(pan=0, strength=0.6){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const sp = panNode(pan);
+    const src = ctx.createBufferSource(); applyNoise(src, 1.6, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 3.2;
+    const g = ctx.createGain();
+    src.connect(bp); bp.connect(g);
+    if(sp){ g.connect(sp); sp.connect(master); } else g.connect(master);
+    // formant sweep through three vowels: the shape of speech without words
+    const syll = 2 + (Math.random()*2|0);
+    let t = t0;
+    for(let i=0;i<syll;i++){
+      const f = [420, 760, 1180, 640][ (Math.random()*4)|0 ];
+      bp.frequency.setValueAtTime(f, t);
+      bp.frequency.linearRampToValueAtTime(f*(0.6+Math.random()*0.7), t+0.16);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.13*strength, t+0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.20);
+      t += 0.20 + Math.random()*0.10;
+    }
+    src.start(t0); src.stop(t+0.3);
+  }
+  // something heavy hitting the underside of a hatch or a floor
+  function thump(pos, strength=0.8){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = pos ? panner(pos) : master;
+    const src = ctx.createBufferSource(); applyNoise(src, 0.8, 'brown');
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 260; lp.Q.value=1.4;
+    const g = ctx.createGain(); src.connect(lp); lp.connect(g); g.connect(p);
+    env(g, t0, 0.55*strength, 0.003, 0.30);
+    src.start(t0); src.stop(t0+0.6);
+    const o = ctx.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(78, t0); o.frequency.exponentialRampToValueAtTime(31, t0+0.28);
+    const og = ctx.createGain(); o.connect(og); og.connect(master);
+    env(og, t0, 0.34*strength, 0.002, 0.30);
+    o.start(t0); o.stop(t0+0.4);
+  }
+  /* A DOOR COMING APART, which is a different event from a knock on one.
+
+     Three planks nailed across a frame is the most work anything in the
+     house does all night, and when it finally gives it needs to sound
+     like the end of that work rather than one more hit. So this is a
+     thump's low body with a bright splintering top over it: brown noise
+     through a lowpass for the mass of the leaf hitting the wall, and a
+     short burst of high-passed white for the nails tearing out of the
+     timber. Louder and longer than knock(), and it is the only sound in
+     the file that says a barricade has failed. */
+  function crash(pos, strength=1.0){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    const p = pos ? panner(pos) : master;
+    // the body: the leaf and the frame
+    const src = ctx.createBufferSource(); applyNoise(src, 1.0, 'brown');
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 320; lp.Q.value=1.1;
+    const g = ctx.createGain(); src.connect(lp); lp.connect(g); g.connect(p);
+    env(g, t0, 0.72*strength, 0.004, 0.55);
+    src.start(t0); src.stop(t0+0.9);
+    // the splinter: nails coming out of wood
+    const sp = ctx.createBufferSource(); applyNoise(sp, 0.5, 'white');
+    const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 1900;
+    const sg = ctx.createGain(); sp.connect(hp); hp.connect(sg); sg.connect(p);
+    env(sg, t0, 0.30*strength, 0.002, 0.22);
+    sp.start(t0); sp.stop(t0+0.35);
+    // and the drop underneath it
+    const o = ctx.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(96, t0); o.frequency.exponentialRampToValueAtTime(28, t0+0.42);
+    const og = ctx.createGain(); o.connect(og); og.connect(master);
+    env(og, t0, 0.42*strength, 0.002, 0.42);
+    o.start(t0); o.stop(t0+0.55);
+  }
+  // many small feet, for the things that are not the tall one
+  /* Claws on boards. This is the most frequently fired sound in the
+     game — the crawler emits one on every step, and its step interval is
+     a fifth of a second — so it is built to be cheap.
+
+     It used to be fourteen separate buffer sources, fourteen bandpass
+     filters and fourteen gains PER CALL: forty-two new nodes five times
+     a second while the crawler was moving. It is now one source gated by
+     one envelope through one filter that jumps frequency per tick, which
+     is both a fourteenth of the cost and closer to what claws on a
+     floorboard actually are: continuous scrabbling, chopped up. */
+  let lastSkitter = -9;
+  function skitter(pos, strength=0.5){
+    if(!ready) return;
+    const t0 = ctx.currentTime;
+    if(t0 - lastSkitter < 0.085) return;         // never let them stack up
+    lastSkitter = t0;
+    const p = pos ? panner(pos) : master;
+    const src = ctx.createBufferSource(); applyNoise(src, 0.9, 'white');
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 5;
+    const g = ctx.createGain(); g.gain.value = 0.0001;
+    src.connect(bp); bp.connect(g); g.connect(p);
+    if(!pos) g.connect(verbSend);
+    let t = t0;
+    const n = 9 + (Math.random()*5|0);
+    for(let i=0;i<n;i++){
+      const a = Math.max(0.0004, 0.20*strength*(0.45 + Math.random()*0.8));
+      bp.frequency.setValueAtTime(1400 + Math.random()*2600, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(a, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.042);
+      t += 0.028 + Math.random()*0.030;
+    }
+    g.gain.setValueAtTime(0, t + 0.02);
+    src.start(t0); src.stop(t + 0.06);
+  }
+
+  function click(){
+    if(!ready) return;
+    const t0=ctx.currentTime;
+    const src=ctx.createBufferSource(); applyNoise(src, 0.1, 'white');
+    const bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2600; bp.Q.value=4;
+    const g=ctx.createGain(); src.connect(bp); bp.connect(g); g.connect(master);
+    env(g,t0,0.12,0.001,0.045);
+    src.start(t0); src.stop(t0+0.12);
+  }
+  /* `occ` is 0 when you are in the room with it and 1 when the whole deck
+     is between you and it. Closing the hatch swings it most of the way. */
+  function setGenerator(on, pos, occ=0){
+    if(!ready) return;
+    const t = ctx.currentTime;
+    if(pos && !gen.placed){
+      if(gen.pan.positionX){
+        gen.pan.positionX.value = pos.x; gen.pan.positionY.value = pos.y; gen.pan.positionZ.value = pos.z;
+      } else gen.pan.setPosition(pos.x, pos.y, pos.z);
+      gen.placed = true;
+    }
+    const muffle = clamp(occ, 0, 1);
+    gen.gain.gain.setTargetAtTime(on ? 0.62 * lerp(1.0, 0.16, muffle) : 0.0, t, on ? 0.30 : 0.9);
+    gen.occl.frequency.setTargetAtTime(lerp(3200, 150, muffle), t, 0.30);
+    gen.filter.frequency.setTargetAtTime(on ? 1500 : 400, t, 0.4);
+  }
+  // read-only view of the generator bus, for diagnostics
+  function genState(){
+    return ready ? { gain: gen.gain.gain.value, cutoff: gen.occl.frequency.value }
+                 : { gain: 0, cutoff: 0 };
+  }
+  return { init, resume, updateListener, setRainMix, thunder, distantThunder, genState,
+           footstep, creak, doorCreak, doorHandle, doorLatch, scuff, knock, click,
+           hatchSwing, hatchDrop, setGenerator,
+           breakerStrain, breakerTrip, breakerReset, applianceStart, hammer, windowForce,
+           setDrone, heartbeat, pumpHeart, sting, creatureRoar,
+           breath, scratch, whisper, thump, crash, skitter,
+           drag, furnitureScrape, pipes, drip, houseGroan, breathAtEar,
+           setBirds, updateBirds, setStorm, setEarshot, occlusionAt,
+           get storm(){ return stormLevel; },
+           get ctx(){ return ctx; }, get ready(){ return ready; },
+           get panRing(){ return panRing; } };
+})();
+
+
+  /* ---------- lifted: RESOURCES (531 lines) ---------- */
+
+/* =====================================================================
+   ===== RESOURCES =====
+   The strategy layer's ledger. The power chain is live: the grid fails
+   for good partway through the night, the generator has to be started by
+   hand in the GARAGE at the far end of the east wing, and the breaker
+   priorities decide who gets what is left.
+   ===================================================================== */
+/* How much house is between the player and the generator. The panner
+   handles distance; this handles what the sound has to get through. */
+/* The generator lives in the garage now, not the cellar, so occlusion is
+   no longer a question about the hatch — it is how much house is between
+   you and the far end of the east wing. The room graph already answers
+   exactly that, per door, so ask it. Standing in the garage you hear all
+   of it; from the old house with the wing door shut you hear almost
+   none, which is precisely the twenty metres the wing exists to create. */
+function generatorOcclusion(){
+  if(Player.room === 'garage') return 0.03;
+  if(Player.room === 'sidehall') return 0.30;   // straight down the corridor
+  const vis = computeRoomVisibility(Player.room);
+  const through = clamp(vis.garage ?? 0, 0, 1);
+  // never fully sealed: a running generator two rooms off is still a
+  // thing you can hear, and it is the landmark that tells you it is on
+  return clamp(0.88 - through*0.80, 0.03, 0.88);
+}
+
+const Resources = {
+  /* THE MAINS DO NOT LAST THE NIGHT. The grid used to be permanently on
+     with only 20-90 second brownouts from close strikes, so the generator
+     was decoration and the fuel economy never mattered. Now the line
+     comes down for good at some point in the small hours — after that the
+     only power in the house is what you make, and the tank holds a little
+     under one night's burn, so you have to choose what stays on. */
+  grid: true,             // mains power
+  gridDead: false,        // the line is down for the rest of the night
+  gridFailIn: 0,          // seconds until it goes; seeded per night
+  gridOutTimer: 0,        // a temporary storm brownout
+  generatorOn: false,
+  fuel: 6.5,              // litres
+  /* WHAT IT BURNS, and it depends on what you are asking of it. A flat
+     0.85 an hour meant an idling generator cost exactly as much as one
+     carrying nine hundred watts, which made starting it early a pure
+     trap and made switching things off pointless once it was running.
+
+     Idle is 0.30 and the load adds up to 0.72 more, so at the ~700W a
+     working night actually pulls it comes out at 0.86 — the same
+     shortfall the night is designed around (0.85 x 9 hours = 7.65 against
+     a 6.5 litre tank) — while an idling one is cheap and a hammered one
+     is dear. */
+  fuelIdle: 0.30,         // litres per in-game hour, running unloaded
+  fuelLoad: 0.72,         // and up to this much more, at full capacity
+  battery: 100,           // camera / tablet battery, %
+  torchFuel: 100,
+  /* %/s. A cell is three minutes of light, not ten. The torch was
+     cheap enough to simply leave on for most of a night, which quietly
+     removed the decision it exists to create — and made the charger, the
+     dead-cell pile and the 90W it draws off the generator into scenery.
+     Three minutes means you switch it off between rooms. */
+  torchDrain: 0.55,
+  // --- the breaker: a real ceiling on what the house can run at once ---
+  capacityGrid: 1500,     // watts
+  capacityGen: 900,
+  load: 0,
+  tripped: false,
+  overload: 0,            // seconds spent over capacity
+  onCharger: false,       // is the flashlight sitting in the wall cradle?
+  carrying: null,         // a fuel can, if you picked one up
+  // consumables (spent in the gameplay pass)
+  /* NAILS ARE THE BOTTLENECK, not boards. At 34 you could place eight
+     boards, which is enough to seal BOTH bedroom doors from the opening
+     minute and simply live in there until six — the turtle solve. At 20
+     you can place five: one door sealed for good, or a couple of doors
+     slowed down, and that is the decision. More timber exists, but only
+     on the woodpile in the yard, which means every extra barricade is
+     paid for with a trip outside in the dark. */
+  food: 6, water: 8, boards: 9, nails: 20, medical: 2,
+  /* ONE LIGHT, ONE CELL, NO SPARES.
+
+     There used to be three spare cells, a pile of flat ones, and a bench
+     charger that turned the second into the first — a little economy you
+     could run in the background, and the trouble with it was that the
+     answer to "the torch is dead" was always in your pocket. Swapping a
+     cell cost a keypress. The beam was effectively free four times over,
+     and a light that is free is a light you never think about, which is
+     the one thing this house cannot afford.
+
+     There is one flashlight and one cell in it. When it browns out, that
+     is the end of the beam until you walk it to the cradle in the utility
+     room and give it real minutes of real current — the same current the
+     generator is rationing, in the room at the wrong end of the house.
+     Nothing else in the game makes light you can carry.
+
+     The cell does NOT come back at the top of a night. It is a carried
+     consumable like the fuel and the boards: finish a night on an empty
+     torch and you start the next one in the dark, with the mains still
+     up and a decision to make about how you spend that. */
+  // the equipment you can put down. Also seeded per night.
+  kitTrips: 3, kitSensors: 2, kitFloods: 2,
+  // which circuits the breaker panel is feeding when on generator
+  /* Which circuits the panel is feeding when the house is on generator.
+     `floods` is not a room — it is the yard circuit, and it is the only
+     one you can throw from the panel by hand mid-night. */
+  /* WHICH CIRCUITS THE GENERATOR CARRIES. Not a lighting table — the
+     whole house is wired through this, appliances included. utility is
+     the washer's circuit and bedroom is the workstation's, and neither
+     of them is on the generator until you have been up to the attic and
+     thrown the isolator. That is what "a second feed" means. */
+  /* EVERY ROOM IS IN HERE, and the four that were not are the reason
+     the whole east wing went permanently dark the moment the mains
+     failed: roomPower() reads this table and an absent key is undefined,
+     which is falsy, so sidehall, bedroom2, bathroom and the GARAGE could
+     never be lit on the generator and were never billed for either. The
+     garage is where the generator stands — its own room comes up with
+     it, because walking to the machine you are feeding in the dark
+     forever is not a mechanic, it is an oversight. The rest of the wing
+     stays off until you close the roof-space feed. */
+  priority: { living:true, kitchen:true, hall:true, bedroom:false, utility:false,
+              basement:true, porch:false, attic:false, garage:true,
+              sidehall:false, bedroom2:false, bathroom:false, floods:false },
+
+  supply(){ return this.grid || this.generatorOn; },
+  burnRate(){
+    const cap = this.capacityGen || 900;
+    return this.fuelIdle + this.fuelLoad * clamp(this.currentLoad() / cap, 0, 1);
+  },
+  capacity(){ return this.grid ? this.capacityGrid : (this.generatorOn ? this.capacityGen : 0); },
+  roomPower(room){
+    if(this.tripped) return 0;
+    if(this.grid) return 1;
+    if(this.generatorOn && this.priority[room]) return 1;
+    return 0;
+  },
+  // everything drawing current right now
+  currentLoad(){
+    let w = 0;
+    for(const p of Lights.practicals) if(p.on && this.roomPower(p.room) > 0) w += p.watts;
+    // the yard circuit, when it is closed
+    if(this.priority.floods && !this.tripped && this.supply())
+      for(const f of Equipment.floodlights) if(f.on) w += f.watts;
+    /* THE APPLIANCES ARE ON CIRCUITS TOO. They were counted whenever they
+       were running and startable whenever ANY supply existed, which drove
+       a hole straight through the circuit-selection mechanic: after the
+       mains died you could start the washer — in the utility room, a
+       circuit the generator explicitly does not carry — and it would pull
+       800 of the generator's 900 watts. The one decision the generator
+       exists to create was bypassed by the two things you most want to
+       run. Now they draw from their own circuit or they do not run. */
+    if(World.washer && World.washer.running && this.roomPower('utility') > 0) w += 800;
+    if(World.workstation && World.workstation.running && this.roomPower('bedroom') > 0) w += 420;
+    if(this.onCharger && !this.tripped && this.supply()) w += 90;
+    if(UI.tabletOpen) w += 25;
+    return w;
+  },
+  trip(reason){
+    if(this.tripped) return;
+    this.tripped = true;
+    this.overload = 0;
+    if(World.washer) World.washer.running = false;
+    if(World.workstation) World.workstation.running = false;
+    Audio.breakerTrip(World.breaker ? World.breaker.pos : camera.position);
+    UI.say('A hard snap from under the floor, and the house goes out.');
+    GameState.stress = clamp(GameState.stress + 0.22, 0, 1);
+    Director.notice('grid-down', 0.45);
+  },
+  resetBreaker(){
+    if(!this.tripped){ UI.say('Every breaker is already closed.'); return; }
+    this.tripped = false;
+    this.overload = 0;
+    Audio.breakerReset(World.breaker ? World.breaker.pos : camera.position);
+    UI.say(this.supply()
+      ? 'The breakers go back over. The house comes up around you.'
+      : 'The breakers go back over. Nothing comes up — there is nothing ' +
+        'feeding them.');
+  },
+  gridFlicker(){
+    if(!this.grid || this.gridDead) return;
+    this.grid = false;
+    this.gridOutTimer = randf(20, 90);
+    /* And it says what actually happened. With the generator running the
+       lights do not die at all — it picks the load up — and the fridge is
+       in the kitchen, not under the house. */
+    UI.say(this.generatorOn
+      ? 'The mains stutter and drop. The generator picks the house up.'
+      : 'The lights die. Over in the kitchen, the fridge stops humming.');
+    Director.notice('grid-down', 0.35);
+  },
+  // the line comes down and stays down
+  killGrid(){
+    if(this.gridDead) return;
+    this.gridDead = true;
+    this.grid = false;
+    this.gridOutTimer = 1e9;
+    Audio.breakerTrip(World.breaker ? World.breaker.pos : camera.position);
+    UI.say('The mains go, and this time they do not come back. ' +
+           (this.generatorOn
+              ? 'Whatever you have not put on the generator, you have lost.'
+              : 'The generator is in the garage, at the far end of the wing.'), 9);
+    Director.notice('grid-down', 0.8);
+  },
+  // a new night puts the line back up and re-arms the failure
+  /* Called at the top of every night. It re-arms the line, and — since
+     it is the only per-night ledger hook there is — the consumables that
+     are meant to reset with it: the equipment kit and the tablet. Fuel,
+     boards and THE CELL IN THE TORCH deliberately do NOT reset; they are
+     the things you carry across. The torch used to be covered by the
+     three spares this reset, and with the spares gone, topping it up
+     here would hand back the one resource the night is supposed to spend
+     — so a flat torch stays flat into the next night and the cradle is
+     the only way back. */
+  armGrid(){
+    for(const c of Equipment.cameras){
+      c.dead = false; c.deadUntil = 0; c.ghostFrames = 0;
+      c.lastSuccessfulCapture = 0; c.blanked = false;
+    }
+    /* THE TABLET GOES BACK ON FULL. It never did, and it had no recharge
+       path either, so its 100% drained away at 0.30/s of open-tablet
+       time and stayed at zero for every night after the first. At zero
+       every feed took the `dead` branch in updateFeeds and stopped being
+       captured — seven canvases holding their last image with NO SIGNAL
+       over them, which from the player's side is the cameras freezing
+       and never coming back. */
+    this.battery = 100;
+    this.kitTrips = 3; this.kitSensors = 2; this.kitFloods = 2;
+    /* The attic resets with everything else: the isolator drops out, the
+       footlocker is restocked, and the ways up go back to how the house
+       leaves them. That is what makes the attic a trip you take EVERY
+       night rather than a one-time unlock. */
+    this.capacityGen = 900;
+    this.priority.utility = false;
+    this.priority.bedroom = false;
+    this.priority.sidehall = false;
+    if(World.isolator){
+      World.isolator.on = false;
+      World.isolator.lever.rotation.z = 0;
+      World.isolator.led.material.color.setHex(0x3a1008);
+    }
+    if(World.footlocker) World.footlocker.taken = false;
+    // every way into the attic starts SHUT. Opening one is a decision
+    // you make, and it is a decision that makes a noise.
+    for(const c of ATTIC_CLIMBS){
+      c.blocked = false; c.cleared = false;
+      setAtticClimbOpen(c, false);
+    }
+    // the crates go back on their stack and the wardrobe back on the hatch
+    const ac = World.atticCrates;
+    if(ac && (ac.home.x !== 5.4 || ac.home.z !== 1.2)){
+      const dx = 5.4 - ac.home.x, dz = 1.2 - ac.home.z;
+      ac.group.position.set(5.4, 0, 1.2); ac.group.rotation.y = 0;
+      ac.solid.min.x += dx; ac.solid.max.x += dx;
+      ac.solid.min.z += dz; ac.solid.max.z += dz;
+      ac.home.set(5.4, 0, 1.2);
+    }
+    if(World.bedWardrobe && World.bedWardrobe.position.x > 2.5){
+      World.bedWardrobe.position.x -= 1.75;
+      const sd = World.bedWardrobeSolid;
+      if(sd){ sd.min.x -= 1.75; sd.max.x -= 1.75; }
+    }
+    // the ladder gets blocked somewhere in the middle third of the night
+    this.ladderBlockIn = randf(240, 430);
+    /* A BREAKER THROWN AT FIVE IN THE MORNING STAYED THROWN. `tripped`
+       killed roomPower() for every room, so night 2 could begin with the
+       mains up, the generator running and not one light in the house
+       able to come on, with no indication why. The panel goes back in. */
+    this.tripped = false;
+    /* AND THE CANS COME BACK. They are the only way to put fuel in the
+       tank, they live in the garage, and nothing refilled them — so a
+       night 1 that emptied all four left every later night with no fuel
+       economy at all while the jobs still needed the generator. The tank
+       itself deliberately does NOT reset: what you saved is yours. */
+    if(this.carrying){ this.carrying = null; }
+    for(const c of (World.cans || [])){
+      c.litres = 3.0; c.empty = false;
+      if(c.mesh){ c.mesh.visible = true; c.mesh.position.copy(c.home); c.mesh.scale.setScalar(1); }
+    }
+    this.grid = true; this.gridDead = false; this.gridOutTimer = 0;
+    // 2.5 to 5.5 real minutes in, which on a 13.5 minute night is
+    // somewhere between about half ten and half twelve
+    this.gridFailIn = randf(150, 330);
+  },
+  pourCan(){
+    if(!this.carrying) return;
+    /* POUR WHAT FITS AND KEEP THE REST. The tank tops out at 14 and the
+       cans are 3 litres each, so "empty the can in" threw away half a
+       litre on the third can and the whole of the fourth. You pour until
+       it is full and carry the rest back. */
+    const room = Math.max(0, 14 - this.fuel);
+    const pour = Math.min(room, this.carrying.litres);
+    this.fuel += pour;
+    this.carrying.litres -= pour;
+    if(this.carrying.litres > 0.05){
+      UI.say(`The tank takes ${pour.toFixed(1)} and will not take any more. ` +
+             `${this.fuel.toFixed(1)} litres in it, ${this.carrying.litres.toFixed(1)} still in the can.`, 6);
+    } else {
+      UI.say(`You empty the can in. ${this.fuel.toFixed(1)} litres.`);
+    }
+    Audio.scuff('metal', 0.6, World.generator.pos);
+    // the can goes back where it was, with whatever is still in it
+    this.carrying.mesh.visible = true;
+    this.carrying.mesh.position.copy(this.carrying.home);
+    this.carrying.mesh.scale.setScalar(1);
+    this.carrying.empty = this.carrying.litres <= 0.05;
+    if(this.carrying.empty) this.carrying.litres = 0;
+    this.carrying = null;
+  },
+  toggleGenerator(){
+    if(this.fuel <= 0.05){ UI.say('The tank is dry.'); Audio.click(); return; }
+    this.generatorOn = !this.generatorOn;
+    Audio.click();
+    /* NEITHER OF THESE GETS TO ASSUME IT IS THE ONLY THING FEEDING THE
+       HOUSE. Shutting the generator down while the mains are up changes
+       nothing you can see, and "the dark comes back in" was simply not
+       true — you switched off a machine in the garage and the hall light
+       stayed on. And it was not dying, you turned it off. */
+    if(this.generatorOn){
+      UI.say('The generator catches on the third pull.' +
+             (this.tripped ? ' The breakers are still out.' : ''));
+      World.generator.led.material.color.setHex(0x2f8f3a);
+    } else {
+      UI.say(this.grid && !this.tripped
+        ? 'You shut the generator down. The mains still have the house.'
+        : 'You shut the generator down, and the house goes with it.');
+      World.generator.led.material.color.setHex(0x401008);
+    }
+  },
+  update(dt){
+    const hours = dt / 90;                 // 90 real seconds ≈ 1 in-game hour
+
+    /* ---- load and the breaker ---- */
+    this.load = this.currentLoad();
+    const cap = this.capacity();
+    if(!this.tripped && cap > 0 && this.load > cap){
+      // a little grace, so a brief spike is survivable and audible first
+      this.overload += dt;
+      if(this.overload > 1.6) this.trip('overload');
+      else if(rand() < dt*3) Audio.breakerStrain(World.breaker ? World.breaker.pos : camera.position);
+    } else this.overload = Math.max(0, this.overload - dt*0.6);
+
+    /* ---- the two jobs that have to get done tonight ---- */
+    const powered = !this.tripped && this.supply();
+    const W = World.washer, PC = World.workstation;
+    /* An interruption costs the SAME on both machines: it stops, and you
+       lose the last few percent. The workstation used to drop 12% while
+       the washer lost nothing but time, which meant one breaker mistake
+       was trivial on one objective and punishing on the other for no
+       reason the player could see. 6% is about nine seconds of work on
+       either — a real setback, not a reset. */
+    const INTERRUPT_LOSS = 0.06;
+    /* AND THEY KEEP CHECKING THE CIRCUIT THEY ARE ON.
+
+       Starting the washer already asked roomPower('utility'), and
+       currentLoad() already billed it against that circuit. This loop did
+       not: it asked `powered`, which is "the mains OR the generator is
+       running" and says nothing about whether this room is fed. So the
+       one case the whole mechanic exists for — start it on the mains, the
+       mains die, the roof-space feed is still open — left the machine
+       turning, making noise and finishing the job while drawing zero
+       watts from a generator that does not carry that room. */
+    const wRoom = () => this.roomPower('utility') > 0;
+    const pcRoom = () => this.roomPower('bedroom') > 0;
+    if(W && W.running){
+      if(!wRoom()){
+        W.running = false;
+        W.progress = Math.max(0, W.progress - INTERRUPT_LOSS);
+        UI.say(`The machine stops mid-cycle. ${(W.progress*100)|0}% still on the drum.`);
+      }
+      else {
+        W.progress = Math.min(1, W.progress + dt/95);
+        W.drum.rotation.z += dt * 7.5;
+        Player.noise = Math.min(1, Player.noise + dt*0.30);   // it is LOUD
+        if(W.progress >= 1){ W.running = false; W.done = true;
+          UI.say('The cycle ends. One thing off the list.'); Objectives.check(); }
+      }
+    }
+    if(PC && PC.running){
+      if(!pcRoom()){
+        PC.running = false;
+        PC.progress = Math.max(0, PC.progress - INTERRUPT_LOSS);
+        UI.say(`The screen dies. ${(PC.progress*100)|0}% of the transfer survived.`);
+      }
+      else {
+        PC.progress = Math.min(1, PC.progress + dt/110);
+        if(PC.progress >= 1){ PC.running = false; PC.done = true;
+          UI.say('Transfer complete.'); Objectives.check(); }
+      }
+    }
+    if(PC) PC.glow.material.opacity = PC.running ? 0.35 + 0.25*Math.sin(GameState.t*9) : (PC.done ? 0.12 : 0);
+
+    /* ---- the flashlight on its cradle ---- */
+    /* The cradle is on the utility-room wall, so it charges off the
+       utility circuit rather than off "some supply exists somewhere". */
+    if(this.onCharger){
+      if(this.roomPower('utility') > 0){
+        this.torchFuel = Math.min(100, this.torchFuel + dt*3.2);
+        if(World.charger) World.charger.led.material.color.setHex(
+          this.torchFuel >= 99.5 ? 0x2f8f3a : 0x8a5a10);
+      } else if(World.charger) World.charger.led.material.color.setHex(0x201008);
+    }
+    /* THE LADDER GETS BLOCKED. Partway through the night a stack of the
+       attic's own crates comes down across the head of the utility
+       ladder. It is a real physical event with a real sound in a real
+       place — if you are up there you see it happen — and afterwards
+       that route is one-way. */
+    if(this.ladderBlockIn > 0){
+      this.ladderBlockIn -= dt;
+      if(this.ladderBlockIn <= 0){
+        const c = ATTIC_CLIMBS.find(k => k.id === 'util');
+        if(c && !c.blocked){
+          c.blocked = true;
+          // they land across the deck end of the flight, which is the end
+          // you would be coming UP to — which is why it stays one-way
+          const hiZ = c.up > 0 ? c.z1 : c.z0;
+          const p = new THREE.Vector3((c.x0+c.x1)/2, CFG.ATTIC.floor,
+                                      hiZ + Math.sign(c.up) * 0.62);
+          const ac = World.atticCrates;
+          if(ac){
+            ac.group.position.set(p.x, 0, p.z);
+            ac.group.rotation.y = 0.42;
+            const dx = p.x - ac.home.x, dz = p.z - ac.home.z;
+            ac.solid.min.x += dx; ac.solid.max.x += dx;
+            ac.solid.min.z += dz; ac.solid.max.z += dz;
+            ac.home.set(p.x, 0, p.z);
+          }
+          Audio.thump(p, 1.0);
+          Audio.scuff('wood', 0.9, p);
+          Director.stimulus('crash', p, 'attic', 0.9, true);
+          /* It said "up above the utility room" wherever the crates
+             landed. `p` is the head of whichever climb was used, so the
+             room it is over is a lookup, not a guess. */
+          const under = roomAt(p.x, p.z, 'ground', false);
+          const name = (CFG.ROOMS[under] && CFG.ROOMS[under].name || '')
+                         .toLowerCase() || 'the house';
+          UI.say(Player.room === 'attic'
+            ? 'A stack of crates goes over across the head of the ladder.'
+            : `Something heavy comes down, up above the ${name}.`, 5);
+        }
+      }
+    }
+    // the line's own clock: it fails once a night and does not recover
+    if(this.grid && !this.gridDead && Sky.phase === 'night'){
+      this.gridFailIn -= dt;
+      if(this.gridFailIn <= 0) this.killGrid();
+    }
+    /* THE MAINS COMING BACK, AND SAYING ONLY WHAT HAPPENS.
+
+       This branch is only ever reachable from gridFlicker -- a storm
+       brownout with a 20-90s clock. killGrid parks the timer at 1e9 AND
+       sets gridDead, and the guard below tests gridDead explicitly, so a
+       permanent kill can never be walked back by a decrementing counter.
+
+       It used to announce "the mains come back with a thump" and play
+       nothing. There is no thump in the audio graph at that moment: the
+       player reads a sound that never existed. Two things fix it. The
+       contactor DOES thump when it drops back in, so play the thump --
+       at the breaker panel, where the noise would come from, occluded by
+       distance like every other world sound. And what the line says has
+       to match what the player can actually perceive: with the generator
+       already carrying the house, nothing visible changes at all, so it
+       does not get a sentence about lights. */
+    if(!this.grid && !this.gridDead){
+      this.gridOutTimer -= dt;
+      if(this.gridOutTimer <= 0){
+        this.grid = true;
+        const at = World.breaker ? World.breaker.pos : camera.position;
+        Audio.thump(at, 0.9);
+        if(this.generatorOn){
+          // the generator never dropped the load; you barely notice
+          UI.say('Something heavy drops back in under the house. You barely notice.', 4);
+        } else {
+          /* Only name a light if a light actually comes up. `on` is the
+             switch; roomPower decides whether current reaches it. */
+          const lit = Lights.practicals.some(l => l.on && this.roomPower(l.room) > 0);
+          UI.say(lit ? 'The contactor drops back in and the lights come up with it.'
+                     : 'The contactor drops back in. Nothing was switched on to show for it.', 5);
+        }
+      }
+    }
+    /* And one whose circuit goes out UNDER it stops, rather than carrying
+       on drawing current from a feed that is not there.
+
+       COALESCED, because they used to stack. killGrid says its piece, and
+       on that same frame the washer's circuit and the workstation's
+       circuit both go dead and each said its own -- three lines shoving
+       each other off the screen for one event the player experienced as
+       one event. Whatever stops on a given tick is collected and spoken
+       once, and if BOTH stop it is not a list of appliances, it is the
+       house going quiet. */
+    {
+      const stopped = [];
+      if(World.washer && World.washer.running && this.roomPower('utility') <= 0){
+        World.washer.running = false; stopped.push('drum');
+      }
+      if(World.workstation && World.workstation.running && this.roomPower('bedroom') <= 0){
+        World.workstation.running = false; stopped.push('transfer');
+      }
+      if(stopped.length === 2)
+        UI.say('The drum winds down, the screen goes with it, and the house is quiet.', 5);
+      else if(stopped[0] === 'drum')
+        UI.say('The drum winds down. Whatever is feeding the house, it is not feeding this room.', 5);
+      else if(stopped[0] === 'transfer')
+        UI.say('The transfer stops dead. The screen goes with it.', 5);
+    }
+    if(this.generatorOn){
+      this.fuel = Math.max(0, this.fuel - this.burnRate()*hours);
+      if(this.fuel <= 0){
+        this.generatorOn = false;
+        World.generator.led.material.color.setHex(0x401008);
+        UI.say('The generator coughs, and stops.' +
+               (this.grid ? '' : ' Everything that was on it goes with it.'));
+      }
+    }
+    World.generator.running = this.generatorOn;
+    Audio.setGenerator(this.generatorOn, World.generator.pos, generatorOcclusion());
+    if(Lights.torchOn && !this.onCharger && !DEV.infTorch){
+      this.torchFuel = Math.max(0, this.torchFuel - dt*this.torchDrain);
+      if(this.torchFuel <= 0){
+        Lights.torchOn = false;
+        // and that is the last of the light until the cradle gets it
+        UI.say('The flashlight browns out and dies. That was the only cell.');
+      }
+    }
+    /* THE TABLET CELL: it drains while you are looking at it and it
+       charges off the house the rest of the time. Without the second
+       half it was a one-way meter with 333 seconds in it and no way to
+       put anything back, on a 810-second night. Charging is slower than
+       draining and needs power, so watching the wall all night is still
+       a choice that costs you something. */
+    if(UI.tabletOpen) this.battery = Math.max(0, this.battery - dt*(UI.nightVision?0.55:0.30));
+    else if(this.roomPower(Player.room) > 0)
+      this.battery = Math.min(100, this.battery + dt*0.22);
+  }
+};
+
+
+  /* ---------- lifted: EQUIPMENT (228 lines) ---------- */
+
+/* =====================================================================
+   ===== EQUIPMENT =====
+   The seven cameras, and the three things you can put down yourself.
+
+   ---------------------------------------------------------------------
+   WHERE THE KIT COMES FROM
+   ---------------------------------------------------------------------
+   There is no inventory screen and there is not going to be one. The kit
+   lives in a box on the utility-room workbench: hold E on the bench to
+   pick one thing up, and you are then carrying it — the same
+   single-object "carrying" state the fuel cans already use, because a
+   game where you can hold one thing is a game where choosing what to
+   hold is a decision. E again puts it down somewhere legal.
+
+   Each of the three has exactly ONE legal kind of spot, and the spot is
+   chosen so that placement is a judgement about the house rather than a
+   fiddly aiming exercise:
+
+     TRIPWIRE     across a doorway you are looking at. A doorway has two
+                  jambs, which is where a wire goes; it also means the
+                  wire lives on a room-graph EDGE, so "did something walk
+                  through it" is a question the graph can answer.
+     SENSOR       on the floor where you stand. A point and a radius.
+     FLOODLIGHT   outside only, where you stand. Draws 150W off the
+                  generator, and lights a patch of yard.
+
+   ---------------------------------------------------------------------
+   WHAT THEY ARE FOR
+   ---------------------------------------------------------------------
+   None of them hurts anything. This is not a game where you fight, and
+   these are not weapons. What they sell you is KNOWLEDGE, which is the
+   only currency the house deals in: a tripwire tells you something
+   crossed a threshold, a sensor tells you something is in a room, a
+   floodlight tells you what is in the yard — and, because of the lit-room
+   rule, keeps it off you while you are standing in the light.
+
+   And every one of them costs. The wire costs a nail, which is boards
+   you will not put up. The floodlight costs 150W of a 900W generator,
+   which is a circuit you cannot feed at the same time.
+   ===================================================================== */
+const Equipment = {
+  cameras: [],          // filled by buildCameras()
+  sensors: [],          // { pos, room, group, led, cooldown, ping }
+  tripwires: [],        // { a, b, room, other, door, mesh, spent }
+  floodlights: [],      // { pos, light, group, on, room:'outside' }
+  // Each camera hangs off a bracket bolted to a real wall: `mount` is the
+  // point on the wall surface, `pos` is where the body ends up.
+  /* Every camera sits in a CORNER of its room and looks at the far
+     diagonal corner, which is the only placement that gets a whole
+     rectangular room into one frame. They used to sit mid-wall aimed
+     part-way across, so each feed showed most of one half of its room and
+     none of the other — the hall in particular was filmed from the side
+     of a twelve-metre corridor. The hall camera now looks straight down
+     the length of it, and the basement camera has moved right into the
+     west corner because it is by far the biggest room in the house. */
+  spots: [
+    { name:'LIVING',  room:'living',   mount:new THREE.Vector3(-2.20, 2.36, 5.88), pos:new THREE.Vector3(-2.20, 2.28, 5.58), look:new THREE.Vector3(-6.9, 0.85, 1.2) },
+    { name:'KITCHEN', room:'kitchen',  mount:new THREE.Vector3(-2.20, 2.36,-5.88), pos:new THREE.Vector3(-2.20, 2.28,-5.58), look:new THREE.Vector3(-6.9, 0.85,-1.0) },
+    { name:'HALL',    room:'hall',     mount:new THREE.Vector3( 0.95, 2.40, 5.86), pos:new THREE.Vector3( 0.95, 2.32, 5.56), look:new THREE.Vector3(-0.1, 0.85,-5.4) },
+    { name:'BASEMENT',room:'basement', mount:new THREE.Vector3(-5.40,-0.95,-3.96), pos:new THREE.Vector3(-5.40,-1.02,-3.66), look:new THREE.Vector3( 1.9,-2.85, 1.7) },
+    /* The east wing. The corridor takes TWO cameras because one at either
+       end of twenty metres shows you a vanishing point and nothing else;
+       these are back to back at the thirds, each covering its own half.
+       There is deliberately no camera in the back bedroom and none in the
+       bathroom — those two rooms are blind, and that is the point. */
+    { name:'WING W',  room:'sidehall', mount:new THREE.Vector3( 9.10, 2.40, 0.96), pos:new THREE.Vector3( 9.10, 2.32, 1.16), look:new THREE.Vector3(17.5, 1.05, 1.80) },
+    { name:'WING E',  room:'sidehall', mount:new THREE.Vector3(27.10, 2.40, 2.34), pos:new THREE.Vector3(27.10, 2.32, 2.14), look:new THREE.Vector3(19.0, 1.05, 1.55) },
+    { name:'GARAGE',  room:'garage',   mount:new THREE.Vector3(28.30, 2.62, 6.28), pos:new THREE.Vector3(28.50, 2.54, 6.08), look:new THREE.Vector3(34.6, 0.70, 1.4) },
+    /* There is no camera in the attic, and there is not meant to be. The
+       roof space is the one part of the house you can only ever learn
+       about by going up there. */
+  ],
+};
+
+/* ---------- placing the kit ------------------------------------------
+   Everything below is deliberately built out of things the file already
+   has: box() and plane() for the props, addSolid for nothing at all
+   (none of this is solid — you should never be stopped by your own
+   tripwire), Audio's existing panned one-shots for the sounds, and the
+   room graph for every question about who is where.
+------------------------------------------------------------------- */
+const KIT = {
+  trip:   { label:'a tripwire',   stock:'kitTrips',   verb:'Stringing the wire' },
+  sensor: { label:'a motion sensor', stock:'kitSensors', verb:'Setting the sensor' },
+  flood:  { label:'a floodlight', stock:'kitFloods',  verb:'Setting the floodlight' },
+};
+// what you are carrying from the bench, or null
+let carryingKit = null;
+
+function takeFromBench(){
+  if(carryingKit){ UI.say(`You are already carrying ${KIT[carryingKit].label}.`); return; }
+  // offer whatever there is most of, so one E does not need a menu
+  const order = ['trip','sensor','flood'].filter(k => Resources[KIT[k].stock] > 0);
+  if(!order.length){ UI.say('The kit box is empty.'); return; }
+  order.sort((a,b)=> Resources[KIT[b].stock] - Resources[KIT[a].stock]);
+  const kind = order[0];
+  Hold.begin(`Taking ${KIT[kind].label}`, 0.8, ()=>{
+    carryingKit = kind;
+    UI.say(`${KIT[kind].label[0].toUpperCase()}${KIT[kind].label.slice(1)}. E to put it down.`);
+    Audio.click();
+  }, {needLook:'bench', sound:'wood'});
+}
+
+/* ---- TRIPWIRE: across the doorway you are looking at ---- */
+function placeTripwire(){
+  const d = hover && hover.type === 'door' ? hover.door : null;
+  if(!d){ UI.say('A wire needs a doorway. Stand at one and look at it.'); return; }
+  if(Equipment.tripwires.some(w => w.door === d)){ UI.say('There is already a wire across that.'); return; }
+  if(Resources.nails < 1){ UI.say('No nails to pin it with.'); return; }
+  const edge = RoomGraph.edges.find(e => e.door === d.name);
+  Hold.begin(KIT.trip.verb, 1.6, ()=>{
+    Resources.nails--; Resources[KIT.trip.stock]--;
+    carryingKit = null;
+    const cx = d.axis==='x' ? (d.a0+d.a1)/2 : d.at;
+    const cz = d.axis==='x' ? d.at : (d.a0+d.a1)/2;
+    const half = (d.a1-d.a0)/2;
+    const a = new THREE.Vector3(d.axis==='x' ? cx-half : cx, 0.26, d.axis==='x' ? cz : cz-half);
+    const b = new THREE.Vector3(d.axis==='x' ? cx+half : cx, 0.26, d.axis==='x' ? cz : cz+half);
+    /* A thin dark line at shin height. Deliberately near-invisible in
+       ambient light and only really readable when the torch rakes across
+       it — it is YOUR wire, you are supposed to remember where it is,
+       and something you can see from the far end of a corridor is not a
+       tripwire, it is a fence. */
+    const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
+    const mesh = new THREE.Line(geo, new THREE.LineBasicMaterial({ color:0x2a2622 }));
+    scene.add(mesh);
+    // the two pins
+    for(const p of [a,b])
+      box(0.03, 0.10, 0.03, MAT.metalDark, p.x, 0.05, p.z, {solid:false, tile:0.2});
+    Equipment.tripwires.push({
+      a, b, door:d, mesh, spent:false,
+      room: edge ? edge.a : d.room, other: edge ? edge.b : d.room,
+      mid: a.clone().add(b).multiplyScalar(0.5),
+    });
+    UI.say(`Wire across the ${d.name.toLowerCase()}. ${Resources.kitTrips} left.`);
+    Audio.scuff('metal', 0.4, a);
+  }, {needLook:'door', sound:'metal'});
+}
+
+/* ---- SENSOR: a point in the room you are standing in ---- */
+function placeSensor(){
+  if(Player.room === 'outside'){ UI.say('It is pouring. It would not last five minutes out here.'); return; }
+  Hold.begin(KIT.sensor.verb, 1.2, ()=>{
+    Resources[KIT.sensor.stock]--; carryingKit = null;
+    const g = new THREE.Group();
+    g.position.set(Player.pos.x, Player.pos.y, Player.pos.z);
+    scene.add(g);
+    box(0.13, 0.09, 0.10, MAT.metalDark, 0, 0.045, 0, {parent:g, solid:false, tile:0.2});
+    box(0.09, 0.02, 0.03, MAT.metal,     0, 0.10,  0, {parent:g, solid:false, tile:0.2});
+    const led = new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 6),
+      new THREE.MeshBasicMaterial({ color:0x101a12 }));
+    led.position.set(0, 0.075, 0.052); g.add(led);
+    Equipment.sensors.push({
+      pos: g.position.clone(), room: Player.room, group:g, led,
+      cooldown: 0, ping: 0, R: 4.0,
+    });
+    UI.say(`Sensor down. ${Resources.kitSensors} left.`);
+    Audio.click();
+  }, {sound:'metal'});
+}
+
+/* ---- FLOODLIGHT: outside only ---- */
+function placeFloodlight(){
+  if(Player.room !== 'outside'){ UI.say('A floodlight is for the yard. This is indoors.'); return; }
+  Hold.begin(KIT.flood.verb, 2.0, ()=>{
+    Resources[KIT.flood.stock]--; carryingKit = null;
+    const g = new THREE.Group();
+    g.position.set(Player.pos.x, 0, Player.pos.z);
+    scene.add(g);
+    // a tripod and a head, pointed away from the house
+    for(const a of [0, 2.09, 4.19])
+      box(0.035, 1.05, 0.035, MAT.metalDark,
+          Math.cos(a)*0.16, 0.52, Math.sin(a)*0.16, {parent:g, solid:false, tile:0.2});
+    box(0.30, 0.22, 0.16, MAT.metalDark, 0, 1.12, 0, {parent:g, solid:false, tile:0.3});
+    const lens = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.18),
+      new THREE.MeshBasicMaterial({ color:0x1a1712 }));
+    lens.position.set(0, 1.12, 0.085); g.add(lens);
+    const aim = new THREE.Vector3(Player.pos.x, 0, Player.pos.z).normalize().multiplyScalar(6);
+    const light = new THREE.SpotLight(0xfff0d0, 0, 16, 0.62, 0.55, 1.4);
+    light.position.set(0, 1.12, 0);
+    light.target.position.set(aim.x, 0, aim.z);
+    g.add(light); g.add(light.target);
+    Equipment.floodlights.push({
+      pos: g.position.clone(), light, lens, group:g, on:false, room:'outside',
+      watts: 150, R: 7.0,
+    });
+    UI.say(`Floodlight up. Switch it at the breaker panel. ${Resources.kitFloods} left.`);
+    Audio.scuff('metal', 0.6, g.position);
+  }, {sound:'metal'});
+}
+
+function placeCarriedKit(){
+  if(carryingKit === 'trip')   return placeTripwire();
+  if(carryingKit === 'sensor') return placeSensor();
+  if(carryingKit === 'flood')  return placeFloodlight();
+}
+
+/* ---- per-frame: are the floodlights lit, and is the player in one ----
+   The lit-room rule (nothing can kill you in a lit room) is checked
+   against Lights.roomIsLit(), which asks the practicals — and a
+   floodlight is not a practical and the yard is not a room. So the yard
+   gets its own answer here: stand inside a burning floodlight's cone and
+   you are as safe as you are under a bulb. It is the only way the yard
+   is ever safe, and it costs 150W to make it so. */
+function updateEquipment(dt){
+  const powered = Resources.supply() && !Resources.tripped;
+  for(const f of Equipment.floodlights){
+    const live = f.on && powered && Resources.priority.floods !== false;
+    f.light.intensity = lerp(f.light.intensity, live ? 5.2 : 0, 1-Math.exp(-dt*8));
+    f.lens.material.color.setHex(live ? 0xffe9c0 : 0x1a1712);
+  }
+  for(const s of Equipment.sensors){
+    if(s.cooldown > 0) s.cooldown -= dt;
+    if(s.ping > 0){
+      s.ping -= dt;
+      s.led.material.color.setHex(s.ping > 0 ? 0xd02a1a : 0x101a12);
+    }
+  }
+}
+// is the player standing in a floodlight that is actually burning?
+function inFloodlight(){
+  for(const f of Equipment.floodlights){
+    if(f.light.intensity < 1.0) continue;
+    if(f.pos.distanceTo(Player.pos) < f.R) return true;
+  }
+  return false;
+}
+
   /* ---- WHAT THE REST OF THE GAME IS ALLOWED TO TOUCH --------------- */
   return {
     GROUP, CFG, World, MAT,
@@ -27960,12 +29945,56 @@ function updateDoors(dt){
        Ticked whether or not the player is indoors, because a door the
        player left swinging does not stop swinging when they walk out,
        and because something else in this house opens doors too. */
-    tick(dt){
+    tick(dt, host){
       if(!placedAt) return;
+      /* ---- THE SKY AND THE STORM ARE DOWNRIVER'S --------------------
+         The house's lighting reads Sky.day and Sky.phase to decide how
+         much daylight reaches each room, and its own Sky is driven by
+         GameState.clock -- a clock nothing in this game advances. Left
+         alone it would be permanently 2100h inside a house standing in
+         Downriver's afternoon.
+
+         So the fields are overwritten from the host each frame rather
+         than the Sky module being rewritten: the house only ever READS
+         them, and its own updateSky() is never called. The phase names
+         differ (the house knows night, dawn and morning; Downriver also
+         has day and dusk) so anything that is not night or dawn is
+         morning as far as the house is concerned -- which is what its
+         lighting means by it.
+
+         Storm follows the weather for the same reason. The lightning
+         that used to read it is the Director's, which is not lifted;
+         when it is, the rule is that it only flashes when Downriver's
+         weather is actually stormy. */
+      if(host && host.sky){
+        Sky.day = host.sky.day;
+        Sky.phase = host.sky.phase === 'night' ? 'night'
+                  : host.sky.phase === 'dawn'  ? 'dawn' : 'morning';
+      }
+      if(host && host.weather){
+        Storm.intensity = clamp(host.weather.thunder || 0, 0, 1);
+        Storm.distance = lerp(8, 1.2, clamp(host.weather.thunder || 0, 0, 1));
+      }
+      /* ---- ONE FLASHLIGHT, AND IT IS DOWNRIVER'S -------------------
+         The house has a torch of its own with its own cell, its own
+         fuel and its own volumetric cone, and Downriver has a
+         flashlight with batteries. Two lights on one player is one too
+         many, so the house's is held off here rather than deleted --
+         the cradle in the utility room still exists and still has
+         somewhere to put a light, which is what makes it the charger
+         for the real one once interaction is wired. */
+      Lights.torchOn = false;
       updateDoors(dt);
       updateWindows(dt);
       updateHatch(dt);
       updateClimbSides();
+      updatePracticals(dt);
+      Resources.update(dt);
+      /* The room the lighting is computed FROM is the player's, and the
+         house only has an opinion about that while they are inside it.
+         Out in the world the rooms are lit for the doorway they can be
+         seen through, which is what room 'outside' means to it. */
+      applyRoomLighting(Player.room || 'outside', 0);
     },
     /* ---- IS THE PLAYER IN THE HOUSE? --------------------------------
        Asked of the house's own room map rather than of the footprint,
