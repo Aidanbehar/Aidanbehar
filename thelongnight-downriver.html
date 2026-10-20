@@ -31042,7 +31042,12 @@ const UI = (()=>{
       buildMaterials();
       /* The house's own HUD and its tablet. init() binds the elements
          that were inserted into the document with it. */
-      try { UI.init(); } catch(err){ lastHouseError = 'UI.init: ' + err; }
+      /* The house's own run flag. It belongs to The Long Night's start
+         button, which does not exist here -- and it gates more than it
+         looks: UI.toggleTablet() returns immediately without it, so Tab
+         was dead for this reason rather than for want of a binding. */
+      GameState.started = true; GameState.paused = false;
+      try { UI.show(); } catch(err){ lastHouseError = 'UI.show: ' + err; }
       buildCameras();
       buildHouse();
       buildWing();
@@ -31145,6 +31150,11 @@ const UI = (()=>{
     toggleTablet(){ try { UI.toggleTablet(); } catch(err){} },
     toggleHouseMap(){ try { UI.toggleMap(); } catch(err){} },
     get lastError(){ return lastHouseError; },
+    /* What pickTarget settled on, so a test can tell "E did nothing"
+       from "E acted on something else". */
+    get hover(){ return hover; },
+    get cameraLocal(){ return camera; },
+    get started(){ return GameState.started; },
     get lightStats(){ return { lights: houseLights.length,
                                on: houseLights.filter(l=>l.visible).length,
                                shadows: shadowStats }; },
