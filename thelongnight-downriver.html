@@ -17928,8 +17928,12 @@ const Ambience = {
     const big = clamp(Math.log10(1+this.waterKind/CFG.HYDRO.riverAcc), 0, 1.4);
     Audio.setBed(B.water, wl*0.055*hush, lerp(2200, 520, clamp(big,0,1)), 0.7);
 
-    // ---- footsteps, on the surface that is actually underfoot ----
-    if(Player.moving && !Player.falling){
+    /* ---- footsteps, on the surface that is actually underfoot ----
+       Not indoors: the house has its own, one per surface -- boards,
+       concrete, the stair treads -- and they are better than these.
+       Two sets of footsteps for one pair of feet is worse than
+       either. */
+    if(Player.moving && !Player.falling && !indoorsNow()){
       const stride = Player.sprinting ? 0.34 : 0.52;
       this.stepPhase += (Player.speed*dt)/ (stride*CFG.PLAYER.walk);
       if(this.stepPhase >= 1){
@@ -22021,6 +22025,24 @@ function stepPlayerEitherSide(dt){
     camera.rotation.set(Player.pitch, Player.yaw, 0, 'YXZ');
     const p = LN.stepPlayer(dt, camera, Keys, Player.yaw, Player.pitch);
     Player.pos.set(p.x, p.y, p.z);
+    /* ---- AND THE STATE THAT GOES WITH THE POSITION ----------------
+       Only the position was handed back, so every field describing
+       HOW the player is moving kept whatever value Downriver's own
+       updatePlayer left in it on the frame they walked through the
+       door -- and updatePlayer does not run again until they walk
+       out. Player.moving stayed true and Player.speed stayed at a
+       walking pace for the whole time they were inside.
+
+       Ambience.update reads exactly those two to decide when to play
+       a footstep, so it played one every stride-length of a speed
+       that was never being updated: the forest's footsteps, on loop,
+       in a building with its own floor sounds. That is the walking
+       noise that would not stop. It is also read by the creatures to
+       decide how much noise the player is making, so they were being
+       told you were walking about even while you stood still. */
+    Player.moving = !!LN.Player.moving;
+    Player.speed = LN.Player.speed || 0;
+    Player.sprinting = !!LN.Player.sprinting;
   } else {
     updatePlayer(dt);
   }
@@ -36765,7 +36787,14 @@ const Audio = (()=>{
       gen.placed = true;
     }
     const muffle = clamp(occ, 0, 1);
-    gen.gain.gain.setTargetAtTime(on ? 0.62 * lerp(1.0, 0.16, muffle) : 0.0, t, on ? 0.30 : 0.9);
+    /* 0.62 down to 0.50. The generator should be the loudest thing in
+       the house, and it was winning by enough to sit on top of the
+       storm, the floor and everything else the room had to say. A
+       shade under, so it still dominates without flattening the mix.
+       The first attempt at this added a second gpan.connect(master),
+       which is an extra path to the output and would have made it
+       LOUDER -- the gain is the one place to change it. */
+    gen.gain.gain.setTargetAtTime(on ? 0.50 * lerp(1.0, 0.16, muffle) : 0.0, t, on ? 0.30 : 0.9);
     gen.occl.frequency.setTargetAtTime(lerp(3200, 150, muffle), t, 0.30);
     gen.filter.frequency.setTargetAtTime(on ? 1500 : 400, t, 0.4);
   }
@@ -39026,6 +39055,10 @@ class GlassPass extends Pass {
       return { x: f.x, y: placedAt.y + Player.pos.y, z: f.z,
                level: Player.level, room: Player.room };
     },
+    /* For the harness: run the generator, the way the player does. */
+    startGenerator(){ Resources.fuel = Math.max(Resources.fuel, 6);
+                      Resources.generatorOn = true;
+                      if(World.generator) World.generator.running = true; },
     /* For the harness: one of the house's doors, by its name. */
     doorByName(n){ return World.doors.find(d=>d.name === n) || null; },
     /* For the harness: give the house boards and nails to work with. */
