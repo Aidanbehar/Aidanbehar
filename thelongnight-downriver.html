@@ -22708,11 +22708,38 @@ const LN = ((hostScene, hostCamera, hostPass)=>{
     houseLights = [];
     GROUP.traverse(o=>{ if(o.isLight) houseLights.push(o); });
   }
+  /* ---- AND THE COUNT IS WHAT COSTS, NOT THE LIGHT -----------------
+     The version above flipped each lamp's `visible` individually, every
+     frame, on whether applyRoomLighting currently had it above 0.002.
+     It is right about the per-fragment cost and wrong about the price
+     of changing your mind: the LIGHT COUNT is part of every material's
+     program key, so every flip rebuilds every shader in the world.
+
+     Measured, with renderer.info.programs:
+
+       walking in the yard        81 programs,   16ms
+       first frames indoors      100 programs, 1312ms   +19
+       settled indoors           100 programs,   16ms
+       generator switched on     117 programs, 1639ms   +17
+
+     That is the one-second freeze on first entering, the freeze when
+     the generator comes on, and the stalls when walking between rooms
+     changes which lamps are lit -- all the same bug wearing three
+     hats. The town's bulbs already had this diagnosed and solved, a
+     few hundred lines away: "the number of distinct counts the game
+     ever shows is the number of times it can stop to compile."
+
+     So the house shows ONE count. The lamps stay in the scene and are
+     driven by intensity alone, which is not part of a program key.
+
+     THAT TRADE IS AFFORDABLE NOW AND WAS NOT BEFORE. The measurement
+     this was originally written against -- twenty lamps dragging the
+     forest to twenty frames a second -- was taken with shadows ON,
+     and a point light's shadow is a cube map rendered six times. With
+     CFG.QUALITY.shadows false those lamps cost a loop over twenty
+     entries in the fragment shader and nothing else. */
   function gateLights(inside){
-    for(const L of houseLights){
-      const want = inside && (L.intensity || 0) > 0.002;
-      if(L.visible !== want) L.visible = want;
-    }
+    for(const L of houseLights) if(!L.visible) L.visible = true;
   }
   /* ---- AND FIFTEEN HUNDRED SHADOW CASTERS -------------------------
      2,223 meshes in the house, 1,572 of them asking to be drawn again
