@@ -15835,7 +15835,12 @@ const Gear = {
     this.tickFumble(dt);
     if(this.fumbling()) this.torchOn = false;
     // ---- battery ----
-    if(this.torchOn){
+    /* ---- THE CELL IS THE HOUSE'S, AND THE HOUSE DRAINS IT --------
+       Resources.update() spends torchFuel while the beam is on, and
+       LN.tick copies what is left into this.battery. Draining here as
+       well would be two meters on one torch running down at two
+       different rates. */
+    if(this.torchOn && !(typeof LN !== 'undefined' && LN.site)){
       this.battery = Math.max(0, this.battery - dt/(CFG.GEAR.batteryMinutes*60));
       if(this.battery <= 0){
         this.torchOn = false;
@@ -23044,14 +23049,13 @@ const CFG = {
     get god(){ return !!CFG.DEBUG.invuln; },
     invisible: false,
     forceFlank: false,
-    /* THE CELL IS DOWNRIVER'S. Resources.update() drains torchFuel
-       whenever Lights.torchOn is true and says "that was the only
-       cell" when it runs out -- which is right in a game with one
-       flashlight in it, and wrong here, where the beam the player is
-       holding has its own batteries and its own charging. The house's
-       own switch for exactly this is DEV.infTorch, so the house keeps
-       its cradle, its cell and its UI and simply never spends it. */
-    infTorch: true,
+    /* THE CELL IS THE HOUSE'S AGAIN. This was true for a while, and it
+       stopped Resources.update() spending a cell the house did not
+       own -- correct while Downriver's batteries were the ones in the
+       torch. They are not any more: there is one flashlight, one cell,
+       and the cradle in the utility room is what puts it back. See the
+       bridge in LN.tick. */
+    infTorch: false,
   };
   const Director = (()=>{
     const THREAT = { DORMANT:'DORMANT', STALKING:'STALKING', HUNTING:'HUNTING', ATTACKING:'ATTACKING' };
@@ -38970,9 +38974,30 @@ class GlassPass extends Pass {
          with a lit torch in their hand. It mirrors the host's beam
          now -- the state is Downriver's, and so is the only light that
          actually renders. */
-      Lights.torchOn = !!(host && host.torch);
+      /* ---- ONE TORCH, ONE CELL, AND THE CRADLE PUTS IT BACK --------
+         The Long Night's flashlight is a physical object with a finite
+         cell you recharge in the utility-room cradle. All of it is
+         lifted and all of it worked except that nothing connected it
+         to the beam the player actually holds: Downriver's torch ran
+         on Downriver's batteries and the cradle was scenery.
+
+         Resources.torchFuel is the cell now and Gear.battery is a VIEW
+         of it rather than a second supply. The drain, the brown-out,
+         the low flicker and the cradle's ninety watts are all the
+         house's, which is where they were written; one number crosses.
+
+         Seated in the cradle it is not in your hand, so the beam is
+         off whatever the key says -- which is the point of it being an
+         object rather than a stat. */
+      const seated = !!Resources.onCharger;
+      Lights.torchOn = !seated && !!(host && host.torch) && Resources.torchFuel > 0;
       if(Lights.flashlight) Lights.flashlight.visible = false;
       if(Lights.cone) Lights.cone.visible = false;
+      if(typeof Gear !== 'undefined'){
+        Gear.battery = clamp(Resources.torchFuel/100, 0, 1);
+        Gear.spares = 0;
+        if(seated || Resources.torchFuel <= 0) Gear.torchOn = false;
+      }
       /* ---- NIGHTFALL AND DAWN, ON DOWNRIVER'S CLOCK ----------------
          The house has both of these written -- startNextNight() puts
          back the fuel, the boards, the objectives and the grid and
@@ -39169,6 +39194,13 @@ class GlassPass extends Pass {
       return { x: f.x, y: placedAt.y + Player.pos.y, z: f.z,
                level: Player.level, room: Player.room };
     },
+    /* For the harness: the one cell, and the cradle. */
+    get torchFuel(){ return Resources.torchFuel; },
+    get onCharger(){ return !!Resources.onCharger; },
+    setTorchFuel(v){ Resources.torchFuel = v; },
+    seatTorch(on){ Resources.onCharger = !!on; },
+    setPower(on){ Resources.grid = !!on; Resources.generatorOn = !!on;
+                  Resources.fuel = Math.max(Resources.fuel, 8); },
     /* For the harness: the seats, and getting on and off them. */
     seats(){ return World.seats || []; },
     sitDown(seat){ sitDown(seat); },
