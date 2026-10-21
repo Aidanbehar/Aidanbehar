@@ -8179,8 +8179,26 @@ function buildTerrainMesh(){
 
        Zero width means no hole, which is what every seed has until the
        house is placed. */
-    sh.uniforms.uHole = { value: new THREE.Vector4(0,0,0,0) };
+    /* ---- AND THE HOLE HAS TO SURVIVE THE COMPILE ------------------
+       onBeforeCompile runs on the FIRST RENDER of this material, and
+       the house is placed during world build, before anything has
+       been drawn. So the line that installs the stairwell rect ran
+       against a MAT.terrainU that did not exist yet, its guard
+       quietly declined, and uHole stayed (0,0,0,0) for the whole run
+       -- which means no discard, which means the yard's ground drawn
+       straight across the cellar entrance. Measured: stairwellRect
+       returning a good 3.9m x 1.9m rect and the uniform reading all
+       zeros.
+
+       The rect is kept on Wld and read back here, so it does not
+       matter which happens first. Every compiled variant is also
+       remembered, because a material can be compiled more than once
+       and only the last one was being held. */
+    const h0 = Wld.stairHole;
+    sh.uniforms.uHole = { value: h0 ? new THREE.Vector4(h0.x0, h0.z0, h0.x1, h0.z1)
+                                    : new THREE.Vector4(0,0,0,0) };
     MAT.terrainU = sh.uniforms;
+    (MAT.terrainUAll || (MAT.terrainUAll = [])).push(sh.uniforms);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec2 aSnow; varying vec2 vSnow; varying vec2 vWXZ;`)
@@ -22310,9 +22328,14 @@ async function startRun(seedInput){
       { x: 6.2,  z: -4.2,  top: 0.55, headZ: -4.2 },
       { x: 15.2, z: -1.55, top: 0.53, headZ: -2.5 },
     ];
+    /* Stored first, so a material that compiles later picks it up,
+       and pushed into every variant that has already compiled. */
     const hole = LN.stairwellRect();
-    if(hole && MAT.terrainU && MAT.terrainU.uHole)
-      MAT.terrainU.uHole.value.set(hole.x0, hole.z0, hole.x1, hole.z1);
+    if(hole){
+      Wld.stairHole = hole;
+      for(const u of (MAT.terrainUAll || []))
+        if(u.uHole) u.uHole.value.set(hole.x0, hole.z0, hole.x1, hole.z1);
+    }
   }
   buildClues();
   setProgress(0.76, 'building the sound of this place');
@@ -34678,9 +34701,38 @@ function standUp(){
   const seat = Player.seated;
   if(!seat) return;
   Player.seated = null;
-  // step clear of the furniture rather than standing inside it
+  /* ---- STEP CLEAR OF THE FURNITURE, AND NOT INTO A WALL ----------
+     This stepped 0.62m along whatever the player happened to be
+     LOOKING at, and committed to it without asking whether anything
+     was there. A chair in a small room is usually facing a wall --
+     the side bedroom's is -- so getting up put the body inside the
+     timber, and the resolver's shortest way out of a 0.22m wall is
+     as often through the outside face as the inside one. That is
+     standing up from a chair and finding yourself in the yard.
+
+     The candidates are tried in order and the first clear one wins:
+     where you are looking, then either side of it, then behind, and
+     finally the seat itself. Sitting still in the chair is a far
+     better failure than being posted through the wall, and every one
+     of these is asked of the house's own collider rather than
+     assumed. */
   const fwd = localForward(new THREE.Vector3());
-  Player.pos.set(seat.pos.x + fwd.x*0.62, seat.floor, seat.pos.z + fwd.z*0.62);
+  const rx = -fwd.z, rz = fwd.x;                 // ninety degrees from it
+  const feet = seat.floor + 0.05, head = seat.floor + CFG.PLAYER.eye;
+  const tries = [
+    [ fwd.x,  fwd.z], [ rx,  rz], [-rx, -rz], [-fwd.x, -fwd.z],
+  ];
+  let put = null;
+  for(const [ux, uz] of tries){
+    const q = { x: seat.pos.x + ux*0.62, y: seat.floor, z: seat.pos.z + uz*0.62 };
+    /* The seat is the thing we are getting off: it does not count as
+       something in the way. */
+    if(collide(q, CFG.PLAYER.radius, feet, head, sol => sol === seat.solid)) continue;
+    if(!roomAt(q.x, q.z, Player.level)) continue;   // not out through a wall
+    put = q; break;
+  }
+  if(!put) put = { x: seat.pos.x, y: seat.floor, z: seat.pos.z };
+  Player.pos.set(put.x, put.y, put.z);
   Player.vel.set(0,0,0);
   Audio.scuff('fabric', 0.4, seat.pos);
 }
@@ -39117,6 +39169,10 @@ class GlassPass extends Pass {
       return { x: f.x, y: placedAt.y + Player.pos.y, z: f.z,
                level: Player.level, room: Player.room };
     },
+    /* For the harness: the seats, and getting on and off them. */
+    seats(){ return World.seats || []; },
+    sitDown(seat){ sitDown(seat); },
+    standUp(){ standUp(); },
     /* For the harness: run the generator, the way the player does. */
     startGenerator(){ Resources.fuel = Math.max(Resources.fuel, 6);
                       Resources.generatorOn = true;
