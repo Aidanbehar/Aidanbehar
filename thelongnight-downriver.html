@@ -39933,6 +39933,8 @@ class GlassPass extends Pass {
        try/catch, so the TypeError was swallowed and pressing the key
        did nothing with no error to show for it. The catch is what made
        it invisible; these are reads for the harness only. */
+    get tabletBattery(){ return Resources.battery; },
+    cameras(){ return Equipment.cameras || []; },
     get devOpen(){ return !!DEV.open; },
     get devEligible(){ return !!DEV.eligible; },
     /* For the harness: the one cell, and the cradle. */
