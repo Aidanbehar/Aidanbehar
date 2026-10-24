@@ -14152,12 +14152,12 @@ function onKeyDown(e){
   if(e.code === 'Backquote' || e.code === 'F1'){
     e.preventDefault();
     /* ---- THE PANEL FOR THE GAME YOU ARE IN ------------------------
-       Two dev panels, one key. The house's knows about the night, the
-       room graph, the creatures and the power; the forest's knows
-       about terrain, weather and the mind. Whichever building the
-       player is standing in is the one they are asking about. */
-    if(indoorsNow() && typeof LN !== 'undefined' && LN.site && LN.devEligible) LN.devToggle();
-    else DEV.toggle();
+       Two dev panels, one key. The house's binds its own listener and
+       opens itself, so the only decision here is whether the FOREST's
+       should open as well: indoors it should not, or both arrive on
+       top of each other. */
+    if(!(indoorsNow() && typeof LN !== 'undefined' && LN.site && LN.devEligible))
+      DEV.toggle();
     return;
   }
   if(onVolumeKey(e)) return;
@@ -23230,12 +23230,24 @@ const CFG = {
     function show(on){
       D.open = on;
       ensureRoot();
+      /* ---- AND THE PANEL ITSELF -----------------------------------
+         build() is what makes #ln-devpanel; ensureRoot only makes the
+         backdrop. In the original the ONLY call to build() was inside
+         the password gate, after a correct password -- so taking the
+         gate out took the panel with it. The key worked, D.open went
+         true, a dim layer appeared over the screen and there was
+         nothing in it. Opening is what should build it, not being let
+         in. */
+      if(on) build();
       root.classList.toggle('on', on);
       if(panel) panel.style.display = on ? 'block' : 'none';
       // game input is suppressed while it is open, and the keys are cleared
       // so nothing is left held down when it closes
       for(const k in Keys) Keys[k] = false;
-      if(on){ if(controls && controls.isLocked) controls.unlock(); }
+      /* The mouse is the host's. PointerLockControls is not in this
+         build, and a bare `controls` here threw a ReferenceError from
+         inside the key listener every time the panel opened. */
+      if(on){ try { document.exitPointerLock(); } catch(e){} }
       else if(GameState.started){ hostRelock(); }
     }
 
@@ -39858,11 +39870,15 @@ class GlassPass extends Pass {
                level: Player.level, room: Player.room };
     },
     /* ---- THE HOUSE'S DEV PANEL ------------------------------------
-       Backquote belongs to whichever game the player is standing in,
-       the same rule the tablet's digits follow. */
-    devToggle(){ try { DEV.toggle(); } catch(e){} },
-    get devOpen(){ try { return !!DEV.open; } catch(e){ return false; } },
-    get devEligible(){ try { return !!DEV.eligible; } catch(e){ return false; } },
+       It binds its OWN Backquote listener, which is how it worked in
+       The Long Night, so there is nothing here to call. The first go
+       at this added a devToggle() that called DEV.toggle() -- a method
+       that does not exist on that module -- and wrapped it in a
+       try/catch, so the TypeError was swallowed and pressing the key
+       did nothing with no error to show for it. The catch is what made
+       it invisible; these are reads for the harness only. */
+    get devOpen(){ return !!DEV.open; },
+    get devEligible(){ return !!DEV.eligible; },
     /* For the harness: the one cell, and the cradle. */
     get torchFuel(){ return Resources.torchFuel; },
     get onCharger(){ return !!Resources.onCharger; },
