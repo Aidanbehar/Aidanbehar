@@ -1014,6 +1014,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { CopyShader } from 'three/addons/shaders/CopyShader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /* =====================================================================
    ===== CONFIG =====
@@ -36478,6 +36479,185 @@ function windowAction(win){
    closed. They also overhang the frame properly now: 6% of the opening
    was 3cm of bearing on the jamb, which is not what a board across a
    door looks like. */
+/* ---- ONE HOUSE, TEN DRAW CALLS INSTEAD OF EIGHTEEN HUNDRED ---------
+   Measured at the worst view from the spawn: 2599 draw calls in the
+   frame, of which 1843 were the farmhouse -- for 268,000 triangles, so
+   about 145 triangles per call. The house is built out of thousands of
+   individual boxes, each its own mesh, each its own draw call. Draw
+   calls are paid on the CPU and no graphics card makes them free, which
+   is why this and not the triangle count is what costs the framerate.
+
+   Triangles are cheap and calls are dear, so the static shell of the
+   house is merged into one mesh per (material, layer, shadow flags)
+   group and the originals are hidden.
+
+   WHAT IS NOT MERGED, and how that is decided rather than guessed:
+
+     - anything the house holds a reference to. Everything in World,
+       Lights and Equipment is walked and every Object3D found is
+       spared, so doors, windows, sashes, boards, seats, props, lamps,
+       shades, cameras, the generator and its LED are all excluded by
+       having been registered rather than by being listed here.
+     - anything that is not a DIRECT child of the group. That excludes
+       every door leaf, sash and creature body in one rule, because
+       those hang off their own pivots and groups and inherit a
+       transform that changes.
+     - anything named, or carrying userData, which is how the rest of
+       this file marks a mesh it means to find again.
+     - transparent materials (the glass), multi-material meshes,
+       instanced and skinned meshes, and anything whose material is not
+       a plain standard material.
+
+   A merged mesh keeps its frustum culling, so it is still dropped when
+   its bounds are off screen; what it loses is the FINE grain of it,
+   since one mesh covering a wing of the house is in view if any of that
+   wing is. That is the trade, and it is a good one at these ratios.
+
+   The originals are hidden rather than removed, so anything that still
+   holds one and pokes at it keeps working instead of throwing. */
+const _mm = new THREE.Matrix4();
+/* The originals the merge hid, and the merged meshes that stand in for
+   them, so the whole thing can be switched off and compared against --
+   which is the only way to show that a merge changed nothing visible. */
+const mergeHidden = [], mergeMeshes = [];
+function setMergeActive(on){
+  for(const o of mergeHidden) o.visible = !on;
+  for(const m of mergeMeshes) m.visible = !!on;
+  return { active:!!on, merged:mergeMeshes.length, originals:mergeHidden.length };
+}
+function mergeStaticHouse(){
+  const keep = new Set();
+  const seen = new Set();
+  /* STRICT about what it will descend into, and the first version was
+     not: `for(const k in v)` over a typed array enumerates every index,
+     so walking a geometry's position buffer meant walking a hundred
+     thousand numbers, and the house never finished building. Geometry,
+     materials and textures cannot contain an Object3D, so none of them
+     are worth entering; only plain objects and short arrays are. */
+  const walk = (v, d)=>{
+    if(!v || d > 5 || typeof v !== 'object') return;
+    if(v.isObject3D){ keep.add(v); return; }        // and deliberately no deeper
+    if(ArrayBuffer.isView(v) || v instanceof ArrayBuffer) return;
+    if(v.isBufferGeometry || v.isMaterial || v.isTexture || v.isVector3
+       || v.isVector2 || v.isMatrix4 || v.isQuaternion || v.isColor) return;
+    if(seen.has(v)) return;
+    seen.add(v);
+    if(Array.isArray(v)){
+      if(v.length > 4096) return;
+      for(const x of v) walk(x, d+1);
+      return;
+    }
+    const proto = Object.getPrototypeOf(v);
+    if(proto !== Object.prototype && proto !== null && !(v instanceof Map)) return;
+    if(v instanceof Map){ for(const x of v.values()) walk(x, d+1); return; }
+    for(const k of Object.keys(v)){
+      let x; try { x = v[k]; } catch(err){ continue; }   // getters may throw
+      walk(x, d+1);
+    }
+  };
+  walk(World, 0); walk(Lights, 0); walk(Equipment, 0);
+
+  /* ---- WHICH MESHES, AND HOW DEEP ---------------------------------
+     The first version took only DIRECT children of the group, which is
+     the easy rule but the wrong one: it caught 501 of the house's 2163
+     meshes and left the other 1662 as their own draw calls, because
+     almost everything in this house is built inside a sub-group -- a
+     room, a cupboard, a stack of shelves.
+
+     The rule that matters is not depth, it is whether anything can
+     MOVE the mesh or go looking for it. So the whole subtree is walked,
+     and a mesh is merged only if neither it nor any ancestor up to the
+     group is referenced, named or carrying userData. An ancestor being
+     spared is what keeps the door leaves, the sashes and the creature
+     bodies out: their pivots and groups are registered, so everything
+     underneath them is excluded by one check rather than by a list.
+
+     Geometry is baked with the mesh's transform RELATIVE TO THE GROUP
+     (its own matrixWorld with the group's inverse applied), which is
+     the frame the merged mesh lives in. */
+  scene.updateMatrixWorld(true);
+  const groupInv = new THREE.Matrix4().copy(scene.matrixWorld).invert();
+  const groups = new Map();
+  const why = { referenced:0, named:0, userData:0, material:0, kind:0, geometry:0, hidden:0 };
+  const visit = (o, blocked)=>{
+    /* The root is exempt from its own test. The group IS referenced --
+       it is the house, everything holds it -- so counting it as spared
+       marked all 2221 meshes beneath it as untouchable and merged
+       nothing at all. What matters is what lies BETWEEN a mesh and the
+       root, not the root. */
+    const self = (o === scene) ? false
+      : (blocked || keep.has(o) || !!o.name
+         || (o.userData && Object.keys(o.userData).length > 0));
+    if(o !== scene && o.isMesh){
+      if(self){
+        if(blocked) why.referenced++;
+        else if(keep.has(o)) why.referenced++;
+        else if(o.name) why.named++;
+        else why.userData++;
+      } else if(o.isInstancedMesh || o.isSkinnedMesh){ why.kind++;
+      } else if(!o.visible){ why.hidden++;
+      } else {
+        const m = o.material, g = o.geometry;
+        if(!m || Array.isArray(m) || !m.isMeshStandardMaterial
+           || m.transparent || m.opacity < 1) why.material++;
+        else if(!g || !g.attributes || !g.attributes.position) why.geometry++;
+        else {
+          /* Indexed and non-indexed geometry cannot be merged together,
+             and nor can different attribute sets, so both are in the key. */
+          const key = m.uuid + '|' + o.layers.mask + '|' + (o.castShadow?1:0)
+                    + (o.receiveShadow?1:0) + '|' + (g.index?'i':'n')
+                    + '|' + Object.keys(g.attributes).sort().join(',');
+          if(!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(o);
+        }
+      }
+    }
+    /* `self` propagates: everything under a spared or moving object is
+       spared too, because its transform is not ours to bake. */
+    for(const c of o.children) visit(c, self);
+  };
+  visit(scene, false);
+
+  let merged = 0, replaced = 0;
+  for(const list of groups.values()){
+    if(list.length < 8) continue;            // not worth a merge
+    const geos = [];
+    for(const o of list){
+      const g = o.geometry.clone();
+      /* The mesh's place in the GROUP's frame, however deep it sits. */
+      g.applyMatrix4(_mm.multiplyMatrices(groupInv, o.matrixWorld));
+      geos.push(g);
+    }
+    let out = null;
+    try { out = mergeGeometries(geos, false); }
+    catch(err){ out = null; }
+    for(const g of geos) g.dispose();
+    if(!out) continue;                       // a group that will not merge is left alone
+    const src = list[0];
+    const mesh = new THREE.Mesh(out, src.material);
+    mesh.layers.mask = src.layers.mask;
+    mesh.castShadow = src.castShadow;
+    mesh.receiveShadow = src.receiveShadow;
+    /* Culling stays ON. The first version turned it off, reasoning that
+       a mesh spanning the whole house is always in view anyway -- but
+       from the yard that cost calls rather than saving them, 87 against
+       the original 57, because thirty always-submitted merged meshes
+       beat fifty-seven that the frustum was throwing away. With culling
+       left on, a merged mesh is dropped whenever its bounds are off
+       screen, exactly like the meshes it replaced. */
+    mesh.frustumCulled = true;
+    mesh.name = 'house-merged';
+    scene.add(mesh);
+    for(const o of list){ o.visible = false; mergeHidden.push(o); }
+    mergeMeshes.push(mesh);
+    merged++; replaced += list.length;
+  }
+  let meshesLeft = 0;
+  scene.traverse(o=>{ if(o.isMesh && o.visible) meshesLeft++; });
+  return { mergedMeshes: merged, originalsHidden: replaced,
+           meshesStillDrawn: meshesLeft, skipped: why };
+}
+
 const DOOR_BOARD_OFF = 0.135;      // clears a 220mm exterior wall's face
 function addDoorBoard(d){
   d.boardMeshes = d.boardMeshes || [];
@@ -38762,6 +38942,7 @@ const feedScene = new THREE.Scene();
 feedScene.background = new THREE.Color(0x05070a);
 feedScene.fog = new THREE.FogExp2(0x0a0d12, 0.030);
 
+let lastMerge = null;
 let pendingFeed = null, pendingSync = null;
 /* Frames the current fence has been waited on, and how many captures in
    a row have had to fall back to the blocking read. */
@@ -39801,6 +39982,10 @@ class GlassPass extends Pass {
       if(Lights.cone){ Lights.cone.visible = false; }
       collectLights();
       thinShadowCasters();
+      /* Last of all, and only once the house is complete: everything
+         above has to have run for the merge to see the whole shell. */
+      try { lastMerge = mergeStaticHouse(); }
+      catch(err){ lastHouseError = 'mergeStaticHouse: ' + err; }
       /* The bodies, and the hour each of them lets itself in. Here and
          not earlier for the same reason as the two above: ensureBodies
          puts creatures into this group, and armArrivals reads the room
@@ -39990,6 +40175,12 @@ class GlassPass extends Pass {
     /* Read-only view of the generator bus: its gain and the occlusion
        filter's cutoff, the two numbers that move when it sounds wrong. */
     genState(){ return Audio.genState(); },
+    /* What the static merge did at build time, for the harness. */
+    mergeStats(){ return lastMerge; },
+    /* Turn the static merge off or on at runtime. Only useful for
+       proving the merged house draws the same picture as the original
+       one, which is exactly what it is for. */
+    setMergeActive(on){ return setMergeActive(on); },
     feedDiag(){ return Object.assign({}, feedDiag); },
     get audioCtx(){ return Audio.ready ? Audio.contextRef : null; },
     get audioBusConnected(){ return Audio.ready; },
