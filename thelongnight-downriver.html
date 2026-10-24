@@ -14149,7 +14149,17 @@ function initInput(){
 }
 
 function onKeyDown(e){
-  if(e.code === 'Backquote' || e.code === 'F1'){ e.preventDefault(); DEV.toggle(); return; }
+  if(e.code === 'Backquote' || e.code === 'F1'){
+    e.preventDefault();
+    /* ---- THE PANEL FOR THE GAME YOU ARE IN ------------------------
+       Two dev panels, one key. The house's knows about the night, the
+       room graph, the creatures and the power; the forest's knows
+       about terrain, weather and the mind. Whichever building the
+       player is standing in is the one they are asking about. */
+    if(indoorsNow() && typeof LN !== 'undefined' && LN.site && LN.devEligible) LN.devToggle();
+    else DEV.toggle();
+    return;
+  }
   if(onVolumeKey(e)) return;
   /* ---- SPACE IS A FLIGHT CONTROL, NOT A BUTTON PRESS ---------------
      An HTML button keeps keyboard focus after it is clicked, and a
@@ -23045,18 +23055,667 @@ const CFG = {
      read false rather than reaching across to an object that happens
      to share the name -- with `god` wired to the invulnerability the
      host panel does have, so that switch still works. */
-  const DEV = {
-    get god(){ return !!CFG.DEBUG.invuln; },
-    invisible: false,
-    forceFlank: false,
-    /* THE CELL IS THE HOUSE'S AGAIN. This was true for a while, and it
-       stopped Resources.update() spending a cell the house did not
-       own -- correct while Downriver's batteries were the ones in the
-       torch. They are not any more: there is one flashlight, one cell,
-       and the cradle in the utility room is what puts it back. See the
-       bridge in LN.tick. */
-    infTorch: false,
-  };
+  /* ---- THE HOUSE'S OWN DEV PANEL, LIFTED -------------------------
+     The small object that used to stand here held the four flags the
+     Director reads -- god, invisible, forceFlank, infTorch -- and
+     nothing else, because The Long Night's dev panel was never
+     brought across. This is that panel: the readouts, the overlays,
+     the room graph, the creature spawner, the event audit, all of it.
+
+     THREE THINGS HAD TO CHANGE ON THE WAY IN.
+
+     Its element ids clashed. Both games call a readout `devread`, so
+     every id this panel makes is prefixed -- the same rule the HUD
+     lift followed.
+
+     It locked the pointer through PointerLockControls, which this
+     merge does not have; the host owns the mouse and hostRelock()
+     asks it.
+
+     And the password gate is gone from the shipped path, as the merge
+     brief asked. The panel opens on its key when the player is in the
+     house. Nothing about the gate is persisted anywhere -- not
+     localStorage, not a cookie, not the URL -- because it is not here
+     to persist. */
+  function hostRelock(){
+    try {
+      const el = (typeof renderer !== 'undefined') && renderer.domElement;
+      if(el && document.pointerLockElement !== el) el.requestPointerLock();
+    } catch(e){}
+  }
+  const DEV = (() => {
+    const TOUCHLESS = matchMedia('(pointer:fine)').matches
+                   && !('ontouchstart' in window)
+                   && !(navigator.maxTouchPoints > 0);
+    /* ---- NO GATE ON THE SHIPPED PATH -----------------------------
+       The merge brief asked for the password gate to come out, so the
+       panel is reached by its key and nothing else. There is no
+       password here to be kept anywhere: not in localStorage, not in
+       a cookie, not in the URL, not in a log line.
+
+       The file:// and ?dev=1 test is dropped with it. It was there to
+       keep the panel off a hosted build, and the gate behind it was
+       the real lock; without the gate the test only decides whether
+       the key does anything, and the key is the point. */
+    const ELIGIBLE = TOUCHLESS;
+
+    const D = {
+      unlocked:true, open:false, gating:false, eligible:ELIGIBLE,
+      god:false, noclip:false, infTorch:false, silent:false, invisible:false,
+      noDecrement:false, speedMul:1, aggroMul:1, frozen:false, possess:null,
+      overlays:{ graph:false, paths:false, stim:false, audio:false,
+                 lights:false, doors:false, solids:false, perf:false },
+      queue:[], queueT:0,
+    };
+    /* NOT ELIGIBLE MEANS NOT BUILT -- but the two hooks the game itself
+       calls every frame still have to EXIST, or the render loop throws on
+       the first frame of a normal build and takes the whole game with it.
+       They are empty functions and nothing below this line is ever
+       defined: no listener, no element, no per-frame work. */
+    if(!ELIGIBLE){ D.frame = ()=>{}; D.suppress = ()=>false; return D; }
+
+    let root=null, panel=null, readout=null, fails=0, lockUntil=0, built=false, gateEl=null;
+    let gizmos=null, lastRead=0, frames=0, fpsAcc=0, fps=0;
+
+    const el=(t,c,txt)=>{ const n=document.createElement(t); if(c) n.className=c;
+                          if(txt!=null) n.textContent=txt; return n; };
+    const btn=(label,fn,cls)=>{ const b=el('button',cls,label); b.onclick=(ev)=>{ ev.stopPropagation(); fn(b); }; return b; };
+    const row=(...kids)=>{ const r=el('div','devrow'); kids.forEach(k=>r.appendChild(k)); return r; };
+    const lab=t=>el('label',null,t);
+    const sec=(title,build)=>{
+      const d=el('details','devsec'); const sm=el('summary',null,title); d.appendChild(sm);
+      const body=el('div'); build(body); d.appendChild(body); return d;
+    };
+    const num=(val,min,max,step,fn)=>{ const i=el('input'); i.type='number'; i.value=val;
+      i.min=min; i.max=max; i.step=step??1; i.style.width='72px';
+      i.oninput=()=>fn(parseFloat(i.value)||0); return i; };
+    const slider=(val,min,max,step,fn)=>{ const i=el('input'); i.type='range'; i.min=min; i.max=max;
+      i.step=step; i.value=val; i.oninput=()=>fn(parseFloat(i.value)); return i; };
+    const sel=(opts,fn)=>{ const s2=el('select'); opts.forEach(o=>{ const op=el('option',null,o); op.value=o; s2.appendChild(op); });
+      s2.onchange=()=>fn(s2.value); return s2; };
+    const toggle=(label,get,set)=>{
+      const b=btn(label,()=>{ set(!get()); b.classList.toggle('on', !!get()); });
+      b.classList.toggle('on', !!get()); return b;
+    };
+    const ROOMS = ['living','kitchen','hall','bedroom','utility','basement','attic',
+                   'sidehall','bedroom2','bathroom','garage','outside'];
+
+    /* ---- the password gate ---------------------------------------- */
+    /* ---- THERE IS NO GATE ------------------------------------------
+       This was the password prompt: an input, an OK button, a five-try
+       lockout. It is gone from the shipped path on the merge brief's
+       instruction, and gone rather than disabled -- a prompt that is
+       never shown but still reads a constant is a password sitting in
+       the file waiting for someone to call it.
+
+       D.unlocked starts true, so nothing asks. Nothing about this is
+       written to localStorage, to a cookie, to the URL or to a log
+       line, because there is no longer anything to write. */
+    function gate(){ D.unlocked = true; build(); show(true); }
+
+    /* =================================================================
+       ACTIONS THAT ARE A MOMENT, NOT A VALUE
+       -----------------------------------------------------------------
+       The menu holds the world still: the animate loop skips the entire
+       update block while it is open, so no Director.tick, no updateDoors,
+       no Resources.update, no decals, no stimulus decay. That is what you
+       want when you are reading the numbers -- and it quietly broke half
+       the buttons.
+
+       A VALUE survives the pause with no help at all. Set the torch to
+       40%, drag the time slider, turn on noclip: the field holds whatever
+       you put in it and play picks it up when it resumes. Those run
+       immediately, and always did.
+
+       A MOMENT does not. Firing an event plays its sound into a live
+       audio context while you are staring at a menu, sets timers that
+       never advance because tick is frozen, and swings a door that
+       updateDoors is not currently animating -- so by the time you close
+       the panel the whole thing has already happened somewhere you were
+       not. That is the "I fired an event and nothing happened": it did
+       happen, at a moment when nothing was running to carry it.
+
+       So moments are QUEUED and flushed on the first frame after the
+       panel closes -- before that frame's update block, so the very same
+       frame ticks them. Press three things, close the menu, and all three
+       land at once with the world running underneath them. The audio
+       context is resumed on the way through, because unlocking the
+       pointer to use a menu is exactly the sort of thing that parks it.
+
+       Anything pressed while the menu is CLOSED (a scenario line firing
+       on its timer, say) runs immediately -- there is nothing to wait
+       for. */
+    const pending = [];
+    let pendNote = null, lastFail = '';
+    function defer(label, fn){
+      if(!D.open){ fn(); return; }
+      pending.push({ label, fn });
+      paintPending();
+    }
+    function paintPending(){
+      if(!pendNote) return;
+      pendNote.textContent = pending.length
+        ? `${pending.length} queued · fires the moment you close this menu`
+        + (lastFail ? `  · last failure: ${lastFail}` : '')
+        : (lastFail ? `last failure: ${lastFail}` : '');
+    }
+    function flushPending(){
+      if(!pending.length) return;
+      Audio.resume();
+      const q = pending.splice(0, pending.length);
+      for(const item of q){
+        // one bad action must not eat the rest of the queue, and nothing
+        // goes to the console -- the panel says what failed instead
+        try { item.fn(); } catch(err){ lastFail = item.label + ': ' + (err && err.message || err); }
+      }
+      paintPending();
+    }
+
+    function closeGate(){
+      if(!gateEl) return;
+      gateEl.remove(); gateEl = null; D.gating = false;
+      if(!D.unlocked && root){
+        root.classList.remove('on');
+        if(GameState.started) hostRelock();
+      }
+    }
+
+    function ensureRoot(){
+      if(root) return;
+      root = el('div'); root.id='ln-devroot';
+      const dim = el('div'); dim.id='ln-devdim'; root.appendChild(dim);
+      document.body.appendChild(root);
+    }
+
+    function show(on){
+      D.open = on;
+      ensureRoot();
+      root.classList.toggle('on', on);
+      if(panel) panel.style.display = on ? 'block' : 'none';
+      // game input is suppressed while it is open, and the keys are cleared
+      // so nothing is left held down when it closes
+      for(const k in Keys) Keys[k] = false;
+      if(on){ if(controls && controls.isLocked) controls.unlock(); }
+      else if(GameState.started){ hostRelock(); }
+    }
+
+    /* ---- the panel ------------------------------------------------- */
+    function build(){
+      if(built) return; built = true;
+      ensureRoot();
+      panel = el('div'); panel.id='ln-devpanel';
+      panel.onclick = e => e.stopPropagation();
+      panel.appendChild(el('h2', null, 'developer \u00b7 session only'));
+      readout = el('div'); readout.id='ln-devread'; panel.appendChild(readout);
+      pendNote = el('div','note'); panel.appendChild(pendNote);
+
+      // ---------------- world & time ----------------
+      panel.appendChild(sec('World & time', b=>{
+        const tl = lab('00:00');
+        const sl = slider(0.02, 0, 1, 0.001, v=>{ Sky.setTime(v); });
+        b.appendChild(row(lab('time'), sl, tl));
+        D._timeLabel = tl;
+        const jump = (name, t)=> btn(name, ()=>{ Sky.setTime(t); sl.value = t; });
+        b.appendChild(row(jump('Dusk',0.0), jump('Midnight',0.333), jump('3 AM',0.667), jump('Dawn',0.995)));
+        b.appendChild(row(
+          btn('Advance night', ()=>defer('advance night',
+              ()=>{ Director.newNight(); Resources.armGrid(); })),
+          toggle('Storm', ()=>!!World.stormOn, v=>{ World.stormOn = v;
+            if(LN.rain) LN.rain.visible = v;
+            (World.fogPlanes||[]).forEach(f=>f.visible = v); })));
+        b.appendChild(row(lab('fog'), sel(['clear','normal','thick','soup'], v=>{
+          const k = {clear:0, normal:1, thick:2.2, soup:4}[v] ?? 1;
+          (World.fogPlanes||[]).forEach(f=>{ f.visible = k>0;
+            if(f.material) f.material.opacity = 0.14*k; });
+          if(scene.fog) scene.fog.density = 0.0035 * k;
+        })));
+        b.appendChild(row(
+          btn('gridFlicker', ()=>defer('gridFlicker', ()=>Resources.gridFlicker())),
+          btn('killGrid',    ()=>defer('killGrid',    ()=>Resources.killGrid())),
+          btn('Restore mains', ()=>defer('restore mains', ()=>{
+            Resources.gridDead=false; Resources.grid=true;
+            Resources.gridOutTimer=0; Resources.tripped=false; }))));
+        b.appendChild(el('div','note',
+          'the power and the night are moments \u00b7 they fire on close, with the world running'));
+      }));
+
+      // ---------------- player ----------------
+      panel.appendChild(sec('Player', b=>{
+        let dest = ROOMS[0];
+        b.appendChild(row(lab('teleport'), sel(ROOMS, v=>dest=v), btn('Go', ()=>{
+          const c = Director.ROOM_C[dest]; if(!c) return;
+          Player.pos.copy(c);
+          Player.level = dest==='basement'?'basement':dest==='attic'?'attic':'ground';
+          Player.room = dest;
+          camera.position.set(c.x, CFG.PLAYER.eye, c.z);
+        }), btn('To cursor', ()=>{
+          const rc = new THREE.Raycaster();
+          rc.setFromCamera({x:0,y:0}, camera);
+          const hit = rc.intersectObjects(scene.children, true)[0];
+          if(!hit) return;
+          Player.pos.set(hit.point.x, 0, hit.point.z);
+          Player.room = roomAt(hit.point.x, hit.point.z, Player.level, false) || Player.room;
+        })));
+        b.appendChild(row(
+          toggle('God',      ()=>D.god,      v=>D.god=v),
+          toggle('Noclip',   ()=>D.noclip,   v=>D.noclip=v),
+          toggle('Inf torch',()=>D.infTorch, v=>D.infTorch=v)));
+        b.appendChild(row(
+          toggle('Silent',   ()=>D.silent,   v=>D.silent=v),
+          toggle('Invisible',()=>D.invisible,v=>D.invisible=v)));
+        b.appendChild(row(
+          btn('Heal', ()=>{ GameState.over=false; Player.stamina=CFG.PLAYER.staminaMax; Player.winded=false; }),
+          btn('Kill player', ()=>Director.kill(), 'warn'),
+          btn('Reset stamina', ()=>{ Player.stamina=CFG.PLAYER.staminaMax; Player.winded=false; })));
+        const spdL = lab('1.00x');
+        b.appendChild(row(lab('move speed'), slider(1,0.25,4,0.05,v=>{ D.speedMul=v; spdL.textContent=v.toFixed(2)+'x'; }), spdL));
+        const fovL = lab(String(camera.fov|0));
+        b.appendChild(row(lab('fov'), slider(camera.fov,50,120,1,v=>{ camera.fov=v; camera.updateProjectionMatrix(); fovL.textContent=v|0; }), fovL));
+      }));
+
+      // ---------------- spawning ----------------
+      panel.appendChild(sec('Spawning', b=>{
+        let spec='crawler', where='hall', mode='hunt', both=false;
+        const species = Object.keys(Director.SPECIES);
+        b.appendChild(row(lab('species'), sel(species, v=>spec=v),
+                          lab('room'), sel(ROOMS, v=>where=v)));
+        b.appendChild(row(lab('mode'), sel(['hunt','idle','wander','hide','investigate'], v=>mode=v),
+                          toggle('both species', ()=>both, v=>both=v)));
+        /* THERE IS ONE BODY PER SPECIES, AND THAT IS NOT A LIMITATION TO
+           PAPER OVER. Every entity in this game is a single prebuilt rig
+           that gets moved, so "spawn 4 crawlers" placed the same crawler
+           four times and looked like a button that half worked. The count
+           box is gone; "both species" is the honest version of it, and two
+           is the real ceiling. */
+        const warn = el('div','warnnote'); b.appendChild(warn);
+        const said = el('div','note'); b.appendChild(said);
+        const aggroL = lab('1.00x');
+        b.appendChild(row(lab('aggression'), slider(1,0.25,4,0.05,v=>{ D.aggroMul=v; aggroL.textContent=v.toFixed(2)+'x'; }), aggroL));
+        const doSpawn = (room)=>{
+          /* Placement is a VALUE, not a moment: the body goes in now, so
+             you can look at it with the world held still, and it starts
+             working the instant you close the menu. */
+          const out = [];
+          for(const id of (both ? Object.keys(Director.SPECIES).filter(k=>Director.SPECIES[k].lethal) : [spec])){
+            const e = Director.devSpawn(id, room, mode);
+            out.push(e ? `${id} \u2192 ${e.room}` : `${id} \u2192 refused`);
+          }
+          said.textContent = out.join('   ');
+          const live = Director.entities.filter(x=>x.active).length;
+          warn.textContent = live > 4
+            ? `${live} live creatures \u2014 past the soft cap; the Director was not built for a swarm.` : '';
+        };
+        b.appendChild(row(btn('Spawn', ()=>doSpawn(where)), btn('Spawn at cursor', ()=>{
+          const rc = new THREE.Raycaster(); rc.setFromCamera({x:0,y:0}, camera);
+          const hit = rc.intersectObjects(scene.children, true)[0];
+          if(!hit){ said.textContent = 'nothing under the crosshair'; return; }
+          doSpawn(roomAt(hit.point.x, hit.point.z, 'ground', false) || where);
+        })));
+        b.appendChild(row(
+          btn('Kill nearest', ()=>{
+            const live = Director.entities.filter(x=>x.active);
+            live.sort((a,c)=>a.pos.distanceTo(Player.pos)-c.pos.distanceTo(Player.pos));
+            if(live[0]) Director.despawnAll(live[0].spec.id);
+          }),
+          btn('Despawn tall', ()=>Director.despawnAll('tall')),
+          btn('Despawn crawler', ()=>Director.despawnAll('crawler')),
+          btn('Despawn all', ()=>Director.despawnAll(null), 'warn')));
+        b.appendChild(row(
+          toggle('Freeze AI', ()=>D.frozen, v=>{ D.frozen=v; Director.freezeAI(v); }),
+          toggle('Possess', ()=>!!D.possess, v=>{
+            D.possess = v ? (Director.entities.find(x=>x.active) || null) : null; })));
+        b.appendChild(row(
+          btn('Force breach', ()=>defer('force breach', ()=>{
+            const e = Director.entities.find(x=>x.active); if(!e) return;
+            let best=null,bd=1e9;
+            for(const d of World.doors){ const dd=d.pivot.position.distanceTo(e.pos); if(dd<bd){bd=dd;best=d;} }
+            if(best){ best.target=0; best.breachProgress=0; e.breachDoor=best; e.mode='breach'; }
+          })),
+          btn('Force lunge', ()=>defer('force lunge', ()=>{
+            const e=Director.entities.find(x=>x.spec.id==='crawler'&&x.active);
+            if(e){ e.pounceArmed=true; e.pounceCool=0; } })),
+          btn('Force hide', ()=>defer('force hide', ()=>{
+            const e=Director.entities.find(x=>x.active);
+            if(e){ e.pState='HIDE'; e.pT=0; e.dwellFor=8; } }))));
+        /* These two drive the two decisions in the hunt that are hardest to
+           provoke on purpose: which way round it comes, and whether it
+           gives up on a door. Both go through the same fields the hunt
+           writes -- there is no separate dev path through the router. */
+        b.appendChild(row(
+          btn('Force flank', ()=>{
+            for(const e of Director.entities){
+              if(!e.active || !e.lethal) continue;
+              e.flankGate = null; e.flankT = 0;      // re-decide on the next frame
+              e.forceFlank = true;                   // and take the long way round
+            }
+          }),
+          btn('Force retreat', ()=>defer('force retreat', ()=>{
+            for(const e of Director.entities){ if(e.active && e.lethal) Director.breakOff(e); }
+          }))));
+        b.appendChild(el('div','note','scenario \u00b7 one per line \u00b7 "t+5 spawn crawler bedroom2"'));
+        const ta = el('textarea'); b.appendChild(ta);
+        b.appendChild(row(btn('Run', ()=>runScenario(ta.value)),
+                          btn('Stop', ()=>{ D.queue.length=0; })));
+      }));
+
+      // ---------------- director ----------------
+      panel.appendChild(sec('Director & events', b=>{
+        let evId = (Director.EVENTS[0]||{}).id || '';
+        const opts = Director.EVENTS.map(e=>e.id);
+        const fired = el('div','note');
+        b.appendChild(row(lab('event'), sel(opts, v=>evId=v),
+                          btn('Fire', ()=>defer('event '+evId, ()=>{
+                            fired.textContent = `${evId}: ${Director.forceFire(evId) ? 'fired' : 'found no room to fire in'}`;
+                          }))));
+        b.appendChild(row(btn('Hunt now',   ()=>defer('hunt now',   ()=>Director.forceFire('theHunt'))),
+                          btn('Stand down', ()=>defer('stand down', ()=>Director.standDown()))));
+        b.appendChild(fired);
+        b.appendChild(el('div','note',
+          'events are moments \u00b7 they fire with the world running, so you hear them where they happen'));
+        const pL=lab('0.00'), dL=lab('0.00');
+        b.appendChild(row(lab('pressure'), slider(0,0,1,0.01,v=>{ Director.setPressure(v); pL.textContent=v.toFixed(2); }), pL));
+        b.appendChild(row(lab('dread'),    slider(0,0,1,0.01,v=>{ Director.setDread(v);    dL.textContent=v.toFixed(2); }), dL));
+        b.appendChild(row(lab('quiet'), num(0,0,300,1,v=>Director.setQuiet(v))));
+      }));
+
+      // ---------------- resources ----------------
+      panel.appendChild(sec('Resources', b=>{
+        const R = Resources;
+        const f=(name,key,max)=>row(lab(name), num(R[key],0,max,1,v=>{ R[key]=v; }));
+        b.appendChild(f('boards','boards',99)); b.appendChild(f('nails','nails',99));
+        // there are no spare cells to set a count for; the torch's own
+        // charge is the whole of the light budget
+        b.appendChild(row(lab('torch %'), num(R.torchFuel|0,0,100,1,v=>R.torchFuel=v)));
+        b.appendChild(row(lab('fuel L'), num(+R.fuel.toFixed(1),0,40,0.5,v=>R.fuel=v)));
+        b.appendChild(row(
+          btn('Empty pockets', ()=>{ R.boards=0;R.nails=0;R.torchFuel=3; }),
+          btn('Starter kit', ()=>{ R.boards=4;R.nails=20;R.torchFuel=100; }),
+          btn('Loaded', ()=>{ R.boards=40;R.nails=99;R.torchFuel=100;R.fuel=20; })));
+        b.appendChild(row(toggle('Never decrement', ()=>D.noDecrement, v=>D.noDecrement=v)));
+      }));
+
+      // ---------------- overlays ----------------
+      panel.appendChild(sec('Debug overlays', b=>{
+        const o = D.overlays;
+        const t=(name,key)=>toggle(name, ()=>o[key], v=>{ o[key]=v; refreshGizmos(); });
+        b.appendChild(row(t('Room graph','graph'), t('Paths','paths'), t('Stimuli','stim')));
+        b.appendChild(row(t('Audio radius','audio'), t('Light rooms','lights'), t('Door labels','doors')));
+        b.appendChild(row(t('Collision','solids'), t('Perf HUD','perf')));
+      }));
+
+      // ---------------- danger ----------------
+      panel.appendChild(sec('Danger zone', b=>{
+        b.appendChild(row(
+          btn('New night', ()=>defer('new night',
+              ()=>{ Director.newNight(); Resources.armGrid(); }), 'warn'),
+          btn('Reset resources', ()=>Resources.armGrid(), 'warn')));
+        b.appendChild(row(btn('Reset world', ()=>{
+          Director.despawnAll(null);
+          for(const d of World.doors){
+            while(d.boarded > 0){ d.boarded--; removeDoorBoard(d); }
+            d.boardedShut=false; d.target=d.startOpen ?? 0; d.breachProgress=0;
+            updateDoorSolid(d);
+          }
+          for(const w of World.windows){ w.sashY = 0; }
+          Resources.armGrid();
+          const c = Director.ROOM_C.bedroom; if(c){ Player.pos.copy(c); Player.room='bedroom'; }
+        }, 'warn'), btn('Reload page', ()=>location.reload(), 'warn')));
+      }));
+
+      root.appendChild(panel);
+    }
+
+    /* ---- the scenario runner ---------------------------------------- */
+    function runScenario(text){
+      D.queue.length = 0; D.queueT = 0;
+      for(const raw of String(text).split('\n')){
+        const line = raw.trim(); if(!line) continue;
+        const m = /^t\+(\d+(?:\.\d+)?)\s+(.*)$/i.exec(line);
+        if(!m) continue;
+        D.queue.push({ at: parseFloat(m[1]), cmd: m[2].trim().split(/\s+/) });
+      }
+      D.queue.sort((a,b)=>a.at-b.at);
+    }
+    function tickScenario(dt){
+      if(!D.queue.length) return;
+      D.queueT += dt;
+      while(D.queue.length && D.queue[0].at <= D.queueT){
+        const { cmd } = D.queue.shift();
+        const [op, a, b] = cmd;
+        /* Through defer() like every other action: with the menu closed --
+           which is where a scenario is meant to run -- these fire the
+           instant their timer comes up. Leave the panel open mid-scenario
+           and they stack instead of being eaten by the paused world. */
+        if(op === 'spawn')        Director.devSpawn(a || 'crawler', b || 'hall', 'hunt');
+        else if(op === 'killgrid')defer('killgrid', ()=>Resources.killGrid());
+        else if(op === 'flicker') defer('flicker',  ()=>Resources.gridFlicker());
+        else if(op === 'hunt')    defer('hunt',     ()=>Director.forceFire('theHunt'));
+        else if(op === 'despawn') Director.despawnAll(a || null);
+        else if(op === 'night')   defer('night', ()=>{ Director.newNight(); Resources.armGrid(); });
+        else if(op === 'time')    Sky.setTime(parseFloat(a) || 0);
+      }
+    }
+
+    /* ---- overlays ---------------------------------------------------- */
+    function refreshGizmos(){
+      const any = Object.values(D.overlays).some(Boolean);
+      if(!any){ if(gizmos){ scene.remove(gizmos); gizmos = null; } return; }
+      if(!gizmos){ gizmos = new THREE.Group(); gizmos.renderOrder = 999; scene.add(gizmos); }
+    }
+    const _gl = () => { while(gizmos.children.length) gizmos.remove(gizmos.children[0]); };
+    function seg(a, b2, hex){
+      const g = new THREE.BufferGeometry().setFromPoints([a, b2]);
+      return new THREE.Line(g, new THREE.LineBasicMaterial({ color:hex, depthTest:false }));
+    }
+    function boxWire(min, max, hex){
+      const b3 = new THREE.Box3(min, max);
+      const h = new THREE.Box3Helper(b3, hex); h.material.depthTest = false; return h;
+    }
+    /* FLOATING TEXT, CHEAPLY. A sprite with a canvas on it, which is the
+       only way to get readable text into a three.js scene without a font
+       loader and an external asset -- and there are no external assets in
+       this file, by rule. The texture is keyed on the string and cached,
+       because drawGizmos runs every frame and building a canvas per door
+       per frame is a way to make the debug overlay the slowest thing in
+       the game. The cache is only ever written to while an overlay is on,
+       and there are perhaps twenty distinct strings. */
+    const _labels = new Map();
+    function labelTex(text, hex){
+      const key = hex + '|' + text;
+      let t = _labels.get(key);
+      if(t) return t;
+      const c = document.createElement('canvas');
+      const ctx2 = c.getContext('2d');
+      ctx2.font = '600 34px ui-monospace, Menlo, monospace';
+      c.width = Math.ceil(ctx2.measureText(text).width) + 20; c.height = 46;
+      const g2 = c.getContext('2d');
+      g2.font = '600 34px ui-monospace, Menlo, monospace';
+      g2.fillStyle = 'rgba(6,7,8,0.72)'; g2.fillRect(0,0,c.width,c.height);
+      g2.fillStyle = '#' + hex.toString(16).padStart(6,'0');
+      g2.textBaseline = 'middle'; g2.fillText(text, 10, c.height/2 + 1);
+      t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      _labels.set(key, t);
+      return t;
+    }
+    function label(text, pos, hex, scale){
+      const t = labelTex(text, hex);
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:t, depthTest:false,
+                                                             transparent:true }));
+      const k = (scale ?? 0.34);
+      sp.scale.set(k * (t.image.width / t.image.height), k, 1);
+      sp.position.copy(pos);
+      return sp;
+    }
+    function drawGizmos(){
+      if(!gizmos) return;
+      _gl();
+      const o = D.overlays;
+      if(o.graph){
+        for(const e of LN.RoomGraph.edges){
+          const a = Director.ROOM_C[e.a], b2 = Director.ROOM_C[e.b];
+          if(!a || !b2) continue;
+          const op = edgeOpenness(e);
+          const d = e.door && World.doors.find(x=>x.name===e.door);
+          const hex = d && d.boardedShut ? 0x111111 : op > 0.55 ? 0x49c96b
+                    : op > 0.06 ? 0xd9a441 : 0xc8523c;
+          gizmos.add(seg(a.clone().setY(1.1), b2.clone().setY(1.1), hex));
+        }
+      }
+      if(o.paths){
+        for(const e of Director.entities){
+          if(!e.active) continue;
+          const tgt = e.lethal ? Player.pos : (Director.ROOM_C[e.goalRoom] || null);
+          if(tgt) gizmos.add(seg(e.pos.clone().setY(0.9), tgt.clone().setY(0.9), 0x63b6ff));
+        }
+      }
+      if(o.stim){
+        const now = GameState.t;
+        for(const st of Director.stimuli){
+          const age = now - st.t;
+          if(age > 5) continue;
+          const m = new THREE.Mesh(new THREE.SphereGeometry(0.10, 8, 6),
+            new THREE.MeshBasicMaterial({ color:0xff9840, depthTest:false }));
+          m.position.copy(st.pos); m.position.y += 0.4; gizmos.add(m);
+          // what it was, how loud, and how stale — the three things you want
+          gizmos.add(label(`${st.type} ${st.strength.toFixed(2)} ${age.toFixed(1)}s`,
+                           m.position.clone().setY(m.position.y + 0.30), 0xff9840, 0.20));
+        }
+        const tri = Director.triangulate && Director.triangulate();
+        if(tri && tri.pair)
+          gizmos.add(label('TRIANGULATED', tri.pos.clone().setY(1.35), 0xffe07a, 0.24));
+      }
+      if(o.audio){
+        for(const st of Director.stimuli){
+          if(GameState.t - st.t > 1.5) continue;
+          const m = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.4, st.strength*6), 10, 8),
+            new THREE.MeshBasicMaterial({ color:0x4fd0c0, transparent:true, opacity:0.10,
+                                          depthTest:false, side:THREE.BackSide }));
+          m.position.copy(st.pos); gizmos.add(m);
+        }
+      }
+      if(o.lights){
+        for(const k of ROOMS){
+          const c = Director.ROOM_C[k]; if(!c) continue;
+          const v = clamp(roomBrightness(k), 0, 1);
+          const col = new THREE.Color().setHSL(0.62 - v*0.50, 0.75, 0.25 + v*0.35);
+          const m = new THREE.Mesh(new THREE.SphereGeometry(0.30, 10, 8),
+            new THREE.MeshBasicMaterial({ color:col, depthTest:false }));
+          m.position.copy(c); m.position.y = 1.8; gizmos.add(m);
+        }
+      }
+      if(o.doors){
+        for(const d of World.doors){
+          const hex = d.boardedShut ? 0x9a9a9a : d.boarded ? 0xc8523c
+                    : d.open > 0.5 ? 0x49c96b : 0xd9a441;
+          const at = d.pivot.position.clone().setY(2.05);
+          const m = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6),
+            new THREE.MeshBasicMaterial({ color:hex, depthTest:false }));
+          m.position.copy(at); gizmos.add(m);
+          /* The label is the whole reason this overlay exists: a coloured
+             dot tells you a door is "bad", the text tells you which of the
+             four bad things it is and how far through a breach it is. */
+          let t = d.boardedShut ? 'SEALED' : d.open > 0.5 ? 'OPEN'
+                : d.open > 0.06 ? 'AJAR' : 'SHUT';
+          if(d.boarded) t += ` +${d.boarded}b`;
+          if(d.breachProgress > 0.05) t += ` ${d.breachProgress.toFixed(1)}s`;
+          gizmos.add(label(t, at.clone().setY(2.30), hex, 0.22));
+        }
+      }
+      if(o.solids){
+        for(const so of World.solids){
+          if(so.off) continue;
+          gizmos.add(boxWire(so.min.clone(), so.max.clone(), 0x8a7fd6));
+        }
+      }
+    }
+
+    /* ---- per-frame, and ONLY while unlocked ------------------------- */
+    let framesSeen = 0;
+    function frame(dt){
+      framesSeen++;
+      if(!D.unlocked) return;
+      /* Before anything else, and before animate's update block: whatever
+         was queued while the menu was up lands now, into a frame that is
+         about to run. */
+      if(!D.open) flushPending();
+      tickScenario(dt);
+      if(D.possess && D.possess.active){
+        camera.position.set(D.possess.pos.x,
+                            D.possess.pos.y + D.possess.spec.height*0.85,
+                            D.possess.pos.z);
+      }
+      frames++; fpsAcc += dt;
+      if(fpsAcc > 0.5){ fps = frames/fpsAcc; frames=0; fpsAcc=0; }
+      const now = performance.now();
+      if(now - lastRead > 180){
+        lastRead = now;
+        if(D.open) paintReadout();
+        paintPerf();
+      }
+      if(D.open || Object.values(D.overlays).some(Boolean)) drawGizmos();
+    }
+    /* THE PERF HUD IS ITS OWN THING, NOT A LINE IN THE PANEL.
+
+       The panel is only up while the game is paused underneath it, which
+       makes every number in it a measurement of a paused game. The one
+       readout you actually want during PLAY is the frame cost, so it lives
+       outside the panel, in the corner, with pointer-events off so it
+       cannot take a click away from the game. It is created the first time
+       it is switched on and removed when it is switched off -- there is no
+       element and no work at all while it is not wanted. */
+    let perfEl = null;
+    function paintPerf(){
+      if(!D.overlays.perf){ if(perfEl){ perfEl.remove(); perfEl = null; } return; }
+      if(!perfEl){ perfEl = el('div'); perfEl.id = 'ln-devperf'; document.body.appendChild(perfEl); }
+      const i = renderer.info;
+      perfEl.textContent =
+        `${fps.toFixed(0).padStart(3)} fps  ${(1000/Math.max(1,fps)).toFixed(1)} ms\n`
+      + `tri ${i.render.triangles}  calls ${i.render.calls}\n`
+      + `geo ${i.memory.geometries}  tex ${i.memory.textures}\n`
+      + `lights ${Lights.practicals.filter(l=>l.on && l.level>0.05).length}`
+      + `  live ${Director.entities.filter(x=>x.active).length}`;
+    }
+
+    function paintReadout(){
+      if(!readout) return;
+      const info = renderer.info;
+      const hh = (GameState.clock/60|0)%24, mm = (GameState.clock%60)|0;
+      const live = Director.entities.filter(x=>x.active);
+      let t = '';
+      t += `fps ${fps.toFixed(0).padStart(3)}  ${(1000/Math.max(1,fps)).toFixed(1)}ms  tri ${info.render.triangles}  calls ${info.render.calls}\n`;
+      t += `room ${String(Player.room).padEnd(9)} xyz ${Player.pos.x.toFixed(1)},${Player.pos.y.toFixed(1)},${Player.pos.z.toFixed(1)}\n`;
+      t += `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} ${Sky.phase}  night ${GameState.night}  skill ${Director.skillNow().toFixed(2)}\n`;
+      t += `threat ${Director.state.threat}  pressure ${Director.state.pressure.toFixed(2)}  dread ${Director.state.dread.toFixed(2)}  quiet ${Director.state.quiet|0}\n`;
+      t += `hunters ${live.filter(x=>x.lethal).length}  huntCool ${Director.huntCool().toFixed(0)}s`
+         + `  frames ${framesSeen}` + (pending.length ? `  queued ${pending.length}` : '') + `\n`;
+      for(const e of live){
+        t += `  ${e.spec.id.padEnd(8)} ${String(e.mode||'-').padEnd(7)} ${String(e.pState||'-').padEnd(11)}`
+           + ` ${String(e.navRoom||e.goalRoom||'-').padEnd(9)} ${e.pos.distanceTo(Player.pos).toFixed(1)}m`
+           + ` ${e.breachDoor?e.breachDoor.name:''}\n`;
+      }
+      readout.textContent = t;
+      if(D._timeLabel) D._timeLabel.textContent =
+        `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} \u00b7 ${Sky.phase}`;
+    }
+
+    /* ---- the one listener that exists while locked ------------------ */
+    addEventListener('keydown', e => {
+      if(e.code !== 'Backquote' && e.code !== 'F1') return;
+      e.preventDefault();
+      if(!D.unlocked){ if(gateEl) closeGate(); else gate(); return; }
+      show(!D.open);
+    }, true);
+
+    D.frame = frame;
+    D.suppress = () => D.open || D.gating;
+    // readable state, so the queue can be inspected without opening the panel
+    Object.defineProperty(D, 'queued',   { get: () => pending.length });
+    Object.defineProperty(D, 'frames',   { get: () => framesSeen });
+    Object.defineProperty(D, 'queuedLabels', { get: () => pending.map(x=>x.label) });
+    Object.defineProperty(D, 'lastFail', { get: () => lastFail });
+    return D;
+  })();
   const Director = (()=>{
     const THREAT = { DORMANT:'DORMANT', STALKING:'STALKING', HUNTING:'HUNTING', ATTACKING:'ATTACKING' };
 
@@ -39110,6 +39769,10 @@ class GlassPass extends Pass {
          back to it. */
       Director.tick(dt);
       Director.updateDecals(dt);
+      /* The panel's readouts are per-frame, like the host's. Guarded
+         because DEV.frame is replaced by a no-op on a device the panel
+         will not build for. */
+      try { DEV.frame(dt); } catch(e){}
       /* ---- AND THE REST OF THE HOUSE'S OWN FRAME -------------------
          Everything below was lifted and then never called, because the
          function that called it -- The Long Night's own frame loop --
@@ -39194,6 +39857,12 @@ class GlassPass extends Pass {
       return { x: f.x, y: placedAt.y + Player.pos.y, z: f.z,
                level: Player.level, room: Player.room };
     },
+    /* ---- THE HOUSE'S DEV PANEL ------------------------------------
+       Backquote belongs to whichever game the player is standing in,
+       the same rule the tablet's digits follow. */
+    devToggle(){ try { DEV.toggle(); } catch(e){} },
+    get devOpen(){ try { return !!DEV.open; } catch(e){ return false; } },
+    get devEligible(){ try { return !!DEV.eligible; } catch(e){ return false; } },
     /* For the harness: the one cell, and the cradle. */
     get torchFuel(){ return Resources.torchFuel; },
     get onCharger(){ return !!Resources.onCharger; },
