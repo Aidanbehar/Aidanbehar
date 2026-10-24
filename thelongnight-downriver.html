@@ -19330,7 +19330,20 @@ const UI = {
       mapCanvas: document.getElementById('mapcanvas'),
       mapNote: document.getElementById('mapnote'),
     };
-    document.getElementById('again').onclick = ()=> location.reload();
+    /* ---- SAME SEED AGAIN IS A RESET, NOT A RELOAD -----------------
+       This was location.reload(), which throws the whole world away
+       and builds it again from the same number: the heightfield, the
+       river, the forest, the town, the farmhouse, every texture and
+       every shader. Thirty seconds of loading screen to get back to a
+       world that is, by definition, identical to the one you were
+       just standing in.
+
+       Nothing about the WORLD needs to change for another go at it.
+       What needs to change is the run: where the player is, what they
+       are carrying, what the house has spent, and what the night has
+       done so far. softRestart() is the second half of startRun --
+       the half after the world is built -- and nothing else. */
+    document.getElementById('again').onclick = ()=> softRestart();
     document.getElementById('newseed').onclick = ()=>{
       const u = new URL(location.href); u.searchParams.delete('seed'); location.href = u.toString();
     };
@@ -22294,6 +22307,59 @@ function updateAimZoom(dt){
   if(Math.abs(camera.fov - want) < 0.02) return;
   camera.fov = lerp(camera.fov, want, 1 - Math.exp(-dt*9));
   camera.updateProjectionMatrix();
+}
+
+/* ---- ANOTHER GO AT THE SAME WORLD ----------------------------------
+   Everything startRun() does AFTER the world exists, and none of what
+   it does to build one. The seed, the heightfield, the forest, the
+   town and the farmhouse are all exactly as they were; this puts the
+   run back to its first frame.
+
+   The house is reset through its own verbs rather than by reaching
+   into its state: startNextNight() is what The Long Night runs between
+   nights and it already knows the list -- the grid re-armed, the
+   objectives cleared, the Director's counters zeroed, the creatures
+   put away -- and GameState.night is set back to one first so the run
+   reads as a first night rather than night four.
+
+   Fuel, boards and the cell in the torch DO come back here, unlike
+   between nights, because this is a new run and not the next night of
+   the same one. */
+function softRestart(){
+  const es = document.getElementById('endscreen');
+  if(es) es.classList.remove('on');
+  Survival.reset();
+  Gear.reset();
+  Mind.reset();
+  Director.reset();
+  Phantoms.clear();
+  Fauna.clear(); Fauna.build();
+  const s2 = Wld.start;
+  Player.pos.set(s2.x, heightAt(s2.x, s2.z), s2.z);
+  Player.vel.set(0,0,0);
+  Player.lastSafe.copy(Player.pos);
+  Player.dead = false; Player.seated = null; Player.sleeping = false;
+  Player.stamina = CFG.PLAYER.staminaMax;
+  const away = Math.atan2(s2.x - Wld.hospital.x, s2.z - Wld.hospital.z);
+  Player.yaw = away + (rngFor('facing')()-0.5)*2.2;
+  Player.pitch = -0.04;
+  G.hours = P.startHour;
+  G.t = 0;
+  G.over = false; G.won = false; G.deaths = null;
+  G.admitted = false; G.admittedAt = 0;
+  G.admittedStage = 0; G.admittedCollapsing = false;
+  G.clockHeld = false;
+  G.paused = false;
+  /* The house, through its own front door: its night, its grid, its
+     objectives and its creatures, in the order it resets them itself. */
+  if(typeof LN !== 'undefined' && LN.site) LN.restart();
+  Terra.update(Player.pos.x, Player.pos.z, true);
+  Veg.refill(Player.pos.x, Player.pos.z);
+  for(let i=0;i<20;i++){ updateWeather(0.2); updateSky(0.2); }
+  clock.getDelta();
+  try { renderer.domElement.requestPointerLock(); } catch(e){}
+  Audio.resume();
+  UI.say(OPENING_LINE, 6);
 }
 
 /* =====================================================================
@@ -31931,7 +31997,8 @@ function makeDoor(axis, at, op, thick){
   const d = {
     pivot, leaf, solid, dir, axis, at, a0:op.a0, a1:op.a1, y0:op.y0, y1:op.y1,
     name: op.name || 'DOOR', open: op.open||0, target: op.open||0,
-    locked: !!op.locked, exterior: !!op.exterior,
+    locked: !!op.locked, lockedAtStart: !!op.locked,
+    openAtStart: op.open||0, exterior: !!op.exterior,
     room: op.room||'?', creakPos: pivot.position.clone(),
   };
   d.leafW = w;
@@ -34730,7 +34797,8 @@ function buildLighting(){
     l.position.set(x,y,z);
     l.layers.enable(LAYER_BASEMENT);
     scene.add(l);
-    const p = { light:l, base:intensity, on:opts.on!==false, room:opts.room||'?',
+    const p = { light:l, base:intensity, on:opts.on!==false,
+                onAtStart:opts.on!==false, room:opts.room||'?',
                 flicker:opts.flicker||0, seed:rand()*100, drop:0, name:opts.name||'LAMP',
                 watts: opts.watts ?? 60, kelvin, vis:1, level:0 };
     Lights.practicals.push(p);
@@ -40008,6 +40076,65 @@ class GlassPass extends Pass {
       return { x: f.x, y: placedAt.y + Player.pos.y, z: f.z,
                level: Player.level, room: Player.room };
     },
+    /* Another go at the same house: its own between-nights reset,
+       with the night counter put back to one and the things it
+       deliberately carries across -- fuel, boards, the cell -- given
+       back, because this is a new run rather than the next night. */
+    restart(){
+      GameState.night = 0;          // startNextNight() takes it to one
+      GameState.over = false;
+      GameState.stress = 0.06;
+      /* The consumables. These deliberately survive a night -- what you
+         did not burn is still in the tank at nine the next evening --
+         which is exactly why they have to be put back by hand here:
+         startNextNight() is written to leave them alone. */
+      Resources.fuel = 6.5;
+      Resources.boards = 4; Resources.nails = 20;
+      Resources.torchFuel = 100; Resources.onCharger = false;
+      Resources.food = 6; Resources.water = 8; Resources.medical = 2;
+      /* The generator is one flag: Resources.update() writes it through
+         to World.generator.running every frame, so clearing it here
+         stops the engine, the LED and the audio in one go. */
+      Resources.generatorOn = false;
+      /* Every board comes off, through the same two functions that put
+         them on, so the meshes leave the scene with the counters.
+         Zeroing `boarded` alone would have left the timber hanging in
+         the air over an unboarded door for the rest of the session. */
+      for(const d of World.doors){
+        while(d.boardMeshes && d.boardMeshes.length) removeDoorBoard(d);
+        d.boarded = 0; d.boardedShut = false; d.forced = 0;
+        /* The locks have to come back too, and they need a record of
+           how they started: a run where you found the cellar key left
+           the cellar door unlocked, and without openAtStart/lockedAtStart
+           the next run began with it already open. */
+        d.locked = d.lockedAtStart;
+        d.open = d.openAtStart; d.target = d.openAtStart; applyDoorAngle(d);
+      }
+      for(const w of World.windows){
+        for(const b of w.boards) if(b.parent) b.parent.remove(b);
+        w.boards.length = 0;
+        w.boarded = 0; w.forced = false; w.sashY = 0;
+      }
+      /* And the night itself, through the house's own between-nights
+         reset: the line back up, the objectives cleared, the Director's
+         counters zeroed and the creatures put away. */
+      /* EVERY SWITCH BACK TO HOW IT WAS FOUND. `on` is the switch and
+         `level` is only what the bulb is currently doing about it --
+         updateLights() lerps level towards `on` every frame, so zeroing
+         level alone would have been undone within three frames. Nothing
+         in the between-nights reset touches switches, and rightly so:
+         between nights a lamp you left on is a lamp you left on. On a
+         new run it is not.
+
+         No applyRoomLighting() call here. The first version made one,
+         from Player.room -- which is stale the moment the player is
+         outdoors, and the end screen is usually reached outdoors. The
+         next frame's own pass does it from the real viewpoint. */
+      for(const pr of Lights.practicals){ pr.on = pr.onAtStart; pr.level = 0; pr.drop = 0; }
+      Lights.flash = 0;
+      startNextNight();
+      GameState.t = 0;
+    },
     /* ---- THE HOUSE'S DEV PANEL ------------------------------------
        It binds its OWN Backquote listener, which is how it worked in
        The Long Night, so there is nothing here to call. The first go
@@ -40039,6 +40166,11 @@ class GlassPass extends Pass {
     doorByName(n){ return World.doors.find(d=>d.name === n) || null; },
     /* For the harness: give the house boards and nails to work with. */
     setStock(boards, nails){ Resources.boards = boards; Resources.nails = nails; },
+    /* The two board adders, out where the dev panel and the tests can
+       reach them. They are the only way to get real timber into the
+       scene without standing at a door holding E, which is what made
+       the board half of restart() untestable. */
+    addDoorBoard(d){ addDoorBoard(d); }, addWindowBoard(w){ addBoard(w); },
     /* For the harness: swing every door in the house through the same
        code the player's E goes through, and report how many moved. */
     swingAllDoors(){
