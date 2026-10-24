@@ -37876,6 +37876,30 @@ const Resources = {
       : 'The breakers go back over. Nothing comes up — there is nothing ' +
         'feeding them.');
   },
+  /* ---- THE MAINS GOING FOR GOOD ----------------------------------
+     The dev panel has had a killGrid button since the panel was lifted
+     and this is the method it calls. It was never brought across, so
+     the button threw a TypeError and the grid never died -- which is
+     the whole of "the dev menu cannot kill the grid". gridFailIn,
+     which arms it on its own clock during a night, is lifted and
+     counts down to a call that did not exist either.
+
+     The generator is deliberately NOT touched here. A generator that
+     stops when the mains stop is a generator for nothing; the lights
+     staying on when you have one running is the machine doing its job,
+     and the message says which half of the house you have lost. */
+  killGrid(){
+    if(this.gridDead) return;
+    this.gridDead = true;
+    this.grid = false;
+    this.gridOutTimer = 1e9;
+    Audio.breakerTrip(World.breaker ? World.breaker.pos : camera.position);
+    UI.say('The mains go, and this time they do not come back. ' +
+           (this.generatorOn
+              ? 'Whatever you have not put on the generator, you have lost.'
+              : 'The generator is in the garage, at the far end of the wing.'), 9);
+    Director.notice('grid-down', 0.8);
+  },
   gridFlicker(){
     if(!this.grid || this.gridDead) return;
     this.grid = false;
