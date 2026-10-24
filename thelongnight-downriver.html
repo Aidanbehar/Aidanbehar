@@ -23342,6 +23342,52 @@ const CFG = {
       }));
 
       // ---------------- player ----------------
+      /* ---- THE FOREST'S HALF, IN THE SAME PANEL --------------------
+         Two games, two dev panels, and the one you could reach while
+         indoors only knew about the house -- so flight, the fauna and
+         the debug views meant walking outside to get at them.
+
+         They are a section here instead of a second overlay. Every
+         name this closure uses for them is shadowed by the house's own
+         -- CFG is the house's config, Fauna does not exist in here at
+         all -- so the host's are reached through window.DR, which is
+         the same route the house's audio takes to find the host's
+         context. Read live on each click rather than captured, so a
+         button cannot go stale against a world rebuilt under it. */
+      panel.appendChild(sec('Forest (Downriver)', b=>{
+        const H = ()=> (typeof window !== 'undefined' ? window.DR : null);
+        const dbg = ()=>{ const h = H(); return h && h.CFG ? h.CFG.DEBUG : null; };
+        b.appendChild(row(
+          toggle('flight',   ()=>{ const d=dbg(); return !!(d&&d.fly); },
+                             v =>{ const d=dbg(); if(d) d.fly = v; }),
+          toggle('invulnerable', ()=>{ const d=dbg(); return !!(d&&d.invuln); },
+                             v =>{ const d=dbg(); if(d) d.invuln = v; })));
+        b.appendChild(row(lab('speed'), slider(1, 0.25, 6, 0.25, v=>{
+          const d = dbg(); if(d) d.speedMult = v; })));
+        b.appendChild(row(
+          btn('collision view', ()=>{ const h=H(); if(h&&h.CollisionView) h.CollisionView.toggle(); }),
+          btn('creature view',  ()=>{ const h=H(); if(h&&h.CreatureView)  h.CreatureView.toggle(); })));
+        /* The beasts. Spawned at the player, which indoors means on
+           the porch rather than in the room -- the territory rule bars
+           them from the house and a dev button does not get to break
+           a rule the game keeps. */
+        const kinds = (()=>{ const h=H(); return h && h.BEASTS ? Object.keys(h.BEASTS) : []; })();
+        if(kinds.length){
+          let kind = kinds[0];
+          /* Fauna.spawn(kind, x, z) -- the same call Downriver's own
+             panel makes. The first version of this invented a
+             spawnAt() that does not exist and guarded it with an `if`,
+             which would have made the button do nothing quietly. */
+          b.appendChild(row(lab('spawn'), sel(kinds, v=>kind=v), btn('Put one in the yard', ()=>{
+            const h = H(); if(!h || !h.Fauna) return;
+            const yard = farmLocalToWorldXZ(0, 14, placedAt);
+            h.Fauna.spawn(kind, yard.x, yard.z);
+          })));
+        }
+        b.appendChild(row(
+          btn('clear the forest', ()=>{ const h=H(); if(h&&h.Fauna) h.Fauna.clear(); }),
+          btn('respawn them',     ()=>{ const h=H(); if(h&&h.Fauna) h.Fauna.build(); })));
+      }));
       panel.appendChild(sec('Player', b=>{
         let dest = ROOMS[0];
         b.appendChild(row(lab('teleport'), sel(ROOMS, v=>dest=v), btn('Go', ()=>{
@@ -38692,7 +38738,20 @@ function captureFeed(c){
     if(!foliageWas) setFoliageVisible(true);
     renderer.setRenderTarget(c.rt);
     renderer.clear();
-    renderer.render(scene, c.cam);
+    /* ---- THE FEED RENDERS THE HOST SCENE -------------------------
+       `scene` in this closure is the deliberate shadow for GROUP, and
+       rendering GROUP alone renders a world with NO AMBIENT AND NO
+       SKY: Downriver's ambient and hemisphere lights belong to the
+       host scene, not to the house. So every feed came back black and
+       the CCTV gain amplified black into a flat dark grey. Measured
+       on three channels at once: capturing happily, not dead, 14,000
+       lit pixels of a brightest value of 13.7 out of 255.
+
+       The camera is a child of GROUP which is a child of the host
+       scene, so its world matrix is right either way -- what changes
+       is what gets drawn and what lights it. The glass pass renders
+       the host scene for exactly this reason. */
+    renderer.render(hostScene, c.cam);
     renderer.readRenderTargetPixels(c.rt, 0, 0, FEED_W, FEED_H, c.pixels);
     captured = true;
   } catch(err){
