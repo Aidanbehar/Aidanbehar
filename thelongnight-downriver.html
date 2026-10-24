@@ -39663,6 +39663,31 @@ class GlassPass extends Pass {
          interact() a door still flagged locked here would be one that
          could never be opened at all. */
       for(const d of World.doors) d.locked = false;
+      /* AND THAT UNLOCK IS WHAT A RESTART HAS TO GO BACK TO, not the
+         flag the door was built with. lockedAtStart is captured when the
+         record is made, which is before this loop, so restoring it after
+         a run would bolt the front door and the side entry shut again --
+         the exact state the comment above says can never be opened. The
+         opening state of a door is whatever the finished build left. */
+      for(const d of World.doors){ d.lockedAtStart = d.locked; d.openAtStart = d.open; }
+      /* ---- THE MAINS HAVE TO BE ARMED FOR THE FIRST NIGHT TOO -------
+         armGrid() seeds gridFailIn with 150-330 seconds, and it was
+         called from startNextNight() and the dev buttons and nowhere
+         else -- so night ONE began with the field at its declared 0,
+         and the countdown in Resources.update()
+
+             if(this.grid && !this.gridDead && Sky.phase === 'night'){
+               this.gridFailIn -= dt;
+               if(this.gridFailIn <= 0) this.killGrid();
+
+         tripped on the first night frame of every run. The house was
+         therefore never on mains power at all: measured with every
+         switch in the house on, 0 of 14 practicals lit, and 6 lit the
+         moment the generator was started. That is the whole of "the
+         generator stays on when the grid goes out as well as lights"
+         and of the grid controls doing nothing -- there was nothing
+         left to kill, and a breaker trip was sounding on frame one. */
+      Resources.armGrid();
       /* ---- AND THESE RUN LAST, ON A HOUSE THAT EXISTS ---------------
          Both of these measure the built group, and the first attempt
          called them straight after buildCameras() -- before buildHouse,
@@ -40319,8 +40344,25 @@ class GlassPass extends Pass {
     get onCharger(){ return !!Resources.onCharger; },
     setTorchFuel(v){ Resources.torchFuel = v; },
     seatTorch(on){ Resources.onCharger = !!on; },
-    setPower(on){ Resources.grid = !!on; Resources.generatorOn = !!on;
-                  Resources.fuel = Math.max(Resources.fuel, 8); },
+    /* Clearing Resources.grid is NOT how the power goes off, and this
+       used to do exactly that. The recovery branch in Resources.update()
+       reads
+
+           if(!this.grid && !this.gridDead){ this.gridOutTimer -= dt;
+             if(this.gridOutTimer <= 0) this.grid = true;
+
+       so a bare grid = false with gridDead still false and the timer
+       still at 0 was put straight back on the same frame, with a
+       contactor thump and a line about the lights coming up. Measured
+       with every switch on: 14 practicals lit, power supposedly off.
+       Off therefore means killGrid() -- which sets gridDead and parks
+       the timer at 1e9, the one state the recovery branch cannot walk
+       back -- and on means armGrid(), the same verb a new night uses. */
+    setPower(on){
+      if(on){ Resources.armGrid(); Resources.generatorOn = true;
+              Resources.fuel = Math.max(Resources.fuel, 8); }
+      else  { Resources.killGrid(); Resources.generatorOn = false; }
+    },
     /* For the harness: the seats, and getting on and off them. */
     seats(){ return World.seats || []; },
     sitDown(seat){ sitDown(seat); },
