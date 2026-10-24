@@ -38615,6 +38615,30 @@ function buildCameras(){
     const fwd = new THREE.Vector3().subVectors(s.look, s.pos).normalize();
     cam.position.copy(s.pos).addScaledVector(fwd, 0.22);
     cam.lookAt(s.look);
+    /* ---- AND IT HAS TO BELONG TO THE HOUSE -------------------------
+       THIS is why the cameras showed nothing. In The Long Night the
+       house sits at the world origin, so a camera that was never added
+       to anything still had the right world matrix -- its local
+       transform WAS its world transform, and the original gets away
+       with leaving it parentless.
+
+       Here the house is placed hundreds of metres out and turned
+       through a quarter circle, so a parentless camera stayed behind at
+       the origin: measured at house-local (-2.4, 2.2, 5.4) while the
+       player stood at (814, 31.2, -1319.8). Every feed was rendering
+       whatever is underneath Downriver's terrain a kilometre and a half
+       from the farmhouse, which is nothing at all -- raw readback max
+       0 on all seven channels, and the grey the tiles did show was the
+       grade's own sensor noise rather than a picture.
+
+       Added AFTER lookAt() on purpose. Both s.pos and s.look are in
+       the house's own metres, and lookAt() works in world space, so
+       aiming has to happen while the camera is still parentless and in
+       that frame. Adding it afterwards leaves the local transform
+       untouched and composes the house's placement on top, which is
+       exactly the frame the housings and the rest of the house are
+       already in. */
+    scene.add(cam);
     const rt = new THREE.WebGLRenderTarget(FEED_W, FEED_H, {
       type: THREE.UnsignedByteType, minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter,
       depthBuffer:true, colorSpace:THREE.LinearSRGBColorSpace
@@ -38691,6 +38715,13 @@ let feedCursor = 0, feedTimer = 0;
 /* The channel whose pixels the GPU is currently writing into its pixel
    buffer, with the fence that says when it has finished. One slot,
    because only one capture is queued per tick. */
+/* The root the feeds render against: The Long Night's own scene, with
+   the background and fog the original gave it. GROUP is parked in here
+   for the length of a capture and nothing else ever lives in it. */
+const feedScene = new THREE.Scene();
+feedScene.background = new THREE.Color(0x05070a);
+feedScene.fog = new THREE.FogExp2(0x0a0d12, 0.030);
+
 let pendingFeed = null, pendingSync = null;
 /* Frames the current fence has been waited on, and how many captures in
    a row have had to fall back to the blocking read. */
@@ -38991,20 +39022,33 @@ function captureFeed(c){
     if(!foliageWas) setFoliageVisible(true);
     renderer.setRenderTarget(c.rt);
     renderer.clear();
-    /* ---- THE FEED RENDERS THE HOST SCENE -------------------------
-       `scene` in this closure is the deliberate shadow for GROUP, and
-       rendering GROUP alone renders a world with NO AMBIENT AND NO
-       SKY: Downriver's ambient and hemisphere lights belong to the
-       host scene, not to the house. So every feed came back black and
-       the CCTV gain amplified black into a flat dark grey. Measured
-       on three channels at once: capturing happily, not dead, 14,000
-       lit pixels of a brightest value of 13.7 out of 255.
+    /* ---- THE FEED RENDERS THE HOUSE, AS IT DID IN THE LONG NIGHT ---
+       The original is `renderer.render(scene, c.cam)` against The Long
+       Night's own scene: the house, its own hemisphere and ambient
+       lights, its own near-black background and its own heavy fog.
 
-       The camera is a child of GROUP which is a child of the host
-       scene, so its world matrix is right either way -- what changes
-       is what gets drawn and what lights it. The glass pass renders
-       the host scene for exactly this reason. */
-    renderer.render(hostScene, c.cam);
+       This rendered hostScene instead, on the reasoning that GROUP has
+       no ambient of its own. That reasoning was simply wrong --
+       buildLighting() adds the house's hemi and ambient to `scene`,
+       which IS GROUP, so the house has always carried its own rig --
+       and rendering the host scene cost the feeds both ways: every
+       frame drew the whole of Downriver, the terrain, the forest and
+       the town, through a 72-degree lens pointed at a wall, and lit
+       the result with the outdoor rig instead of the house's.
+
+       feedScene exists so the capture can have the original's root
+       without taking GROUP away from the host for good: GROUP moves
+       into it for the render and goes straight back in the finally.
+       Its local transform is unchanged by the move and both roots sit
+       at the origin, so every camera's world matrix is the same in
+       both -- which is what makes this safe. */
+    const groupHome = GROUP.parent;
+    try {
+      feedScene.add(GROUP);
+      renderer.render(feedScene, c.cam);
+    } finally {
+      if(groupHome) groupHome.add(GROUP);
+    }
     /* The pixels are ASKED FOR here and collected later. The target is
        still bound at this point, which is what feedRequestPixels needs. */
     feedDiag.requests++;
