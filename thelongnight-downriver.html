@@ -38688,6 +38688,128 @@ const FEED_GAMMA = (()=>{
 })();
 
 let feedCursor = 0, feedTimer = 0;
+/* The channel whose pixels the GPU is currently writing into its pixel
+   buffer, with the fence that says when it has finished. One slot,
+   because only one capture is queued per tick. */
+let pendingFeed = null, pendingSync = null;
+/* Frames the current fence has been waited on, and how many captures in
+   a row have had to fall back to the blocking read. */
+let feedWait = 0, feedAsyncMisses = 0;
+/* Counters for the feed pipeline, so a channel that is not updating can
+   be told apart from a pipeline that is not running. */
+const feedDiag = { requests:0, asked:0, polls:0, timeouts:0, signalled:0,
+                   landed:0, failed:0, syncFallback:0, stalled:0, gaveUp:0 };
+/* Whether the asynchronous path is available at all. Decided once, on
+   the first capture, because the context is not up before then. */
+let feedAsync = null;
+
+/* Ask the GPU for a channel's pixels without waiting for them. The
+   framebuffer must already be bound -- captureFeed() calls this with the
+   render target still set, immediately after rendering into it. */
+function feedRequestPixels(c){
+  const gl = renderer.getContext();
+  if(feedAsync === null)
+    feedAsync = typeof WebGL2RenderingContext !== 'undefined'
+             && gl instanceof WebGL2RenderingContext;
+  if(!feedAsync) return false;
+  if(!c.pbo){
+    c.pbo = gl.createBuffer();
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, c.pbo);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, c.w * c.h * 4, gl.STREAM_READ);
+  } else gl.bindBuffer(gl.PIXEL_PACK_BUFFER, c.pbo);
+  /* The null offset is the whole point: with a buffer bound here,
+     readPixels writes into THAT and returns without a sync. */
+  gl.readPixels(0, 0, c.w, c.h, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  if(pendingSync) gl.deleteSync(pendingSync);
+  /* feedWait is NOT reset here. It is reset when a readback completes.
+     Resetting it per request was the first version's mistake: a capture
+     is queued every fifth frame and the deadline was six, so the counter
+     was cleared before it could ever be reached and the fallback was
+     unreachable code. Measured: 299 timeouts and 0 fallbacks. */
+  pendingSync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  gl.flush();                 // the fence is meaningless unless it is sent
+  feedDiag.asked++;
+  return true;
+}
+
+/* Collect a channel's pixels if, and only if, the GPU has finished with
+   them. Called once per frame; a fence that has not signalled yet simply
+   waits for the next one, which is why nothing ever blocks here. */
+function feedReadback(){
+  feedDiag.polls++;
+  if(!pendingFeed) return;
+  const gl = renderer.getContext();
+  const c = pendingFeed;
+  if(feedAsync && pendingSync){
+    /* clientWaitSync with a timeout of zero is a question, not a wait. */
+    const st = gl.clientWaitSync(pendingSync, 0, 0);
+    /* ---- THE DEADLINE -----------------------------------------------
+       A fence that has not signalled is normally just a fence that will
+       signal next frame, and waiting is the whole point. But a fence
+       that NEVER signals would freeze every feed, which is a far worse
+       bug than the stall this replaced -- and it is not hypothetical:
+       under a synchronous test loop with no frame boundary, Chrome never
+       flushes the command buffer and the fence sits on TIMEOUT_EXPIRED
+       for ever. So after five frames of waiting the pixels are fetched
+       the old blocking way, and only after twelve captures in a row have
+       needed that is the asynchronous path abandoned for the session.
+       Twelve rather than three because a busy GPU can legitimately miss
+       a five-frame deadline now and again, and the penalty for being
+       patient is a slightly staler tile while the penalty for giving up
+       early is the stall back for good.
+
+       The worst case is therefore exactly the behaviour this replaced,
+       and the normal case costs nothing. */
+    if(st === gl.TIMEOUT_EXPIRED){
+      feedDiag.timeouts++;
+      if(++feedWait <= 5) return;                     // not yet; try next frame
+      feedDiag.stalled++;
+      if(++feedAsyncMisses >= 12){ feedAsync = false; feedDiag.gaveUp = 1; }
+      gl.deleteSync(pendingSync); pendingSync = null;
+      pendingFeed = null; feedWait = 0;
+      feedDiag.syncFallback++;
+      try { renderer.readRenderTargetPixels(c.rt, 0, 0, c.w, c.h, c.pixels); }
+      catch(err){
+        feedDiag.failed++;
+        if(console && console.debug) console.debug('[feed] readback failed', c.name, err);
+        return;
+      }
+      feedDiag.landed++;
+      c.lastSuccessfulCapture = GameState.t;
+      gradeFeed(c);
+      return;
+    }
+    feedDiag.signalled++;
+    feedAsyncMisses = 0;
+    gl.deleteSync(pendingSync); pendingSync = null;
+    pendingFeed = null; feedWait = 0;
+    if(st === gl.WAIT_FAILED){ feedDiag.failed++; return; }  // the watchdog comes back
+    try {
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, c.pbo);
+      gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, c.pixels);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    } catch(err){
+      feedDiag.failed++;
+      if(console && console.debug) console.debug('[feed] readback failed', c.name, err);
+      return;
+    }
+  } else {
+    pendingFeed = null; feedDiag.syncFallback++;
+    try { renderer.readRenderTargetPixels(c.rt, 0, 0, c.w, c.h, c.pixels); }
+    catch(err){
+      if(console && console.debug) console.debug('[feed] readback failed', c.name, err);
+      return;
+    }
+  }
+  /* lastSuccessfulCapture moves when the PIXELS land, not when the
+     render is queued -- the watchdog uses it to spot a starved channel,
+     and a channel whose readback keeps failing is starved however
+     reliably it renders. */
+  feedDiag.landed++;
+  c.lastSuccessfulCapture = GameState.t;
+  gradeFeed(c);
+}
 /* ---------- THE WALL DROPS OUT WHILE THE HOUSE IS DARK -------------
    Seven channels on a domestic DVR running off the same supply as
    everything else, in a house whose lights are out: they do not sit
@@ -38761,8 +38883,47 @@ function updateFeeds(dt){
       c.stamp.textContent = '--:--:--';
     }
   }
+  /* ---- THE READBACK OF THE *PREVIOUS* CAPTURE ---------------------
+     readRenderTargetPixels() is a synchronous GPU->CPU readback, and a
+     synchronous readback does not just copy bytes: it blocks until every
+     piece of work already queued on the GPU has finished, this frame's
+     main scene render included. Measured on seed 20260110 with the
+     tablet open: rendering a feed into its target cost 3.4ms, and
+     reading it back cost 1001ms. The giveaway that it was a pipeline
+     stall rather than the pixels was reading ONE pixel -- 450ms for a
+     single pixel, then 0.4ms for the full 384x216 immediately after,
+     because by then the queue had drained. Every five frames, for as
+     long as the tablet was open: 34 seconds of stall in 300 frames.
+
+     That stall is also what made the generator glitch. The audio graph
+     runs on its own clock in its own thread, and setGenerator() leans on
+     setTargetAtTime from the frame loop -- so half a second of blocked
+     main thread is half a second of the generator's gain and occlusion
+     filter not being updated while the sound keeps playing.
+
+     Simply doing the same call one tick later does NOT help, and that
+     was the first attempt: a sync readback drains whatever is queued at
+     the moment it runs, and by then the next frame's main render is
+     already queued in front of it. Measured, it changed nothing -- 60
+     spikes and 33.6 seconds, the same as before.
+
+     So the pixels come back ASYNCHRONOUSLY. readPixels() with a buffer
+     bound to PIXEL_PACK_BUFFER does not return pixels at all; it asks
+     the GPU to write them into that buffer and returns immediately. A
+     fence tells us when it has, and only then do we copy them out, which
+     costs nothing because the work is already done. Nothing blocks.
+
+     This needs WebGL2, which is what three.js uses on anything that can
+     run this game, and it falls back to the old blocking call otherwise
+     so the feeds still work rather than going black. */
+  feedReadback();
   feedTimer -= dt;
   if(feedTimer > 0) return;
+  /* One capture in flight at a time. Queueing another over an unread one
+     threw the first channel's pixels away, and it is also what made the
+     deadline above unreachable. A tick skipped this way is a tick the
+     round robin simply takes next frame. */
+  if(pendingFeed) return;
   feedTimer = 1/14;                       // ~14 captures/sec spread over 4 feeds
   /* When one channel is focused it is the only one on screen, so give it
      every capture instead of spending three quarters of them on tiles
@@ -38844,7 +39005,10 @@ function captureFeed(c){
        is what gets drawn and what lights it. The glass pass renders
        the host scene for exactly this reason. */
     renderer.render(hostScene, c.cam);
-    renderer.readRenderTargetPixels(c.rt, 0, 0, FEED_W, FEED_H, c.pixels);
+    /* The pixels are ASKED FOR here and collected later. The target is
+       still bound at this point, which is what feedRequestPixels needs. */
+    feedDiag.requests++;
+    feedRequestPixels(c);
     captured = true;
   } catch(err){
     if(console && console.debug) console.debug('[feed] capture failed', c.name, err);
@@ -38855,8 +39019,7 @@ function captureFeed(c){
     applyRoomLighting(Player.room);            // hand the budget back to the player
   }
   if(!captured) return;
-  c.lastSuccessfulCapture = GameState.t;
-  gradeFeed(c);
+  pendingFeed = c;
 }
 
 /* The software CCTV grade, split out of the capture so it can be re-run
@@ -39715,6 +39878,10 @@ class GlassPass extends Pass {
     get started(){ return GameState.started; },
     get clockNow(){ return +GameState.clock.toFixed(1); },
     get audioReady(){ return Audio.ready; },
+    /* Read-only view of the generator bus: its gain and the occlusion
+       filter's cutoff, the two numbers that move when it sounds wrong. */
+    genState(){ return Audio.genState(); },
+    feedDiag(){ return Object.assign({}, feedDiag); },
     get audioCtx(){ return Audio.ready ? Audio.contextRef : null; },
     get audioBusConnected(){ return Audio.ready; },
     /* Asked of the objects that actually exist. The version of this
