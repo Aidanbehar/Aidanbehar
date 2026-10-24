@@ -3610,10 +3610,49 @@ function adaptResolution(dt, fps){
     }
   } else RES.good = 0;
   if(RES.hold > 0) return;
-  if(fps < 48 && RES.i > 0){ setPixelStep(RES.i-1); RES.hold = 4; return; }
-  if(RES.i > 0) return;
-  const want = fps < 24 ? 3 : fps < 30 ? 2 : fps < 38 ? 1 : 0;
-  if(want > RES.rung && ladderDown()) RES.hold = 4;
+  /* ---- HOW FAST THE LADDER IS ALLOWED TO COME DOWN -----------------
+     It used to come down one rung of one kind at a time, on a four
+     second hold, and it had to empty the resolution ladder before it
+     would touch quality at all. Five pixel steps and three quality
+     rungs at four seconds each is close to half a minute of running at
+     settings the machine has already demonstrated it cannot hold -- and
+     the complaint is not "it gets better after thirty seconds", it is
+     that the game is laggy, which is a description of those thirty
+     seconds.
+
+     The hold exists for a good reason: react to one bad frame and the
+     resolution oscillates visibly. So the hold stays, and what changes
+     is the SIZE of the step. A machine at 45fps is one step away from
+     the target and takes one step. A machine at 20fps is not one step
+     away from anything, and pretending otherwise just means it spends
+     the next twenty seconds finding that out.
+
+     The way back up is deliberately NOT symmetric: one step at a time,
+     on a longer hold, after eight unbroken seconds above 55. Dropping
+     four steps because of a hitch costs a little sharpness; climbing
+     four steps because of a quiet moment costs a stutter every time. */
+  const target = 50;
+  if(fps > 0 && fps < 48){
+    const shortfall = (target - fps) / target;          // 0 at target, 1 at a standstill
+    if(RES.i > 0){
+      // one step per 12% under target, so 20fps takes four at once
+      const drop = Math.max(1, Math.round(shortfall / 0.12));
+      setPixelStep(Math.max(0, RES.i - drop));
+      /* Only hold the full four seconds for a small correction. A big
+         one has already changed a lot and wants measuring again soon. */
+      RES.hold = drop > 1 ? 1.5 : 4;
+      return;
+    }
+    /* The resolution ladder is at the bottom and it is still not enough,
+       so the quality rungs come down -- and more than one of them if the
+       gap is wide. */
+    const want = fps < 24 ? 3 : fps < 30 ? 2 : fps < 38 ? 1 : 0;
+    if(want > RES.rung){
+      let moved = false;
+      while(RES.rung < want && ladderDown()) moved = true;
+      if(moved) RES.hold = 4;
+    }
+  }
 }
 
 /* Everything the renderer owns that the rest of the file needs a handle
@@ -22659,6 +22698,7 @@ window.DR = {
   buildWaterMesh, buildTerrainMesh, buildAllStructures, validateWorld, TOWN, Terra, playHalf, Keys,
   parseSeed, seedState, randomSeed, SEED_MAX, EASTER_EGGS,
   buildEventLibrary, pickTarget, findSpot, startRun, boot, stepWorld, RES,
+  adaptResolution, setPixelStep, ladderUp, ladderDown, applyRungs,
   admit, townDepth, checkArrival, updateShadowBudget, ShadowBudget,
   gxOf, gzOf, wxOf, wzOf, idxOf, surfaceAt, obbPush, Doors, registerColliders, shelterAt,
   buildHouse, structSolids, Hold, pickTarget, Sleep, Smoke, forceBoards, skipWeather,
