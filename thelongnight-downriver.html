@@ -36713,7 +36713,14 @@ function mergeStaticHouse(){
       walk(x, d+1);
     }
   };
-  walk(World, 0); walk(Lights, 0); walk(Equipment, 0);
+  /* ATTIC_CLIMBS is in this list because leaving it out broke all three
+     ways into the attic. Each climb owns a leaf that ROTATES and a run
+     of treads that is hidden until the stair is folded down; merged,
+     both were baked where they stood at build time and made permanently
+     visible, so the hall stair stood deployed in the air with its hatch
+     shut over it -- a flight you could see, could not use, and walked
+     straight through. Exactly as reported. */
+  walk(World, 0); walk(Lights, 0); walk(Equipment, 0); walk(ATTIC_CLIMBS, 0);
 
   /* ---- WHICH MESHES, AND HOW DEEP ---------------------------------
      The first version took only DIRECT children of the group, which is
@@ -36743,8 +36750,15 @@ function mergeStaticHouse(){
        marked all 2221 meshes beneath it as untouchable and merged
        nothing at all. What matters is what lies BETWEEN a mesh and the
        root, not the root. */
+    /* `!o.visible` is part of this test and not just of the per-mesh one
+       below, because visibility is inherited: a hidden GROUP's children
+       each carry visible === true and would otherwise merge happily,
+       come back always-drawn, and stop answering to the flag that was
+       hiding them. That is what put the folding stair's treads in the
+       air permanently -- the group was hidden, every tread in it was
+       not. */
     const self = (o === scene) ? false
-      : (blocked || keep.has(o) || !!o.name
+      : (blocked || keep.has(o) || !!o.name || !o.visible
          || (o.userData && Object.keys(o.userData).length > 0));
     if(o !== scene && o.isMesh){
       if(self){
