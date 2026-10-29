@@ -1282,6 +1282,11 @@ body.scrubbing .view.active{animation:none}
     <div class="card">
       <div class="card-title"><span class="ico" data-icon="gauge"></span><h3>Estimated BAC right now</h3></div>
       <p class="card-note">Gauge position is a display convention — see the note below it.</p>
+      <label class="check">
+        <input type="checkbox" id="alc-cannabis"><span class="box"></span>
+        <span>I have also used cannabis today</span>
+      </label>
+
       <div class="gauge-wrap" id="alc-gauge"></div>
       <div class="gauge-readout" id="alc-readout"></div>
       <div class="stat-row" id="alc-stats"></div>
@@ -1383,6 +1388,10 @@ body.scrubbing .view.active{animation:none}
       <table class="wide" id="alc-ref-table"></table>
     </div>
     <div class="scroll-hint"><span class="ico" data-icon="swipe"></span>Scroll sideways to see every column.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="ico" data-icon="alert"></span><h3>Combining with&hellip;</h3></div>
+    <div id="alc-combine"></div>
   </div>
 </section>
 
@@ -2126,6 +2135,10 @@ body.scrubbing .view.active{animation:none}
     <div class="card-title"><span class="ico" data-icon="dropper"></span><h3>Sublingual and buccal caffeine</h3></div>
     <div id="caf-tips"></div>
   </div>
+  <div class="card">
+    <div class="card-title"><span class="ico" data-icon="alert"></span><h3>Combining with&hellip;</h3></div>
+    <div id="caf-combine"></div>
+  </div>
 </section>
 
 
@@ -2278,6 +2291,10 @@ body.scrubbing .view.active{animation:none}
   <div class="card">
     <div class="card-title"><span class="ico" data-icon="book"></span><h3>Five things worth knowing</h3></div>
     <div id="nic-tips"></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="ico" data-icon="alert"></span><h3>Combining with&hellip;</h3></div>
+    <div id="nic-combine"></div>
   </div>
 </section>
 
@@ -3482,10 +3499,23 @@ function cannabisModel(cfg){
                   rather than being forced to by a Math.max. The route floor
                   below is a floor, not the usual answer. */
   const feltEnd = pkEndMin(felt, cap, floor);
-  const feltFade = pkEndMin(felt, cap, INTENSITY_BANDS[1].min);
+  /* A dose whose peak never reaches the Mild band has no Mild boundary to
+     fall out of, and reporting "faded after 0 min" for it would be absurd.
+     In that case the 1 % floor IS the end of the felt curve. */
+  const mildMin = INTENSITY_BANDS[1].min;
+  const feltFade = peak.value >= mildMin ? pkEndMin(felt, cap, mildMin) : feltEnd;
   const impEndRaw = pkEndMin(imp, cap, IMPAIR_THRESHOLD_PCT);
-  const impEnd = Math.max(impEndRaw, feltFade,
-                          cfg.route === 'inhaled' ? TOL_FLOOR_INHALED_MIN : TOL_FLOOR_ORAL_MIN);
+  /* The route floor exists so that no combination of tolerance and
+     abstinence can talk a real impairment window down to nothing. It is NOT
+     a claim that any dose at all impairs you for six hours: a dose that
+     never produces modelled impairment and never reaches the Mild band does
+     not get a floor applied to it, because "1 mg of THC impairs your driving
+     for six hours" is the kind of number that teaches people to ignore the
+     rest of the app. */
+  const hasWindow = impEndRaw > 0 || peak.value >= mildMin;
+  const impEnd = hasWindow
+    ? Math.max(impEndRaw, feltFade, cfg.route === 'inhaled' ? TOL_FLOOR_INHALED_MIN : TOL_FLOOR_ORAL_MIN)
+    : Math.max(impEndRaw, feltFade);
   const onset = (() => {
     const step = cap / 2000;
     for (let t = 0; t <= peak.at; t += step) if (felt(t) >= floor){
@@ -4570,7 +4600,7 @@ function badgeFor(pct){
 const STORE_KEY = 'substance-effects-estimator.v1';
 const DEFAULT_STATE = {
   ui:{theme:'dark', themeChosen:false, units:'metric', time:'hm', view:'home'},
-  alc:{rKey:'male', rMode:'flat', rCustom:'', weightKg:75, heightCm:175, ageY:30, beta:'auto', food:'light', model:'pk',
+  alc:{rKey:'male', rMode:'flat', rCustom:'', weightKg:75, heightCm:175, ageY:30, beta:'auto', food:'light', model:'pk', withCannabis:false,
        drinks:[], nextId:1, draft:{vol:355, abv:5, when:30, over:0, name:'Regular beer', icon:'beer'}},
   /* Each cannabis tab holds a LIST of doses, like caffeine. The single-dose
      fields survive as the draft the builder edits; a v1 save is migrated into
@@ -5213,6 +5243,8 @@ function renderAlcohol(){
     body:'Divided attention, hazard scanning and reaction time are measurably degraded from around 0.02 %. Estimates like this one cannot tell you it is safe to drive — nothing can except not drinking.'});
   if (ps.state === 'rising') banners.push({level:'info', icon:'hourglass', title:'Still absorbing',
     body:'Your BAC is modelled as still rising — ' + ps.text.toLowerCase() + '. Alcohol already swallowed keeps arriving for some time after the last sip.'});
+  if (state.alc.withCannabis) banners.push({level:'warn', icon:'leaf', title:'You said you have also used cannabis today',
+    body:'Impairment from the two together is at least additive, and this is the commonest drug combination found in impaired driving. A controlled study also found that drinking before vaporized cannabis produced higher peak blood THC. This estimate is for ethanol alone and does not know what you entered on the cannabis tabs.'});
   renderBanners(document.getElementById('alc-banners'), banners);
 
   /* --- chart -------------------------------------------------------------- */
@@ -5366,6 +5398,14 @@ function alcSetDraftFromPreset(key){
 }
 
 function initAlcohol(){
+  mountStatic('alc-combine', COMBINE_ALCOHOL_HTML);
+  /* Self-reported co-use. Stored in THIS tab's state only; it raises a banner
+     here and is never read by the cannabis tabs. */
+  const alcCan = document.getElementById('alc-cannabis');
+  if (alcCan){
+    alcCan.checked = !!state.alc.withCannabis;
+    alcCan.addEventListener('change', () => { state.alc.withCannabis = alcCan.checked; saveState(); renderAlcohol(); });
+  }
   const s = state.alc;
 
   buildPills(document.getElementById('alc-rmode'), ALCOHOL.R_MODES, s.rMode, k => { s.rMode = k; saveState(); renderAlcohol(); });
@@ -5692,6 +5732,31 @@ const COMBINE_CANNABIS_HTML =
   '<div class="acc"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="alert"></span></span>Children and pets<span class="chev ico" data-icon="chevron"></span></button>' +
   '<div class="acc-body article"><p>Edibles left within reach are a leading cause of paediatric cannabis exposures, because they look like sweets and a child&rsquo;s dose per kilogram is enormous. ' +
   'Store them like medicine: closed, labelled, out of reach. For any exposure in a child or a pet, call Poison Control (1-800-222-1222 in the US) or emergency services straight away &mdash; do not wait to see what happens.</p></div></div>';
+
+/* ---- "Combining with..." cards. Static, and deliberately so: none of them
+   reads another tab's state, and each says that it does not. ------------- */
+const COMBINE_ALCOHOL_HTML =
+'<div class="acc open"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="leaf"></span></span>Cannabis<span class="chev ico" data-icon="chevron"></span></button>' +
+  '<div class="acc-body article"><p>Impairment from the two together is at least additive, and this is the most common drug combination found in impaired driving. A controlled study also found that drinking alcohol before vaporized cannabis produced <em>higher</em> peak blood THC than the same cannabis without the drink, so the cannabis side is not simply unchanged. Nausea and vomiting are more likely than with either alone. This tab models ethanol only and does not know what you entered on the cannabis tabs.</p></div></div>' +
+'<div class="acc"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="capsule"></span></span>Benzodiazepines, opioids and sleep aids<span class="chev ico" data-icon="chevron"></span></button>' +
+  '<div class="acc-body article"><p>This is the dangerous one. Ethanol with benzodiazepines, opioids, prescription sleep aids or sedating antihistamines produces respiratory depression well beyond what either produces alone, and that combination is a major cause of overdose deaths. The model here has no term for it and never will &mdash; there is no safe dose arithmetic to offer.</p></div></div>' +
+'<div class="acc"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="coffee"></span></span>Caffeine<span class="chev ico" data-icon="chevron"></span></button>' +
+  '<div class="acc-body article"><p>Caffeine masks the <em>sleepiness</em>, not the impairment. Reaction time, judgement and coordination stay where the alcohol put them while you feel more capable of using them, which is why pre-mixed caffeinated alcoholic drinks were pulled from sale. Feeling awake is not the same as being sober, and this app will never tell you that you are.</p></div></div>' +
+  '';
+
+const COMBINE_CAFFEINE_HTML =
+'<div class="acc open"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="beer"></span></span>Alcohol<span class="chev ico" data-icon="chevron"></span></button>' +
+  '<div class="acc-body article"><p>Caffeine masks the sleepiness that alcohol produces without touching the impairment underneath it. Reaction time, judgement and coordination stay exactly where the alcohol put them while you feel more capable of using them. That mismatch &mdash; feeling alert while being impaired &mdash; is the specific reason pre-mixed caffeinated alcoholic drinks were taken off the market, and it is a reason to be more careful rather than less.</p></div></div>' +
+'<div class="acc"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="clock"></span></span>Your own sleep<span class="chev ico" data-icon="chevron"></span></button>' +
+  '<div class="acc-body article"><p>The commonest interaction is with the night ahead. A dose with a five-hour half-life taken in the afternoon is still substantially present at bedtime, and the sleep panel on this tab models exactly that. Losing sleep to caffeine makes you want more caffeine the next day, which is the whole loop.</p></div></div>' +
+  '';
+
+const COMBINE_NICOTINE_HTML =
+'<div class="acc open"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="beer"></span></span>Alcohol<span class="chev ico" data-icon="chevron"></span></button>' +
+  '<div class="acc-body article"><p>Drinking reliably increases how much people smoke and how strongly they crave a cigarette, and the two are among the most commonly co-used substances there are. It is one of the hardest situations in which to hold a quit attempt, and it is worth planning for rather than being surprised by. This tab models nicotine only and does not know what you entered on the Alcohol tab.</p></div></div>' +
+'<div class="acc"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="coffee"></span></span>Caffeine<span class="chev ico" data-icon="chevron"></span></button>' +
+  '<div class="acc-body article"><p>Smoking induces the enzyme that clears caffeine and roughly halves its half-life, which is why heavy smokers often drink a great deal of coffee. <strong>Stopping smoking reverses that within days</strong>, so the same coffee habit suddenly delivers substantially more caffeine &mdash; and the jitteriness and poor sleep that follow are frequently mistaken for nicotine withdrawal. The caffeine tab has a clearance setting for exactly this.</p></div></div>' +
+  '';
 
 /* ---- tolerance readout --------------------------------------------------- */
 function toleranceNote(tol){
@@ -7119,6 +7184,7 @@ function cafExitEdit(){
 function initCaffeine(){
   const s = state.caf;
   mountStatic('caf-tips', CAFFEINE_TIPS);
+  mountStatic('caf-combine', COMBINE_CAFFEINE_HTML);
   buildPills(document.getElementById('caf-presets'), CAFFEINE.PRESETS.map(p => ({key:p.key, label:p.label, sub:p.mg + ' mg', icon:p.icon})), null, cafSetDraftFromPreset);
   const holdField = document.getElementById('caf-hold-field'), hold = document.getElementById('caf-hold');
   const syncRoute = () => {
@@ -7867,6 +7933,7 @@ const NIC_TIPS =
 function initNicotine(){
   const s = state.nic;
   mountStatic('nic-tips', NIC_TIPS);
+  mountStatic('nic-combine', COMBINE_NICOTINE_HTML);
   mountStatic('nic-withdrawal', NIC_WITHDRAWAL_HTML());
   nicSetDraftFromProduct(s.draft.product || 'cig');
 
@@ -11177,7 +11244,271 @@ function boot(){
   document.addEventListener('visibilitychange', retick);
 
   switchView(state.ui.view || 'home', {noScroll:true});
+
+  /* The self-test runs last, so everything it asserts against is built. */
+  if (/(^|[#?&])selftest\b/.test(location.hash + location.search)) setTimeout(selfTest, 0);
 }
+/* ---------------------------------------------------------------------------
+   SELF-TEST  —  runs when the URL carries #selftest or ?selftest
+
+   Every assertion here exists because something in this file was once wrong
+   in that exact way. It logs pass/fail to the console and leaves the result
+   on window.SELFTEST so a headless browser can read it without scraping.
+   ------------------------------------------------------------------------ */
+function selfTest(){
+  const R = {pass:0, fail:0, lines:[]};
+  const ok = (name, cond, detail) => {
+    if (cond) R.pass++; else R.fail++;
+    R.lines.push((cond ? 'PASS  ' : 'FAIL  ') + name + (detail != null ? '   :: ' + detail : ''));
+  };
+  const near = (a, b, tol) => Math.abs(a - b) <= (tol == null ? 0.5 : tol);
+
+  /* ---- a reference state for a module, with one dose of `amount` ---- */
+  const refOral = (C, mg) => {
+    const st = {doses:[{id:1, mg:mg, product:'gummy', food:'light', when:0, at:Date.now()}], nextId:2,
+      weightKg:70, bf:'25', sex:'male', tol:'none', first:false, daysOff:'', age:'',
+      withAlcohol:false, legacyCal:false, whatIf:0, product:'gummy', food:'light', cbd:0, cbn:0, cbg:0};
+    return cannabisComputeFor(C, st);
+  };
+  const refInh = (mgTHC, method) => ({model:smokedRefModel((mgTHC / 1000) / 0.20, 20, method)});
+
+  /* ---- 1. curve shape ------------------------------------------------- */
+  [[D9, 25], [D8, 50]].forEach(([C, mg]) => {
+    const M = refOral(C, mg).model;
+    let negative = false, peaks = 0, prev = -1, rising = true;
+    for (let t = 0; t <= M.feltFade; t += M.feltFade / 400){
+      const v = M.felt(t);
+      if (v < -1e-9) negative = true;
+      if (v < prev - 1e-9 && rising){ peaks++; rising = false; }
+      if (v > prev + 1e-9) rising = true;
+      prev = v;
+    }
+    ok('curve is non-negative (' + mg + ' mg)', !negative);
+    ok('one dose gives one peak (' + mg + ' mg)', peaks <= 1, 'turning points ' + peaks);
+  });
+  const smM = refInh(25, 'joint').model;
+  let smNeg = false;
+  for (let t = 0; t <= smM.feltFade; t += smM.feltFade / 400) if (smM.felt(t) < -1e-9) smNeg = true;
+  ok('inhaled curve is non-negative', !smNeg);
+
+  /* ---- 2. monotonic in dose AT EVERY TIME POINT ----------------------- */
+  const monoFail = (() => {
+    const a = refOral(D9, 10).model, b = refOral(D9, 20).model;
+    for (let t = 0; t <= 900; t += 5) if (b.felt(t) < a.felt(t) - 1e-6) return t;
+    return -1;
+  })();
+  ok('a bigger dose is never below a smaller one', monoFail < 0,
+     monoFail < 0 ? 'checked 0-900 min' : 'fails at t=' + monoFail);
+
+  /* ---- 3. the calibration rank order ---------------------------------- */
+  const o10 = refOral(D9, 10).model.peak.value, o25 = refOral(D9, 25).model.peak.value,
+        o50 = refOral(D9, 50).model.peak.value;
+  const s10 = refInh(10, 'pipe').model.peak.value, s25 = refInh(25, 'pipe').model.peak.value,
+        v10 = refInh(10, 'vaporizer').model.peak.value, v25 = refInh(25, 'vaporizer').model.peak.value;
+  ok('oral 10 < oral 25', o25 > o10 + 1, Math.round(o10) + ' -> ' + Math.round(o25));
+  ok('oral 25 < oral 50', o50 > o25 + 1, Math.round(o25) + ' -> ' + Math.round(o50));
+  ok('oral 50 ~ smoked 10', Math.abs(o50 - s10) <= 6, Math.round(o50) + ' vs ' + Math.round(s10));
+  ok('smoked 10 < smoked 25', s25 > s10 + 1, Math.round(s10) + ' -> ' + Math.round(s25));
+  ok('smoked 25 ~ vaporized 10', Math.abs(s25 - v10) <= 6, Math.round(s25) + ' vs ' + Math.round(v10));
+  ok('vaporized 10 < vaporized 25', v25 > v10 + 1, Math.round(v10) + ' -> ' + Math.round(v25));
+  ok('10 mg inhaled outranks 10 mg swallowed', s10 > o10 + 1,
+     'inhaled ' + Math.round(s10) + ' vs oral ' + Math.round(o10));
+  /* band placement, which is what the fit was actually anchored to */
+  [[2.5, ['Minimal', 'Mild']], [5, ['Mild']], [10, ['Moderate']], [25, ['Strong']], [50, ['Very Strong']]]
+    .forEach(([mg, want]) => {
+      const lbl = intensityLabel(refOral(D9, mg).model.peak.value);
+      ok('oral ' + mg + ' mg lands in ' + want.join('/'), want.indexOf(lbl) !== -1,
+         Math.round(refOral(D9, mg).model.peak.value) + ' % = ' + lbl);
+    });
+
+  /* ---- 4. Delta-8 at 2x mg equals Delta-9 at 1x mg EXACTLY ------------ */
+  let d8Max = 0;
+  [5, 10, 20, 40, 75].forEach(mg => {
+    const a = refOral(D9, mg).model, b = refOral(D8, mg * 2).model;
+    for (let t = 0; t <= 900; t += 15) d8Max = Math.max(d8Max, Math.abs(a.felt(t) - b.felt(t)));
+  });
+  ok('Delta-8 at 2x mg matches Delta-9 at 1x mg', d8Max < 1e-9, 'max difference ' + d8Max.toExponential(2));
+  ok('the EC50 ratio is exactly 2', Math.abs(D8.CAL.ec50 / D9.CAL.ec50 - 2) < 1e-9);
+  ok('the Hill coefficients are identical', D8.CAL.n === D9.CAL.n);
+
+  /* ---- 5. impairment outlasts the felt curve, and the floors hold ----- */
+  [['oral', refOral(D9, 25).model, TOL_FLOOR_ORAL_MIN], ['inhaled', refInh(20, 'joint').model, TOL_FLOOR_INHALED_MIN]]
+    .forEach(([label, M, floor]) => {
+      ok(label + ': impairment ends at or after the felt curve', M.impairmentEnd >= M.feltFade - 1e-6,
+         Math.round(M.impairmentEnd) + ' vs ' + Math.round(M.feltFade) + ' min');
+      ok(label + ': impairment window is at or above the floor', M.impairmentEnd >= floor - 1e-6,
+         Math.round(M.impairmentEnd) + ' vs floor ' + floor + ' min');
+    });
+  /* ...and tolerance cannot talk it below the floor */
+  (() => {
+    const st = {doses:[{id:1, mg:2.5, product:'gummy', food:'light', when:0, at:Date.now()}], nextId:2,
+      weightKg:70, bf:'25', sex:'male', tol:'heavy', first:false, daysOff:'0', age:'',
+      withAlcohol:false, legacyCal:false, whatIf:0, product:'gummy', food:'light', cbd:0, cbn:0, cbg:0};
+    const M = cannabisComputeFor(D9, st).model;
+    ok('heavy tolerance cannot shrink the window below the floor', M.impairmentEnd >= TOL_FLOOR_ORAL_MIN - 1e-6,
+       Math.round(M.impairmentEnd) + ' min');
+  })();
+  /* ...and the impairment window matches the driving meta-analysis */
+  ok('20 mg inhaled: impairment window is 5-8 h', (() => {
+    const h = refInh(20, 'joint').model.impairmentEnd / 60;
+    return h >= 5 && h <= 8;
+  })(), round(refInh(20, 'joint').model.impairmentEnd / 60, 1) + ' h');
+
+  /* ---- 6. superposition ----------------------------------------------- */
+  (() => {
+    const base = {nextId:3, weightKg:70, bf:'25', sex:'male', tol:'none', first:false, daysOff:'', age:'',
+                  withAlcohol:false, legacyCal:false, whatIf:0, product:'gummy', food:'light', cbd:0, cbn:0, cbg:0};
+    const two = cannabisComputeFor(D9, Object.assign({}, base, {doses:[
+      {id:1, mg:10, product:'gummy', food:'light', when:0, at:Date.now()},
+      {id:2, mg:10, product:'gummy', food:'light', when:0, at:Date.now()}]})).model;
+    const one20 = cannabisComputeFor(D9, Object.assign({}, base, {doses:[
+      {id:1, mg:20, product:'gummy', food:'light', when:0, at:Date.now()}]})).model;
+    let maxD = 0;
+    for (let t = 0; t <= 900; t += 10) maxD = Math.max(maxD, Math.abs(two.felt(t) - one20.felt(t)));
+    ok('two 10 mg doses at the same moment equal one 20 mg dose', maxD < 1e-9,
+       'max difference ' + maxD.toExponential(2));
+    /* and a staggered pair must exceed either alone at the later peak */
+    const stag = cannabisComputeFor(D9, Object.assign({}, base, {doses:[
+      {id:1, mg:10, product:'gummy', food:'light', when:60, at:minutesAgoToStamp(60)},
+      {id:2, mg:10, product:'gummy', food:'light', when:0, at:Date.now()}]})).model;
+    ok('a staggered pair peaks above a single dose', stag.peak.value > refOral(D9, 10).model.peak.value + 1,
+       Math.round(stag.peak.value) + ' vs ' + Math.round(refOral(D9, 10).model.peak.value));
+  })();
+
+  /* ---- 7. the export equals the screen, first-time flag included ------ */
+  (() => {
+    const saved = JSON.parse(JSON.stringify(state.d9));
+    const prevView = currentView;
+    state.d9.doses = [{id:1, mg:20, product:'gummy', food:'light', when:150, at:minutesAgoToStamp(150)}];
+    state.d9.nextId = 2; state.d9.first = true; state.d9.tol = 'none';
+    currentView = 'd9';
+    renderTHC();
+    const onScreen = Math.round(cannabisComputeFor(D9, state.d9).nowPct);
+    const txt = buildExport().text;
+    const m = txt.match(/Now \([^)]*\): (\d+) %/);
+    ok('the export matches the screen with first-time ticked', !!m && +m[1] === onScreen,
+       'export ' + (m ? m[1] : 'n/a') + ' vs screen ' + onScreen);
+    const hasSens = /first-time sensitivity/.test(txt);
+    ok('the export records the first-time multiplier', hasSens);
+    state.d9 = saved; currentView = prevView;
+  })();
+
+  /* ---- 8. loadState migrates a v1 single-dose save -------------------- */
+  (() => {
+    const before = {d9:{mg:15, product:'chocolate', food:'heavy', elapsed:45, takenAt:Date.now() - 45 * 60000,
+                        weightKg:80, tol:'regular', first:true},
+                    sm:{method:'bong', amount:0.3, potency:22, depth:'deep', elapsed:20}};
+    const snapshot = JSON.stringify(state);
+    Object.keys(DEFAULT_STATE).forEach(k => { state[k] = mergeDefaults(DEFAULT_STATE[k], before[k]); });
+    migrateCannabisDoses(before);
+    ok('a v1 Delta-9 dose becomes a one-item list', state.d9.doses.length === 1, JSON.stringify(state.d9.doses));
+    ok('...keeping its milligrams', state.d9.doses[0] && state.d9.doses[0].mg === 15);
+    ok('...its product and food', state.d9.doses[0] && state.d9.doses[0].product === 'chocolate' && state.d9.doses[0].food === 'heavy');
+    ok('...and its timing', state.d9.doses[0] && Math.abs(state.d9.doses[0].when - 45) <= 1);
+    ok('a v1 smoked session becomes a one-item list', state.sm.doses.length === 1);
+    ok('...keeping amount, potency, method and depth',
+       state.sm.doses[0] && state.sm.doses[0].amount === 0.3 && state.sm.doses[0].potency === 22 &&
+       state.sm.doses[0].method === 'bong' && state.sm.doses[0].depth === 'deep');
+    ok('settings outside the dose survive the migration', state.d9.weightKg === 80 && state.d9.tol === 'regular' && state.d9.first === true);
+    /* a v2 save with an empty list must STAY empty */
+    const v2 = {d9:{doses:[], mg:15}};
+    state.d9 = mergeDefaults(DEFAULT_STATE.d9, v2.d9);
+    migrateCannabisDoses(v2);
+    ok('a v2 save with an empty list is not repopulated', state.d9.doses.length === 0);
+    /* deep merge: nested defaults must not be shared references */
+    state.laws.map.sel = 'ZZ';
+    ok('nested state is cloned, not shared with the defaults', DEFAULT_STATE.laws.map.sel !== 'ZZ',
+       'DEFAULT_STATE.laws.map.sel = ' + DEFAULT_STATE.laws.map.sel);
+    Object.assign(state, JSON.parse(snapshot));
+  })();
+
+  /* ---- 9. prose matches the constants --------------------------------- */
+  /* Rendered prose only. documentElement.innerHTML includes this script, so
+     every phrase the scan looks for was being found in the scan itself. */
+  const html = (() => {
+    const clone = document.body.cloneNode(true);
+    clone.querySelectorAll('script').forEach(n => n.remove());
+    return clone.innerHTML;
+  })();
+  const prose = [
+    ['Delta-8 EC50 is twice Delta-9', Math.abs(D8.CAL.ec50 / D9.CAL.ec50 - 2) < 1e-9],
+    ['no smoked efficiency is outside the 2-56 % Huestis range',
+     SMOKED.METHODS.every(m => m.efficiency >= 0.02 && m.efficiency <= 0.56)],
+    ['the three smoked (not vaporised) efficiencies are inside the 8-24 % typical band',
+     ['joint', 'pipe', 'bong'].every(k => {
+       const e = SMOKED.METHODS.find(m => m.key === k).efficiency;
+       return e >= 0.08 && e <= 0.24;
+     })],
+    ['KA_MUCOSAL really is five times KA_PER_HOUR', Math.abs(CAFFEINE.KA_MUCOSAL / CAFFEINE.KA_PER_HOUR - 5) < 1e-9],
+    ['the rendered preset count equals the list length', (() => {
+      const m = html.match(/(\d+) presets/);
+      return !!m && +m[1] === ALCOHOL.PRESETS.length;
+    })()],
+    ['no article still says "Five estimators"', !/Five estimators/.test(html)],
+    ['no article still claims CBD damps intensity', !/modest damping of overall intensity/.test(html)],
+    /* The phrase survives in art-d8, but only inside the paragraph that
+       disowns it. What matters is that the code it described is gone: the
+       two modules' per-effect curves must be byte-identical. */
+    ['Delta-8 per-effect curves are identical to Delta-9',
+     JSON.stringify(D8.EFFECTS) === JSON.stringify(D9.EFFECTS)],
+    ['any surviving mention of shifted weights is a correction',
+     !/shifted per-effect weights/.test(html) || /An earlier version of this article claimed[^<]*shifted per-effect weights/.test(html)],
+    ['no article still quotes distributionFactor in the tolerance formula',
+     !/effectiveDose = mg .{0,3} distributionFactor/.test(html)],
+    ['no article still calls 45 % a midpoint of 10-35 %', !/midpoints of those published ranges/.test(html)],
+    ['the hemp banner is not in the wrong tense',
+     !(Date.now() < HEMP_DATES.synthetic.at && /lost hemp status on/.test(cbdFederalBanner()))],
+    ['the CBD legend lists only categories in use',
+     !Object.keys(mapCatsInUse('cbd-state')).some(k => !CBD_CATS[k]) &&
+     !mapCatsInUse('cbd-state').none],
+    ['every effect declares an explicit emax',
+     [D9, D8, SMOKED].every(C => C.EFFECTS.every(e => typeof e.emax === 'number' && e.emax > 0 && e.emax <= 1))],
+    ['every effect declares a tolerance exponent',
+     [D9, D8, SMOKED].every(C => C.EFFECTS.every(e => typeof e.tolK === 'number' && e.tolK >= 0 && e.tolK <= 1))],
+    ['every effect declares an effect-site lag',
+     [D9, D8, SMOKED].every(C => C.EFFECTS.every(e => typeof e.lag === 'number' && e.lag >= 0))],
+    ['every PROVENANCE entry has a known type',
+     PROVENANCE.every(p => !!PROVENANCE_TYPES[p.type])],
+    ['the fitted calibrations are registered as fitted',
+     PROVENANCE.some(p => p.k === 'D9.CAL' && p.type === 'fitted') &&
+     PROVENANCE.some(p => p.k === 'SMOKED.CAL' && p.type === 'fitted')],
+    ['the Delta-8 calibration is registered as derived',
+     PROVENANCE.some(p => p.k === 'D8.CAL' && p.type === 'derived')]
+  ];
+  prose.forEach(([name, cond]) => ok('prose: ' + name, cond));
+
+  /* ---- 10. no tab render function reads another tab's state ----------- */
+  (() => {
+    const owners = {renderAlcohol:'alc', renderTHC:'d9', renderD8:'d8', renderSmoked:'sm',
+                    renderCaffeine:'caf', renderNicotine:'nic', renderHalfLife:'hl'};
+    const slices = ['alc', 'd9', 'd8', 'sm', 'caf', 'nic', 'hl', 'laws', 'conv'];
+    Object.keys(owners).forEach(fn => {
+      const src = String(window[fn]);
+      const foreign = slices.filter(k => k !== owners[fn] && new RegExp('state\\.' + k + '\\b').test(src));
+      ok(fn + ' reads only its own state', foreign.length === 0,
+         foreign.length ? 'also reads state.' + foreign.join(', state.') : 'state.' + owners[fn] + ' only');
+    });
+    /* the shared cannabis layer must not touch `state` at all */
+    ['cannabisModel', 'cannabisDoseItems', 'cannabisComputeFor', 'cannabisBand', 'renderOralCannabis',
+     'pkExposureAt', 'pkLaggedExposureAt', 'curvePhases'].forEach(fn => {
+      ok(fn + ' never touches state directly', !/\bstate\s*\./.test(String(window[fn])));
+    });
+  })();
+
+  /* ---- 11. the average-intensity integrator --------------------------- */
+  (() => {
+    const flat = integrateIntensity(t => (t >= 60 && t < 180) ? 40 : 0, 400, {floor:1});
+    ok('a flat 40 % plateau averages exactly 40 while it lasts', near(flat.avgActive, 40, 0.05), round(flat.avgActive, 3));
+    ok('...and 40 x 120/180 over the whole window', near(flat.avgAll, 40 * 120 / 180, 0.05), round(flat.avgAll, 3));
+  })();
+
+  R.lines.forEach(l => (l.charAt(0) === 'F' ? console.error(l) : console.log(l)));
+  const summary = 'SELF-TEST: ' + R.pass + ' passed, ' + R.fail + ' failed';
+  (R.fail ? console.error : console.log)(summary);
+  window.SELFTEST = {pass:R.pass, fail:R.fail, lines:R.lines, summary:summary};
+  return R;
+}
+
 document.addEventListener('DOMContentLoaded', boot);
 </script>
 </body>
