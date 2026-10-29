@@ -3499,11 +3499,16 @@ function cannabisModel(cfg){
                   rather than being forced to by a Math.max. The route floor
                   below is a floor, not the usual answer. */
   const feltEnd = pkEndMin(felt, cap, floor);
-  /* A dose whose peak never reaches the Mild band has no Mild boundary to
-     fall out of, and reporting "faded after 0 min" for it would be absurd.
-     In that case the 1 % floor IS the end of the felt curve. */
+  /* "Faded" means out of the Mild band OR down to 30 % of its own peak,
+     whichever comes first. A single absolute boundary does not work at both
+     ends of the dose range: a dose whose peak never reaches Mild has no Mild
+     boundary to fall out of, and measuring it against the 1 % floor instead
+     made the column non-monotonic, with 2.5 mg reporting a LONGER fade than
+     5 mg. Taking the earlier of the two keeps it ordered at every dose and
+     means the same thing at both ends. */
   const mildMin = INTENSITY_BANDS[1].min;
-  const feltFade = peak.value >= mildMin ? pkEndMin(felt, cap, mildMin) : feltEnd;
+  const fadeAt = Math.max(floor, Math.min(mildMin, peak.value * FADE_SHARE_OF_PEAK));
+  const feltFade = peak.value > 0 ? pkEndMin(felt, cap, fadeAt) : 0;
   const impEndRaw = pkEndMin(imp, cap, IMPAIR_THRESHOLD_PCT);
   /* The route floor exists so that no combination of tolerance and
      abstinence can talk a real impairment window down to nothing. It is NOT
@@ -3540,6 +3545,7 @@ function cannabisModel(cfg){
    "Peak" is where the curve is within 80 % of its own maximum, so a flat-
    topped large dose reports a long peak and a small one reports a brief
    one - which is the difference the old 22 %/65 % split could not see. */
+const FADE_SHARE_OF_PEAK = 0.30;    // HAND-TUNED: what counts as "faded" for a small dose
 const PHASE_PEAK_SHARE = 0.80;      // HAND-TUNED: what counts as "at the peak"
 function curvePhases(model){
   const thr = model.peak.value * PHASE_PEAK_SHARE;
@@ -5853,21 +5859,17 @@ function oralBanners(C, s, R, L){
   if (s.first && mg > C.STD_UNIT_MG)
     b.push({level:'crit', icon:'alert', title:'First-time user above one standard THC unit',
       body:'A standard research unit is <strong>' + C.STD_UNIT_MG + '&nbsp;mg</strong> of THC &mdash; a unit of measure, not a limit and not a recommendation. ' +
-           'This is ' + stdUnits + ' of them. For someone with no tolerance the usual advice is to start at half a unit, wait a full two hours, and only then decide.'});
-  if (mg >= 50)
-    b.push({level:'crit', icon:'alert', title:'Very large edible dose',
-      body:'At this size the pleasant part of the curve has flattened while anxiety, disorientation, vomiting and tachycardia have not. ' +
-           'It is not dangerous the way an alcohol overdose is dangerous, but it can be genuinely frightening and can last most of a day.'});
-  else if (mg >= 25)
-    b.push({level:'warn', icon:'alert', title:'Large edible dose',
-      body:'25&nbsp;mg and up is an experienced-user dose. In the trial this model is calibrated against, 25&nbsp;mg significantly impaired ' +
-           'attention and working memory, and one participant in seventeen vomited.'});
+           'This is ' + stdUnits + ' of them. ' + L.firstTimeAdvice});
+  if (mg >= L.bigDose)
+    b.push({level:'crit', icon:'alert', title:L.bigTitle, body:L.bigBody});
+  else if (mg >= L.midDose)
+    b.push({level:'warn', icon:'alert', title:L.midTitle, body:L.midBody});
   if (R.now < M.peak.at)
     b.push({level:'warn', icon:'hourglass',
-      title:R.now < M.onset ? 'Nothing is expected yet &mdash; do not re-dose' : 'Still coming up &mdash; do not re-dose',
+      title:R.now < M.onset ? 'Nothing is expected yet &mdash; do not take more' : 'Still coming up &mdash; do not take more',
       body:'Onset is modelled at ' + fmtDuration(M.onset) + ' and the peak at ' + fmtDuration(M.peak.at) +
            '. You are ' + fmtDuration(R.now) + ' in' + (R.now >= M.onset ? ' and nowhere near the top yet' : '') +
-           '. Taking more before the peak is the single most common way an edible goes wrong, because both doses then arrive together.'});
+           '. ' + L.redoseWarning});
   if (toleranceConflict(s.tol, s.first))
     b.push({level:'info', icon:'scale', title:'Both &ldquo;first-time&rdquo; and an established tolerance are set',
       body:'Those describe different people, so the model uses <strong>both</strong> rather than quietly picking one. If you meant one or the other, untick the box or set tolerance to None.'});
@@ -6138,9 +6140,19 @@ function renderTHC(){
   syncClock();
   renderOralCannabis(D9, state.d9, 'd9', D9_LABELS);
 }
-const D9_LABELS = {name:'Delta-9', sym:'\u03949', totalLabel:'Labelled total',
+const EDIBLE_BANNER_TEXT = {
+  bigDose:50, bigTitle:'Very large edible dose',
+  bigBody:'At this size the pleasant part of the curve has flattened while anxiety, disorientation, vomiting and tachycardia have not. ' +
+          'It is not dangerous the way an alcohol overdose is dangerous, but it can be genuinely frightening and can last most of a day.',
+  midDose:25, midTitle:'Large edible dose',
+  midBody:'25&nbsp;mg and up is an experienced-user dose. In the trial this model is calibrated against, 25&nbsp;mg swallowed significantly impaired ' +
+          'attention and working memory, and one participant in seventeen vomited.',
+  redoseWarning:'Taking more before the peak is the single most common way an edible goes wrong, because both doses then arrive together.',
+  firstTimeAdvice:'For someone with no tolerance the usual advice is to start at half a unit, wait a full two hours, and only then decide.'
+};
+const D9_LABELS = Object.assign({}, EDIBLE_BANNER_TEXT, {name:'Delta-9', sym:'\u03949', totalLabel:'Labelled total',
   hrNote:'Anchored to the measured oral group means of +6, +10 and +13 bpm at 10, 25 and 50 mg.',
-  avgNote:'An edible spends most of its first hour doing nothing, which is why these two numbers differ at all \u2014 for anything inhaled, drunk or absorbed quickly they come out identical.'};
+  avgNote:'An edible spends most of its first hour doing nothing, which is why these two numbers differ at all \u2014 for anything inhaled, drunk or absorbed quickly they come out identical.'});
 
 const EDIBLE_TIPS =
   '<div class="acc open"><button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="hourglass"></span></span>Start low, and actually wait<span class="chev ico" data-icon="chevron"></span></button>' +
@@ -6420,9 +6432,19 @@ function renderD8(){
   renderOralCannabis(D8, state.d8, 'd8', D8_LABELS);
   renderD8vsD9();
 }
-const D8_LABELS = {name:'Delta-8', sym:'\u03948', totalLabel:'Labelled total',
+const D8_LABELS = Object.assign({}, EDIBLE_BANNER_TEXT, {
+  /* Twice the milligrams for the same place on the curve, so the thresholds
+     double too. Quoting the Delta-9 trial's 25 mg at a Delta-8 dose would
+     describe an experience twice this strong. */
+  bigDose:100, bigTitle:'Very large Delta-8 dose',
+  bigBody:'This is above 50&nbsp;mg of Delta-9 equivalent. At this size the pleasant part of the curve has flattened while anxiety, ' +
+          'disorientation, vomiting and tachycardia have not. It can be genuinely frightening and can last most of a day.',
+  midDose:50, midTitle:'Large Delta-8 dose',
+  midBody:'50&nbsp;mg of Delta-8 is about 25&nbsp;mg of Delta-9 equivalent, which is an experienced-user dose &mdash; and in the trial ' +
+          'that anchors this model, that much Delta-9 significantly impaired attention and working memory.',
+  name:'Delta-8', sym:'\u03948', totalLabel:'Labelled total',
   hrNote:'Anchored to the measured oral Delta-9 group means of +6, +10 and +13 bpm at 10, 25 and 50 mg. No Delta-8 bpm series exists to anchor to.',
-  avgNote:'Same curve shape as Delta-9 and the same wait before it starts; only the mid-point differs, which is why the two numbers here behave identically to the Delta-9 tab.'};
+  avgNote:'Same curve shape as Delta-9 and the same wait before it starts; only the mid-point differs, which is why the two numbers here behave identically to the Delta-9 tab.'});
 
 /* The Delta-8 vs Delta-9 comparison reads Delta-9's CONSTANTS - never its
    state. That is the one cross-module read this app allows, and it is
@@ -6591,7 +6613,17 @@ function renderSmoked(){
   renderOralCannabis(SMOKED, state.sm, 'sm', SM_LABELS);
   renderMethodComparison();
 }
-const SM_LABELS = {name:'Inhaled cannabis', sym:'THC in the material', totalLabel:'THC in the material',
+const SM_LABELS = {
+  bigDose:25, bigTitle:'Very large inhaled session',
+  bigBody:'In the controlled study this module is fitted to, 25&nbsp;mg inhaled raised paranoia ratings, produced one hallucination and ' +
+          'one participant vomiting, and left people still off baseline at six hours. The pleasant part of the curve has flattened; ' +
+          'the unpleasant parts have not.',
+  midDose:10, midTitle:'Large inhaled session',
+  midBody:'Ten milligrams of THC inhaled is not a small dose. In the trials this model is fitted to it sits level with <em>fifty</em> ' +
+          'milligrams swallowed &mdash; the single most counter-intuitive thing in this app, and the thing the previous calibration had backwards.',
+  redoseWarning:'The feedback loop is short by this route, which is its one real advantage: wait for the peak before deciding, and you will usually be right.',
+  firstTimeAdvice:'Inhaled, that is a large amount for someone with no tolerance. One or two draws, then a full fifteen minutes before deciding.',
+  name:'Inhaled cannabis', sym:'THC in the material', totalLabel:'THC in the material',
   hrNote:'The only published bpm series this app has is oral, so this is a FLOOR rather than an estimate: inhaled heart-rate rises are generally larger and faster than the oral means it is anchored to.',
   avgNote:'Inhaled, the two numbers come out the same: there is essentially no wait to average over. What is worth reading instead is the gap between the felt curve and the impairment curve, which is at its widest by this route.'};
 
