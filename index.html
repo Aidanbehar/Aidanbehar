@@ -1069,7 +1069,7 @@ body.scrubbing .view.active{animation:none}
     <div class="art"><span class="ico" data-icon="molecule"></span></div>
     <div>
       <h2>Estimate, then understand</h2>
-      <p class="sub">Five estimators built on published pharmacological models — Widmark and Michaelis&ndash;Menten ethanol kinetics for alcohol, Hill/E<sub>max</sub> dose-response for cannabis, and a genuinely first-order one-compartment model for caffeine — plus a Learn section that shows you the exact arithmetic behind every number.</p>
+      <p class="sub"><span data-live="estimator-count">Six</span> substance estimators and a half-life lab, built on published pharmacological models — Widmark and Michaelis&ndash;Menten ethanol kinetics for alcohol, Hill/E<sub>max</sub> dose-response for cannabis, and a genuinely first-order one-compartment model for caffeine — plus a Learn section that shows you the exact arithmetic behind every number.</p>
     </div>
   </div>
 
@@ -2548,21 +2548,31 @@ hill(dose, ec50, n) = dose^n / (ec50^n + dose^n)
 <span class="cm">// n    = Hill coefficient; &gt;1 makes the curve steeper around EC50</span></div>
       <div class="formula" data-live="verify-hill">computing…</div>
 
-      <h4>Step 3 — From milligrams to effective dose</h4>
-      <p>Two things happen before a dose ever touches the curve: it is scaled by how the body distributes it, and it is divided by tolerance. Tolerance is modelled as <em>sliding you left along the dose axis</em> — a tolerant user needs more milligrams to reach the same point on the same curve — rather than as a multiplier applied to the output, which would wrongly leave the shape of the response untouched.</p>
-      <div class="formula"><span class="cm">// Adipose uptake of THC is SLOW, so fat mass shapes the TAIL, not the peak.</span>
+      <h4>Step 3 — From milligrams to exposure</h4>
+      <p>This step changed completely, and it is the most important change in the app. The old model computed one peak intensity from the dose and then multiplied it by a unit-height time curve. That scales the <em>response</em> over time, which is backwards: a saturating dose then fell away as fast as a moderate one, duration barely moved with dose, and an effect with a high mid-point faded in exact proportion to a mild one.</p>
+      <p>What the app models now is <strong>exposure</strong>, in effective milligrams, and it applies the Hill equation to that exposure at every point in time.</p>
+      <div class="formula"><span class="cm">// Lagged first-order absorption and elimination. Chosen because it</span>
+<span class="cm">// SUPERPOSES EXACTLY: the sum of two doses' exposures is the exposure</span>
+<span class="cm">// of the two doses together. That is what makes the re-dose arithmetic</span>
+<span class="cm">// in the dose lists honest rather than an approximation.</span>
+td       = t — tlag
+x(t)     = dose × (e^(—ke×td) — e^(—ka×td)) / norm      <span class="cm">// norm makes a single dose peak at `dose`</span>
+x_total  = sum of x(t) over every dose in the list
+
+<span class="cm">// Each effect then sees that exposure through its OWN effect compartment,</span>
+<span class="cm">// which both delays it and blunts it. ke0 is an equilibration half-life.</span>
+xe(t)    = (ke0/(ke0—ke))(e^(—ke×td)—e^(—ke0×td)) — (ke0/(ke0—ka))(e^(—ka×td)—e^(—ke0×td))
+
+<span class="cm">// Tolerance divides the EXPOSURE, per effect, and lowers the ceiling.</span>
+response_e(t) = 100 × emax_e × ceiling × hill(xe(t) / tol^k_e, EC50×ec50k_e, n_e)
+
+<span class="cm">// Fat mass stretches the tail only: it scales ke, never the peak.</span>
 fatMassKg          = weightKg × bodyFatPercent / 100
-REFERENCE_FAT_KG   = 17.5              <span class="cm">// 70 kg at 25 % body fat</span>
-durationFactor     = clamp((fatMassKg / REFERENCE_FAT_KG) ^ 0.15, 0.85, 1.30)
-distributionFactor = <span class="hl">1</span>                  <span class="cm">// deliberately inert; see below</span>
-
-<span class="cm">// tolerance shifts the dose, it does not scale the response</span>
-effectiveDose = mg / toleranceFactor
-
-intensity01   = hill(effectiveDose, EC50_MG, HILL_N)
-intensityPct  = round(intensity01 × 100)</div>
-      <p><strong>distributionFactor used to be real, and it was wrong.</strong> It scaled the effective dose by fat mass with an exponent of 0.35, which swung the same 10&nbsp;mg gummy from ×1.45 at 60&nbsp;kg and 10&nbsp;% fat to ×0.72 at 110&nbsp;kg and 40&nbsp;% — the difference between "Strong, 67&nbsp;%" and "Moderate, 42&nbsp;%". But the acute peak is governed by absorption and first-pass metabolism, and fat takes the drug up slowly, so that term was modelling the wrong phase of the curve. It is now 1, kept as a named function purely so this article can show you that it is. Fat mass survives only in <code>durationFactor</code>, where the reservoir genuinely operates.</p>
-      <p><span class="tuned">hand-tuned</span> The 0.15 exponent, the 17.5&nbsp;kg reference, the 0.85–1.30 clamp and every EC<sub>50</sub> below remain my reasoned estimates.</p>
+durationFactor     = clamp((fatMassKg / 17.5) ^ 0.15, 0.85, 1.30)
+distributionFactor = <span class="hl">1</span>                  <span class="cm">// deliberately inert; see below</span></div>
+      <p>Two consequences fall straight out of this rather than being bolted on. Duration now grows with dose, because a bigger exposure takes longer to fall through the same Hill curve. And a large dose sits near its ceiling for a while, because the flat top of the Hill curve is flat &mdash; which is what &ldquo;a flat top&rdquo; physically means.</p>
+      <p><strong>distributionFactor used to be real, and it was wrong.</strong> It scaled the effective dose by fat mass with an exponent of 0.35, which swung the same 10&nbsp;mg gummy from ×1.45 at 60&nbsp;kg and 10&nbsp;% fat to ×0.72 at 110&nbsp;kg and 40&nbsp;%. But the acute peak is governed by absorption and first-pass metabolism, and fat takes the drug up slowly, so that term was modelling the wrong phase of the curve. It is now 1, kept as a named function purely so this article can show you that it is. The old formula in this article also carried a <code>food.absorb</code> multiplier; food no longer changes the height of the peak at all, for the reason set out in <a href="#" data-article="art-delay">Why edibles are delayed</a>.</p>
+      <p><span class="tuned">hand-tuned</span> The 0.15 exponent, the 17.5&nbsp;kg reference and the 0.85–1.30 clamp remain my reasoned estimates. The EC<sub>50</sub> and Hill coefficients below are <span class="fitted">fitted</span>, which is a different and better-supported thing &mdash; see <a href="#" data-article="art-tuned">Every constant I invented</a>.</p>
 
       <h4>Step 4 — The three EC<sub>50</sub> values</h4>
       <p>Three separate modules, three separate constants, chosen to reproduce the potency ordering that is actually reported. The two edible values are in <em>labelled milligrams swallowed</em>; the inhaled value is in <em>estimated milligrams absorbed</em>. They are deliberately not interchangeable units, and the comparison table in the smoked section is the place they are reconciled.</p>
@@ -2585,19 +2595,20 @@ intensity01 = hill(effectiveDose, EC50_MG, HILL_N)   <span class="hl">// no cann
       <p>The direction is evidenced; a coefficient is not. So CBD, CBN and CBG now produce an explanatory panel and change no number at all. CBN and CBG were never better supported than CBD — the difference is only that their invented coefficients pointed somewhere harmless.</p>
 
       <h4>Step 6 — The time course</h4>
-      <p>Cannabis intensity is drawn as an explicitly asymmetric curve: a climb that accelerates, then a decline with a long tail. Symmetric bell curves are wrong in both directions — they come up too fast and finish too early.</p>
-      <div class="formula"><span class="cm">// t in minutes since the dose</span>
-t &lt; onsetMin                 →  0
-onsetMin ≤ t ≤ peakMin       →  u = (t − onsetMin) / (peakMin − onsetMin)
-                                f = u ^ 1.3
-peakMin &lt; t ≤ endMin         →  u = (t − peakMin)  / (endMin  − peakMin)
-                                f = (1 − u) ^ 0.8
-t &gt; endMin                   →  0
+      <p>There is no separate time-course formula any more. The shape of the curve <em>is</em> the exposure profile from Step 3 run through the Hill equation, which is why the shape changes with the dose instead of being a fixed template scaled to fit. The old model used an explicitly asymmetric template:</p>
+      <div class="formula"><span class="cm">// WHAT IT USED TO DO: one unit-height shape, scaled by the peak.</span>
+<span class="cm">//   f = u^1.3 on the way up, (1 — u)^0.8 on the way down</span>
+<span class="cm">//   intensityAtTime = peakIntensityPct × f</span>
+<span class="cm">// Every dose got the same shape. A 100 mg dose decayed at the same</span>
+<span class="cm">// RATE as a 5 mg dose, which is not how saturation works.</span>
 
-intensityAtTime = peakIntensityPct × f</div>
-      <div class="formula" data-live="verify-timing">computing…</div>
-      <p>The clamps around those numbers follow what public-health agencies publish rather than what felt tidy. Health Canada tells people an edible begins in 30&nbsp;minutes to 2&nbsp;hours, can take up to 4&nbsp;hours to peak, lasts up to 12&nbsp;hours and leaves residual effects for up to 24; for inhalation, peak within 30&nbsp;minutes and effects lasting up to 6&nbsp;hours. Earlier versions of this app capped edibles at 10&nbsp;hours and inhalation at 3, which cut the tail short in both cases.</p>
-      <p>Felt intensity is also not the same thing as impairment, so the charts carry a separate shaded band for it. The driving meta-analysis has most driving-relevant skills recovering within about 5&nbsp;hours of inhaling 20&nbsp;mg of THC and nearly all within 7, with oral doses taking longer — in every case well past the point at which the intensity curve has flattened to nothing.</p>
+<span class="cm">// WHAT IT DOES NOW: Hill applied to exposure, point by point.</span>
+felt(t)       = 100 × ceiling × hill(xe_felt(t) / tol^k, EC50, n)
+impairment(t) = 100 × ceiling × hill(xe_imp(t)  / tol,   EC50×1.35, n_imp)</div>
+      <div class="formula" data-live="verify-timing">computing&hellip;</div>
+      <p>The two curves are drawn separately on every cannabis chart. The impairment curve outlasts the felt curve because its effect compartment equilibrates far more slowly &mdash; about 8&nbsp;minutes for heart rate against 39–85 for CNS effects in the PK/PD analysis this is anchored to &mdash; not because a band was drawn over it. Inhaled, that gap is at its widest: heart rate is back to baseline within about three hours while cognitive deficits have been measured out to six or eight.</p>
+      <p>The windows the app reports are printed from the constants in <a href="#" data-article="art-delay">Why edibles are delayed</a> and <a href="#" data-article="art-inhale">Inhalation efficiency</a>, so this article does not retype them. Three different endings are reported, because they answer three different questions: the 1&nbsp;% floor (used by the average-intensity cards, where the window has to be the whole episode or the integral is wrong), the Mild boundary (what &ldquo;it has faded&rdquo; means to a person), and the impairment window, which is fitted to the driving meta-analysis rather than to the felt curve.</p>
+      <p>Phases are read off the curve too, rather than from fixed fractions of the tail: &ldquo;Peak&rdquo; is wherever the curve is within 80&nbsp;% of its own maximum, so a large flat-topped dose reports a long peak and a small one a brief one. The old 22&nbsp;%/65&nbsp;% split could not see that difference, because it was a property of the axis rather than of the dose.</p>
 
       <h4>Step 7 — Alcohol's place on the shared scale</h4>
       <p>Alcohol has no EC<sub>50</sub> here; BAC is already a physical quantity and reporting a fabricated "receptor occupancy" for it would be dishonest. To place a BAC on the same six-step vocabulary as the cannabis modules, the app uses an explicit, declared display mapping:</p>
@@ -2631,65 +2642,89 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
   <div class="acc" id="art-delay">
     <button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="hourglass"></span></span>Why edibles are delayed — and why re-dosing goes wrong<span class="chev ico" data-icon="chevron"></span></button>
     <div class="acc-body article">
-      <p>Three sequential bottlenecks separate swallowing from feeling anything: gastric emptying, intestinal absorption of a fat-soluble molecule into lymph and portal blood, and hepatic first-pass conversion. Each adds tens of minutes. Typical onset lands between 30 and 90 minutes, the peak between 1.5 and 3 hours, and the whole arc runs 6 to 10 hours — with a residual dullness that can outlast the day.</p>
-      <p>Product format shifts the first bottleneck measurably, which is why it is an input in the estimator. A tincture held under the tongue partly bypasses the stomach through sublingual absorption and comes on soonest. Nano-emulsified drinks are engineered to absorb quickly and are next. Gummies and chocolates must dissolve first. Hard capsules with a shell to break down are slowest. Food matters at least as much: an empty stomach empties fastest and gives the quickest onset, while a fatty meal delays onset substantially <em>and</em> increases total absorption, because dietary fat improves the uptake of a lipophilic drug.</p>
-      <p>The dangerous consequence is the re-dose. At 45 minutes you feel nothing; you take a second gummy; at 90 minutes both arrive at once. You have not doubled your experience in a linear way — but you have moved from a dose where the Hill curve is steep to a dose where anxiety, cognitive disruption and coordination loss are climbing far faster than euphoria. It is a well-recognised route to an emergency department, though not the only one: accidental exposure in children and products whose labelled potency is simply wrong account for a large share of cannabis-related presentations too.</p>
-      <p>The rule that follows is not a slogan; it falls straight out of the timing model: <strong>take a dose, then wait two full hours before deciding it was not enough.</strong> The estimator draws the dashed onset and peak markers precisely so that the waiting interval is visible rather than abstract.</p>
+
+      <p>Three sequential bottlenecks separate swallowing from feeling anything: gastric emptying, intestinal absorption of a fat-soluble molecule into lymph and portal blood, and hepatic first-pass conversion. Each adds tens of minutes.</p>
+      <p>The windows this app uses are published ones, and they are printed here straight from the constants rather than retyped:</p>
+      <div class="formula" data-live="oral-timing">computing&hellip;</div>
+      <p>Product format shifts the first bottleneck, which is why it is an input. Nano-emulsified drinks are engineered to absorb quickly and are modelled as the fastest format, though that is an industry claim with limited independent confirmation. Gummies and chocolates must dissolve first. Hard capsules with a shell to break down are slowest.</p>
+      <p><strong>A tincture is not faster, and this app used to say it was.</strong> Held under the tongue it is widely sold as fast-acting, but the best controlled comparison found no significant difference in peak concentration, time to peak or total exposure between swallowed THC and matched oromucosal dosing. The model therefore treats a tincture as a swallowed dose, and so does this paragraph.</p>
+      <p><strong>Food changes when and for how long, not how high.</strong> The dronabinol label &mdash; oral THC in sesame oil, the closest thing to a controlled oral THC product &mdash; reports that a high-fat meal delays Tmax by about four hours and raises total exposure about 2.9&times;, with <em>peak concentration not significantly changed</em>. An earlier version of this model raised the peak by 18&nbsp;% for a fatty meal, which is the opposite of what that label says. A fatty meal now delays the curve and lengthens it; the extra exposure shows up as duration, which is what more AUC at an unchanged Cmax actually means. The magnitudes are scaled well down from the label's four hours, because a gummy chewed after dinner is not a capsule of THC in sesame oil &mdash; that scaling is <span class="tuned">hand-tuned</span>, the direction is not.</p>
+      <p>The dangerous consequence is the re-dose. At 45 minutes you feel nothing; you take a second gummy; some time later both arrive together. You have not doubled your experience linearly &mdash; you have moved from a dose where the Hill curve is steep to a dose where anxiety, cognitive disruption and coordination loss are climbing far faster than euphoria. The &ldquo;latest onset AND the most total exposure&rdquo; combination of a fatty meal is exactly the one that invites it.</p>
+      <p>That is why each edible tab now holds a <em>list</em> of doses rather than one. Two doses superpose exactly in this model, so the chart shows you the stack instead of describing it, and the tab tells you in words when a dose landed before the previous one had peaked.</p>
+      <p>The rule that follows is not a slogan; it falls out of the timing model: <strong>take a dose, then wait two full hours before deciding it was not enough.</strong></p>
     </div>
   </div>
 
   <div class="acc" id="art-hill">
     <button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="sigma"></span></span>The Hill equation: why dose-response saturates<span class="chev ico" data-icon="chevron"></span></button>
     <div class="acc-body article">
-      <p>There is a fixed number of CB1 receptors in your brain. A drug's effect depends on the fraction of them occupied, and occupancy follows the same saturating mathematics as any binding equilibrium. The Hill (or E<sub>max</sub>) equation captures it in one line: <code>response = D^n / (EC50^n + D^n)</code>.</p>
-      <p>Two parameters do all the work. <strong>EC<sub>50</sub></strong> is the dose producing half the maximum modelled response — it sets where on the dose axis the interesting part of the curve sits. <strong>n</strong>, the Hill coefficient, sets how steeply the curve rises through that midpoint; values above 1 give the characteristic S-shape of a cooperative or amplified system.</p>
+
+      <p>There is a fixed number of CB1 receptors in your brain. A drug&rsquo;s effect depends on the fraction of them occupied, and occupancy follows the same saturating mathematics as any binding equilibrium. The Hill (or E<sub>max</sub>) equation captures it in one line: <code>response = D^n / (EC50^n + D^n)</code>.</p>
+      <p>Two parameters do all the work. <strong>EC<sub>50</sub></strong> is the dose producing half the maximum modelled response &mdash; it sets where on the dose axis the interesting part of the curve sits. <strong>n</strong>, the Hill coefficient, sets how steeply the curve rises through that midpoint.</p>
       <p>The behaviour this produces is the entire reason the app uses it. Near the bottom of the curve the response is almost proportional to dose, so 10&nbsp;mg really does feel about twice 5&nbsp;mg. Near the top the curve flattens, so 110&nbsp;mg is barely distinguishable from 100&nbsp;mg no matter what the label says. A calculator that scales linearly tells a user that tripling a large dose triples the effect, which is biologically false.</p>
-      <p>Be careful with the moral, though — an earlier version of this article had it backwards. Saturation is not a safety argument in either direction. It is the <em>saturating</em> curve that says another 10&nbsp;mg on top of 100 will barely register, and someone who reads that as permission has misread it. What flattens is the modelled subjective high. Duration does not flatten, the chance of vomiting does not flatten, and the odds of a frightening few hours do not flatten. That is why the effect bars here ride separate curves and why the impairment band on the chart outlasts the intensity curve completely.</p>
-      <p>Saturation is not the same as safety. The <em>subjective</em> high plateaus, but the effects that ride different curves do not stop climbing in step: anxiety, tachycardia, vomiting and profound disorientation keep increasing with dose long after euphoria has flattened. That is why each effect bar in this app has its own EC<sub>50</sub> rather than being a fixed fraction of one overall score, and why the anxiety curves are given both a higher midpoint and a steeper coefficient.</p>
+      <p><strong>What D is matters as much as what the equation is.</strong> This app applies the Hill equation to the <em>exposure at each moment</em>, not to the dose once and then scaled by a time curve. That distinction is the whole of <a href="#" data-article="art-formula">Step 3 of the formula article</a>, and it is what makes a large dose sit near its ceiling for a while rather than falling away at the same rate as a small one.</p>
+      <p><strong>Saturation is not a safety argument, in either direction.</strong> It is the saturating curve that says another 10&nbsp;mg on top of 100 will barely register, and someone who reads that as permission has misread it. What flattens is the modelled subjective high. Duration does not flatten &mdash; it grows with dose, visibly, on every chart here. The chance of vomiting does not flatten: nausea has one of the highest mid-points and one of the steepest coefficients in the app, so it is still climbing hard where euphoria has stopped. And the impairment curve does not flatten at the same time as the felt one, because it is a different curve with a different mid-point and a much slower effect compartment.</p>
+      <p>That is also why every effect bar here has <em>both</em> its own dose-response curve and its own time course. Each one has its own EC<sub>50</sub>, its own Hill coefficient, its own ceiling and its own equilibration lag, so they peak at different times rather than rising and falling together. An earlier version of this article said the bars &ldquo;ride separate curves&rdquo; while the code multiplied every one of them by a single shared time shape &mdash; separate in dose, identical in time. They are now separate in both, which is what that sentence was always claiming.</p>
     </div>
   </div>
 
   <div class="acc" id="art-tolerance">
     <button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="brain"></span></span>Tolerance and CB1 receptor downregulation<span class="chev ico" data-icon="chevron"></span></button>
     <div class="acc-body article">
-      <p>Cannabis tolerance is not psychological. Regular THC exposure causes measurable <strong>downregulation and desensitisation of CB1 receptors</strong> — imaging studies in daily users show substantially reduced cortical CB1 availability compared with non-users. Fewer available receptors means a given dose occupies a smaller fraction of a smaller pool, and the whole dose-response relationship shifts.</p>
-      <p>The encouraging half of the same finding is that it largely reverses. CB1 availability recovers substantially over roughly two to four weeks of abstinence, with the fastest recovery in the first few days. A "tolerance break" is a real pharmacological intervention, not a folk remedy.</p>
-      <p>How tolerance is modelled matters. This app divides the dose before it reaches the curve — <code>effectiveDose = mg × distributionFactor / toleranceFactor</code> — which slides a tolerant user leftward along the same curve. The alternative, multiplying the final percentage by some fraction, would be wrong in a specific and misleading way: it would preserve the shape of the response, implying that a tolerant user at a large dose still sits on the same steep part of the curve as a naive user. In reality they are further left, where the curve is shallower, which is exactly why tolerance is so difficult to out-dose and why escalation runs away.</p>
-      <p>One caveat on that picture, because the model is a simplification of it. A pure rightward slide implies tolerance can always be out-dosed — take enough and you arrive at the same place. Receptor downregulation does not work like that: with fewer receptors available, a partial agonist has a lower <em>ceiling</em>, not just a longer road to it. A heavy daily user chasing a naive user's experience is climbing toward a maximum that has itself come down. This app shifts the dose without lowering the ceiling, which is the one place its tolerance model is knowingly optimistic.</p>
-      <p>The multipliers themselves — 1.0 for none, up to 4.0 for heavy daily use — are <span class="tuned">hand-tuned</span>. They reproduce the widely-reported clinical picture that experienced daily users need several times the dose a naive user needs for comparable effect, but no study hands you the number 2.8.</p>
+
+      <p>Cannabis tolerance is not psychological. Regular THC exposure causes measurable <strong>downregulation and desensitisation of CB1 receptors</strong>; imaging studies put cortical CB1 availability about 15&nbsp;% lower in dependent users than in controls.</p>
+      <p>The encouraging half of the same finding is that it reverses, and quickly at first. CB1 availability begins recovering within about two days of abstinence and is no longer distinguishable from controls by roughly four weeks. A tolerance break is a real pharmacological intervention, not a folk remedy &mdash; and each cannabis tab now has a field for how long yours has been, which decays the shift back toward 1 on that shape:</p>
+      <div class="formula" data-live="tol-decay">computing&hellip;</div>
+      <p><strong>Tolerance is not one number here any more.</strong> It used to be a single divisor applied identically to every effect, with no ceiling reduction, and this article used to say so &mdash; it described the lowered ceiling as the one place the model was knowingly optimistic. It now does three separate things.</p>
+      <p><strong>One: it shifts you along the dose axis, but not equally for every effect.</strong> The systematic review of human evidence finds tolerance strongest and most consistent for cognitive and psychomotor impairment, clear for the cardiac response and for acute intoxication, and least established for the psychotomimetic effects &mdash; several studies find anxiety and paranoia barely blunted at all. So each effect carries its own exponent on the tolerance factor rather than sharing one. Cognition, coordination, heart rate and nausea are shifted hard; euphoria and relaxation rather less; anxiety and paranoia hardly at all. The direction of that ordering is from the review. The exponents are <span class="tuned">hand-tuned</span>.</p>
+      <p><strong>Two: it lowers the ceiling.</strong> A pure rightward slide implies tolerance can always be out-dosed &mdash; take enough and you arrive at the same place. Receptor downregulation does not work like that: with fewer receptors available, a partial agonist has a lower maximum, not just a longer road to it. The ceiling now falls with tolerance severity, modestly, so a heavy daily user is climbing toward a maximum that has itself come down. The size of that drop is <span class="tuned">hand-tuned</span>.</p>
+      <p><strong>Three: it does not make anyone safe to drive.</strong> Regular users are measurably less impaired at matched doses, and they are still impaired &mdash; that is the finding, both halves of it. The impairment window in this app has a hard floor below which no combination of tolerance and abstinence can push it, because the alternative is an app that tells a daily user their window is short.</p>
+      <p>The formula every tab actually runs is printed here from the code path itself, so it cannot drift from this paragraph the way the old one did:</p>
+      <div class="formula" data-live="tol-formula">computing&hellip;</div>
+      <p>The base multipliers &mdash; 1.0 for none, up to 4.0 for heavy daily use &mdash; are <span class="tuned">hand-tuned</span>. They reproduce the widely-reported picture that experienced daily users need several times the dose a naive user needs, but no study hands you the number 2.8.</p>
+      <p>One thing no coefficient here models: <strong>cannabinoid hyperemesis</strong>. Years of heavy near-daily use can produce cyclic vomiting with abdominal pain that nothing relieves reliably except stopping. It is frequently mistaken for a stomach illness for a long time. The heavy-daily setting raises a banner about it, because it is the effect regular users are least likely to have heard of.</p>
     </div>
   </div>
 
   <div class="acc" id="art-d8">
     <button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="molecule"></span></span>Delta-8 vs Delta-9: chemistry, potency, regulation<span class="chev ico" data-icon="chevron"></span></button>
     <div class="acc-body article">
-      <p>&Delta;<sup>8</sup>-THC and &Delta;<sup>9</sup>-THC are isomers: identical formula, C<sub>21</sub>H<sub>30</sub>O<sub>2</sub>, differing only in the position of one double bond in the cyclohexene ring. That single displacement lowers binding affinity at the CB1 receptor, and the consistent report — from the mid-twentieth-century human studies onward and from a very large body of modern user reporting — is that &Delta;<sup>8</sup> is meaningfully weaker milligram for milligram, commonly framed as somewhere between half and three-quarters as potent.</p>
-      <p>This app expresses that difference where it belongs: in the EC<sub>50</sub>. The Delta-8 module carries a higher midpoint than the Delta-9 module, so identical milligrams land lower on the identical scale, and the two reference tables genuinely disagree at the same dose rather than being the same rows with a different heading. The exact values, and the ratio they imply, are printed in the comparison table at the bottom of the Delta-8 section.</p>
-      <p>The qualitative reports differ too, and consistently enough to model: less anxiety, less cognitive disruption, a clearer head at comparable subjective intensity. That shows up here as shifted per-effect weights rather than as a different overall curve. <span class="tuned">hand-tuned</span> — there is far less controlled human data on &Delta;<sup>8</sup> than on &Delta;<sup>9</sup>, and reasoning from user reports is exactly the kind of inference that deserves a flag.</p>
-      <p>The part that has nothing to do with pharmacology is the part most worth knowing. Hemp contains only trace &Delta;<sup>8</sup>, so commercial product is made by acid-catalysed isomerisation of CBD. That synthesis can leave reaction by-products and residual reagents behind, and in many places these products have sat outside the testing regime that applies to licensed cannabis. The FDA has published adverse-event and poison-centre data on exactly this, linked in <a href="#" data-article="art-reading">Further reading</a>.</p>
-      <p><strong>The legal position is actively changing and this file cannot update itself.</strong> The federal hemp definition in the United States is being narrowed toward a total-THC standard, with the effective dates repeatedly moved by stopgap legislation, and state law varies enormously on top of that. Anything specific this article told you about dates would be wrong by the time you read it — check your own jurisdiction's current rules rather than trusting an offline HTML file on the subject.</p>
-      <p>The practical implication for the estimator is blunt either way: the milligrams on a &Delta;<sup>8</sup> label are less trustworthy than the milligrams on a regulated &Delta;<sup>9</sup> label, and a model can only ever be as good as the number you feed it.</p>
+
+      <p>&Delta;<sup>8</sup>-THC and &Delta;<sup>9</sup>-THC are isomers: identical formula, C<sub>21</sub>H<sub>30</sub>O<sub>2</sub>, differing only in the position of one double bond in the cyclohexene ring. That single displacement lowers binding affinity at CB1.</p>
+      <p><strong>There is now a controlled human trial, and it settles the potency question.</strong> Participants received oral &Delta;<sup>8</sup> at 10, 20 and 40&nbsp;mg against 20&nbsp;mg of &Delta;<sup>9</sup>. At <em>equal</em> milligrams, &Delta;<sup>8</sup> produced lower drug effect, fewer negative effects, less cognitive impairment and a smaller heart-rate rise. But <strong>40&nbsp;mg of &Delta;<sup>8</sup> and 20&nbsp;mg of &Delta;<sup>9</sup> were pharmacodynamically indistinguishable.</strong> That is a potency ratio of 2, and this app uses exactly 2 &mdash; the Delta-8 EC<sub>50</sub> is twice the Delta-9 one, with an identical Hill coefficient, which is what makes the &ldquo;Delta-9 equivalent&rdquo; figure in that tab exact rather than approximate.</p>
+      <p>A ratio of 2 is at the stronger end of the range user reports suggest. &ldquo;Half to three-quarters as potent&rdquo; is the figure that circulates; the trial supports the half, not the three-quarters, and a trial beats a consensus of reports. If you have read the larger number elsewhere, this is why the app does not use it.</p>
+      <p><strong>The second finding is the one this app got wrong for longer.</strong> Once the doses were matched for intensity, the trial found no pharmacodynamic differences &mdash; not a softer character, not less anxiety, not a clearer head. An earlier version of this article claimed the qualitative difference &ldquo;shows up here as shifted per-effect weights&rdquo;. It never did: the two modules have always carried identical per-effect curves, and now they do so deliberately, because inventing per-effect discounts for &Delta;<sup>8</sup> would be modelling a difference the only controlled trial did not find. The entire difference lives in the EC<sub>50</sub>, which is where it belongs.</p>
+      <p>The part that has nothing to do with pharmacology is the part most worth knowing. Hemp contains only trace &Delta;<sup>8</sup>, so commercial product is made by acid-catalysed isomerisation of CBD. That synthesis can leave reaction by-products and residual reagents behind, and in many places these products have sat outside the testing regime that applies to licensed cannabis. That is why this tab assumes a wider label-accuracy range than the Delta-9 tab does. The FDA has published adverse-event and poison-centre data on exactly this, linked in <a href="#" data-article="art-reading">Further reading</a>.</p>
+      <p><strong>The legal position is actively changing and this file cannot update itself.</strong> See the Laws tab, which states its own review date, and treat anything it says as needing confirmation against a current source.</p>
     </div>
   </div>
 
   <div class="acc" id="art-inhale">
     <button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="vape"></span></span>Inhalation efficiency: what actually reaches your blood<span class="chev ico" data-icon="chevron"></span></button>
     <div class="acc-body article">
-      <p>Combustion is a lossy delivery system. Of the THC in a joint, a large share is destroyed by pyrolysis, lost in sidestream smoke between puffs, or exhaled before it can cross the alveolar membrane. Systemic delivery from smoking is usually quoted in the range of 10–35&nbsp;% of the THC in the material, and varies with technique as much as with hardware.</p>
-      <p>Vaporisation improves on that by heating below the point of combustion — less THC is destroyed, and there is no sidestream loss while the device is idle. Concentrates improve on it again by starting from a far higher THC fraction and delivering a large dose in a single inhalation. The efficiencies used by the estimator — roughly 30&nbsp;% for a joint, 45&nbsp;% for a dry-herb vaporiser, 55&nbsp;% for a dab — are <span class="tuned">hand-tuned</span> midpoints of those published ranges, then multiplied by an inhalation-depth factor, because hold time and breath volume genuinely change absorption.</p>
-      <p>What inhalation buys pharmacologically is speed and control. Arterial THC concentration peaks within minutes of the last puff; subjective effects follow a few minutes behind and peak in the 8–20 minute range. That lag between "dose taken" and "effect felt" is short enough to be intuitive, which is why inhaled overconsumption is comparatively rare while edible overconsumption is common — the feedback loop closes before you can take much more.</p>
-      <p>The trade-off is the route itself. Smoke is smoke: combustion products, tar and particulates reach lung tissue regardless of which plant produced them. Vaporisation reduces but does not eliminate that exposure, and concentrates deliver doses that make tolerance escalate quickly. Speed of onset is a harm-reduction advantage for dosing and a risk in its own right for everything else.</p>
+
+      <p>Combustion is a lossy delivery system. Of the THC in a joint, a large share is destroyed by pyrolysis, lost in sidestream smoke between puffs, or exhaled before it can cross the alveolar membrane.</p>
+      <p><strong>The honest figure is lower than this app used to claim.</strong> Huestis reports systemic availability from smoked cannabis of 2&ndash;56&nbsp;%, more typically 8&ndash;24&nbsp;%, varying strongly with how experienced the user is. An earlier version of this article described the efficiencies used here &mdash; then 30, 45 and 55&nbsp;% &mdash; as &ldquo;midpoints of the 10&ndash;35&nbsp;% range&rdquo;. Two of those three numbers were outside that range, and the midpoint of 10&ndash;35 is 22.5. The values are now inside the typical band and are printed below from the constants themselves:</p>
+      <div class="formula" data-live="inhale-eff">computing&hellip;</div>
+      <p>Vaporisation improves on combustion by heating below it &mdash; less THC is destroyed, and there is no sidestream loss while the device idles. The ratio used here is not invented: in the controlled comparison, vaporized cannabis produced about twice the blood THC peak of the same milligrams smoked at 10&nbsp;mg, and about 1.4&times; at 25&nbsp;mg.</p>
+      <p>What inhalation buys pharmacologically is speed. The felt peak arrives within tens of minutes rather than hours, and the timing windows used here come from Health Canada rather than from this app's own clamps &mdash; an earlier version quoted &ldquo;peak 8&ndash;20 minutes, fading over 1&ndash;3 hours&rdquo; as though it were published, when the 1&ndash;3 hours was this app's own invention quoted back at itself:</p>
+      <div class="formula" data-live="inhale-timing">computing&hellip;</div>
+      <p>That short lag between &ldquo;dose taken&rdquo; and &ldquo;effect felt&rdquo; is why inhaled overconsumption is comparatively rare while edible overconsumption is common &mdash; the feedback loop closes before you can take much more.</p>
+      <p><strong>Speed is not the same as brevity.</strong> In the controlled study, participants given 25&nbsp;mg vaporized were still not back to baseline at six hours, and cognitive deficits from inhaled cannabis have been measured out to six to eight hours while heart rate returns to baseline within about three. The chart in the Smoked tab draws those as two separate curves for exactly this reason: the high can be over while the impairment is not.</p>
+      <p>The trade-off is the route itself. Smoke is smoke: combustion products, tar and particulates reach lung tissue regardless of which plant produced them. Vaporisation reduces but does not eliminate that exposure, and concentrates deliver doses that make tolerance escalate quickly.</p>
     </div>
   </div>
 
   <div class="acc" id="art-minor">
     <button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="dropper"></span></span>CBD, CBN and CBG have three different jobs<span class="chev ico" data-icon="chevron"></span></button>
     <div class="acc-body article">
-      <p>Lumping the minor cannabinoids into one "entourage" slider is a modelling shortcut that erases the only interesting thing about them: they do different things. This app gives each one a specific, separate action.</p>
-      <p><strong>CBD</strong> is not psychoactive in the THC sense and has low direct affinity for CB1. It appears to act largely as a <span class="term" data-tip="Negative allosteric modulator: binds at a site other than the main one and reduces the effect of whatever binds at the main site — in this case, THC at CB1.">negative allosteric modulator</span> at CB1 and through several non-cannabinoid targets, which is consistent with the common report that a high-CBD product produces a softer, less overwhelming version of the same dose. It is modelled here as a modest damping of overall intensity that saturates — the ratio matters, and past a point more CBD stops helping.</p>
-      <p><strong>CBN</strong> is largely a degradation product of THC — it is what old cannabis is full of. Its reputation as sedating is more reliably reported than it is proven, and the sedation in aged flower may owe as much to changed terpene content as to CBN itself. Its action here is narrow and specific: it raises <em>sedation</em> and <em>sleepiness</em> and touches nothing else.</p>
-      <p><strong>CBG</strong> is the biosynthetic precursor from which THC and CBD are both made, and it is usually present in only small quantities. It is most often described as clear-headed, with anxiolytic character. Its action here is equally narrow: it reduces <em>anxiety</em> and <em>paranoia</em> and leaves the rest of the profile alone.</p>
-      <p>All four coefficients that control these three effects are <span class="tuned">hand-tuned</span>. The human evidence for CBN and CBG in particular is thin, and the honest statement is that the <em>directions</em> here are well supported by report while the <em>magnitudes</em> are mine.</p>
+
+      <p>Lumping the minor cannabinoids into one &ldquo;entourage&rdquo; slider erases the only interesting thing about them: they do different things, and what evidence exists points in different directions. This app therefore applies <strong>none</strong> of them to the estimate, and this article exists to say why, because an earlier version of it applied three coefficients it should not have.</p>
+      <p><strong>CBD does not damp an edible &mdash; it amplifies it.</strong> That is the finding that forced the change. In a controlled study at Johns Hopkins, 20&nbsp;mg of oral THC given with 640&nbsp;mg of CBD produced roughly <em>double</em> the peak THC concentration of the same THC alone, about ten times the 11-hydroxy-THC, and stronger subjective drug effects. The mechanism is not receptor-level at all: CBD inhibits the CYP enzymes that clear oral THC, so less of it is removed on the way through. The old model subtracted intensity for CBD. It had the sign wrong.</p>
+      <p>That result came from a very high CBD dose. At the ratios actually printed on consumer products &mdash; a few milligrams of CBD beside a few of THC &mdash; the same study and others find no meaningful modulation in either direction. So the honest model at consumer ratios is no effect, and the honest warning at pharmaceutical ratios is that the effect runs the opposite way to the folklore.</p>
+      <p><strong>CBN</strong> is largely a degradation product of THC &mdash; it is what old cannabis is full of. Its reputation as sedating is more widely repeated than it is demonstrated, and the sedation in aged flower may owe as much to changed terpene content as to CBN. There is no human dose-response curve to put a coefficient on, so this app does not invent one.</p>
+      <p><strong>CBG</strong> is the biosynthetic precursor from which THC and CBD are both made, usually present only in small quantities. It is commonly described as clear-headed and anxiolytic. The same applies: a direction reported by users is not a coefficient, and nothing here converts it into one.</p>
+      <p>The three input fields remain, because what is in the product is worth recording and worth reading about. The panel beside them reports what is known about each and states plainly that none of them moves the number. That is a weaker claim than the app used to make, and a true one.</p>
     </div>
   </div>
 
@@ -2791,7 +2826,7 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
       <h4>The test</h4>
       <p>Take a pack a day: twenty cigarettes at about 1&nbsp;mg absorbed each, so 20&nbsp;mg of nicotine a day, of which 15&nbsp;mg becomes cotinine. At steady state the amount in the body is the input rate divided by the elimination rate constant — 0.625&nbsp;mg/h ÷ 0.0433/h ≈ 14.4&nbsp;mg — and dividing by a 70&nbsp;kg person's 56&nbsp;L gives about <strong>260&nbsp;ng/mL</strong>.</p>
       <p>Measured cotinine in established daily smokers runs roughly 200 to 400&nbsp;ng/mL. The model lands in the middle of that from constants none of which were chosen with it in mind. And a single day of smoking in the app reaches about 165&nbsp;ng/mL rather than 260, which is also right: 24 hours is one and a half cotinine half-lives, so accumulation should have reached 1 − 0.5<sup>1.5</sup> = 65&nbsp;% of steady state, and 0.65 × 260 ≈ 169.</p>
-      <p>Two independent checks, both passed, from unfitted inputs. That is the reason to trust the cotinine curve slightly more than the nicotine curve above it — the nicotine curve has a volume of distribution in it that I fitted to measured peaks, and this one does not have a fitted constant anywhere. It is the only curve in this app I would describe that way, and it is worth saying plainly which ones are not like it.</p>
+      <p>Two independent checks, both passed, from constants none of which were fitted. The nicotine curve above it is in the same position: its volume of distribution is taken from inside the published 1–3&nbsp;L/kg range rather than solved for, and it reproduces a 21&nbsp;mg patch settling near 20&nbsp;ng/mL against a measured 17–23, and a pack a day in the low thirties against a measured typical 15–30. What it does <em>not</em> reproduce is the single-cigarette peak, which comes out near 8&nbsp;ng/mL against a measured 10–15 — a one-compartment model has no distribution phase, and no choice of volume fixes that. An earlier version of this paragraph, and of the dashboard card and the export, described that volume as fitted to measured venous peaks. It is not, and if it had been it would have been chosen to hit the figure it misses.</p>
 
       <h4>What the number means if someone tests you</h4>
       <p>The usual cut-point separating users from non-users is around 10&nbsp;ng/mL, with passive exposure producing values in the low single digits and light or occasional use landing somewhere between. None of which makes this app a test. It does not know what you actually absorbed, your CYP2A6 activity, or the twenty per cent of nicotine that goes down other metabolic routes. It is a demonstration of why the metabolite is the thing worth measuring, not a substitute for measuring it.</p>
@@ -2836,15 +2871,18 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
   <div class="acc" id="art-scale">
     <button class="acc-head" type="button"><span class="pre-ico"><span class="ico" data-icon="gauge"></span></span>What these percentages actually mean<span class="chev ico" data-icon="chevron"></span></button>
     <div class="acc-body article">
+
       <p>Every gauge and every effect bar in this app reports a number between 0 and 100 with a word attached. Both halves need explaining, because the obvious readings of them are wrong.</p>
-      <p><strong>The percentage is a position on a modelled dose-response curve.</strong> For the cannabis modules it is the Hill-equation output — the fraction of the maximum modelled response for that specific effect — multiplied by 100. "Euphoria 64&nbsp;%" means "this dose sits at 64&nbsp;% of the way to the modelled ceiling for euphoria". It does <em>not</em> mean a 64&nbsp;% chance of feeling euphoric, it is not 64&nbsp;% of any measurable quantity in your body, and two different effects reading 64&nbsp;% are not claimed to be equally likely or equally strong in absolute terms. They are relative, illustrative indicators.</p>
-      <p><strong>The word comes from one shared six-step scale</strong>, applied identically everywhere — gauges, effect bars, and every reference table in every section. The bands are fixed:</p>
-      <div class="formula" data-live="scale-bands">computing…</div>
-      <p>That consistency is deliberate. If "Moderate" meant one thing on the Delta-9 table and something slightly different on the Delta-8 table, the two tables could not be compared, which is the only reason to have both. The label is produced by a single function that every section calls, so the vocabulary cannot drift.</p>
+      <p><strong>The percentage is a position on a modelled dose-response curve.</strong> For the cannabis modules it is the Hill-equation output for that specific effect, multiplied by that effect&rsquo;s own ceiling and by 100. &ldquo;Euphoria 64&nbsp;%&rdquo; means &ldquo;this exposure sits at 64&nbsp;% of the modelled ceiling for euphoria&rdquo;. It does <em>not</em> mean a 64&nbsp;% chance of feeling euphoric, it is not 64&nbsp;% of any measurable quantity in your body, and two different effects reading 64&nbsp;% are not claimed to be equally likely or equally strong in absolute terms.</p>
+      <p><strong>Each effect has its own explicit ceiling, and some of them are below 100.</strong> That is deliberate and it used to be hidden. The previous version multiplied each bar by an unlabelled weight, so dry mouth topped out near 80&nbsp;% without the interface ever saying so &mdash; and this article claimed every bar ran to its own full 100. Each effect now carries a declared <code>emax</code>, listed in the constants table, because dry mouth does not have a 100&nbsp;% and pretending it does makes the number mean something different from the number beside it.</p>
+      <p><strong>The word comes from one shared six-step scale</strong>, applied identically everywhere &mdash; gauges, effect bars, and every reference table in every section. The bands are fixed:</p>
+      <div class="formula" data-live="scale-bands">computing&hellip;</div>
+      <p>That consistency is deliberate. If &ldquo;Moderate&rdquo; meant one thing on the Delta-9 table and something slightly different on the Delta-8 table, the two tables could not be compared, which is the only reason to have both. The label is produced by a single function that every section calls, and it is computed from the number as <em>displayed</em>, so a reading of 29.6 cannot print &ldquo;30&nbsp;%&nbsp;&middot;&nbsp;Mild&rdquo; the way it used to.</p>
+      <p><strong>What the scale is anchored to.</strong> For the three cannabis tabs the EC<sub>50</sub> and Hill coefficients are <span class="fitted">fitted</span> to two controlled human trials, and the <a href="#" data-article="art-tuned">constants article</a> prints the model&rsquo;s output next to the published group means. The anchor is the <em>band</em> each dose lands in and the <em>order</em> the doses come in &mdash; not a one-to-one mapping onto those studies&rsquo; visual analogue scales. Mapping one-to-one would put even 100&nbsp;mg swallowed at &ldquo;Strong&rdquo;, because a group mean averages low responders in with high ones, and showing anyone that would be dangerous.</p>
       <p><strong>Alcohol is the exception that proves the point.</strong> BAC is a real physical concentration, so the app reports it directly and never dresses it up as a percentage of anything. To place it on the shared scale for the gauge it applies an explicitly declared display mapping, spelled out in <a href="#" data-article="art-formula">Step 7 of the formula article</a>. The BAC figure itself is untransformed.</p>
-      <p><strong>Averaging one of these numbers over time is legitimate; averaging it over dose is not.</strong> Each intensity chart carries an average-intensity card underneath it, and what it does is integrate the curve and divide by its own length — area under the curve, in percent-hours, over the width of the window in hours. That is an honest time-weighted mean of the plotted quantity: it answers "if the whole episode had sat at one flat level, what level would it have been?" and it is the reason a long gentle curve and a short sharp one can read the same. Two windows are reported because two different questions are being asked. The one that starts at the first dose includes the absorption lag, so a two-hour wait for an edible drags the mean down — that is the honest answer to "what was the evening like". The one that starts at onset begins only once the curve first crosses the floor on the way up, so it describes the episode itself without the waiting — the honest answer to "how strong was it while it lasted". The gap between them is exactly the cost of the wait, which is why it is wide for edibles and essentially zero for anything smoked, vaped or drunk.</p>
+      <p><strong>Averaging one of these numbers over time is legitimate; averaging it over dose is not.</strong> Each intensity chart carries an average-intensity card underneath it, and what it does is integrate the curve and divide by its own length &mdash; area under the curve, in percent-hours, over the width of the window in hours. That is an honest time-weighted mean of the plotted quantity: it answers &ldquo;if the whole episode had sat at one flat level, what level would it have been?&rdquo; Two windows are reported because two different questions are being asked. The one that starts at the first dose includes the absorption lag, so a two-hour wait for an edible drags the mean down. The one that starts at onset describes the episode itself without the waiting. The gap between them is exactly the cost of the wait, which is why it is wide for edibles and essentially zero for anything smoked, vaped or drunk.</p>
       <p>Two caveats carry real weight. The window has to end somewhere, and an exponential tail never actually ends, so the app declares the episode over at <span class="tuned">1&nbsp;%</span> of the scale; a higher cut-off would end the window sooner and report a higher average. And because the percentage is a position on a saturating curve, percent-hours are not proportional to milligrams or to plasma exposure. Doubling the dose does not double the figure, and this number must never be compared against a published AUC, which measures concentration over time in entirely different units.</p>
-      <p>Finally, the ceiling is a modelling artifact, not a limit on experience. "Extremely Strong — 96&nbsp;%" does not mean the strongest possible experience; it means the curve has flattened so completely that the model can no longer tell doses apart. Beyond that point more milligrams still make things worse — just not in the direction the gauge is measuring.</p>
+      <p>Finally, the ceiling is a modelling artifact, not a limit on experience. &ldquo;Extremely Strong &mdash; 96&nbsp;%&rdquo; does not mean the strongest possible experience; it means the curve has flattened so completely that the model can no longer tell doses apart. Beyond that point more milligrams still make things worse &mdash; just not in the direction the gauge is measuring.</p>
     </div>
   </div>
 
@@ -3028,11 +3066,26 @@ scalePosition = 100 × (bacPercent / 0.30) ^ 0.75      <span class="cm">// clamp
      §11 Learn + dashboard       (renderLearn / renderDashboard)
      §12 App shell: tabs, keys, theme, export, print, reset, boot
 
-   DESIGN RULE: sections never share mutable logic. Each of the four
-   estimators owns its own constants, its own dose function and its own
-   render function, so retuning one cannot silently change another. Only
-   *pure* helpers (§2–§5) are shared, and that sharing is what keeps the
-   visual language and the vocabulary identical everywhere.
+   DESIGN RULE, stated as it actually is rather than as it was first
+   aspired to:
+
+     1. NO TAB READS ANOTHER TAB'S STATE. This is the hard rule and nothing
+        breaks it. state.d9 is touched only by the Delta-9 tab, and so on.
+     2. Shared code must be STATELESS with respect to module state: it takes
+        the constants object and the state slice as arguments. The PK/PD
+        engine, the model builder and the shared cannabis renderer all work
+        this way, so the three cannabis tabs run one implementation while
+        keeping three entirely separate constant sets. Retuning D8 still
+        cannot move D9, because the only thing that differs is what is
+        passed in.
+     3. READ-ONLY CONSTANT COMPARISONS ARE ALLOWED, and are labelled as
+        comparisons wherever they appear. renderD8vsD9 and the route
+        comparison in the Smoked tab read D9's CONSTANTS to put two modules
+        side by side; that is the entire purpose of those tables.
+
+   An earlier version of this comment said sections "never share" anything
+   beyond pure helpers, while three render functions were already reading
+   another module's constants. The rule above is what the code does.
    ========================================================================= */
 'use strict';
 
@@ -4742,7 +4795,9 @@ const ALCOHOL = {
     pk:'<strong>Pharmacokinetic.</strong> First-order absorption into a single compartment, zero-order elimination out of it. Gives a realistic rising limb and an analytical time-to-peak, so it is the better choice in the first hour or two. Absorption rate is a guess about your stomach, which is its main weakness.',
     widmark:'<strong>Widmark.</strong> Treats every drink as absorbed the instant it was finished, then subtracts &beta;&nbsp;&times;&nbsp;time. It therefore overstates BAC shortly after drinking and puts the peak at your last drink. Simple, transparent, and the basis of most forensic estimates.'
   },
-  /* 18 presets. Volumes are canonical mL; grams are computed, never stored. */
+  /* Volumes are canonical mL; grams are computed, never stored. The count is
+     generated wherever it is quoted - this comment used to say 18 while the
+     list held 19 and the dashboard card said 19. */
   PRESETS:[
     {key:'lightbeer', label:'Light beer',   vol:355, abv:4.2, icon:'can'},
     {key:'beer',      label:'Regular beer', vol:355, abv:5.0, icon:'beer'},
@@ -6186,8 +6241,14 @@ function initD9(){
 }
 /* ---------------------------------------------------------------------------
    §9  DELTA-8 EDIBLE MODULE  —  renderD8()
-   A separate module on purpose. Higher EC50, lower Hill coefficient, its own
-   per-effect weights, its own timing clamps. Nothing here reads D9's values.
+   A separate module on purpose, but separate in exactly ONE respect: the
+   EC50, which is twice the Delta-9 one. The Hill coefficient, the kinetics
+   and every per-effect curve are deliberately IDENTICAL, because the 2025
+   controlled trial found no pharmacodynamic difference once the doses were
+   matched for intensity. An earlier version of this comment claimed a lower
+   Hill coefficient and its own per-effect weights; neither was ever true in
+   the code. renderD8vsD9 reads D9's CONSTANTS for the comparison table, and
+   nothing anywhere reads D9's STATE.
    ------------------------------------------------------------------------ */
 const D8 = {
   ROUTE:'oral',
@@ -6614,8 +6675,8 @@ const CAFFEINE = {
      which is the usually quoted Tmax of 30-60 min for a swallowed dose. */
   KA_PER_HOUR:5.0,
   /* HAND-TUNED: absorption rate for the fraction taken up across the oral
-     mucosa. Roughly three times the swallowed rate, giving that component a
-     Tmax near 12 min for that component alone. Human sublingual caffeine
+     mucosa. Five times the swallowed rate (25 against 5), giving that
+     component a Tmax near 12 min on its own. Human sublingual caffeine
      pharmacokinetic data is much
      thinner than oral data — caffeine gum is the best-studied form and is
      reported to peak appreciably sooner than capsules, but the published
@@ -7310,9 +7371,10 @@ function nicProduct(key){ return NICOTINE.PRODUCTS.find(p => p.key === key) || N
 
 /* --- pharmacokinetics -----------------------------------------------------
    Amounts first, concentrations second. Cotinine is formed from the amount of
-   nicotine ELIMINATED, so keeping the model in milligrams means the fitted
-   nicotine volume above cannot leak into the cotinine curve, which uses real
-   published constants and has to stay honest. */
+   nicotine ELIMINATED, so keeping the model in milligrams means the nicotine
+   volume of distribution above cannot leak into the cotinine curve, which
+   carries its own published constants. Neither volume is fitted: both are
+   taken from inside published ranges. */
 function nicotineAmountSingle(absMg, tHours, ke, ka){
   if (tHours <= 0) return 0;
   /* guard the ka == ke singularity with the limiting form */
@@ -8797,6 +8859,98 @@ function renderLearn(){
     '// inhalation. No agency publishes that; it was this app\'s own clamp,\n' +
     '// quoted back at itself as though it were a source.');
 
+  /* ---- timing, efficiencies and tolerance, printed from the constants ----
+     Every one of these replaces a sentence that used to be typed by hand and
+     had drifted away from the code. */
+  setLive('oral-timing',
+    '// straight from D9.KIN, D9.PRODUCTS and D9.FOOD\n' +
+    pad('absorption lag', 22) + D9.KIN.tlag + ' min base, ' +
+      Math.min.apply(null, D9.PRODUCTS.map(x => x.onset)) + ' to +' +
+      Math.max.apply(null, D9.PRODUCTS.map(x => x.onset)) + ' by product, ' +
+      Math.min.apply(null, D9.FOOD.map(x => x.onset)) + ' to +' +
+      Math.max.apply(null, D9.FOOD.map(x => x.onset)) + ' by stomach\n' +
+    pad('absorption half-life', 22) + D9.KIN.absorbHalf + ' min\n' +
+    pad('decay half-life', 22) + D9.KIN.decayHalf + ' min, x' +
+      D9.FOOD[0].decayMul + ' to x' + D9.FOOD[2].decayMul + ' by stomach\n' +
+    pad('effect-site lag', 22) + D9.MAIN_LAG_MIN + ' min (felt), ' + D9.IMPAIRMENT.lag + ' min (impairment)\n' +
+    '\n' +
+    '// what that produces for the reference person, 10 mg gummy, light food:\n' +
+    (function(){
+      const M = oralRefPeak(D9, 10, false);
+      return pad('  onset', 22) + Math.round(M.onset) + ' min\n' +
+             pad('  felt peak', 22) + (M.peak.at / 60).toFixed(1) + ' h\n' +
+             pad('  faded below Mild', 22) + (M.feltFade / 60).toFixed(1) + ' h\n' +
+             pad('  1 % residual gone', 22) + (M.feltEnd / 60).toFixed(1) + ' h\n';
+    })() +
+    '\n<span class="hl">// Health Canada: ingested effects begin 30 min - 2 h, peak up to 4 h,</span>\n' +
+    '<span class="hl">// last up to 12 h, with residual effects to 24 h.</span>\n' +
+    '// Schlienz 2020 puts the oral subjective peak at 1.5-3 h and\n' +
+    '// impairment later, at 2-5 h. Both windows contain the figures above.');
+
+  setLive('inhale-eff',
+    '// straight from SMOKED.METHODS[].efficiency\n' +
+    SMOKED.METHODS.map(m => pad('  ' + m.label, 26) + pad(Math.round(m.efficiency * 100) + ' %', 7) +
+      '<span class="cm">// ' + round(10 * m.efficiency, 2) + ' mg absorbed from 10 mg of THC</span>').join('\n') +
+    '\n\n<span class="hl">// Huestis 2007: systemic availability 2-56 %, more typically 8-24 %.</span>\n' +
+    '// vaporiser : pipe ratio here = ' +
+      round((SMOKED.METHODS.find(m => m.key === 'vaporizer').efficiency /
+             SMOKED.METHODS.find(m => m.key === 'pipe').efficiency), 2) +
+      'x, against the ~2x blood Cmax\n// ratio Spindle 2018 measured at 10 mg.');
+
+  setLive('inhale-timing',
+    '// straight from SMOKED.KIN, for the reference person\n' +
+    (function(){
+      const rows = [[0.15, 20, 'joint'], [0.20, 20, 'vaporizer'], [0.05, 75, 'dab']];
+      return rows.map(r => {
+        const M = smokedRefModel(r[0], r[1], r[2]);
+        return pad('  ' + r[2] + ', ' + r[0] + ' g @ ' + r[1] + ' %', 30) +
+               pad(Math.round(M.peak.at) + ' min peak', 15) +
+               pad((M.feltFade / 60).toFixed(1) + ' h faded', 15) +
+               (M.impairmentEnd / 60).toFixed(1) + ' h impairment';
+      }).join('\n');
+    })() +
+    '\n\n<span class="hl">// Health Canada: inhaled effects peak within 30 min and can last up to 6 h.</span>\n' +
+    '<span class="hl">// Spindle 2018: 25 mg vaporized was NOT back to baseline at 6 h.</span>\n' +
+    '// The impairment column is fitted to the driving meta-analysis instead:\n' +
+    '// most driving-relevant skills recover within ~5 h of 20 mg inhaled,\n' +
+    '// nearly all within 7 h.');
+
+  setLive('tol-decay',
+    '// tolAfterBreak(factor, days) = 1 + (factor - 1) * exp(-days / ' + TOL_RECOVERY_TAU_DAYS + ')\n' +
+    '// a heavy daily user, factor ' + TOLERANCE_FACTORS[4].factor + ', taking a break:\n' +
+    [0, 1, 2, 3, 5, 7, 10, 14, 21, 28, 42].map(d =>
+      pad('  day ' + d, 12) + pad('divide by ' + round(tolAfterBreak(TOLERANCE_FACTORS[4].factor, d), 2), 20) +
+      '<span class="cm">// ' + Math.round(100 * (1 - (tolAfterBreak(TOLERANCE_FACTORS[4].factor, d) - 1) /
+        (TOLERANCE_FACTORS[4].factor - 1))) + ' % recovered</span>').join('\n') +
+    '\n\n<span class="hl">// CB1 availability starts recovering within 2 days and is no longer</span>\n' +
+    '<span class="hl">// distinguishable from controls by about 28 days. The exponential</span>\n' +
+    '<span class="hl">// and its time constant are mine; those two landmarks are not.</span>');
+
+  setLive('tol-formula',
+    '// the actual path, per effect e:\n' +
+    'exposure_e(t) = sum over doses of  dose x firstTimeSensitivity\n' +
+    '                                   x batemanLagged(t, product, food, effect_e)\n' +
+    '                                   / toleranceFactor ^ k_e\n' +
+    'response_e(t) = 100 x emax_e x ceiling x hill(exposure_e(t), EC50 x ec50k_e, n_e)\n' +
+    '\n' +
+    'toleranceFactor = tolAfterBreak(base, daysOff)\n' +
+    'ceiling         = 1 - ' + TOL_CEILING_DROP + ' x severity        <span class="cm">// severity 0 at none, 1 at heavy daily</span>\n' +
+    '\n' +
+    '// for the current Delta-9 settings:\n' +
+    (function(){
+      const t = cannabisTol(state.d9);
+      return pad('  base factor', 22) + round(t.base, 2) + '\n' +
+             pad('  days off', 22) + t.daysOff + '\n' +
+             pad('  after the break', 22) + round(t.factor, 2) + '\n' +
+             pad('  ceiling', 22) + round(tolCeiling(t.sev), 3) + '\n';
+    })() +
+    '\n// per-effect exponents k_e, this module:\n' +
+    D9.EFFECTS.map(e => pad('  ' + e.name, 40) + 'k = ' + e.tolK.toFixed(2)).join('\n') +
+    '\n\n<span class="hl">// There is no distributionFactor in this expression. An earlier version of</span>\n' +
+    '<span class="hl">// the tolerance article printed one, and printed food.absorb too; neither</span>\n' +
+    '<span class="hl">// is in the path any more. distributionFactor() survives in the code only</span>\n' +
+    '<span class="hl">// so the formula article can show you that it returns 1.</span>');
+
   /* ---- the shared scale, printed from the single definition ---- */
   setLive('scale-bands', INTENSITY_BANDS.map((b, i) =>
     pad(bandRangeText(i), 12) + b.label).join('\n') +
@@ -8804,6 +8958,12 @@ function renderLearn(){
 
   /* ---- model vs published data, computed live ---- */
   renderCalibrationTable();
+
+  /* The headline count is generated: there were five estimators when that
+     sentence was written and there are more now. */
+  setLive('estimator-count',
+    ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'][
+      TIME_DEPENDENT_VIEWS.length] || 'Several');
 
   /* ---- provenance table ---- */
   renderTable(document.getElementById('tuned-table'),
@@ -9013,22 +9173,22 @@ function initConverter(){
 /* ------------------------------- dashboard -------------------------------- */
 const HOME_CARDS = [
   {view:'alcohol', accent:'alcohol', icon:'beer', title:'Alcohol — BAC',
-   body:'Unlimited drinks with individual edit and delete, 19 presets, two selectable models, time-until-threshold estimates for 0.08 / 0.05 / 0.02 / 0.00, and a permanent effects table from 0.00 to 0.40 +.',
+   body:'Unlimited drinks with individual edit and delete, ' + ALCOHOL.PRESETS.length + ' presets, two selectable models, time-until-threshold estimates for 0.08 / 0.05 / 0.02 / 0.00, and a permanent effects table from 0.00 to 0.40 +.',
    go:'Open the BAC estimator'},
   {view:'d9', accent:'d9', icon:'leaf', title:'Delta-9 THC — edibles',
-   body:'Hill dose-response on labelled milligrams, with product format and stomach contents shifting onset, body-fat-driven distribution, and CBD, CBN and CBG each doing their own specific job.',
+   body:'Exposure is modelled as a lagged absorption and elimination profile and the Hill equation is applied to it at every point, so duration grows with dose and doses in the list superpose exactly. Fitted to a controlled oral trial. Fat mass stretches the tail only, and CBD, CBN and CBG are recorded and explained but change no number.',
    go:'Open the Delta-9 estimator'},
   {view:'d8', accent:'d8', icon:'gummy', title:'Delta-8 THC — edibles',
-   body:'A separate module with a higher EC50 and its own per-effect weights, so the same milligrams genuinely land lower on the same scale. Includes a Delta-8 vs Delta-9 comparison built from both modules’ constants.',
+   body:'A separate module whose EC50 is exactly twice the Delta-9 one, from the trial in which 40 mg of Delta-8 and 20 mg of Delta-9 were indistinguishable. The per-effect curves are deliberately identical, because matched for intensity that trial found no difference in character. Includes a comparison built from both modules’ constants.',
    go:'Open the Delta-8 estimator'},
   {view:'smoked', accent:'smoked', icon:'joint', title:'Smoked & inhaled',
-   body:'A minutes-scale timeline for six methods, each with its own absorption efficiency and irritation profile, multiplied by inhalation depth — plus an edible-versus-inhaled comparison table.',
+   body:'A minutes-scale timeline for six methods, each with its own absorption efficiency inside the published 8–24 % band, multiplied by inhalation depth. Fitted to a controlled smoked-versus-vaporized trial, which is why ten milligrams inhaled now outranks fifty swallowed — plus a route comparison table that reconciles the two units.',
    go:'Open the inhaled estimator'},
   {view:'caffeine', accent:'caffeine', icon:'coffee', title:'Caffeine',
    body:'The counterexample: caffeine really is first-order, so it has a genuine half-life and the exponential model that is wrong for alcohol is right here. Unlimited doses, half-life modifiers that matter (smoking halves it, oral contraceptives double it), a plasma curve and an effects curve, and a sleep panel.',
    go:'Open the caffeine estimator'},
   {view:'nic', accent:'nic', icon:'cig', title:'Nicotine',
-   body:'Eighteen products from cigarettes to patches, each with its own absorption rate fitted to a published time-to-peak, plus a cotinine curve integrated forward from the nicotine one on unfitted published constants — and a dependence panel that shows why a two-hour half-life is the whole problem.',
+   body:'Eighteen products from cigarettes to patches, each with its own absorption rate chosen so the closed-form time to peak matches a published one, plus a cotinine curve integrated forward from the nicotine one on published constants that were not fitted — and a dependence panel that shows why a two-hour half-life is the whole problem.',
    go:'Open the nicotine estimator'},
   {view:'hl', accent:'hl', icon:'decay', title:'Half-life lab',
    body:'Set any half-life, from the twenty minutes of carbon-11 to the four and a half billion years of uranium-238, and see what it implies: the curve on a linear and a logarithmic axis, every halving in a table, how long to fall to any amount, and where repeated doses settle. Plus a library of published half-lives with what kind of half-life each one actually is.',
@@ -9765,6 +9925,14 @@ function mapCounts(){
 let mapView = {k:1, x:0, y:0};
 const MAP_W = 975, MAP_H = 610;
 function mapCats(mode){ return mode === 'cbd-state' ? CBD_CATS : (mode === 'mj-county' ? CNTY_CATS : MJ_CATS); }
+/* Which category keys any shape on this map actually carries. */
+function mapCatsInUse(mode){
+  const out = {};
+  if (mode === 'cbd-state'){ Object.keys(CBD_MAP).forEach(pc => { out[CBD_MAP[pc].cat] = true; }); }
+  else if (mode === 'mj-county'){ Object.keys(CNTY_CATS).forEach(k => { out[k] = true; }); }
+  else { Object.keys(MJ_MAP).forEach(pc => { out[MJ_MAP[pc].cat] = true; }); }
+  return out;
+}
 function mapStarStates(mode){
   /* Decriminalised but no legal sales — only meaningful on the marijuana maps */
   if (mode === 'cbd-state') return {};
@@ -9842,7 +10010,14 @@ function paintMap(){
 }
 function renderMapLegend(mode){
   const cats = mapCats(mode), host = document.getElementById('map-legend');
-  let rows = Object.keys(cats).map(k => {
+  /* Only categories the data actually uses are listed. The CBD schema carries
+     an "Illegal / unavailable" band for completeness, but no state is in it -
+     no state bans CBD outright - and a legend that showed an empty red band
+     invited the reader to go looking for a state that is in it. A comment
+     here used to claim the band was left out while the code printed every
+     key in the object. */
+  const used = mapCatsInUse(mode);
+  let rows = Object.keys(cats).filter(k => used[k]).map(k => {
     const c = cats[k];
     return '<div class="map-legend-row"><span class="map-swatch" style="background:' + c.fill + '">' +
       (c.pattern ? '<svg viewBox="0 0 24 15" style="position:absolute;inset:0;width:100%;height:100%">' +
@@ -10260,17 +10435,51 @@ function mapDetailCbd(pc){
       'the category is defined differently by every source that estimates it, so "market size" is left as verify rather than filled with a number that looks precise. ' +
       'Sources: state agriculture and health department hemp programmes.</p>';
 }
-const CBD_FEDERAL_BANNER =
-  '<div class="banner warn" style="margin:12px 0"><span class="ico" data-icon="alert"></span><div class="b-body">' +
-  '<strong>A federal change is landing on full-spectrum CBD, and it is not settled.</strong>' +
+/* The two federal dates, as data. The banner's tense is computed against the
+   clock rather than typed, because this file was written before both of them
+   and said "lost hemp status on 12 November 2026" while that date was still
+   in the future. The dates themselves and the H.R. 6500 claim are unchanged
+   and NEED HUMAN VERIFICATION - nothing here re-checked them. */
+const HEMP_DATES = {
+  synthetic:{at:Date.UTC(2026, 10, 12), label:'12 November 2026'},
+  totalThc: {at:Date.UTC(2026, 11, 11), label:'11 December 2026'}
+};
+function hempTense(d, past, future){ return Date.now() >= d.at ? past : future; }
+/* Review dates are only as good as how old they are, so the app says how old
+   rather than leaving the reader to work it out from a date in the text. */
+const STALE_AFTER_DAYS = 90;
+function reviewAge(dateText){
+  const t = Date.parse(dateText);
+  if (!isFinite(t)) return null;
+  return Math.floor((Date.now() - t) / 86400000);
+}
+function stalenessNotice(dateText, what){
+  const days = reviewAge(dateText);
+  if (days == null || days <= STALE_AFTER_DAYS) return '';
+  const months = Math.round(days / 30);
+  return '<div class="banner crit" style="margin:12px 0"><span class="ico" data-icon="alert"></span><div class="b-body">' +
+    '<strong>This information is ' + (months >= 12 ? 'over a year' : 'about ' + months + ' months') + ' old.</strong>' +
+    '<p>' + what + ' was last reviewed on ' + esc(dateText) + ', ' + days + ' days ago. ' +
+    'Cannabis law moves faster than that. Treat every colour and every figure here as a starting point for your own check against a current source, ' +
+    'not as an answer. Nothing in this file updates itself.</p></div></div>';
+}
+function cbdFederalBanner(){
+  const syn = HEMP_DATES.synthetic, tot = HEMP_DATES.totalThc;
+  return '<div class="banner warn" style="margin:12px 0"><span class="ico" data-icon="alert"></span><div class="b-body">' +
+  '<strong>A federal change ' + hempTense(tot, 'has landed on', 'is landing on') + ' full-spectrum CBD, and it is not settled.</strong>' +
   '<p>Section 781 of the 2026 appropriations act narrows the federal definition of hemp from a delta-9-only standard to <strong>total THC</strong>, ' +
   'and caps finished consumable hemp products at <strong>0.4 mg of total THC per container</strong>. Many ordinary full-spectrum CBD products — ' +
-  'the ones with trace THC, which is most of them — would exceed that cap and lose federal hemp status. Isolate and broad-spectrum products are not affected.</p>' +
+  'the ones with trace THC, which is most of them — ' + hempTense(tot, 'now exceed', 'would exceed') +
+  ' that cap and ' + hempTense(tot, 'have lost', 'would lose') + ' federal hemp status. Isolate and broad-spectrum products are not affected.</p>' +
   '<p style="margin-top:6px">Two dates, because they were split. Cannabinoids the plant cannot make on its own, which covers most commercial delta-8, ' +
-  'lost hemp status on the original schedule of <strong>12 November 2026</strong>. The rest — the total-THC standard and the 0.4 mg container cap — ' +
-  'was pushed back thirty days by H.R. 6500, signed 2 September 2026, and is due to take effect <strong>11 December 2026</strong>.</p>' +
+  hempTense(syn, ' lost hemp status on ', ' are due to lose hemp status on ') + '<strong>' + syn.label + '</strong>. ' +
+  'The rest — the total-THC standard and the 0.4 mg container cap — ' +
+  'was pushed back thirty days by H.R. 6500, signed 2 September 2026, and ' +
+  hempTense(tot, 'took effect on ', 'is due to take effect ') + '<strong>' + tot.label + '</strong>.</p>' +
   '<p style="margin-top:6px">Treat none of that as final. Enforcement mechanics, litigation and the possibility of a further extension were all still moving ' +
-  'when this was written, and the state colours on this map describe state law, which the federal change may simply overtake.</p></div></div>';
+  'when this was written, and the state colours on this map describe state law, which the federal change may simply overtake. ' +
+  'These dates were not re-checked when this page was loaded and are the single most likely thing on it to be out of date.</p></div></div>';
+}
 
 /* --------------------------- maps: top-level render ----------------------- */
 function renderMaps(){
@@ -10279,7 +10488,8 @@ function renderMaps(){
     'Three views over the same geometry. <strong>' + esc(MAP_MODES.find(x => x.key === mode).label) + '</strong> is showing. ' +
     'Every category is distinguishable by pattern or symbol as well as colour, because red and green are exactly the pair that colour-blind readers cannot separate. ' +
     'Reviewed ' + MAPS_REVIEWED + '.';
-  document.getElementById('map-banner').innerHTML = mode === 'cbd-state' ? CBD_FEDERAL_BANNER : '';
+  document.getElementById('map-banner').innerHTML =
+    stalenessNotice(MAPS_REVIEWED, 'The map data') + (mode === 'cbd-state' ? cbdFederalBanner() : '');
   paintIcons(document.getElementById('map-banner'));
   paintMap();
   renderMapSmall();
@@ -10355,7 +10565,9 @@ function renderLawsBody(){
   const thc = thcStandardText(L.thc);
 
   document.getElementById('laws-reviewed').innerHTML =
-    'Last reviewed <strong>' + LAWS_REVIEWED + '</strong>. Nothing here updates itself — treat anything older than a few months as a starting point for your own check, not an answer.';
+    'Last reviewed <strong>' + LAWS_REVIEWED + '</strong>' +
+    (reviewAge(LAWS_REVIEWED) != null ? ', ' + reviewAge(LAWS_REVIEWED) + ' days ago' : '') +
+    '. Nothing here updates itself — treat anything older than a few months as a starting point for your own check, not an answer.';
 
   document.getElementById('laws-d8-federal').innerHTML =
     '<p class="card-note" style="margin:0 0 10px">Delta-8 is the least settled area in this app, and state law is about to stop being the deciding factor.</p>' +
@@ -10748,7 +10960,7 @@ function buildExport(){
       L.push('Time to peak: ' + fmtDuration(nicotineTmaxMin(items, ke)) + ' from the first item');
       L.push('');
       L.push('Nicotine concentrations use an EFFECTIVE volume of distribution of ' + NICOTINE.VD_L_PER_KG + ' L/kg,');
-      L.push('fitted to measured venous peaks rather than taken from a textbook. The cotinine');
+      L.push('taken from inside the published 1-3 L/kg range rather than fitted. The cotinine');
       L.push('figure uses published constants only and is the more defensible of the two.');
     }
   } else {
