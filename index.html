@@ -3097,8 +3097,13 @@ const INTENSITY_BANDS = [
   {min:70, label:'Very Strong',      cls:'s5', cssVar:'--sev-5'},
   {min:85, label:'Extremely Strong', cls:'s6', cssVar:'--sev-6'}
 ];
+/* The band is computed from the value as DISPLAYED, not the raw one. Every
+   readout in the app prints Math.round(pct), so 29.6 showed as "30 %" while
+   intensityBand(29.6) still said "Mild" - the number and the word disagreed
+   on screen. Rounding here fixes it at the single point every caller shares:
+   gauges, stats, tables, effect bars, the chart marker and the aria labels. */
 function intensityBand(pct){
-  const v = clamp(pct, 0, 100);
+  const v = Math.round(clamp(pct, 0, 100));
   let band = INTENSITY_BANDS[0];
   for (let i = 0; i < INTENSITY_BANDS.length; i++){ if (v >= INTENSITY_BANDS[i].min) band = INTENSITY_BANDS[i]; }
   return band;
@@ -3934,6 +3939,31 @@ function buildPills(host, options, selectedKey, onSelect){
    each keystroke, on each frame of a drag, and once every thirty seconds when
    the clock ticks. These are rebuilt only when their contents actually
    differ, and icons are repainted only when something was rebuilt. */
+/* Static panels (tips accordions, reference prose) are mounted once at init.
+   Writing them on every render closed any accordion the reader had opened, on
+   the next keystroke or on the next 30-second tick. */
+function mountStatic(id, html){
+  const el = document.getElementById(id);
+  if (!el || el.dataset.mounted === '1') return;
+  el.innerHTML = html;
+  el.dataset.mounted = '1';
+  paintIcons(el);
+  wireAccordions(el);
+}
+/* Give every accordion head the state a screen reader needs. The delegated
+   click handler keeps aria-expanded in step after this; this sets the initial
+   value and the aria-controls link, for markup written by hand and for any
+   panel mounted later alike. */
+let ACC_SEQ = 0;
+function wireAccordions(root){
+  (root || document).querySelectorAll('.acc').forEach(a => {
+    const head = a.querySelector('.acc-head'), body = a.querySelector('.acc-body');
+    if (!head || !body) return;
+    if (!body.id) body.id = (a.id || 'acc-' + (++ACC_SEQ)) + '-body';
+    head.setAttribute('aria-expanded', String(a.classList.contains('open')));
+    head.setAttribute('aria-controls', body.id);
+  });
+}
 function setHTML(host, html){
   if (host.__lastHTML === html) return false;
   host.__lastHTML = html;
@@ -3984,15 +4014,35 @@ const DEFAULT_STATE = {
 };
 let state = JSON.parse(JSON.stringify(DEFAULT_STATE));
 
+/* Deep merge of a saved blob onto a fresh clone of the defaults.
+   The old shallow Object.assign had two failure modes: a nested object the
+   user had never touched (laws.map, every draft) came through as a shared
+   reference INTO DEFAULT_STATE, so editing it corrupted the defaults for the
+   rest of the session; and a nested object the user HAD saved replaced the
+   default wholesale, so any key added to that object in a later version was
+   simply missing. Arrays are user content and win whole - merging a saved
+   dose list element-wise against defaults would resurrect deleted doses. */
+function mergeDefaults(def, saved){
+  if (Array.isArray(def)) return Array.isArray(saved) ? saved.slice() : def.slice();
+  if (def === null || typeof def !== 'object') return saved === undefined ? def : saved;
+  const out = {};
+  Object.keys(def).forEach(k => { out[k] = mergeDefaults(def[k], saved ? saved[k] : undefined); });
+  if (saved && typeof saved === 'object'){
+    Object.keys(saved).forEach(k => { if (!(k in out)) out[k] = saved[k]; });
+  }
+  return out;
+}
 function loadState(){
   try{
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return;
     const saved = JSON.parse(raw);
+    if (!saved || typeof saved !== 'object') return;
     Object.keys(DEFAULT_STATE).forEach(k => {
-      if (saved[k] && typeof saved[k] === 'object') state[k] = Object.assign({}, DEFAULT_STATE[k], saved[k]);
+      state[k] = mergeDefaults(DEFAULT_STATE[k], saved[k]);
     });
-  }catch(e){ /* corrupt or unavailable storage — fall back to defaults silently */ }
+    migrateCannabisDoses();
+  }catch(e){ /* corrupt or unavailable storage - fall back to defaults silently */ }
 }
 /* ---------------------------------------------------------------------------
    THE CLOCK
@@ -4736,8 +4786,17 @@ function initAlcohol(){
     const v = parseFloat(age.value);
     s.ageY = isFinite(v) ? clamp(v, 16, 100) : 30; saveState(); renderAlcohol();
   });
-  vol.addEventListener('input', () => { s.draft.vol = displayToMl(parseFloat(vol.value) || 0); s.draft.name = 'Custom drink'; s.draft.icon = 'drink'; saveState(); });
-  abv.addEventListener('input', () => { s.draft.abv = parseFloat(abv.value) || 0; s.draft.name = 'Custom drink'; s.draft.icon = 'drink'; saveState(); });
+  /* Retyping the volume or the ABV used to wipe the name: edit a Regular beer
+     to 500 ml and it became "Custom drink", losing the label the user had
+     chosen and the icon with it. A named drink keeps its name and is marked
+     as edited; only a drink that never had a name of its own becomes one. */
+  const markEdited = () => {
+    const base = s.draft.name || '';
+    if (!base || base === 'Custom drink'){ s.draft.name = 'Custom drink'; s.draft.icon = 'drink'; return; }
+    if (!/ \(edited\)$/.test(base)) s.draft.name = base + ' (edited)';
+  };
+  vol.addEventListener('input', () => { s.draft.vol = displayToMl(parseFloat(vol.value) || 0); markEdited(); saveState(); });
+  abv.addEventListener('input', () => { s.draft.abv = parseFloat(abv.value) || 0; markEdited(); saveState(); });
   when.addEventListener('input', () => { s.draft.when = Math.max(0, parseFloat(when.value) || 0); saveState(); });
 
   document.getElementById('alc-add').addEventListener('click', () => {
@@ -5001,7 +5060,6 @@ function renderTHC(){
   /* reference table — generated from this module's own constants */
   renderCannabinoidPanel(document.getElementById('d9-cannabinoids'), s.cbd, s.cbn, s.cbg, mg);
   renderD9Reference();
-  document.getElementById('d9-tips').innerHTML = EDIBLE_TIPS;
 }
 
 /* Reference doses are evaluated for a fixed reference person so the table is
@@ -5085,6 +5143,7 @@ function bindPair(numId, rangeId, apply){
 
 function initD9(){
   const s = state.d9;
+  mountStatic('d9-tips', EDIBLE_TIPS);
   buildPills(document.getElementById('d9-product'), D9.PRODUCTS, s.product, k => { s.product = k; saveState(); renderTHC(); });
   buildPills(document.getElementById('d9-food'), D9.FOOD, s.food, k => { s.food = k; saveState(); renderTHC(); });
   buildPills(document.getElementById('d9-sex'), D9.SEX, s.sex, k => { s.sex = k; saveState(); renderTHC(); });
@@ -5894,8 +5953,6 @@ function renderCaffeine(){
     renderEffectBars(document.getElementById('caf-effects'), CAFFEINE.EFFECTS.map(e => ({name:e.name, value:0, note:e.note})));
     ['caf-chart-mg', 'caf-chart-fx'].forEach(id => { document.getElementById(id).innerHTML = ''; });
     renderCaffeineReference();
-    document.getElementById('caf-tips').innerHTML = CAFFEINE_TIPS;
-    paintIcons(document.getElementById('caf-tips'));
     return;
   }
 
@@ -6043,8 +6100,6 @@ function renderCaffeine(){
     ({name:e.name, value:hill(nowConc / tolF, e.ec50, e.n) * e.w * 100, note:e.note})));
 
   renderCaffeineReference();
-  document.getElementById('caf-tips').innerHTML = CAFFEINE_TIPS;
-  paintIcons(document.getElementById('caf-tips'));
 }
 
 function renderCaffeineReference(){
@@ -6087,6 +6142,7 @@ function cafExitEdit(){
 }
 function initCaffeine(){
   const s = state.caf;
+  mountStatic('caf-tips', CAFFEINE_TIPS);
   buildPills(document.getElementById('caf-presets'), CAFFEINE.PRESETS.map(p => ({key:p.key, label:p.label, sub:p.mg + ' mg', icon:p.icon})), null, cafSetDraftFromPreset);
   const holdField = document.getElementById('caf-hold-field'), hold = document.getElementById('caf-hold');
   const syncRoute = () => {
@@ -6497,9 +6553,6 @@ function renderNicotine(){
     ['nic-chart-ng', 'nic-chart-fx', 'nic-chart-cot'].forEach(id => { document.getElementById(id).innerHTML = ''; });
     document.getElementById('nic-cot-note').textContent = 'Add a dose to see the metabolite build up.';
     renderNicotineReference();
-    document.getElementById('nic-withdrawal').innerHTML = NIC_WITHDRAWAL_HTML();
-    document.getElementById('nic-tips').innerHTML = NIC_TIPS;
-    paintIcons(document.getElementById('nic-tips'));
     return;
   }
 
@@ -6744,9 +6797,6 @@ function renderNicotine(){
     ' — because tolerance to the unpleasant effects builds within days, long before tolerance to anything anyone wants. <span class="tuned">hand-tuned</span>';
 
   renderNicotineReference();
-  document.getElementById('nic-withdrawal').innerHTML = NIC_WITHDRAWAL_HTML();
-  document.getElementById('nic-tips').innerHTML = NIC_TIPS;
-  paintIcons(document.getElementById('nic-tips'));
   requestAnimationFrame(() => {
     document.querySelectorAll('#nic-effects .fill').forEach(f => { f.style.width = f.dataset.w + '%'; });
   });
@@ -6835,6 +6885,8 @@ const NIC_TIPS =
 
 function initNicotine(){
   const s = state.nic;
+  mountStatic('nic-tips', NIC_TIPS);
+  mountStatic('nic-withdrawal', NIC_WITHDRAWAL_HTML());
   nicSetDraftFromProduct(s.draft.product || 'cig');
 
   buildPills(document.getElementById('nic-clearance'), NICOTINE_CLEARANCE.map(c => ({key:c.key, label:c.label, sub:c.sub})), s.clearance,
@@ -7733,8 +7785,10 @@ function renderLearn(){
   const arts = Array.from(document.querySelectorAll('.acc[id^="art-"]'));
   const idx = document.getElementById('learn-index');
   idx.innerHTML = arts.map(a =>
-    '<button class="pill" type="button" data-article="' + a.id + '" aria-pressed="false">' +
+    '<button class="pill" type="button" data-article="' + a.id + '" aria-pressed="' +
+    a.classList.contains('open') + '">' +
     esc(a.querySelector('.acc-head').textContent.trim()) + '</button>').join('');
+  syncLearnPills();
 
   /* ---- live verification: the zero-order region, and where it ends ---- */
   const V = {weightKg:80, r:0.68, beta:0.015, ka:3.5, model:'pk'};
@@ -9439,6 +9493,11 @@ function initLaws(){
 /* ---------------------------------------------------------------------------
    §12  APP SHELL — navigation, theme, units, export, print, reset, boot
    ------------------------------------------------------------------------ */
+/* Views whose output depends on the wall clock. Only these are re-rendered by
+   the 30-second tick; rebuilding Laws every half minute threw away keyboard
+   focus mid-navigation and tore down the county map's 3,142 paths for nothing,
+   and neither Learn, the converter nor the dashboard moves on its own. */
+const TIME_DEPENDENT_VIEWS = ['alcohol', 'd9', 'd8', 'smoked', 'caffeine', 'nic'];
 const RENDERERS = {
   home:   renderDashboard,
   alcohol:renderAlcohol,
@@ -9470,12 +9529,24 @@ function switchView(key, opts){
   paintIcons(document.getElementById('view-' + key));
   if (!opts || !opts.noScroll) window.scrollTo({top:0, behavior:'smooth'});
 }
+/* The index pills were built with aria-pressed="false" and never updated, so
+   a screen reader was told nothing was selected however many articles were
+   open. Each pill tracks its own article's open state. */
+function syncLearnPills(){
+  const idx = document.getElementById('learn-index');
+  if (!idx) return;
+  idx.querySelectorAll('.pill[data-article]').forEach(p => {
+    const art = document.getElementById(p.dataset.article);
+    p.setAttribute('aria-pressed', String(!!art && art.classList.contains('open')));
+  });
+}
 function openArticle(id){
   const art = document.getElementById(id);
   if (!art) return;
   art.classList.add('open');
   const h = art.querySelector('.acc-head');
   if (h) h.setAttribute('aria-expanded', 'true');
+  syncLearnPills();
   setTimeout(() => art.scrollIntoView({behavior:'smooth', block:'start'}), 60);
 }
 
@@ -9772,13 +9843,7 @@ function boot(){
     if (!t.hasAttribute('tabindex')) t.tabIndex = 0;
     if (!t.hasAttribute('role')) t.setAttribute('role', 'note');
   });
-  document.querySelectorAll('.acc').forEach(a => {
-    const head = a.querySelector('.acc-head'), body = a.querySelector('.acc-body');
-    if (!head || !body) return;
-    if (!body.id) body.id = (a.id || 'acc') + '-body';
-    head.setAttribute('aria-expanded', String(a.classList.contains('open')));
-    head.setAttribute('aria-controls', body.id);
-  });
+  wireAccordions(document);
 
   /* tabs: click, plus roving focus so the tablist is keyboard-navigable */
   const tabEls = Array.from(document.querySelectorAll('.tab'));
@@ -9833,6 +9898,7 @@ function boot(){
     if (head){
       const open = head.parentElement.classList.toggle('open');
       head.setAttribute('aria-expanded', String(open));
+      syncLearnPills();
       return;
     }
     const goto = ev.target.closest('[data-goto]');
@@ -9897,6 +9963,7 @@ function boot(){
   const retick = () => {
     if (document.hidden) return;
     syncClock(); syncElapsedInputs();
+    if (TIME_DEPENDENT_VIEWS.indexOf(currentView) === -1) return;
     RENDERERS[currentView]();
     paintIcons(document.getElementById('view-' + currentView));
   };
