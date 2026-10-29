@@ -5072,6 +5072,7 @@ function renderAlcohol(){
     document.getElementById('alc-timeline').innerHTML = '<div class="empty-note">Nothing to plot yet.</div>';
     document.getElementById('alc-thresholds').innerHTML = '<div class="empty-note">Nothing to plot yet.</div>';
     renderEffectBars(document.getElementById('alc-effects'), ALCOHOL.EFFECTS.map(e => ({name:e.name, value:0, note:e.note})));
+    renderIntensityAverage(document.getElementById('alc-avg'), null, {});
     return;
   }
 
@@ -5789,6 +5790,24 @@ function oralRefPeak(C, mg, legacy){
   rs.doses = [{id:1, mg:mg, product:REF_PERSON.product, food:REF_PERSON.food, when:0, at:Date.now()}];
   return cannabisComputeFor(C, rs).model;
 }
+/* Shared plain-language description of each intensity band. One definition,
+   used by every reference table in the app so the wording cannot diverge.
+   Rewritten after the recalibration, and now checked against what the trials
+   actually observed at the doses that land in each band: 10 mg oral reads
+   Moderate and was discriminable WITHOUT significant performance impairment;
+   25 mg reads Strong and did impair attention and working memory; 50 mg
+   reads Very Strong and raised paranoia ratings. The old table promised
+   "marked coordination and memory impairment" at Strong while the model put
+   a 10 mg edible there, which the trial contradicted outright. */
+const BAND_DESCRIPTIONS = {
+  'Minimal':          'Barely perceptible. Most people would not identify this as a dose.',
+  'Mild':             'Light mood lift and relaxation; ordinary tasks still feel ordinary.',
+  'Moderate':         'Clearly discriminable from placebo - euphoria, appetite, time distortion, slower thinking - but at the doses that land here, controlled testing found no significant loss of measured performance.',
+  'Strong':           'Measured impairment of attention, working memory and coordination, of the kind controlled testing detects reliably at these doses.',
+  'Very Strong':      'The largest impairment the trials measured, with paranoia ratings raised and vomiting reported by a minority.',
+  'Extremely Strong': 'Beyond the range anyone has given volunteers on purpose. Disorienting and frequently unpleasant; nausea and panic are common, and the model can no longer tell doses apart up here.'
+};
+
 function renderOralReference(C, P, s){
   const doses = C.REF_DOSES;
   const rows = doses.map(mg => {
@@ -5929,15 +5948,16 @@ function renderOralCannabis(C, s, P, L){
   const xMax = Math.max(M.feltFade * 1.12, M.impairmentEnd * 1.05, now + 30,
                         R.ghost ? R.ghost.feltFade * 1.12 : 0);
   const seeds = M.seeds.concat([M.onset, M.peak.at, M.feltFade, now]);
+  const ribbon = {lo:sampleCurve(t => loM.felt(t), xMax, seeds),
+                  hi:sampleCurve(t => hiM.felt(t), xMax, seeds),
+                  color:'var(--accent)', opacity:0.18};
   const series = [
-    {points:sampleCurve(t => loM.felt(t), xMax, seeds), color:'var(--accent)', width:0, band:true},
-    {points:sampleCurve(t => hiM.felt(t), xMax, seeds), color:'var(--accent)', width:0, band:true},
     {points:sampleCurve(t => M.felt(t), xMax, seeds), color:'var(--accent)', fill:true, width:2.8},
     {points:sampleCurve(t => M.impairment(t), xMax, seeds.concat([M.impairmentEnd])),
-     color:'var(--danger)', width:2.2, dash:true}
+     color:'var(--danger)', width:2.2, dash:'7 5', halo:true}
   ];
   if (R.ghost) series.push({points:sampleCurve(t => R.ghost.felt(t), xMax, R.ghost.seeds),
-                            color:'var(--accent-2)', width:2, dash:true});
+                            color:'var(--accent-2)', width:2, dash:'3 4', halo:true});
   renderChart(el('chart'), {
     xMax:xMax, yMax:100,
     xLabel:'Hours since the first dose', yLabel:'Modelled intensity (% of the shared scale)', yLabelShort:'Intensity (%)',
@@ -5948,8 +5968,8 @@ function renderOralCannabis(C, s, P, L){
     bands:[{x0:0, x1:M.impairmentEnd, label:'driving-relevant impairment likely', color:'var(--danger)'}],
     vlines:R.items.map(i => ({x:i.t0, label:'', color:'var(--text-faint)'}))
            .concat([{x:M.peak.at, label:'peak', color:'var(--accent-2)'}]),
-    series:series,
-    marker:{x:now, y:nowPct, label:'now &middot; ' + Math.round(nowPct) + ' %'},
+    ribbon:ribbon, series:series,
+    marker:{x:now, y:nowPct, label:'now \u00b7 ' + Math.round(nowPct) + ' %'},
     accent:'var(--accent)', drag:{key:P},
     ariaLabel:L.name + ' intensity over time, currently ' + Math.round(nowPct) + ' percent'
   });
@@ -5961,7 +5981,7 @@ function renderOralCannabis(C, s, P, L){
     (R.legacy ? ' <strong>Superseded calibration in use.</strong>' : '');
   renderLegend(el('chart-legend'), [
     {label:'Felt intensity', color:'var(--accent)'},
-    {label:'Modelled cognitive &amp; psychomotor impairment', color:'var(--danger)', dash:true},
+    {label:'Modelled cognitive and psychomotor impairment', color:'var(--danger)', dash:true},
     {label:'Label-accuracy range', color:'var(--accent)', swatch:'band'},
     {label:'Modelled peak', color:'var(--accent-2)', dash:true},
     {label:'Shared scale boundaries', color:severityColor(72), dash:true}
@@ -6845,6 +6865,8 @@ function renderCaffeine(){
     document.getElementById('caf-peak-note').textContent = 'Add a dose to see how much is still with you at bedtime.';
     renderEffectBars(document.getElementById('caf-effects'), CAFFEINE.EFFECTS.map(e => ({name:e.name, value:0, note:e.note})));
     ['caf-chart-mg', 'caf-chart-fx'].forEach(id => { document.getElementById(id).innerHTML = ''; });
+    renderIntensityAverage(document.getElementById('caf-avg'), null, {});
+    ['caf-legend-mg', 'caf-legend-fx'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
     renderCaffeineReference();
     return;
   }
@@ -7445,6 +7467,10 @@ function renderNicotine(){
     renderEffectBars(document.getElementById('nic-effects'), NICOTINE.EFFECTS.map(e => ({name:e.name, value:0, note:e.note})));
     ['nic-chart-ng', 'nic-chart-fx', 'nic-chart-cot'].forEach(id => { document.getElementById(id).innerHTML = ''; });
     document.getElementById('nic-cot-note').textContent = 'Add a dose to see the metabolite build up.';
+    renderIntensityAverage(document.getElementById('nic-avg'), null, {});
+    const nb = document.getElementById('nic-breakdown');
+    if (nb) nb.innerHTML = '';
+    ['nic-legend-ng', 'nic-legend-fx', 'nic-legend-cot'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
     renderNicotineReference();
     return;
   }
