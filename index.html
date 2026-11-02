@@ -4102,6 +4102,55 @@ function seriesAt(pts, t){
   const a = pts[lo], b = pts[hi], w = (t - a[0]) / Math.max(b[0] - a[0], 1e-9);
   return a[1] + (b[1] - a[1]) * w;
 }
+/* ---------------------------------------------------------------------------
+   AXIS STABILITY
+
+   The chart axis used to be a continuous function of where "now" was:
+   xMax = max(curve extent, now + 30). Dragging the marker therefore rescaled
+   the whole chart on every pointermove, so the curve shrank and shifted under
+   the cursor and the tick labels flickered between 8h, 10h, 15h and 20h with
+   the tick COUNT jumping 5 -> 6 -> 3 -> 4. That is the trembling.
+
+   Two things fix it. The axis maximum is snapped up to a round number of
+   hours, so it changes in discrete steps rather than continuously; and while
+   a drag is in progress it is frozen outright, growing only if it absolutely
+   must and never shrinking until the gesture ends.
+   ------------------------------------------------------------------------ */
+function niceAxisMax(minutes){
+  const h = Math.max(minutes, 30) / 60;
+  const step = h <= 2 ? 0.25 : h <= 4 ? 0.5 : h <= 9 ? 1 : h <= 20 ? 2 : h <= 40 ? 4 : 12;
+  return Math.ceil(h / step - 1e-9) * step * 60;
+}
+const AXIS_HOLD = {};
+let LAST_SCRUB_AT = 0;
+const AXIS_SETTLE_MS = 450;     // keyboard stepping holds the axis too, briefly
+function axisIsHeld(){
+  return document.body.classList.contains('scrubbing') ||
+         (Date.now() - LAST_SCRUB_AT) < AXIS_SETTLE_MS;
+}
+function heldAxisMax(key, wanted){
+  const prev = AXIS_HOLD[key];
+  /* Completely frozen during a gesture, not merely prevented from shrinking.
+     Letting it GROW was what remained of the trembling: dragging rightward
+     pushed "now" past the curve, which pushed the axis out, which rescaled
+     everything under the cursor. The marker cannot leave the axis anyway -
+     the drag handler clamps to it - so freezing loses nothing. */
+  if (prev != null && axisIsHeld()) return prev;
+  AXIS_HOLD[key] = wanted;
+  return wanted;
+}
+/* Sampling a curve is the expensive half of a redraw, and scrubbing cannot
+   change any curve: moving "now" shifts every dose by the same amount, so the
+   shape in model coordinates is identical. Anything keyed on a signature that
+   excludes "now" is therefore reusable for the whole gesture. */
+const CURVE_CACHE = {};
+function cachedCurves(key, sig, build){
+  const c = CURVE_CACHE[key];
+  if (c && c.sig === sig) return c.data;
+  const data = build();
+  CURVE_CACHE[key] = {sig:sig, data:data};
+  return data;
+}
 function niceTicks(max, target){
   const raw = max / Math.max(target, 2);
   const mag = Math.pow(10, Math.floor(Math.log10(raw)));
@@ -4258,7 +4307,11 @@ function renderChart(host, cfg){
       const th = sub ? 33 : 20;
       const lx = clamp(mx - tw / 2, P.l + 2, P.l + iw - tw - 2);
       let ly = my < P.t + th + 16 ? my + 14 : my - th - 11;
-      ly = clamp(ly, P.t + 2, P.t + ih - th - 2);
+      /* Keep clear of the band strip along the bottom. With the marker low on
+         the curve the label used to land straight on top of the impairment
+         band's caption and hide it. */
+      const bandReserve = (cfg.bands && cfg.bands.length) ? 30 : 2;
+      ly = clamp(ly, P.t + 2, P.t + ih - th - bandReserve);
       g += '<rect x="' + lx + '" y="' + ly + '" width="' + tw + '" height="' + th + '" rx="6" fill="var(--surface-solid)" stroke="var(--border-strong)"/>';
       g += '<text x="' + (lx + tw / 2) + '" y="' + (ly + 14) + '" text-anchor="middle" font-size="' + (fs - .5) + '" fill="var(--text)" font-weight="700">' + esc(txt) + '</text>';
       if (sub)
@@ -4289,7 +4342,11 @@ function renderChart(host, cfg){
    ------------------------------------------------------------------------ */
 let SCRUB_RAF = null, SCRUB_PENDING = null;
 function scrubTo(key, minutes){
-  const m = Math.max(0, minutes);
+  LAST_SCRUB_AT = Date.now();
+  /* Whole minutes. A pointer position is a float, and storing 485.3146779
+     minutes made every downstream duration carry sub-second noise that the
+     formatter then had to round away differently from one frame to the next. */
+  const m = Math.max(0, Math.round(minutes));
   if (key === 'alc'){
     const st = state.alc;
     if (!st.drinks.length) return;
@@ -4345,6 +4402,7 @@ function scrubTo(key, minutes){
   }
 }
 function scheduleScrub(key, minutes){
+  LAST_SCRUB_AT = Date.now();
   SCRUB_PENDING = minutes;
   if (SCRUB_RAF) return;
   SCRUB_RAF = requestAnimationFrame(() => {
@@ -4369,6 +4427,15 @@ function attachChartDrag(host, cfg, geom){
     window.removeEventListener('pointerup', stop);
     window.removeEventListener('pointercancel', stop);
     document.body.classList.remove('scrubbing');
+    /* The axis is frozen for the gesture, so letting go can leave the marker
+       sitting exactly on the right-hand frame. One render after the hold
+       expires lets the axis settle outward and puts the dot back inside the
+       plot - without it, nothing would redraw until the next 30-second tick. */
+    setTimeout(() => {
+      if (document.body.classList.contains('scrubbing')) return;
+      const r = RENDERERS[currentView];
+      if (r){ r(); paintIcons(document.getElementById('view-' + currentView)); }
+    }, AXIS_SETTLE_MS + 30);
   };
   function move(ev){
     ev.preventDefault();
@@ -5930,7 +5997,16 @@ const BAND_DESCRIPTIONS = {
   'Extremely Strong': 'Beyond the range anyone has given volunteers on purpose. Disorienting and frequently unpleasant; nausea and panic are common, and the model can no longer tell doses apart up here.'
 };
 
+/* The reference table is evaluated for a FIXED reference person, so the only
+   thing about the user's state that can change it is the calibration toggle.
+   It was being rebuilt - thirteen full model runs - on every render,
+   including every frame of a drag, where it is the single most expensive
+   thing on the page and cannot possibly have changed. */
+const REF_TABLE_CACHE = {};
 function renderOralReference(C, P, s){
+  const sig = P + '~' + (s && s.legacyCal ? 'legacy' : 'fitted') + '~' + TIME_MODE;
+  if (REF_TABLE_CACHE[P] === sig) return;
+  REF_TABLE_CACHE[P] = sig;
   const doses = C.REF_DOSES;
   const rows = doses.map(mg => {
     const M = oralRefPeak(C, mg, !!(s && s.legacyCal));
@@ -6066,24 +6142,43 @@ function renderOralCannabis(C, s, P, L){
       '. Nothing has been saved.'
     : 'Draws a dashed forward projection on the chart. It never becomes a real dose until you add it.';
 
-  /* ---- chart: felt curve, impairment curve, uncertainty band ---- */
-  const xMax = Math.max(M.feltFade * 1.12, M.impairmentEnd * 1.05, now + 30,
-                        R.ghost ? R.ghost.feltFade * 1.12 : 0);
-  const seeds = M.seeds.concat([M.onset, M.peak.at, M.feltFade, now]);
-  const ribbon = {lo:sampleCurve(t => loM.felt(t), xMax, seeds),
-                  hi:sampleCurve(t => hiM.felt(t), xMax, seeds),
-                  color:'var(--accent)', opacity:0.18};
-  const series = [
-    {points:sampleCurve(t => M.felt(t), xMax, seeds), color:'var(--accent)', fill:true, width:2.8},
-    {points:sampleCurve(t => M.impairment(t), xMax, seeds.concat([M.impairmentEnd])),
-     color:'var(--danger)', width:2.2, dash:'7 5', halo:true}
-  ];
-  if (R.ghost) series.push({points:sampleCurve(t => R.ghost.felt(t), xMax, R.ghost.seeds),
-                            color:'var(--accent-2)', width:2, dash:'3 4', halo:true});
+  /* ---- chart: felt curve, impairment curve, uncertainty band ----
+     The axis extent is derived from the CURVE, which scrubbing cannot
+     change, and only then stretched to keep "now" in view. Both steps are
+     quantised to round hours and the result is frozen for the duration of a
+     drag, so the chart no longer rescales under the cursor. */
+  const curveMax = Math.max(M.feltFade * 1.12, M.impairmentEnd * 1.05,
+                            R.ghost ? R.ghost.feltFade * 1.12 : 0);
+  const xMax = heldAxisMax(P, niceAxisMax(Math.max(curveMax, now * 1.02 + 15)));
+  /* Everything below is a pure function of the curve and the axis, so it is
+     cached on a signature that deliberately leaves "now" out: dragging the
+     marker reuses the sampled points instead of recomputing them 60 times a
+     second. */
+  const curveSig = [P, R.cal.ec50, R.cal.n, xMax, R.tol.factor, R.tol.sev, R.sens, R.weightKg, R.bf,
+                    M.ceiling, R.whatIf, C.UNCERTAINTY.lo, C.UNCERTAINTY.hi,
+                    R.items.map(i => i.mg + '@' + round(i.t0, 3) + '/' + round(i.kin.tlag, 3) +
+                                     ',' + round(i.kin.ka, 6) + ',' + round(i.kin.ke, 6)).join('|')].join('~');
+  const drawn = cachedCurves(P, curveSig, () => {
+    const seeds = M.seeds.concat([M.onset, M.peak.at, M.feltFade, M.impairmentEnd]);
+    const series = [
+      {points:sampleCurve(t => M.felt(t), xMax, seeds), color:'var(--accent)', fill:true, width:2.8},
+      {points:sampleCurve(t => M.impairment(t), xMax, seeds), color:'var(--danger)', width:2.2, dash:'7 5', halo:true}
+    ];
+    if (R.ghost) series.push({points:sampleCurve(t => R.ghost.felt(t), xMax, R.ghost.seeds),
+                              color:'var(--accent-2)', width:2, dash:'3 4', halo:true});
+    return {
+      series:series,
+      ribbon:{lo:sampleCurve(t => loM.felt(t), xMax, seeds),
+              hi:sampleCurve(t => hiM.felt(t), xMax, seeds),
+              color:'var(--accent)', opacity:0.18},
+      xTicks:niceTicks(xMax / 60, 6).map(h => ({v:h * 60, label:h + 'h'}))
+    };
+  });
+  const series = drawn.series, ribbon = drawn.ribbon;
   renderChart(el('chart'), {
     xMax:xMax, yMax:100,
     xLabel:'Hours since the first dose', yLabel:'Modelled intensity (% of the shared scale)', yLabelShort:'Intensity (%)',
-    xTicks:niceTicks(xMax / 60, 6).map(h => ({v:h * 60, label:h + 'h'})),
+    xTicks:drawn.xTicks,
     yTicks:[0, 20, 40, 60, 80, 100].map(v => ({v:v, label:v + ' %'})),
     thresholds:[{y:70, label:'Very Strong', color:severityColor(72)},
                 {y:30, label:'Moderate', color:severityColor(32)}],
@@ -6630,11 +6725,16 @@ const SM_LABELS = {
 /* The route comparison reads the Delta-9 module's CONSTANTS - never its
    state - to put an inhaled session beside a swallowed dose. It is the one
    cross-module read this app allows, and it is labelled as a comparison. */
+/* Same again for the route comparison: six full model runs for a fixed
+   reference session, rebuilt on every frame of a drag. Only the note
+   underneath depends on what the user entered. */
+let METHOD_TABLE_SIG = null, METHOD_NOTE_SIG = null;
 function renderMethodComparison(){
   const s = state.sm;
   const amt = Math.max(0, parseFloat(s.amount) || 0.15);
   const pot = clamp(parseFloat(s.potency) || 20, 0.1, 100);
-  const rows = SMOKED.METHODS.map(m => {
+  const tableSig = (s.legacyCal ? 'legacy' : 'fitted') + '~' + TIME_MODE;
+  const rows = METHOD_TABLE_SIG === tableSig ? null : SMOKED.METHODS.map(m => {
     const session = m.session;
     const M = smokedRefModel(session, m.potency, m.key);
     const abs = smokedAbsorbedMg(session, m.potency, m.key, 'normal');
@@ -6645,18 +6745,34 @@ function renderMethodComparison(){
             intensityLabel(pk), Math.round(M.peak.at) + ' min',
             fmtDuration(M.feltFade), fmtDuration(M.impairmentEnd)];
   });
-  renderTable(document.getElementById('sm-compare'),
-    ['Method', 'One session', 'Absorbed', 'mg THC in blood', 'Peak', 'Band', 'Peak at', 'Faded by', 'Impairment until'], rows);
+  if (rows){
+    METHOD_TABLE_SIG = tableSig;
+    renderTable(document.getElementById('sm-compare'),
+      ['Method', 'One session', 'Absorbed', 'mg THC in blood', 'Peak', 'Band', 'Peak at', 'Faded by', 'Impairment until'], rows);
+  }
   const note = document.getElementById('sm-ref-note');
   if (note){
     /* Equivalence is reported in BOTH directions, because the two units are
        not interchangeable and quoting only one invites the reader to treat
        them as if they were. */
+    /* How many swallowed milligrams reach the same peak. This was a linear
+       scan in half-milligram steps, each step a full model run - up to six
+       hundred of them, on every render, including every frame of a drag.
+       A bisection needs thirty, and the answer is cached on the inputs that
+       can actually change it, so a scrub costs nothing at all. */
+    const noteSig = [round(amt, 4), round(pot, 2), s.method, s.depth, s.legacyCal ? 1 : 0, TIME_MODE].join('~');
+    if (METHOD_NOTE_SIG === noteSig) return;
+    METHOD_NOTE_SIG = noteSig;
     const here = smokedRefModel(amt, pot, s.method || 'joint');
     const target = here.peak.value;
     let eqMg = 0;
-    for (let mg = 0.5; mg <= 300; mg += 0.5){
-      if (oralRefPeak(D9, mg, false).peak.value >= target){ eqMg = mg; break; }
+    if (oralRefPeak(D9, 300, false).peak.value >= target){
+      let lo = 0, hi = 300;
+      for (let i = 0; i < 30; i++){
+        const mid = (lo + hi) / 2;
+        if (oralRefPeak(D9, mid, false).peak.value >= target) hi = mid; else lo = mid;
+      }
+      eqMg = hi;
     }
     note.innerHTML =
       'Reference person: ' + REF_PERSON.weightKg + '&nbsp;kg, ' + REF_PERSON.bodyFat + '&nbsp;% body fat, no tolerance, normal inhalation. ' +
