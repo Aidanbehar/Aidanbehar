@@ -920,6 +920,19 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
 .chart-host.scrubbable svg{cursor:ew-resize; touch-action:none}
 .chart-host.scrubbable svg:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:10px}
 body.scrubbing{user-select:none}
+/* Scrubbing turns the easing OFF so the gauge, the bars and the timeline
+   track the pointer instead of chasing it a second behind.
+
+   It must turn off TRANSITIONS only. These rules used to say
+   "animation:none !important" as well, and set it on .view.active too, which
+   caused the blink when you let go: suppressing a CSS animation and then
+   un-suppressing it does not resume it, it ARMS IT AFRESH. So the moment the
+   class came off, fadeUp restarted on the whole active view and on every
+   banner and dose row at once, each from its own opacity:0 keyframe - the
+   entire screen faded in from blank over 420 ms, every single time a drag
+   ended. None of the elements below even has an animation except the dose
+   rows and the banners, and those no longer get rebuilt mid-scrub, so there
+   is nothing left to suppress. */
 body.scrubbing .drink-row,
 body.scrubbing .banner,
 body.scrubbing .effect .fill,
@@ -927,8 +940,12 @@ body.scrubbing .gauge-arc,
 body.scrubbing .gauge-dot-g,
 body.scrubbing .tl-marker,
 body.scrubbing .tl-seg,
-body.scrubbing .phase-badge{transition:none !important; animation:none !important}
-body.scrubbing .view.active{animation:none}
+body.scrubbing .phase-badge{transition:none !important}
+/* An entrance animation is for an entrance. Content that REPLACES content
+   already on screen carries this class instead, set on the element itself
+   rather than through a body-level rule - a rule that is added and then
+   removed re-arms the animation underneath it, which is the bug above. */
+.banner.no-entrance,.drink-row.no-entrance{animation:none}
 .scrub-hint{display:inline-flex; align-items:center; gap:6px; font-size:.76rem; color:var(--text-faint); margin-top:8px}
 .scrub-hint .ico{display:grid; place-items:center}
 .scrub-hint .ico svg{width:14px; height:14px}
@@ -4645,12 +4662,44 @@ function setHTML(host, html){
   host.innerHTML = html;
   return true;
 }
+/* Banners are rebuilt on every frame of a scrub, because their text quotes
+   where you are ("you are 1h 30m in"). Replacing the markup restarted the
+   fadeUp entrance animation, which begins at opacity 0 - so the banner
+   blinked out and back on every frame, and once more when the gesture ended
+   and the final render played the whole fade through. That last one is the
+   blink you see when you stop moving.
+
+   When the same banners are still on screen, only their words are updated,
+   in place, exactly as the effect bars already do. The animation then plays
+   only when a banner genuinely appears or disappears, which is what an
+   entrance animation is for. */
 function renderBanners(host, items){
+  /* Fade in only when this panel was empty AND the user is not mid-gesture.
+     Crossing the modelled peak while dragging genuinely removes a banner and
+     then adds it back, so "the panel was empty" is not enough on its own:
+     without the second test the banner re-entered from opacity 0 every time
+     the pointer crossed the peak. */
+  const entrance = (!host.children.length && !axisIsHeld()) ? '' : ' no-entrance';
   const html = items.map(b =>
-    '<div class="banner ' + b.level + '"><span class="ico" data-icon="' + (b.icon || 'alert') + '"></span>' +
+    '<div class="banner ' + b.level + entrance + '"><span class="ico" data-icon="' + (b.icon || 'alert') + '"></span>' +
     '<div class="b-body"><strong>' + b.title + '</strong><p>' + b.body + '</p></div></div>'
   ).join('');
-  if (setHTML(host, html)) paintIcons(host);
+  if (host.__lastHTML === html) return;
+  const sig = items.map(b => b.level + '\u0001' + (b.icon || 'alert')).join('\u0002');
+  if (host.__bannerSig === sig && host.children.length === items.length){
+    items.forEach((b, i) => {
+      const row = host.children[i];
+      const h = row.querySelector('.b-body strong'), p = row.querySelector('.b-body p');
+      if (h && h.innerHTML !== b.title) h.innerHTML = b.title;
+      if (p && p.innerHTML !== b.body) p.innerHTML = b.body;
+    });
+    host.__lastHTML = html;
+    return;
+  }
+  host.__bannerSig = sig;
+  host.__lastHTML = html;
+  host.innerHTML = html;
+  paintIcons(host);
 }
 
 /* --- 5g. Table helper ------------------------------------------------------ */
@@ -5846,7 +5895,7 @@ function toleranceNote(tol){
 
 /* ---- re-dose banner, computed from the actual list ----------------------- */
 function redoseNote(C, R, L){
-  if (R.items.length < 2) return '';
+  if (R.items.length < 2) return [];
   const M = R.model;
   const rows = [];
   for (let i = 1; i < R.items.length; i++){
@@ -5857,11 +5906,13 @@ function redoseNote(C, R, L){
         fmtDuration(prevPeak - cur.t0) + ' before</strong> dose ' + i + ' had even peaked, so they stacked.');
     }
   }
-  if (!rows.length) return '';
-  return '<div class="banner warn" style="margin-top:12px"><span class="ico" data-icon="alert"></span>' +
-    '<div><strong>These doses overlapped</strong><p>' + rows.join(' ') +
-    ' Combined peak ' + Math.round(M.peak.value) + '&nbsp;% at ' + fmtDuration(M.peak.at) +
-    ', against ' + Math.round(oralSingleDosePeak(C, R)) + '&nbsp;% if you had taken only the largest of them.</p></div></div>';
+  if (!rows.length) return [];
+  /* Returned as a banner ITEM rather than raw markup, so it goes through
+     renderBanners and is updated in place like every other banner. As raw
+     innerHTML it was rebuilt on every frame and flashed with the rest. */
+  return [{level:'warn', icon:'alert', title:'These doses overlapped',
+    body:rows.join(' ') + ' Combined peak ' + Math.round(M.peak.value) + '&nbsp;% at ' + fmtDuration(M.peak.at) +
+         ', against ' + Math.round(oralSingleDosePeak(C, R)) + '&nbsp;% if you had taken only the largest of them.'}];
 }
 /* What the largest single dose on its own would have peaked at - the honest
    comparison for "they stacked". */
@@ -5904,19 +5955,41 @@ function renderDoseList(C, s, P, L){
     setHTML(host, '<div class="empty-note">Nothing added yet. Set the dose above, say how long ago, then <strong>Add</strong>.</div>');
     return;
   }
-  const html = list.map(d => {
+  const parts = list.map(d => {
     const info = C.describeDose(d, 1);
-    return '<div class="drink-row" data-id="' + d.id + '">' +
-      '<span class="dico ico" data-icon="' + esc(info.icon) + '"></span>' +
-      '<div><div class="dname">' + esc(info.label) + '</div>' +
-      '<div class="dmeta">' + fmtDuration(d.when) + ' ago &middot; ' + esc(info.sub) + '</div></div>' +
-      '<div class="dacts">' +
-        '<button class="btn tiny" type="button" data-act="edit" title="Edit"><span class="ico" data-icon="edit"></span></button>' +
-        '<button class="btn tiny danger" type="button" data-act="del" title="Delete"><span class="ico" data-icon="trash"></span></button>' +
-      '</div></div>';
-  }).join('') +
-  '<div class="row-btns"><button class="btn tiny danger" type="button" data-act="clear">Clear all</button></div>';
-  if (setHTML(host, html)) paintIcons(host);
+    return {id:d.id, icon:info.icon, name:esc(info.label),
+            meta:fmtDuration(d.when) + ' ago &middot; ' + esc(info.sub)};
+  });
+  const entrance = (!host.querySelector('.drink-row') && !axisIsHeld()) ? '' : ' no-entrance';
+  const html = parts.map(x =>
+    '<div class="drink-row' + entrance + '" data-id="' + x.id + '">' +
+    '<span class="dico ico" data-icon="' + esc(x.icon) + '"></span>' +
+    '<div><div class="dname">' + x.name + '</div>' +
+    '<div class="dmeta">' + x.meta + '</div></div>' +
+    '<div class="dacts">' +
+      '<button class="btn tiny" type="button" data-act="edit" title="Edit"><span class="ico" data-icon="edit"></span></button>' +
+      '<button class="btn tiny danger" type="button" data-act="del" title="Delete"><span class="ico" data-icon="trash"></span></button>' +
+    '</div></div>').join('') +
+    '<div class="row-btns"><button class="btn tiny danger" type="button" data-act="clear">Clear all</button></div>';
+  if (host.__lastHTML === html) return;
+  /* Every row says how long ago the dose was, so the whole list changed on
+     every frame of a scrub and each row replayed its fadeUp from opacity 0.
+     While the same doses are listed, only the two lines of text move. */
+  const sig = parts.map(x => x.id + '\u0001' + x.icon).join('\u0002');
+  if (host.__listSig === sig && host.querySelectorAll('.drink-row').length === parts.length){
+    const rows = host.querySelectorAll('.drink-row');
+    parts.forEach((x, i) => {
+      const n = rows[i].querySelector('.dname'), m = rows[i].querySelector('.dmeta');
+      if (n && n.innerHTML !== x.name) n.innerHTML = x.name;
+      if (m && m.innerHTML !== x.meta) m.innerHTML = x.meta;
+    });
+    host.__lastHTML = html;
+    return;
+  }
+  host.__listSig = sig;
+  host.__lastHTML = html;
+  host.innerHTML = html;
+  paintIcons(host);
 }
 
 /* ---- banners ------------------------------------------------------------- */
@@ -6074,7 +6147,7 @@ function renderOralCannabis(C, s, P, L){
     el('chart').innerHTML = '';
     el('chart-legend').innerHTML = '';
     el('timeline').innerHTML = '';
-    el('redose').innerHTML = '';
+    renderBanners(el('redose'), []);
     el('peak-note').textContent = 'Add a dose to see the phases.';
     el('chart-note').textContent = 'Exposure is modelled as a lagged first-order absorption and elimination profile; the Hill equation is applied to that exposure at every point, not to the peak.';
     el('effects-note').textContent = 'Each effect has its own mid-point, its own ceiling and its own equilibration lag.';
@@ -6133,7 +6206,7 @@ function renderOralCannabis(C, s, P, L){
 
   /* ---- banners ---- */
   renderBanners(el('banners'), oralBanners(C, s, R, L));
-  el('redose').innerHTML = redoseNote(C, R, L);
+  renderBanners(el('redose'), redoseNote(C, R, L));
   el('daysoff-note').innerHTML = toleranceNote(R.tol);
   el('whatif-note').innerHTML = R.whatIf > 0 && R.ghost
     ? 'Dashed line: <strong>' + round(R.whatIf, 1) + '&nbsp;mg</strong> taken right now would take the peak to <strong>' +
