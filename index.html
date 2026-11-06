@@ -605,22 +605,25 @@ td.num,th.num{font-family:var(--mono); white-space:nowrap}
   border-bottom:1px dotted var(--text-faint); cursor:help; position:relative; color:var(--text);
   font-weight:560;
 }
-/* The tooltip generates NO box until it is needed: an always-present
-   absolutely-positioned pseudo-element would contribute to scrollable
-   overflow and widen the page on a narrow screen. --tip-shift is set by
-   a small script so a tooltip near an edge slides back into view. */
-.term::after{
-  content:attr(data-tip); position:absolute; left:50%; bottom:calc(100% + 9px);
-  width:max-content; max-width:min(290px,70vw); padding:9px 11px; border-radius:11px; z-index:60;
+/* The tooltip used to be a ::after pseudo-element on the term itself. Every
+   card in this app sets overflow:hidden (for its rounded corners) and
+   backdrop-filter (for the frosted glass), and BOTH of those clip and
+   contain descendants - so a tooltip on a term near a card's edge had its
+   left half sliced off, which is exactly what happened to "lipophilic" in
+   the You card. position:fixed does not escape either, because a
+   backdrop-filter ancestor becomes the containing block for fixed children.
+   The only reliable fix is to put the tooltip outside all of them: there is
+   one #tip element, a direct child of <body>, moved into place in script. */
+#tip{
+  position:fixed; z-index:200; max-width:min(320px,calc(100vw - 24px));
+  padding:9px 11px; border-radius:11px;
   background:var(--surface-solid); color:var(--text-dim); border:1px solid var(--border-strong);
   box-shadow:var(--shadow); font-size:.79rem; font-weight:450; line-height:1.45; text-align:left;
-  pointer-events:none; display:none;
+  pointer-events:none; opacity:0; visibility:hidden; transform:translateY(5px);
+  transition:opacity .16s ease, transform .16s ease, visibility .16s;
 }
-.term:hover::after,.term:focus::after,.term:focus-visible::after{display:block; animation:tipIn .2s ease both}
-@keyframes tipIn{
-  from{opacity:0; transform:translateX(calc(-50% + var(--tip-shift,0px))) translateY(5px)}
-  to{opacity:1; transform:translateX(calc(-50% + var(--tip-shift,0px))) translateY(0)}
-}
+#tip.on{opacity:1; visibility:visible; transform:none}
+@media (prefers-reduced-motion:reduce){ #tip{transition:none} }
 
 /* formula blocks in the Learn section */
 .formula{
@@ -1453,10 +1456,10 @@ body.scrubbing .phase-badge{transition:none !important}
       <div class="field">
         <label class="lab" for="d9-elapsed">Time since you took it</label>
         <div class="with-unit">
-          <input type="number" id="d9-elapsed" min="0" max="2880" step="5" value="60" inputmode="decimal">
+          <input type="number" id="d9-elapsed" min="0" max="2880" step="1" value="60" inputmode="decimal">
           <span class="unit">min ago</span>
         </div>
-        <input type="range" id="d9-elapsed-range" min="0" max="900" step="5" value="60" aria-label="Minutes since ingestion slider">
+        <input type="range" id="d9-elapsed-range" min="0" max="1000" step="1" value="258" aria-label="Minutes since ingestion slider">
       </div>
 
       <div class="row-btns">
@@ -1650,10 +1653,10 @@ body.scrubbing .phase-badge{transition:none !important}
       <div class="field">
         <label class="lab" for="d8-elapsed">Time since you took it</label>
         <div class="with-unit">
-          <input type="number" id="d8-elapsed" min="0" max="2880" step="5" value="60" inputmode="decimal">
+          <input type="number" id="d8-elapsed" min="0" max="2880" step="1" value="60" inputmode="decimal">
           <span class="unit">min ago</span>
         </div>
-        <input type="range" id="d8-elapsed-range" min="0" max="900" step="5" value="60" aria-label="Minutes since ingestion slider">
+        <input type="range" id="d8-elapsed-range" min="0" max="1000" step="1" value="258" aria-label="Minutes since ingestion slider">
       </div>
 
       <div class="row-btns">
@@ -1865,7 +1868,7 @@ body.scrubbing .phase-badge{transition:none !important}
           <input type="number" id="sm-elapsed" min="0" max="1440" step="1" value="15" inputmode="decimal">
           <span class="unit">min ago</span>
         </div>
-        <input type="range" id="sm-elapsed-range" min="0" max="600" step="1" value="15" aria-label="Minutes since inhalation slider">
+        <input type="range" id="sm-elapsed-range" min="0" max="1000" step="1" value="158" aria-label="Minutes since inhalation slider">
       </div>
 
       <div class="row-btns">
@@ -4789,10 +4792,31 @@ function loadState(){
    ------------------------------------------------------------------------ */
 const minutesSince = at => Math.max(0, Math.round((Date.now() - at) / 60000));
 const minutesAgoToStamp = mins => Date.now() - Math.max(0, mins) * 60000;
+/* Every dose list is stored as absolute timestamps so that it keeps moving
+   while the page is open. This is where that happens, and two of the five
+   lists were missing from it: the three cannabis tabs got dose lists in the
+   multi-dose conversion and were never added, and nicotine never was either.
+   Both were frozen - leave the tab open an hour and the dose still claimed
+   to be five minutes old, which is the one thing absolute stamps exist to
+   prevent.
+
+   `elapsed` is the number the "time since you took it" box shows. It is the
+   age of the OLDEST dose, because that dose is the origin of the window
+   every chart on the tab is drawn against. It used to be derived from a
+   single `takenAt` stamp left over from when a tab held one dose; that stamp
+   stopped being updated, so this line quietly overwrote whatever the slider
+   or the chart marker had just set, on the very next render. */
 function syncClock(){
-  state.alc.drinks.forEach(d => { if (d.at) d.when = minutesSince(d.at); });
-  state.caf.doses.forEach(d => { if (d.at) d.when = minutesSince(d.at); });
-  ['d9', 'd8', 'sm'].forEach(k => { if (state[k].takenAt) state[k].elapsed = minutesSince(state[k].takenAt); });
+  const advance = list => (list || []).forEach(d => { if (d.at) d.when = minutesSince(d.at); });
+  advance(state.alc.drinks);
+  advance(state.caf.doses);
+  advance(state.nic.doses);
+  ['d9', 'd8', 'sm'].forEach(k => {
+    const st = state[k];
+    advance(st.doses);
+    if (st.doses && st.doses.length) st.elapsed = st.doses.reduce((mx, d) => Math.max(mx, d.when), 0);
+    else if (st.takenAt) st.elapsed = minutesSince(st.takenAt);
+  });
 }
 /* Stamps are created only for state saved by an older build. */
 /* Older saved state carried a `watson` boolean and a free-text custom r that
@@ -4863,12 +4887,54 @@ function asOfLine(){
     '</strong> — recalculated every half minute.</span>';
 }
 /* Push the clock into the elapsed fields, never over one being typed in. */
+/* ---------------------------------------------------------------------------
+   THE "TIME SINCE YOU TOOK IT" SLIDER
+
+   A linear slider over the whole range was far too twitchy. Nine hundred
+   minutes across a 336-pixel phone track is 2.7 minutes per pixel, and the
+   old step of 5 made the thumb jump in 5-minute hops as well - a 20-pixel
+   nudge moved nearly an hour, and landing on a particular moment near onset
+   was impossible.
+
+   The slider now carries an abstract 0-1000 position and the minutes are
+   squared out of it, so the track is spent where the curve is interesting.
+   The first half of the track covers the first quarter of the window, which
+   is where onset and the peak live; the last stretch, out in the tail,
+   stays coarse because nobody needs minute precision nine hours in. With a
+   600-minute window on that same phone track that is 0.9 min/px at the
+   half-hour mark against 2.7 before - three times finer - and 0.2 min/px in
+   the first ten minutes, which is twelve times finer.
+   ------------------------------------------------------------------------ */
+const ELAPSED_SLIDER_STEPS = 1000;
+/* HAND-TUNED, and steeper for the inhaled tab on purpose: an edible's
+   interesting hour is one of about ten, while an inhaled session's is one of
+   about nine but far more tightly packed - onset in seconds, peak in eight
+   minutes. A cube puts the first hour across half the inhaled track. */
+const ELAPSED_SLIDER_EXP = {d9:2, d8:2, sm:3};
+function elapsedExp(key){ return ELAPSED_SLIDER_EXP[key] || 2; }
+function elapsedSliderSpan(key){
+  /* Enough track to reach the end of the curve, and always enough to reach
+     where the marker already is. */
+  const held = AXIS_HOLD[key];
+  const st = state[key] || {};
+  const span = Math.max(held || 0, (+st.elapsed || 0) * 1.05, 120);
+  return Math.min(Math.ceil(span / 30) * 30, 2880);
+}
+function elapsedFromSlider(pos, span, key){
+  const u = clamp(pos / ELAPSED_SLIDER_STEPS, 0, 1);
+  return Math.round(span * Math.pow(u, elapsedExp(key)));
+}
+function sliderFromElapsed(min, span, key){
+  const u = span > 0 ? clamp(min / span, 0, 1) : 0;
+  return Math.round(ELAPSED_SLIDER_STEPS * Math.pow(u, 1 / elapsedExp(key)));
+}
 function syncElapsedInputs(){
   [['d9-elapsed', 'd9'], ['d8-elapsed', 'd8'], ['sm-elapsed', 'sm']].forEach(([id, key]) => {
     const el = document.getElementById(id), rng = document.getElementById(id + '-range');
     if (!el || el === document.activeElement) return;
     el.value = state[key].elapsed;
-    if (rng && rng !== document.activeElement) rng.value = clamp(state[key].elapsed, +rng.min, +rng.max);
+    if (rng && rng !== document.activeElement)
+      rng.value = sliderFromElapsed(state[key].elapsed, elapsedSliderSpan(key), key);
   });
 }
 /* The field is a setter, not a readout. An earlier build rewrote it with the
@@ -6377,6 +6443,59 @@ function bindPair(numId, rangeId, apply){
   return {n:n, r:r};
 }
 
+/* Wires the "time since you took it" number box and its squared slider to a
+   tab's dose list. Moving it shifts the whole stack, exactly as dragging the
+   chart marker does, so the two controls stay interchangeable. */
+function bindElapsed(key, getState, redraw){
+  const n = document.getElementById(key + '-elapsed');
+  const r = document.getElementById(key + '-elapsed-range');
+  const shift = m => {
+    const s = getState();
+    const list = (s.doses || []).slice().sort((a, b) => b.when - a.when);
+    if (!list.length) return;
+    const origin = list[0].when, delta = Math.max(0, Math.round(m)) - origin;
+    list.forEach(d => { d.when = Math.max(0, d.when + delta); d.at = minutesAgoToStamp(d.when); });
+    s.elapsed = Math.max(0, Math.round(m));
+    redraw();
+  };
+  if (n){
+    n.addEventListener('input', () => {
+      if (r) r.value = sliderFromElapsed(parseFloat(n.value) || 0, elapsedSliderSpan(key), key);
+    });
+    onTypedInput(n, v => shift(parseFloat(v) || 0));
+  }
+  if (r){
+    /* The span is derived from the chart's axis, and moving this slider
+       changes the curve, which would change the axis, which would change the
+       span - the mapping shifting under the thumb mid-drag. Holding the
+       same `scrubbing` flag the chart drag uses freezes the axis for the
+       gesture, so the scale stays put while you move along it (and the
+       gauge and bars follow instantly, as they do for the chart). */
+    let held = 0;
+    const grab = () => {
+      held = elapsedSliderSpan(key);
+      document.body.classList.add('scrubbing');
+    };
+    const release = () => {
+      held = 0;
+      document.body.classList.remove('scrubbing');
+      syncElapsedInputs();
+    };
+    r.addEventListener('pointerdown', grab);
+    r.addEventListener('keydown', grab);
+    ['pointerup', 'pointercancel', 'blur', 'keyup'].forEach(e => r.addEventListener(e, release));
+    r.addEventListener('input', () => {
+      const m = elapsedFromSlider(parseFloat(r.value) || 0, held || elapsedSliderSpan(key), key);
+      if (n) n.value = m;
+      /* The slider's own value is an abstract position, so announce the real
+         thing: a screen reader should hear minutes, not "412". */
+      r.setAttribute('aria-valuetext', fmtDuration(m) + ' ago');
+      shift(m);
+    });
+  }
+  return {n:n, r:r};
+}
+
 /* ---------------------------------------------------------------------------
    Shared oral tab wiring. Like the renderer, it is handed the constants, the
    state slice and the id prefix; it never reaches into `state` itself.
@@ -6396,14 +6515,7 @@ function initOralCannabis(C, s, P, rerender){
   /* The elapsed slider tracks the CURRENT curve rather than a hard-coded cap,
      so "now" can still be dragged past the end of a long stack instead of
      freezing while real time carries on. */
-  const elapsed = bindPair(P + '-elapsed', P + '-elapsed-range', v => {
-    const m = Math.max(0, v || 0);
-    const list = (s.doses || []).slice().sort((a, b) => b.when - a.when);
-    if (!list.length) return;
-    const origin = list[0].when, delta = m - origin;
-    list.forEach(d => { d.when = Math.max(0, d.when + delta); d.at = minutesAgoToStamp(d.when); });
-    redraw();
-  });
+  const elapsed = bindElapsed(P, () => s, redraw);
   const w = bindNumber(P + '-weight', v => { s.weightKg = readWeightKg(v); redraw(); });
   w.value = round(kgToDisplay(s.weightKg), 1);
   const bf = bindNumber(P + '-bf', v => { s.bf = v; redraw(); });
@@ -6881,14 +6993,7 @@ function initSmoked(){
   amount.n.value = s.amount; amount.r.value = clamp(s.amount, 0, 1.5);
   const potency = bindNumber('sm-potency', v => { s.potency = clamp(parseFloat(v) || 20, 0.1, 99); redraw(); });
   potency.value = s.potency;
-  const elapsed = bindPair('sm-elapsed', 'sm-elapsed-range', v => {
-    const m = Math.max(0, v || 0);
-    const list = (s.doses || []).slice().sort((a, b) => b.when - a.when);
-    if (!list.length) return;
-    const origin = list[0].when, delta = m - origin;
-    list.forEach(d => { d.when = Math.max(0, d.when + delta); d.at = minutesAgoToStamp(d.when); });
-    redraw();
-  });
+  const elapsed = bindElapsed('sm', () => s, redraw);
   const w = bindNumber('sm-weight', v => { s.weightKg = readWeightKg(v); redraw(); });
   w.value = round(kgToDisplay(s.weightKg), 1);
   const bf = bindNumber('sm-bf', v => { s.bf = v; redraw(); });
@@ -11425,21 +11530,55 @@ function boot(){
     else if (k === 'e'){ ev.preventDefault(); doExport(); }
   });
 
-  /* keep hover tooltips inside the viewport on narrow screens */
-  const clampTip = el => {
-    el.style.setProperty('--tip-shift', '0px');
-    const measured = parseFloat(getComputedStyle(el, '::after').width);
-    const w = (measured && measured > 20) ? measured : Math.min(290, window.innerWidth * 0.7);
-    const r = el.getBoundingClientRect(), centre = r.left + r.width / 2, M = 12;
-    let shift = 0;
-    if (centre - w / 2 < M) shift = M - (centre - w / 2);
-    else if (centre + w / 2 > window.innerWidth - M) shift = (window.innerWidth - M) - (centre + w / 2);
-    if (shift) el.style.setProperty('--tip-shift', Math.round(shift) + 'px');
+  /* ---- hover tooltips -------------------------------------------------
+     One element, a direct child of <body>, so no card can clip it. It is
+     measured after the text is in, then placed above the term and nudged
+     back inside the viewport; if there is no room above, it goes below. */
+  const tip = document.createElement('div');
+  tip.id = 'tip';
+  tip.setAttribute('role', 'tooltip');
+  document.body.appendChild(tip);
+  let tipFor = null;
+  const hideTip = () => {
+    if (!tipFor) return;
+    tipFor.removeAttribute('aria-describedby');
+    tipFor = null;
+    tip.classList.remove('on');
+  };
+  const showTip = el => {
+    const text = el.getAttribute('data-tip');
+    if (!text) return;
+    if (tipFor === el) return;
+    hideTip();
+    tipFor = el;
+    tip.textContent = text;
+    tip.classList.add('on');
+    el.setAttribute('aria-describedby', 'tip');
+    /* Measure with the box already laid out, so wrapping is accounted for. */
+    const M = 12, gap = 9;
+    const r = el.getBoundingClientRect();
+    const tr = tip.getBoundingClientRect();
+    let left = r.left + r.width / 2 - tr.width / 2;
+    left = Math.max(M, Math.min(left, window.innerWidth - tr.width - M));
+    let top = r.top - tr.height - gap;
+    if (top < M) top = r.bottom + gap;                 // no room above
+    top = Math.min(top, window.innerHeight - tr.height - M);
+    tip.style.left = Math.round(left) + 'px';
+    tip.style.top = Math.round(Math.max(M, top)) + 'px';
   };
   ['mouseover', 'focusin'].forEach(evt => document.addEventListener(evt, ev => {
     const t = ev.target.closest && ev.target.closest('.term');
-    if (t) clampTip(t);
+    if (t) showTip(t); else if (evt === 'mouseover') hideTip();
   }));
+  ['mouseout', 'focusout'].forEach(evt => document.addEventListener(evt, ev => {
+    const t = ev.target.closest && ev.target.closest('.term');
+    if (t && t === tipFor) hideTip();
+  }));
+  /* A tooltip pinned to a viewport coordinate goes stale the moment the page
+     moves under it, so it is dismissed rather than chased. */
+  window.addEventListener('scroll', hideTip, true);
+  window.addEventListener('resize', hideTip);
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape') hideTip(); });
 
   /* Charts are sized from the host width, so they are redrawn on resize —
      but ONLY when the width actually changed. Scrolling on a phone fires
