@@ -324,6 +324,27 @@
       }
     }
 
+    // Hard floor, the last word every step. contactY is the MEAN of the two
+    // wheel heights, so anywhere the ground between the wheels stands higher
+    // than that mean -- a crest, a rut lip, a water bar -- the chassis was
+    // free to sit inside the hill, and the spring clamp allowed a further
+    // 0.3 m below even that. Measured over five descents the bike sank up to
+    // 1.3 m under the surface and spent a fifth of its frames submerged.
+    // Nothing below this line is reachable: the ground under the bike is the
+    // floor, grounded or airborne, which also means a fast rider can never
+    // tunnel through a face between two steps.
+    // sampled HERE, at the position the step actually ended on: gC was taken
+    // before the bike moved, and on a rise it is already metres out of date
+    var floorY = T.height(this.pos.x, this.pos.z) + R*0.78;
+    if (this.pos.y < floorY) {
+      this.pos.y = floorY;
+      // The fall stops here whether or not the wheels were already down:
+      // letting a grounded chassis keep its downward velocity at the floor
+      // measured worse on every count -- more crashes, less of each course
+      // ridden -- because it spends the next steps driving back into the hill.
+      if (this.vel.y < 0) this.vel.y = 0;
+    }
+
     var lim = T.HALF - 60;
     if (Math.abs(this.pos.x) > lim) { this.pos.x = clamp(this.pos.x,-lim,lim); this.vel.x *= -0.2; }
     if (Math.abs(this.pos.z) > lim) { this.pos.z = clamp(this.pos.z,-lim,lim); this.vel.z *= -0.2; }
