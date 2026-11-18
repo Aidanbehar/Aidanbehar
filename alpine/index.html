@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alpine Descent — Open World Mountain Biking</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="hud">
+  <div class="hud-top-left">
+    <div class="tag" id="modeTag">FREE RIDE</div>
+    <div class="objective" id="objective"></div>
+  </div>
+  <div class="hud-top-right">
+    <div class="stat-block"><div class="k">ALTITUDE</div>
+      <div class="v"><span id="altVal">0</span><small>m</small></div></div>
+    <div class="stat-block small"><div class="k">TIME</div>
+      <div class="v"><span id="clockVal">—</span></div>
+      <div class="sub"><span id="phaseVal"></span> · <span id="weatherTag"></span></div></div>
+    <canvas id="compass" width="220" height="26"></canvas>
+  </div>
+  <div class="hud-bottom-left">
+    <div class="speedo"><div class="speed-num" id="speedVal">0</div><div class="speed-unit">km/h</div></div>
+    <div class="mini-stats">
+      <div><i>GRADE</i><span class="val" id="gradeVal">0%</span></div>
+      <div><i>TERRAIN</i><span class="val" id="biomeVal">—</span></div>
+      <div><i>RIDDEN</i><span class="val" id="distVal">0 m</span></div>
+    </div>
+  </div>
+  <div class="hud-bottom-right">
+    <div class="rows">
+      <div class="row-mini" id="timerRow"><i>TIME</i><b id="timerVal">0:00.00</b><span class="split" id="splitVal"></span></div>
+      <div class="row-mini" id="cpRow"><i>CHECKPOINT</i><b id="cpVal">0 / 0</b></div>
+      <div class="row-mini"><i>STUNT</i><b id="scoreVal">0</b></div>
+      <div class="row-mini coin"><i>CURRENCY</i><b id="coinVal">0</b></div>
+    </div>
+    <canvas id="minimap" width="190" height="190"></canvas>
+  </div>
+  <div id="trickPop"></div>
+  <div id="crashMsg"></div>
+  <div id="stuckHint">Stuck? Press <kbd>R</kbd> to reset to the trail</div>
+  <div id="fps"></div>
+  <div class="hud-hint">M map · C camera · R reset · ESC pause</div>
+</div>
+
+<div id="toast"></div>
+
+<div id="loading" class="screen visible">
+  <div class="load-inner">
+    <h1 class="logo">ALPINE<span>DESCENT</span></h1>
+    <div class="load-sub">generating a 16 km mountain wilderness</div>
+    <div class="load-bar"><div id="loadingBar"></div></div>
+    <div id="loadingText">Starting up…</div>
+    <div id="loadingTip">Every ridge, valley and switchback below is generated from scratch — and all of it is rideable.</div>
+  </div>
+</div>
+
+<div id="title" class="screen">
+  <div class="title-wrap">
+    <div class="title-left">
+      <h1 class="logo big">ALPINE<span>DESCENT</span></h1>
+      <p class="tagline">An open-world downhill mountain-bike wilderness.<br>
+        Human powered. Gravity fed. No engines, anywhere.</p>
+      <div class="title-stats" id="titleStats"></div>
+    </div>
+    <nav class="menu">
+      <button class="btn primary" id="btnPlay">PLAY</button>
+      <button class="btn" id="btnFreeRide">FREE RIDE</button>
+      <button class="btn" id="btnDownhill">DOWNHILL</button>
+      <button class="btn" id="btnTimeTrial">TIME TRIAL</button>
+      <button class="btn" id="btnStunt">STUNT CHALLENGES</button>
+      <button class="btn" id="btnGarage">GARAGE</button>
+      <button class="btn" id="btnMap">MAP</button>
+      <button class="btn" id="btnSettings">SETTINGS</button>
+    </nav>
+  </div>
+  <div class="title-foot">W pedal · A/D steer · S rear brake · SPACE front brake · in the air W/S flip, A/D spin, Q/E roll</div>
+</div>
+
+<div id="panel" class="screen">
+  <div class="panel-wrap">
+    <header><button class="back" id="panelBack">‹ BACK</button><h2 id="panelTitle">PANEL</h2></header>
+    <div id="panelBody"></div>
+  </div>
+</div>
+
+<div id="pause" class="screen">
+  <div class="pause-wrap">
+    <h2>PAUSED</h2>
+    <div id="pauseInfo"></div>
+    <div class="pause-buttons">
+      <button class="btn primary" id="btnResume">RESUME</button>
+      <button class="btn" id="btnRestart">RESTART</button>
+      <button class="btn" id="btnPauseMap">MAP</button>
+      <button class="btn" id="btnPauseSettings">SETTINGS</button>
+      <button class="btn" id="btnQuit">MAIN MENU</button>
+    </div>
+  </div>
+</div>
+
+<div id="results" class="screen">
+  <div class="results-wrap"><h2 id="resultsTitle">COMPLETE</h2><div id="resultsBody"></div></div>
+</div>
+
+<div id="mapOverlay">
+  <div class="map-head">
+    <h2>REGION MAP</h2>
+    <div class="map-tools">
+      <button class="btn tiny" id="mapZoomIn">+</button>
+      <button class="btn tiny" id="mapZoomOut">−</button>
+      <button class="btn tiny" id="mapCenter">CENTRE ON ME</button>
+      <button class="btn tiny" id="mapFit">WHOLE REGION</button>
+      <button class="btn tiny" id="mapClearWp">CLEAR WAYPOINT</button>
+      <button class="btn tiny close" id="mapClose">CLOSE (M)</button>
+    </div>
+  </div>
+  <div class="map-body"><canvas id="mapCanvas"></canvas></div>
+  <div class="map-foot">
+    <div id="mapInfo"></div>
+    <div id="mapLegend">
+      <span><i style="background:#e0503a"></i>Downhill</span>
+      <span><i style="background:#e8b13c"></i>Singletrack</span>
+      <span><i style="background:#cfd6df"></i>Fire road</span>
+      <span><i style="background:#63c46a"></i>Forest</span>
+      <span><i style="background:#7fb6ff"></i>Ridge</span>
+      <span><i style="background:#d98a4a"></i>Canyon</span>
+      <span><i style="background:#c77ff0"></i>Hidden</span>
+      <span><i style="background:#ff8a3d"></i>Stunt zone</span>
+      <span><i style="background:#7fd8ff"></i>Course start</span>
+    </div>
+  </div>
+</div>
+
+<script src="js/lib/three.min.js"></script>
+<script src="js/noise.js"></script>
+<script src="js/terrain.js"></script>
+<script src="js/trails.js"></script>
+<script src="js/chunks.js"></script>
+<script src="js/bike.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/world.js"></script>
+<script src="js/save.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
